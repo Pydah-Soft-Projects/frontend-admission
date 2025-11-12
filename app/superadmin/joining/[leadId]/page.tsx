@@ -20,6 +20,7 @@ import {
   PaymentSummary,
   CoursePaymentSettings,
   PaymentTransaction,
+  CashfreeConfigPreview,
 } from '@/types';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
