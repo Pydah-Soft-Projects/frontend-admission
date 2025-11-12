@@ -39,7 +39,7 @@ const CompletedAdmissionsPage = () => {
       });
       return response.data;
     },
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   });
 
   const headerContent = useMemo(
