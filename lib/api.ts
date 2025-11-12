@@ -7,6 +7,8 @@ import type {
   CashfreeConfigPreview,
   PaymentTransaction,
   LeadUpdatePayload,
+  CreateUserData,
+  UpdateUserData,
 } from '@/types';
 
 // API Base URL - Update this with your backend URL
@@ -76,21 +78,11 @@ export const userAPI = {
     const response = await api.get(`/users/${id}`);
     return response.data;
   },
-  create: async (data: {
-    name: string;
-    email: string;
-    password: string;
-    roleName: string;
-  }) => {
+  create: async (data: CreateUserData) => {
     const response = await api.post('/users', data);
     return response.data;
   },
-  update: async (id: string, data: {
-    name?: string;
-    email?: string;
-    roleName?: string;
-    isActive?: boolean;
-  }) => {
+  update: async (id: string, data: UpdateUserData) => {
     const response = await api.put(`/users/${id}`, data);
     return response.data;
   },

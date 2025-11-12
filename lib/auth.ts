@@ -36,8 +36,8 @@ export const auth = {
   isSuperAdmin: (): boolean => {
     const user = auth.getUser();
     if (!user) return false;
-    
-    return user.roleName === 'Super Admin';
+
+    return user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin';
   },
 
   // Clear authentication

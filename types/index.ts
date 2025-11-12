@@ -1,9 +1,20 @@
 // User Types
+export type RoleName = 'Super Admin' | 'Sub Super Admin' | 'User';
+
+export type ModulePermissionLevel = 'read' | 'write';
+
+export interface ModulePermission {
+  access: boolean;
+  permission: ModulePermissionLevel;
+}
+
 export interface User {
   _id: string;
   name: string;
   email: string;
-  roleName: string; // 'Super Admin' or 'User'
+  roleName: RoleName;
+  designation?: string;
+  permissions?: Record<string, ModulePermission>;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -23,13 +34,17 @@ export interface CreateUserData {
   name: string;
   email: string;
   password: string;
-  roleName: string;
+  roleName: RoleName;
+  designation?: string;
+  permissions?: Record<string, ModulePermission>;
 }
 
 export interface UpdateUserData {
   name?: string;
   email?: string;
-  roleName?: string;
+  roleName?: RoleName;
+  designation?: string;
+  permissions?: Record<string, ModulePermission>;
   isActive?: boolean;
 }
 

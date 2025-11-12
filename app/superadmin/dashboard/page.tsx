@@ -62,7 +62,7 @@ export default function SuperAdminDashboard() {
       router.push('/auth/login');
       return;
     }
-    if (currentUser.roleName !== 'Super Admin') {
+    if (currentUser.roleName !== 'Super Admin' && currentUser.roleName !== 'Sub Super Admin') {
       router.push('/user/dashboard');
       return;
     }

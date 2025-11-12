@@ -16,7 +16,7 @@ export default function Home() {
     if (user) {
       setIsAuthenticated(true);
       // Redirect based on role
-      if (user.roleName === 'Super Admin') {
+      if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
         router.push('/superadmin/dashboard');
       } else {
         router.push('/user/dashboard');

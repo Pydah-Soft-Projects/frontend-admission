@@ -77,7 +77,7 @@ export default function BulkUploadPage() {
 
   useEffect(() => {
     const currentUser = auth.getUser();
-    if (!currentUser || currentUser.roleName !== 'Super Admin') {
+    if (!currentUser || (currentUser.roleName !== 'Super Admin' && currentUser.roleName !== 'Sub Super Admin')) {
       router.push('/auth/login');
       return;
     }

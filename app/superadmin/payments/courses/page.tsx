@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/Input';
 import { courseAPI } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { Branch, Course } from '@/types';
-import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
+import { useRouter } from 'next/navigation';
 
 type ManagedCourse = Course & { branches?: Branch[] };
 
@@ -34,6 +35,8 @@ type BranchEditFormState = BranchFormState & { isActive: boolean };
 
 export default function CourseManagementPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const router = useRouter();
+  const { hasAccess: canAccessPayments, canWrite: canEditPayments } = useModulePermission('payments');
 
   useEffect(() => {
     setHeaderContent(
@@ -49,6 +52,12 @@ export default function CourseManagementPage() {
     );
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent]);
+
+  useEffect(() => {
+    if (!canAccessPayments) {
+      router.replace('/superadmin/dashboard');
+    }
+  }, [canAccessPayments, router]);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['courses', 'with-branches'],
@@ -181,6 +190,10 @@ export default function CourseManagementPage() {
   });
 
   const handleCreateCourse = () => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to modify courses');
+      return;
+    }
     if (!newCourse.name.trim()) {
       showToast.error('Course name is required');
       return;
@@ -193,6 +206,10 @@ export default function CourseManagementPage() {
   };
 
   const openCourseEditModal = (course: ManagedCourse) => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to edit courses');
+      return;
+    }
     setEditingCourse(course);
     setCourseEditForm({
       name: course.name,
@@ -243,6 +260,10 @@ export default function CourseManagementPage() {
   };
 
   const handleToggleCourse = (course: ManagedCourse) => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to update course status');
+      return;
+    }
     updateCourseMutation.mutate({
       courseId: course._id,
       payload: { isActive: !course.isActive },
@@ -250,6 +271,10 @@ export default function CourseManagementPage() {
   };
 
   const handleDeleteCourse = (course: ManagedCourse) => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to delete courses');
+      return;
+    }
     if ((course.branches?.length || 0) > 0) {
       showToast.error('Remove all branches before deleting a course.');
       return;
@@ -262,6 +287,10 @@ export default function CourseManagementPage() {
   };
 
   const handleAddBranch = (courseId: string) => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to add branches');
+      return;
+    }
     const form = branchForms[courseId] || emptyBranchForm;
     if (!form.name.trim()) {
       showToast.error('Branch name is required');
@@ -278,6 +307,10 @@ export default function CourseManagementPage() {
   };
 
   const openBranchEditModal = (courseId: string, branch: Branch) => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to edit branches');
+      return;
+    }
     const courseName = courses.find((item) => item._id === courseId)?.name || 'Course';
     setEditingBranch({
       courseId,
@@ -303,6 +336,10 @@ export default function CourseManagementPage() {
   };
 
   const handleUpdateBranch = () => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to edit branches');
+      return;
+    }
     if (!editingBranch) return;
     if (!branchEditForm.name.trim()) {
       showToast.error('Branch name is required');
@@ -333,6 +370,10 @@ export default function CourseManagementPage() {
   };
 
   const handleToggleBranch = (courseId: string, branch: Branch) => {
+    if (!canEditPayments) {
+      showToast.error('You do not have permission to update branch status');
+      return;
+    }
     updateBranchMutation.mutate({
       courseId,
       branchId: branch._id,
@@ -346,6 +387,10 @@ export default function CourseManagementPage() {
     createBranchMutation.isPending ||
     updateBranchMutation.isPending ||
     deleteCourseMutation.isPending;
+
+  if (!canAccessPayments) {
+    return null;
+  }
 
   return (
     <div className="space-y-8">
@@ -418,10 +463,10 @@ export default function CourseManagementPage() {
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={() => openCourseEditModal(course)}>
+                      <Button variant="secondary" onClick={() => openCourseEditModal(course)} disabled={!canEditPayments}>
                     Edit
                   </Button>
-                  <Button variant="secondary" onClick={() => handleToggleCourse(course)}>
+                      <Button variant="secondary" onClick={() => handleToggleCourse(course)} disabled={!canEditPayments}>
                     {course.isActive ? 'Deactivate' : 'Activate'}
                   </Button>
                   <Button
@@ -433,13 +478,14 @@ export default function CourseManagementPage() {
                       }));
                       setBranchModalCourseId(course._id);
                     }}
+                        disabled={!canEditPayments}
                   >
                     Add Branch
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => handleDeleteCourse(course)}
-                    disabled={deleteCourseMutation.isPending}
+                        disabled={deleteCourseMutation.isPending || !canEditPayments}
                   >
                     Delete
                   </Button>
@@ -470,6 +516,7 @@ export default function CourseManagementPage() {
                                 variant="secondary"
                                 size="sm"
                                 onClick={() => openBranchEditModal(course._id, branch)}
+                                disabled={!canEditPayments}
                               >
                                 Edit
                               </Button>
@@ -477,6 +524,7 @@ export default function CourseManagementPage() {
                                 variant="secondary"
                                 size="sm"
                                 onClick={() => handleToggleBranch(course._id, branch)}
+                                disabled={!canEditPayments}
                               >
                                 {branch.isActive ? 'Deactivate' : 'Activate'}
                               </Button>
@@ -569,7 +617,7 @@ export default function CourseManagementPage() {
               <Button
                 variant="primary"
                 onClick={handleCreateCourse}
-                disabled={createCourseMutation.isPending}
+                disabled={createCourseMutation.isPending || !canEditPayments}
               >
                 {createCourseMutation.isPending ? 'Creating…' : 'Create Course'}
               </Button>
@@ -681,7 +729,7 @@ export default function CourseManagementPage() {
               <Button
                 variant="primary"
                 onClick={() => branchModalCourseId && handleAddBranch(branchModalCourseId)}
-                disabled={createBranchMutation.isPending}
+                disabled={createBranchMutation.isPending || !canEditPayments}
               >
                 {createBranchMutation.isPending ? 'Adding…' : 'Add Branch'}
               </Button>
@@ -754,6 +802,7 @@ export default function CourseManagementPage() {
                       isActive: event.target.value === 'active',
                     }))
                   }
+                  disabled={!canEditPayments}
                   className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                 >
                   <option value="active">Active</option>
@@ -773,7 +822,7 @@ export default function CourseManagementPage() {
               <Button
                 variant="primary"
                 onClick={handleUpdateCourse}
-                disabled={updateCourseMutation.isPending}
+                disabled={updateCourseMutation.isPending || !canEditPayments}
               >
                 {updateCourseMutation.isPending ? 'Saving…' : 'Update Course'}
               </Button>
@@ -866,7 +915,7 @@ export default function CourseManagementPage() {
               <Button
                 variant="primary"
                 onClick={handleUpdateBranch}
-                disabled={updateBranchMutation.isPending}
+                  disabled={updateBranchMutation.isPending || !canEditPayments}
               >
                 {updateBranchMutation.isPending ? 'Saving…' : 'Update Branch'}
               </Button>

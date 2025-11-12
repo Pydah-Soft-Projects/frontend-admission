@@ -22,7 +22,7 @@ import {
   PaymentTransaction,
   CashfreeConfigPreview,
 } from '@/types';
-import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -302,6 +302,8 @@ const JoiningDetailPage = () => {
   const router = useRouter();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const leadId = Array.isArray(params?.leadId) ? params.leadId[0] : params?.leadId;
+  const { hasAccess: canAccessJoiningModule, canWrite: canWriteJoining } = useModulePermission('joining');
+  const { hasAccess: canAccessPaymentsModule, canWrite: canWritePayments } = useModulePermission('payments');
 
   const [formState, setFormState] = useState<JoiningFormState>(buildInitialState());
   const [status, setStatus] = useState<JoiningStatus>('draft');
@@ -452,6 +454,16 @@ const JoiningDetailPage = () => {
     return () => clearHeaderContent();
   }, [lead, router, setHeaderContent, clearHeaderContent]);
 
+  useEffect(() => {
+    if (!canAccessJoiningModule) {
+      router.replace('/superadmin/dashboard');
+    }
+  }, [canAccessJoiningModule, router]);
+
+  if (!canAccessJoiningModule) {
+    return null;
+  }
+
   const selectedCourseSetting = useMemo(() => {
     if (!formState.courseInfo.courseId) return undefined;
     return courseSettings.find((item) => item.course._id === formState.courseInfo.courseId);
@@ -531,15 +543,17 @@ const JoiningDetailPage = () => {
   const totalAmountPaid = Math.max(totalPaid, 0);
   const isBaseFeeCleared = baseFeeTarget > 0 && outstandingBalance <= 0.5;
   const shouldShowAdditionalFeeButton =
-    isBaseFeeCleared || additionalFeePaid > 0 || isAdditionalFeeMode;
+    (isBaseFeeCleared || additionalFeePaid > 0 || isAdditionalFeeMode) && canWritePayments;
   const paymentActionsDisabled =
-    paymentFormState.isProcessing || (!isAdditionalFeeMode && isBaseFeeCleared);
+    paymentFormState.isProcessing ||
+    (!isAdditionalFeeMode && isBaseFeeCleared) ||
+    !canWritePayments;
 
   useEffect(() => {
-    if (isAdditionalFeeMode && !isBaseFeeCleared) {
+    if (isAdditionalFeeMode && (!isBaseFeeCleared || !canWritePayments)) {
       setIsAdditionalFeeMode(false);
     }
-  }, [isAdditionalFeeMode, isBaseFeeCleared]);
+  }, [isAdditionalFeeMode, isBaseFeeCleared, canWritePayments]);
 
   const cashfreeMode: 'production' = 'production';
   const canUseCashfree = Boolean(cashfreeConfig?.isActive && cashfreeConfig?.environment);
@@ -727,6 +741,10 @@ const JoiningDetailPage = () => {
   };
 
   const openPaymentModal = (mode: 'cash' | 'online') => {
+    if (!canWritePayments) {
+      showToast.error('You have read-only access to payments');
+      return;
+    }
     const defaultAmountValue =
       isAdditionalFeeMode
         ? null
@@ -753,6 +771,10 @@ const JoiningDetailPage = () => {
   };
 
   const handleCashPaymentSubmit = async () => {
+    if (!canWritePayments) {
+      showToast.error('You have read-only access to payments');
+      return;
+    }
     if (!leadId) return;
     const amountValue = Number(paymentFormState.amount);
     if (!amountValue || Number.isNaN(amountValue) || amountValue <= 0) {
@@ -794,6 +816,10 @@ const JoiningDetailPage = () => {
   };
 
   const handleCashfreePayment = async () => {
+    if (!canWritePayments) {
+      showToast.error('You have read-only access to payments');
+      return;
+    }
     if (!leadId) return;
     if (!canUseCashfree) {
       showToast.error('Cashfree configuration is not active. Please update settings.');
@@ -1297,14 +1323,18 @@ const JoiningDetailPage = () => {
   const isApproving = approveMutation.isPending;
   const isUpdatingAdmission = updateAdmissionMutation.isPending;
 
-  const canSubmit = status !== 'approved' && status !== 'pending_approval';
-  const canApprove = status === 'pending_approval';
-  const isAdmissionEditable = status === 'approved';
+  const canSubmit = canWriteJoining && status !== 'approved' && status !== 'pending_approval';
+  const canApprove = canWriteJoining && status === 'pending_approval';
+  const isAdmissionEditable = canWriteJoining && status === 'approved';
   const admissionNumberDisplay =
     meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
   const isBusy = isLoading || (isAdmissionEditable && isLoadingAdmission && !admissionRecord);
 
   const handleSaveAdmissionRecord = () => {
+    if (!canWriteJoining) {
+      showToast.error('You have read-only access to the joining desk');
+      return;
+    }
     updateAdmissionMutation.mutate(payloadForSave);
   };
 
@@ -1378,7 +1408,7 @@ const JoiningDetailPage = () => {
                 <>
                   <Button
                     variant="primary"
-                    disabled={isUpdatingAdmission || isBusy}
+                    disabled={isUpdatingAdmission || isBusy || !canWriteJoining}
                     onClick={handleSaveAdmissionRecord}
                     className="group inline-flex items-center gap-2"
                   >
@@ -1400,15 +1430,27 @@ const JoiningDetailPage = () => {
                 <>
                   <Button
                     variant="secondary"
-                    disabled={isSaving || isAdmissionEditable}
-                    onClick={() => saveDraftMutation.mutate()}
+                    disabled={isSaving || isAdmissionEditable || !canWriteJoining}
+                    onClick={() => {
+                      if (!canWriteJoining) {
+                        showToast.error('You have read-only access to the joining desk');
+                        return;
+                      }
+                      saveDraftMutation.mutate();
+                    }}
                   >
                     {isSaving ? 'Saving…' : 'Save Draft'}
                   </Button>
                   <Button
                     variant="primary"
                     disabled={!canSubmit || isSubmitting}
-                    onClick={() => submitMutation.mutate()}
+                    onClick={() => {
+                      if (!canWriteJoining) {
+                        showToast.error('You have read-only access to the joining desk');
+                        return;
+                      }
+                      submitMutation.mutate();
+                    }}
                   >
                     {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
                   </Button>
@@ -1416,7 +1458,13 @@ const JoiningDetailPage = () => {
                     <Button
                       variant="primary"
                       disabled={isApproving}
-                      onClick={() => approveMutation.mutate()}
+                      onClick={() => {
+                        if (!canWriteJoining) {
+                          showToast.error('You have read-only access to the joining desk');
+                          return;
+                        }
+                        approveMutation.mutate();
+                      }}
                     >
                       {isApproving ? 'Approving…' : 'Approve'}
                     </Button>
@@ -2236,14 +2284,15 @@ const JoiningDetailPage = () => {
             </div>
           </section>
 
-          <section
-            id="payment-panel"
-            className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${
-              shouldPromptPayment
-                ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
-                : ''
-            }`}
-          >
+          {canAccessPaymentsModule && (
+            <section
+              id="payment-panel"
+              className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${
+                shouldPromptPayment
+                  ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
+                  : ''
+              }`}
+            >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
@@ -2291,7 +2340,7 @@ const JoiningDetailPage = () => {
                         return !prev;
                       });
                     }}
-                    disabled={paymentFormState.isProcessing}
+                    disabled={paymentFormState.isProcessing || !canWritePayments}
                   >
                     {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
                   </Button>
@@ -2448,7 +2497,8 @@ const JoiningDetailPage = () => {
                 )}
               </div>
             </div>
-          </section>
+            </section>
+          )}
         </div>
       )}
     </div>

@@ -15,6 +15,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/Button';
 import { auth } from '@/lib/auth';
+import type { ModulePermission } from '@/types';
 
 type IconProps = React.SVGProps<SVGSVGElement>;
 type IconComponent = React.FC<IconProps>;
@@ -68,12 +69,38 @@ export const useDashboardHeader = () => {
   return ctx;
 };
 
+type PermissionContextValue = {
+  permissions: Record<string, ModulePermission>;
+  hasAccess: (moduleKey: string) => boolean;
+  canWrite: (moduleKey: string) => boolean;
+};
+
+const PermissionContext = createContext<PermissionContextValue | null>(null);
+
+export const useModulePermission = (moduleKey: string) => {
+  const ctx = useContext(PermissionContext);
+  const fallback = {
+    hasAccess: true,
+    canWrite: true,
+  };
+
+  if (!ctx) {
+    return fallback;
+  }
+
+  return {
+    hasAccess: ctx.hasAccess(moduleKey),
+    canWrite: ctx.canWrite(moduleKey),
+  };
+};
+
 export type DashboardNavItem = {
   href: string;
   label: string;
   icon?: IconComponent;
   badge?: string;
   children?: DashboardNavItem[];
+  permissionKey?: string;
 };
 
 interface DashboardShellProps {
@@ -83,6 +110,7 @@ interface DashboardShellProps {
   description?: string;
   role?: string;
   userName?: string;
+  permissions?: Record<string, ModulePermission>;
 }
 
 export const DashboardShell: React.FC<DashboardShellProps> = ({
@@ -92,6 +120,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   description = 'Manage records and track outcomes with confidence.',
   role,
   userName,
+  permissions = {},
 }) => {
   const pathname = usePathname() || '';
   const router = useRouter();
@@ -132,6 +161,55 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     [setHeader, clearHeader]
   );
 
+  const normalizedPermissions = useMemo(() => permissions || {}, [permissions]);
+
+  const hasAccessForKey = useCallback(
+    (moduleKey?: string) => {
+      if (!moduleKey || moduleKey === 'dashboard') {
+        return true;
+      }
+      const entry = normalizedPermissions[moduleKey];
+      return Boolean(entry?.access);
+    },
+    [normalizedPermissions]
+  );
+
+  const canWriteForKey = useCallback(
+    (moduleKey: string) => {
+      if (!moduleKey || moduleKey === 'dashboard') {
+        return true;
+      }
+      const entry = normalizedPermissions[moduleKey];
+      if (!entry?.access) {
+        return false;
+      }
+      return entry.permission !== 'read';
+    },
+    [normalizedPermissions]
+  );
+
+  const filterNavItems = useCallback(
+    (items: DashboardNavItem[]): DashboardNavItem[] =>
+      items
+        .map((item) => {
+          const children = item.children ? filterNavItems(item.children) : [];
+          const accessible = hasAccessForKey(item.permissionKey);
+
+          if (!accessible && children.length === 0) {
+            return null;
+          }
+
+          return {
+            ...item,
+            children,
+          };
+        })
+        .filter(Boolean) as DashboardNavItem[],
+    [hasAccessForKey]
+  );
+
+  const filteredNavItems = useMemo(() => filterNavItems(navItems), [filterNavItems, navItems]);
+
   const findActiveParents = useCallback((items: DashboardNavItem[], currentPath: string, acc: Set<string>) => {
     items.forEach((item) => {
       if (item.children && item.children.length > 0) {
@@ -146,14 +224,27 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     return acc;
   }, []);
 
-  const activeParents = useMemo(() => Array.from(findActiveParents(navItems, pathname, new Set<string>())), [findActiveParents, navItems, pathname]);
+  const activeParents = useMemo(
+    () => Array.from(findActiveParents(filteredNavItems, pathname, new Set<string>())),
+    [findActiveParents, filteredNavItems, pathname]
+  );
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(activeParents));
 
   useEffect(() => {
     setOpenGroups((prev) => {
-      const next = new Set(prev);
-      activeParents.forEach((href) => next.add(href));
+      const next = new Set(activeParents);
+      if (prev.size === next.size) {
+        let isSame = true;
+        prev.forEach((value) => {
+          if (!next.has(value)) {
+            isSame = false;
+          }
+        });
+        if (isSame) {
+          return prev;
+        }
+      }
       return next;
     });
   }, [activeParents]);
@@ -295,7 +386,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           variant === 'desktop' ? 'overflow-y-auto pb-6 pr-3' : 'pb-6'
         )}
       >
-        {renderNavItems(navItems)}
+        {renderNavItems(filteredNavItems)}
       </nav>
 
       <button
@@ -309,84 +400,95 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     </aside>
   );
 
+  const permissionContextValue = useMemo<PermissionContextValue>(
+    () => ({
+      permissions: normalizedPermissions,
+      hasAccess: hasAccessForKey,
+      canWrite: canWriteForKey,
+    }),
+    [normalizedPermissions, hasAccessForKey, canWriteForKey]
+  );
+
   return (
     <DashboardHeaderContext.Provider value={headerContextValue}>
-      <div className="relative min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-        <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,#e2e8f01f_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f01f_1px,transparent_1px)] bg-[size:28px_28px] dark:bg-[linear-gradient(to_right,rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.12)_1px,transparent_1px)]" />
-        <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-blue-50/40 via-indigo-50/35 to-transparent dark:from-slate-900/60 dark:via-slate-900/65 dark:to-slate-900/80" />
+      <PermissionContext.Provider value={permissionContextValue}>
+        <div className="relative min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+          <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,#e2e8f01f_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f01f_1px,transparent_1px)] bg-[size:28px_28px] dark:bg-[linear-gradient(to_right,rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.12)_1px,transparent_1px)]" />
+          <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-blue-50/40 via-indigo-50/35 to-transparent dark:from-slate-900/60 dark:via-slate-900/65 dark:to-slate-900/80" />
 
-        <div className="relative flex min-h-screen">
-          <div className="hidden lg:flex">{renderSidebar('desktop')}</div>
+          <div className="relative flex min-h-screen">
+            <div className="hidden lg:flex">{renderSidebar('desktop')}</div>
 
-          <div
-            className={cn(
-              'fixed inset-0 z-40 flex lg:hidden',
-              isMobileOpen ? 'pointer-events-auto' : 'pointer-events-none'
-            )}
-          >
-            <div
-              className={cn('fixed inset-0 bg-slate-900/60 transition-opacity', isMobileOpen ? 'opacity-100' : 'opacity-0')}
-              onClick={() => setIsMobileOpen(false)}
-            />
             <div
               className={cn(
-                'relative z-50 w-72 max-w-full px-3 py-4 transition-transform duration-300',
-                isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+                'fixed inset-0 z-40 flex lg:hidden',
+                isMobileOpen ? 'pointer-events-auto' : 'pointer-events-none'
               )}
             >
-              {renderSidebar('mobile')}
+              <div
+                className={cn('fixed inset-0 bg-slate-900/60 transition-opacity', isMobileOpen ? 'opacity-100' : 'opacity-0')}
+                onClick={() => setIsMobileOpen(false)}
+              />
+              <div
+                className={cn(
+                  'relative z-50 w-72 max-w-full px-3 py-4 transition-transform duration-300',
+                  isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+                )}
+              >
+                {renderSidebar('mobile')}
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-1 flex-col">
-            <header className="px-4 pt-4 sm:px-6 lg:px-10">
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_8px_26px_rgba(30,64,175,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none sm:px-5 lg:px-6">
-                <div className="flex items-center gap-4">
-                  <button
-                    type="button"
-                    className="inline-flex rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 lg:hidden dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-500"
-                    onClick={() => setIsMobileOpen(true)}
-                    aria-label="Toggle navigation menu"
-                  >
-                    <MenuIcon className="h-5 w-5" />
-                  </button>
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-blue-500 dark:text-blue-300">
-                      {role ? `${role} Space` : 'Workspace'}
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-xs font-semibold uppercase text-white">
-                        {(userName || 'SA').slice(0, 2)}
-                      </span>
-                      <Button variant="outline" size="sm" onClick={handleLogout}>
-                        Logout
-                      </Button>
+            <div className="flex flex-1 flex-col">
+              <header className="px-4 pt-4 sm:px-6 lg:px-10">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_8px_26px_rgba(30,64,175,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none sm:px-5 lg:px-6">
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      className="inline-flex rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 lg:hidden dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-500"
+                      onClick={() => setIsMobileOpen(true)}
+                      aria-label="Toggle navigation menu"
+                    >
+                      <MenuIcon className="h-5 w-5" />
+                    </button>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-blue-500 dark:text-blue-300">
+                        {role ? `${role} Space` : 'Workspace'}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-xs font-semibold uppercase text-white">
+                          {(userName || 'SA').slice(0, 2)}
+                        </span>
+                        <Button variant="outline" size="sm" onClick={handleLogout}>
+                          Logout
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-1 justify-end">
+                    <div className="flex flex-col items-end gap-2 text-right">
+                      {headerContent ? (
+                        headerContent
+                      ) : (
+                        <>
+                          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
+                          {description && (
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-1 justify-end">
-                  <div className="flex flex-col items-end gap-2 text-right">
-                    {headerContent ? (
-                      headerContent
-                    ) : (
-                      <>
-                        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
-                        {description && (
-                          <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </header>
+              </header>
 
-            <main className="relative z-10 flex-1 overflow-y-auto">
-              <div className="w-full px-4 py-8 sm:px-6 lg:px-8">{children}</div>
-            </main>
+              <main className="relative z-10 flex-1 overflow-y-auto">
+                <div className="w-full px-4 py-8 sm:px-6 lg:px-8">{children}</div>
+              </main>
+            </div>
           </div>
         </div>
-      </div>
+      </PermissionContext.Provider>
     </DashboardHeaderContext.Provider>
   );
 };

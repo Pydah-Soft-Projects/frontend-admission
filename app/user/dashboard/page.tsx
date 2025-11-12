@@ -56,7 +56,7 @@ export default function UserDashboard() {
       router.push('/auth/login');
       return;
     }
-    if (currentUser.roleName === 'Super Admin') {
+    if (currentUser.roleName === 'Super Admin' || currentUser.roleName === 'Sub Super Admin') {
       router.push('/superadmin/dashboard');
       return;
     }
@@ -71,9 +71,11 @@ export default function UserDashboard() {
   useEffect(() => {
     setHeaderContent(
       <div className="flex flex-col items-end gap-2 text-right">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">My Dashboard</h1>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Welcome, {user?.designation || user?.name || 'Counsellor'}
+        </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Snapshot of your assigned leads{user?.name ? ` · ${user.name}` : ''}
+          Snapshot of your assigned leads{user?.designation ? ` · ${user.designation}` : user?.name ? ` · ${user.name}` : ''}
         </p>
         <div className="flex gap-2">
           <Button size="sm" variant="primary" onClick={handleGoToLeads}>

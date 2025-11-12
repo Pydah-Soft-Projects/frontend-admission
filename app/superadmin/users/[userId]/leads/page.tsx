@@ -107,7 +107,7 @@ export default function UserLeadsViewPage() {
       router.push('/auth/login');
       return;
     }
-    if (user.roleName !== 'Super Admin') {
+    if (user.roleName !== 'Super Admin' && user.roleName !== 'Sub Super Admin') {
       router.push('/user/dashboard');
       return;
     }

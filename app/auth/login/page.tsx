@@ -55,7 +55,7 @@ export default function LoginPage() {
       auth.setAuth(token, user);
 
       // Redirect based on role
-      if (user.roleName === 'Super Admin') {
+      if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
         router.push('/superadmin/dashboard');
       } else {
         router.push('/user/dashboard');
