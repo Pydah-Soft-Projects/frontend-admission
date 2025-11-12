@@ -700,6 +700,10 @@ const JoiningDetailPage = () => {
         console.warn('Cashfree checkout error:', sdkError);
       }
 
+      if (!orderId) {
+        throw new Error('Missing Cashfree order identifier');
+      }
+
       const verificationResponse = await paymentAPI.verifyCashfreePayment({ orderId });
       const verification = verificationResponse?.data || {};
       const statusResult = (verification.status || '').toLowerCase();
