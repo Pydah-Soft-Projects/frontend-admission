@@ -9,6 +9,8 @@ import type {
   LeadUpdatePayload,
   CreateUserData,
   UpdateUserData,
+  BulkUploadJobResponse,
+  ImportJobStatusResponse,
 } from '@/types';
 
 // API Base URL - Update this with your backend URL
@@ -166,7 +168,7 @@ export const leadAPI = {
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
     });
-    return response.data?.data;
+    return response.data?.data as BulkUploadJobResponse | undefined;
   },
   inspectBulkUpload: async (formData: FormData) => {
     const response = await api.post('/leads/bulk-upload/inspect', formData, {
@@ -207,6 +209,10 @@ export const leadAPI = {
   getUploadStats: async (batchId: string) => {
     const response = await api.get(`/leads/upload-stats?batchId=${batchId}`);
     return response.data;
+  },
+  getImportJobStatus: async (jobId: string) => {
+    const response = await api.get(`/leads/import-jobs/${jobId}`);
+    return response.data?.data as ImportJobStatusResponse | undefined;
   },
   addActivity: async (
     leadId: string,

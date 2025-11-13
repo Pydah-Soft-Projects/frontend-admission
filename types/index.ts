@@ -540,17 +540,48 @@ export interface LeadUploadData {
 
 export interface BulkUploadResponse {
   batchId: string;
-  total: number;
-  success: number;
-  errors: number;
+  total?: number;
+  success?: number;
+  errors?: number;
   durationMs?: number;
   sheetsProcessed?: string[];
-  errorDetails: Array<{
+  errorDetails?: Array<{
     sheet?: string;
-    row: number;
-    data: LeadUploadData;
+    row?: number;
     error: string;
   }>;
+  message?: string;
+}
+
+export interface BulkUploadJobResponse {
+  jobId: string;
+  uploadId: string;
+  batchId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+}
+
+export interface ImportJobStats {
+  totalProcessed?: number;
+  totalSuccess?: number;
+  totalErrors?: number;
+  sheetsProcessed?: string[];
+  durationMs?: number;
+}
+
+export interface ImportJobStatusResponse {
+  jobId: string;
+  uploadId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  stats?: ImportJobStats;
+  message?: string;
+  errorDetails?: Array<{
+    sheet?: string;
+    row?: number;
+    error: string;
+  }>;
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface BulkUploadInspectResponse {

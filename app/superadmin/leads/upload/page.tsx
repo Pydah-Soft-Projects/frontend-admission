@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { auth } from '@/lib/auth';
 import { leadAPI } from '@/lib/api';
-import { LeadUploadData, BulkUploadResponse, BulkUploadInspectResponse } from '@/types';
+import {
+  LeadUploadData,
+  BulkUploadResponse,
+  BulkUploadInspectResponse,
+  BulkUploadJobResponse,
+  ImportJobStatusResponse,
+} from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -16,7 +22,7 @@ export default function BulkUploadPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadResult, setUploadResult] = useState<BulkUploadResponse | null>(null);
   const [source, setSource] = useState('Bulk Upload');
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +36,10 @@ export default function BulkUploadPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [jobInfo, setJobInfo] = useState<BulkUploadJobResponse | null>(null);
+  const jobInfoRef = useRef<BulkUploadJobResponse | null>(null);
+  const [jobStatus, setJobStatus] = useState<ImportJobStatusResponse | null>(null);
+  const jobPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearProgressInterval = () => {
     if (progressIntervalRef.current) {
@@ -119,8 +129,15 @@ export default function BulkUploadPage() {
     };
   }, []);
 
+  const stopJobPolling = useCallback(() => {
+    if (jobPollingRef.current) {
+      clearInterval(jobPollingRef.current);
+      jobPollingRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
-    if (isUploading) {
+    if (isProcessing) {
       clearProgressResetTimeout();
       setUploadProgress((prev) => (prev > 5 ? prev : 5));
       clearProgressInterval();
@@ -153,7 +170,13 @@ export default function BulkUploadPage() {
     return () => {
       clearProgressInterval();
     };
-  }, [isUploading]);
+  }, [isProcessing]);
+
+  useEffect(() => {
+    return () => {
+      stopJobPolling();
+    };
+  }, [stopJobPolling]);
 
   const analyzeFile = async (selectedFile: File) => {
     setIsAnalyzing(true);
@@ -192,10 +215,78 @@ export default function BulkUploadPage() {
     }
   };
 
+  const resetJobState = useCallback(() => {
+    stopJobPolling();
+    setJobInfo(null);
+    jobInfoRef.current = null;
+    setJobStatus(null);
+    setUploadResult(null);
+    setIsProcessing(false);
+    setUploadProgress(0);
+  }, [stopJobPolling]);
+
+  const fetchJobStatus = useCallback(
+    async (jobId: string) => {
+      try {
+        const status = await leadAPI.getImportJobStatus(jobId);
+        if (!status) {
+          throw new Error('Failed to fetch import status. Please try again.');
+        }
+        setJobStatus(status);
+
+        if (status.status === 'completed' || status.status === 'failed') {
+          stopJobPolling();
+          setIsProcessing(false);
+
+          const info = jobInfoRef.current;
+          if (status.status === 'failed') {
+            setError(status.message || 'Bulk upload failed. Please review the errors and try again.');
+          }
+
+          if (info) {
+            const stats = status.stats || {};
+            setUploadResult({
+              batchId: info.batchId,
+              total: stats.totalProcessed,
+              success: stats.totalSuccess,
+              errors: stats.totalErrors,
+              durationMs: stats.durationMs,
+              sheetsProcessed: stats.sheetsProcessed,
+              errorDetails: status.errorDetails,
+              message: status.message,
+            });
+          }
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch import job status', err);
+        stopJobPolling();
+        setIsProcessing(false);
+        const message =
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to fetch import status. Please try again.';
+        setError(message);
+      }
+    },
+    [stopJobPolling],
+  );
+
+  const startJobPolling = useCallback(
+    (jobId: string) => {
+      stopJobPolling();
+      fetchJobStatus(jobId);
+      jobPollingRef.current = setInterval(() => {
+        fetchJobStatus(jobId);
+      }, 4000);
+    },
+    [fetchJobStatus, stopJobPolling],
+  );
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
+    resetJobState();
     setUploadResult(null);
     setSheetNames([]);
     setSelectedSheets([]);
@@ -224,8 +315,14 @@ export default function BulkUploadPage() {
       return;
     }
 
-    setIsUploading(true);
+    setIsProcessing(true);
     setError(null);
+    setUploadResult(null);
+
+    if (jobInfoRef.current) {
+      resetJobState();
+      setIsProcessing(true);
+    }
 
     try {
       const formData = new FormData();
@@ -240,16 +337,26 @@ export default function BulkUploadPage() {
         formData.append('selectedSheets', JSON.stringify(selectedSheets));
       }
 
-      const response = (await leadAPI.bulkUpload(formData)) as BulkUploadResponse | undefined;
+      const response = await leadAPI.bulkUpload(formData);
       if (!response) {
         throw new Error('Upload response was empty');
       }
-      setUploadResult(response);
+      setJobInfo(response);
+      jobInfoRef.current = response;
+      setJobStatus({
+        jobId: response.jobId,
+        uploadId: response.uploadId,
+        status: response.status,
+      });
+      startJobPolling(response.jobId);
     } catch (err: any) {
       const message = err.response?.data?.message || err.message || 'Upload failed. Please try again.';
       setError(message);
-    } finally {
-      setIsUploading(false);
+      setIsProcessing(false);
+      stopJobPolling();
+      setJobInfo(null);
+      jobInfoRef.current = null;
+      setJobStatus(null);
     }
   };
 
@@ -408,7 +515,7 @@ export default function BulkUploadPage() {
                     variant="outline"
                     size="sm"
                     onClick={selectAllSheets}
-                    disabled={sheetNames.length === 0 || isAnalyzing || isUploading}
+                disabled={sheetNames.length === 0 || isAnalyzing || isProcessing}
                   >
                     Select All
                   </Button>
@@ -416,7 +523,7 @@ export default function BulkUploadPage() {
                     variant="outline"
                     size="sm"
                     onClick={clearAllSheets}
-                    disabled={selectedSheets.length === 0 || isAnalyzing || isUploading}
+                    disabled={selectedSheets.length === 0 || isAnalyzing || isProcessing}
                   >
                     Clear All
                   </Button>
@@ -437,7 +544,7 @@ export default function BulkUploadPage() {
                       className="rounded"
                       checked={selectedSheets.includes(sheet)}
                       onChange={() => toggleSheetSelection(sheet)}
-                      disabled={isAnalyzing || isUploading}
+                      disabled={isAnalyzing || isProcessing}
                     />
                     <span>{sheet}</span>
                   </label>
@@ -488,17 +595,28 @@ export default function BulkUploadPage() {
             variant="primary"
             size="lg"
             onClick={handleBulkUpload}
-            isLoading={isUploading}
-            disabled={!file || isAnalyzing || (fileType === 'excel' && selectedSheets.length === 0) || isUploading}
+            isLoading={isProcessing}
+            disabled={!file || isAnalyzing || (fileType === 'excel' && selectedSheets.length === 0) || isProcessing}
             className="w-full"
           >
-            {isUploading ? `Uploading… ${Math.min(100, Math.max(5, Math.round(uploadProgress)))}%` : `Upload ${file ? file.name : 'File'}`}
+            {isProcessing
+              ? jobStatus?.message ||
+                (jobStatus?.status === 'queued'
+                  ? 'Queued… preparing to import'
+                  : jobStatus?.status === 'processing'
+                    ? `Processing… ${Math.min(100, Math.max(5, Math.round(uploadProgress)))}%`
+                    : 'Processing upload…')
+              : `Upload ${file ? file.name : 'File'}`}
           </Button>
 
-          {uploadProgress > 0 && (
+          {(isProcessing || uploadProgress > 0) && (
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
-                <span>{isUploading ? 'Processing file…' : 'Finalizing results…'}</span>
+                <span>
+                  {isProcessing
+                    ? jobStatus?.message || 'Processing file…'
+                    : 'Finalizing results…'}
+                </span>
                 <span>{Math.min(100, Math.max(1, Math.round(uploadProgress)))}%</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200/80">
@@ -506,6 +624,42 @@ export default function BulkUploadPage() {
                   className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-all duration-300"
                   style={{ width: `${Math.min(100, Math.round(uploadProgress))}%` }}
                 />
+              </div>
+            </div>
+          )}
+
+          {jobInfo && (
+            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-700">
+              <div className="flex flex-col gap-1">
+                <p className="font-medium">
+                  Current Status:{' '}
+                  <span className="font-semibold capitalize text-slate-900">
+                    {jobStatus?.status || jobInfo.status}
+                  </span>
+                </p>
+                {jobStatus?.message && <p>{jobStatus.message}</p>}
+                {jobStatus?.stats && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg bg-white p-3 shadow-sm">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Processed</p>
+                      <p className="text-lg font-semibold text-slate-900">
+                        {jobStatus.stats.totalProcessed ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-3 shadow-sm">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Success</p>
+                      <p className="text-lg font-semibold text-emerald-600">
+                        {jobStatus.stats.totalSuccess ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-white p-3 shadow-sm">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Errors</p>
+                      <p className="text-lg font-semibold text-rose-600">
+                        {jobStatus.stats.totalErrors ?? 0}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -519,15 +673,15 @@ export default function BulkUploadPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="rounded-lg bg-blue-50 p-4">
                 <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl font-bold text-blue-600">{uploadResult.total}</p>
+                <p className="text-2xl font-bold text-blue-600">{uploadResult.total ?? 0}</p>
               </div>
               <div className="rounded-lg bg-green-50 p-4">
                 <p className="text-sm text-gray-600">Success</p>
-                <p className="text-2xl font-bold text-green-600">{uploadResult.success}</p>
+                <p className="text-2xl font-bold text-green-600">{uploadResult.success ?? 0}</p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
                 <p className="text-sm text-gray-600">Errors</p>
-                <p className="text-2xl font-bold text-red-600">{uploadResult.errors}</p>
+                <p className="text-2xl font-bold text-red-600">{uploadResult.errors ?? 0}</p>
               </div>
             </div>
 
@@ -542,6 +696,12 @@ export default function BulkUploadPage() {
               <div className="rounded-lg bg-gray-50 p-4">
                 <p className="text-sm text-gray-600">Worksheets processed</p>
                 <p className="text-sm font-medium text-gray-900">{uploadResult.sheetsProcessed.join(', ')}</p>
+              </div>
+            )}
+
+            {uploadResult.message && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">
+                {uploadResult.message}
               </div>
             )}
 
@@ -561,7 +721,7 @@ export default function BulkUploadPage() {
                       {uploadResult.errorDetails.map((error, index) => (
                         <tr key={index} className="hover:bg-red-50/40">
                           <td className="px-4 py-2 text-sm text-gray-600">{error.sheet || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{error.row}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{error.row ?? '-'}</td>
                           <td className="px-4 py-2 text-sm text-red-600">{error.error}</td>
                         </tr>
                       ))}
