@@ -584,6 +584,36 @@ export interface ImportJobStatusResponse {
   completedAt?: string;
 }
 
+export interface DeleteJobStats {
+  requestedCount: number;
+  validCount: number;
+  deletedLeadCount: number;
+  deletedLogCount: number;
+  durationMs: number;
+}
+
+export interface DeleteJobResponse {
+  jobId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  requestedCount: number;
+  validCount: number;
+  message: string;
+}
+
+export interface DeleteJobStatusResponse {
+  jobId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  stats?: DeleteJobStats;
+  errorDetails?: Array<{
+    leadId: string;
+    error: string;
+  }>;
+  message?: string;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt?: string;
+}
+
 export interface BulkUploadInspectResponse {
   uploadToken: string;
   originalName: string;

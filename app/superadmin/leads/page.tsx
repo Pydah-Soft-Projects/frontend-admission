@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
 import { leadAPI } from '@/lib/api';
-import { Lead, LeadFilters, FilterOptions } from '@/types';
+import { Lead, LeadFilters, FilterOptions, DeleteJobStatusResponse } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -74,6 +74,10 @@ export default function LeadsPage() {
   const [bulkDeleteProgress, setBulkDeleteProgress] = useState(0);
   const bulkDeleteProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bulkDeleteProgressResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
+  const deleteJobPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [deleteJobStatus, setDeleteJobStatus] = useState<DeleteJobStatusResponse | null>(null);
+  const deleteJobCompletedRef = useRef<boolean>(false);
   const queryClient = useQueryClient();
 
   // Debounce search inputs
@@ -470,56 +474,123 @@ export default function LeadsPage() {
     });
   };
 
+  // Clear delete job polling
+  const clearDeleteJobPolling = useCallback(() => {
+    if (deleteJobPollingRef.current) {
+      clearInterval(deleteJobPollingRef.current);
+      deleteJobPollingRef.current = null;
+    }
+  }, []);
+
+  // Poll for delete job status
+  const pollDeleteJobStatus = useCallback(async (jobId: string) => {
+    // Prevent multiple completion handlers - early return if already completed
+    if (deleteJobCompletedRef.current) {
+      return;
+    }
+
+    try {
+      const status = await leadAPI.getDeleteJobStatus(jobId);
+      if (status) {
+        setDeleteJobStatus(status);
+
+        // Update progress based on actual stats
+        if (status.stats) {
+          const { deletedLeadCount, validCount } = status.stats;
+          if (validCount > 0) {
+            const progress = Math.min(95, Math.round((deletedLeadCount / validCount) * 90));
+            setBulkDeleteProgress(progress);
+          }
+        }
+
+        // Stop polling if job is completed or failed
+        if (status.status === 'completed' || status.status === 'failed') {
+          // Double-check and mark as completed atomically to prevent race conditions
+          if (deleteJobCompletedRef.current) {
+            return;
+          }
+          
+          // Set flag immediately before any async operations
+          deleteJobCompletedRef.current = true;
+          
+          // Clear polling immediately to prevent any more calls
+          clearDeleteJobPolling();
+          setBulkDeleteProgress(100);
+
+          // Show toast only once
+          if (status.status === 'completed') {
+            queryClient.invalidateQueries({ queryKey: ['leads'] });
+            setSelectedLeads(new Set<string>());
+            setShowBulkDeleteModal(false);
+            setPage(1);
+            const deletedCount = status.stats?.deletedLeadCount || 0;
+            showToast.success(`Successfully deleted ${deletedCount} lead(s)`);
+          } else {
+            showToast.error(status.message || 'Failed to delete leads');
+          }
+
+          // Reset after a delay
+          setTimeout(() => {
+            setBulkDeleteProgress(0);
+            setDeleteJobId(null);
+            setDeleteJobStatus(null);
+            deleteJobCompletedRef.current = false;
+          }, 2000);
+        }
+      }
+    } catch (error: any) {
+      // Only show error if not already completed
+      if (!deleteJobCompletedRef.current) {
+        console.error('Error polling delete job status:', error);
+        clearDeleteJobPolling();
+        deleteJobCompletedRef.current = false;
+        showToast.error('Failed to check delete job status');
+      }
+    }
+  }, [clearDeleteJobPolling, queryClient]);
+
   // Bulk delete mutation
   const bulkDeleteMutation = useMutation({
     mutationFn: async (leadIds: string[]) => {
-      return await leadAPI.bulkDelete(leadIds);
+      const result = await leadAPI.bulkDelete(leadIds);
+      if (!result || !result.jobId) {
+        throw new Error('Failed to queue delete job');
+      }
+      return result;
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      setSelectedLeads(new Set<string>());
-      setShowBulkDeleteModal(false);
-      setPage(1); // Reset to first page
-      const deletedCount = Array.isArray(variables) ? variables.length : 0;
-      showToast.success(`Successfully deleted ${deletedCount} lead(s)`);
+    onSuccess: (data) => {
+      if (data?.jobId) {
+        // Reset completion flag for new job
+        deleteJobCompletedRef.current = false;
+        setDeleteJobId(data.jobId);
+        setBulkDeleteProgress(5);
+        // Start polling
+        deleteJobPollingRef.current = setInterval(() => {
+          pollDeleteJobStatus(data.jobId);
+        }, 2000);
+        // Poll immediately
+        pollDeleteJobStatus(data.jobId);
+      }
     },
     onError: (error: any) => {
       console.error('Error bulk deleting leads:', error);
-      showToast.error(error.response?.data?.message || 'Failed to delete leads');
+      clearDeleteJobPolling();
+      deleteJobCompletedRef.current = false;
+      setBulkDeleteProgress(0);
+      showToast.error(error.response?.data?.message || 'Failed to queue delete job');
     },
   });
 
+  // Cleanup polling on unmount
   useEffect(() => {
-    if (bulkDeleteMutation.isPending) {
-      clearBulkDeleteProgressResetTimeout();
-      setBulkDeleteProgress((prev) => (prev > 5 ? prev : 5));
-      clearBulkDeleteProgressInterval();
-      bulkDeleteProgressIntervalRef.current = setInterval(() => {
-        setBulkDeleteProgress((prev) => {
-          if (prev >= 92) {
-            return prev;
-          }
-          const increment = Math.random() * 6 + 3;
-          return Math.min(prev + increment, 92);
-        });
-      }, 500);
-    } else {
-      clearBulkDeleteProgressInterval();
-      setBulkDeleteProgress((prev) => {
-        if (prev === 0) return 0;
-        if (prev < 100) return 100;
-        return prev;
-      });
-      clearBulkDeleteProgressResetTimeout();
-      bulkDeleteProgressResetTimeoutRef.current = setTimeout(() => {
-        setBulkDeleteProgress(0);
-      }, 800);
-    }
-
     return () => {
+      clearDeleteJobPolling();
       clearBulkDeleteProgressInterval();
+      if (bulkDeleteProgressResetTimeoutRef.current) {
+        clearTimeout(bulkDeleteProgressResetTimeoutRef.current);
+      }
     };
-  }, [bulkDeleteMutation.isPending]);
+  }, [clearDeleteJobPolling]);
 
   const toggleLeadSelection = (leadId: string, shouldSelect?: boolean) => {
     setSelectedLeads((prev) => {
@@ -1568,38 +1639,61 @@ export default function LeadsPage() {
                 <Button
                   variant="primary"
                   onClick={handleConfirmBulkDelete}
-                  disabled={bulkDeleteMutation.isPending}
+                  disabled={bulkDeleteMutation.isPending || (deleteJobStatus?.status === 'processing' || deleteJobStatus?.status === 'queued')}
                   className="bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700"
                 >
-                  {bulkDeleteMutation.isPending
+                  {(bulkDeleteMutation.isPending || deleteJobStatus?.status === 'processing' || deleteJobStatus?.status === 'queued')
                     ? `Deleting… ${Math.min(100, Math.max(5, Math.round(bulkDeleteProgress)))}%`
                     : 'Delete Leads'}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setShowBulkDeleteModal(false);
-                    setBulkDeleteProgress(0);
+                    if (!bulkDeleteMutation.isPending && deleteJobStatus?.status !== 'processing' && deleteJobStatus?.status !== 'queued') {
+                      setShowBulkDeleteModal(false);
+                      setBulkDeleteProgress(0);
+                      setDeleteJobId(null);
+                      setDeleteJobStatus(null);
+                    }
                   }}
-                  disabled={bulkDeleteMutation.isPending}
+                  disabled={bulkDeleteMutation.isPending || (deleteJobStatus?.status === 'processing' || deleteJobStatus?.status === 'queued')}
                 >
                   Cancel
                 </Button>
               </div>
-              {bulkDeleteProgress > 0 && (
+              {(bulkDeleteProgress > 0 || deleteJobStatus) && (
                 <div className="pt-3">
                   <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 mb-1">
                     <span>
-                      {bulkDeleteMutation.isPending ? 'Deleting leads…' : 'Finalizing deletions…'}
+                      {deleteJobStatus?.status === 'processing' 
+                        ? `Deleting leads… (${deleteJobStatus.stats?.deletedLeadCount || 0}/${deleteJobStatus.stats?.validCount || 0})`
+                        : deleteJobStatus?.status === 'queued'
+                        ? 'Job queued, starting soon…'
+                        : deleteJobStatus?.status === 'completed'
+                        ? 'Deletion completed!'
+                        : deleteJobStatus?.status === 'failed'
+                        ? 'Deletion failed'
+                        : bulkDeleteMutation.isPending
+                        ? 'Deleting leads…'
+                        : 'Finalizing deletions…'}
                     </span>
                     <span>{Math.min(100, Math.max(1, Math.round(bulkDeleteProgress)))}%</span>
                   </div>
                   <div className="h-2 w-full bg-gray-200/80 dark:bg-slate-700/80 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-red-500 via-orange-500 to-amber-500 transition-all duration-300"
+                      className={`h-full transition-all duration-300 ${
+                        deleteJobStatus?.status === 'failed'
+                          ? 'bg-gradient-to-r from-red-600 to-red-500'
+                          : 'bg-gradient-to-r from-red-500 via-orange-500 to-amber-500'
+                      }`}
                       style={{ width: `${Math.min(100, Math.round(bulkDeleteProgress))}%` }}
                     />
                   </div>
+                  {deleteJobStatus?.message && (
+                    <p className="text-xs mt-2 text-gray-600 dark:text-slate-300">
+                      {deleteJobStatus.message}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -11,6 +11,7 @@ import type {
   UpdateUserData,
   BulkUploadJobResponse,
   ImportJobStatusResponse,
+  DeleteJobStatusResponse,
 } from '@/types';
 
 // API Base URL - Update this with your backend URL
@@ -158,7 +159,11 @@ export const leadAPI = {
   },
   bulkDelete: async (leadIds: string[]) => {
     const response = await api.delete('/leads/bulk', { data: { leadIds } });
-    return response.data;
+    return response.data?.data as { jobId: string; status: string; requestedCount: number; validCount: number; message: string } | undefined;
+  },
+  getDeleteJobStatus: async (jobId: string) => {
+    const response = await api.get(`/leads/delete-jobs/${jobId}`);
+    return response.data?.data as DeleteJobStatusResponse | undefined;
   },
   bulkUpload: async (formData: FormData) => {
     const response = await api.post('/leads/bulk-upload', formData, {
