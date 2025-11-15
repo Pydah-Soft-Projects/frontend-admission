@@ -766,12 +766,11 @@ const JoiningDetailPage = () => {
       defaultAmountValue && defaultAmountValue > 0
         ? Number(defaultAmountValue.toFixed(2))
         : 0;
-    setPaymentFormState((prev) => ({
+    setPaymentFormState({
       amount:
         isAdditionalFeeMode || normalizedValue <= 0 ? '' : String(normalizedValue),
-      notes: isAdditionalFeeMode ? prev.notes || 'Additional fee' : '',
       isProcessing: false,
-    }));
+    });
     setShouldPromptPayment(false);
     setOpenPaymentMode(mode);
   };
@@ -796,6 +795,7 @@ const JoiningDetailPage = () => {
     setPaymentFormState((prev) => ({ ...prev, isProcessing: true }));
     try {
       await paymentAPI.recordCashPayment({
+        ...(lead?._id && { leadId: lead._id }),
         joiningId: joiningRecord?._id,
         admissionId: admissionRecord?._id,
         courseId: formState.courseInfo.courseId,
@@ -845,6 +845,7 @@ const JoiningDetailPage = () => {
     let orderId: string | null = null;
     try {
       const orderResponse = await paymentAPI.createCashfreeOrder({
+        ...(lead?._id && { leadId: lead._id }),
         joiningId: joiningRecord?._id,
         admissionId: admissionRecord?._id,
         courseId: formState.courseInfo.courseId,

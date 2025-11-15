@@ -170,9 +170,9 @@ const CompletedAdmissionsPage = () => {
                       {record.updatedAt ? new Date(record.updatedAt).toLocaleString() : '—'}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link href={`/superadmin/joining/${record.leadId}`}>
+                      <Link href={`/superadmin/admission/${record._id}/detail`}>
                         <Button variant="outline" size="sm">
-                          View Joining
+                          View Admission
                         </Button>
                       </Link>
                     </td>

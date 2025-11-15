@@ -128,9 +128,9 @@ const ConfirmedLeadsPage = () => {
                       {lead.updatedAt ? new Date(lead.updatedAt).toLocaleString() : '—'}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link href={`/superadmin/joining/${lead._id}`}>
+                      <Link href={`/superadmin/joining/${lead._id}/detail`}>
                         <Button variant="primary" size="sm">
-                          Open Joining Form
+                          View Details
                         </Button>
                       </Link>
                     </td>

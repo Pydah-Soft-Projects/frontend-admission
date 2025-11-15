@@ -574,6 +574,18 @@ export const admissionAPI = {
     const response = await api.get(`/admissions/${leadId}`);
     return response.data;
   },
+  getByJoiningId: async (joiningId: string) => {
+    const response = await api.get(`/admissions/joining/${joiningId}`);
+    return response.data;
+  },
+  getById: async (admissionId: string) => {
+    const response = await api.get(`/admissions/id/${admissionId}`);
+    return response.data;
+  },
+  updateById: async (admissionId: string, data: any) => {
+    const response = await api.put(`/admissions/id/${admissionId}`, data);
+    return response.data;
+  },
   updateByLeadId: async (leadId: string, data: any) => {
     const response = await api.put(`/admissions/${leadId}`, data);
     return response.data;
@@ -595,7 +607,7 @@ export const paymentAPI = {
     return response.data;
   },
   recordCashPayment: async (data: {
-    leadId: string;
+    leadId?: string;
     joiningId?: string;
     admissionId?: string;
     courseId?: string;
@@ -609,7 +621,7 @@ export const paymentAPI = {
     return response.data;
   },
   createCashfreeOrder: async (data: {
-    leadId: string;
+    leadId?: string;
     joiningId?: string;
     admissionId?: string;
     courseId?: string;

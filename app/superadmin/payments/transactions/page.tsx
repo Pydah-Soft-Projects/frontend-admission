@@ -52,14 +52,13 @@ export default function PaymentTransactionsPage() {
     },
     onSuccess: (data) => {
       const result = data?.data || data;
-      showToast(
-        `Reconciled ${result.checked || 0} transactions. ${result.updated || 0} updated, ${result.failed || 0} failed.`,
-        'success'
+      showToast.success(
+        `Reconciled ${result.checked || 0} transactions. ${result.updated || 0} updated, ${result.failed || 0} failed.`
       );
       refetch();
     },
     onError: (error: any) => {
-      showToast(error?.response?.data?.message || 'Failed to reconcile transactions', 'error');
+      showToast.error(error?.response?.data?.message || 'Failed to reconcile transactions');
     },
   });
 

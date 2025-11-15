@@ -216,9 +216,9 @@ const JoiningInProgressPage = () => {
                       {new Date(joining.updatedAt).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link href={`/superadmin/joining/${joining.leadId}`}>
+                      <Link href={`/superadmin/joining/${joining.leadId || joining._id}/detail`}>
                         <Button variant="outline" className="group inline-flex items-center gap-2">
-                          <span className="transition-transform group-hover:-translate-x-0.5">Open Joining Form</span>
+                          <span className="transition-transform group-hover:-translate-x-0.5">View Details</span>
                           <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>

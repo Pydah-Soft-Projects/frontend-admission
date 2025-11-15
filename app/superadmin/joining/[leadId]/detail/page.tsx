@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
-import { joiningAPI, paymentAPI } from '@/lib/api';
-import { Joining, PaymentSummary, PaymentTransaction } from '@/types';
+import { joiningAPI, paymentAPI, admissionAPI } from '@/lib/api';
+import { Joining, PaymentSummary, PaymentTransaction, Admission } from '@/types';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 
@@ -65,6 +65,23 @@ export default function JoiningDetailPage() {
   const joining = data?.data?.joining as Joining | undefined;
   const lead = (joining?.leadData as any) || data?.data?.lead;
 
+  // Fetch admission if joining is approved
+  const { data: admissionData } = useQuery({
+    queryKey: ['admission', joining?._id],
+    enabled: !!joining?._id && joining?.status === 'approved',
+    queryFn: async () => {
+      if (!joining?._id) return null;
+      try {
+        const response = await admissionAPI.getByJoiningId(joining._id);
+        return response;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const admission = admissionData?.data?.admission as Admission | undefined;
+
   // Fetch payment information - use paymentSummary from joining if available
   const paymentSummary: PaymentSummary | null = useMemo(() => {
     if (joining?.paymentSummary) {
@@ -111,6 +128,7 @@ export default function JoiningDetailPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {joining?.status === 'draft' ? 'Draft' : joining?.status === 'pending_approval' ? 'Pending Approval' : 'Approved'}
             {lead?.enquiryNumber && ` • Enquiry #${lead.enquiryNumber}`}
+            {admission?.admissionNumber && ` • Admission #${admission.admissionNumber}`}
           </p>
         </div>
         <div className="flex gap-3">

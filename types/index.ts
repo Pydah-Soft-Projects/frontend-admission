@@ -484,9 +484,11 @@ export interface OverviewAnalyticsResponse {
 
 export interface Admission {
   _id: string;
-  leadId: string;
+  leadId?: string; // Made optional to support admissions without leads
   joiningId: string;
   admissionNumber: string;
+  enquiryNumber?: string; // Enquiry number from lead
+  leadData?: any; // Snapshot of lead data stored in admission
   status: 'active' | 'withdrawn';
   admissionDate: string;
   courseInfo: JoiningCourseInfo;

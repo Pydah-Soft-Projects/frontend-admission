@@ -355,7 +355,7 @@ const JoiningPipelinePage = () => {
                                 approveMutation.mutate(joining.leadId || joining._id);
                               }}
                             >
-                              {approveMutation.mutate.isPending ? 'Approving…' : 'Approve'}
+                              {approveMutation.isPending ? 'Approving…' : 'Approve'}
                             </Button>
                             <Link href={`/superadmin/joining/${joining.leadId || joining._id || 'new'}/detail`}>
                               <Button variant="outline" size="sm">
