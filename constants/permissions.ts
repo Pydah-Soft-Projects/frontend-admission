@@ -18,7 +18,7 @@ export interface PermissionModuleDefinition {
 export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
   {
     key: 'leads',
-    label: 'Lead Console',
+    label: 'Leads',
     description: 'Capture individual leads, upload bulk lists, and distribute them to counsellors.',
   },
   {

@@ -265,11 +265,27 @@ export default function LeadsPage() {
   const headerNode = useMemo(
     () => (
       <div className="flex flex-col items-end gap-2 text-right">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Leads Management</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Monitor enquiries, qualify prospects, and trigger communications from a single, streamlined workspace.
-          </p>
+        <div className="flex items-center justify-between w-full">
+          <div className="text-left">
+            <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Leads Management</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Monitor enquiries, qualify prospects, and trigger communications from a single, streamlined workspace.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="primary"
+              onClick={() => router.push('/superadmin/leads/individual')}
+            >
+              Add New Enquiry
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => router.push('/superadmin/leads/upload')}
+            >
+              Add Bulk data
+            </Button>
+          </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Button
@@ -289,7 +305,7 @@ export default function LeadsPage() {
         </div>
       </div>
     ),
-    [leads]
+    [leads, router]
   );
 
   useEffect(() => {
@@ -975,147 +991,112 @@ export default function LeadsPage() {
             ) : isLoading ? (
               <Card>
                 <div className="p-6">
-                  <TableSkeleton rows={5} cols={18} />
+                  <TableSkeleton rows={5} cols={9} />
                 </div>
               </Card>
             ) : (
               <>
                 <div className="grid gap-4 md:hidden">
-                  {displayedLeads.map((lead: Lead) => (
-                    <Card
-                      key={`mobile-${lead._id}`}
-                      className="p-4 bg-white/80 dark:bg-slate-900/60"
-                      onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">Enquiry #</p>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                            {lead.enquiryNumber || '—'}
-                          </p>
+                  {displayedLeads.map((lead: Lead) => {
+                    const assignedUserName = typeof lead.assignedTo === 'object' && lead.assignedTo !== null 
+                      ? lead.assignedTo.name 
+                      : '—';
+                    return (
+                      <Card
+                        key={`mobile-${lead._id}`}
+                        className="p-4 bg-white/80 dark:bg-slate-900/60"
+                        onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">Student Name</p>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                              {lead.name}
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={selectedLeads.has(lead._id)}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleLeadSelection(lead._id, e.target.checked);
+                            }}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={selectedLeads.has(lead._id)}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleLeadSelection(lead._id, e.target.checked);
-                          }}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                      </div>
 
-                      <div className="mt-4 space-y-3 text-sm">
-                        {lead.hallTicketNumber && (
+                        <div className="mt-4 space-y-3 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-gray-500 dark:text-slate-400">Hall Ticket</span>
-                            <span className="font-medium text-gray-900 dark:text-slate-100">{lead.hallTicketNumber}</span>
+                            <span className="text-gray-500 dark:text-slate-400">Lead Date</span>
+                            <span className="font-medium text-gray-900 dark:text-slate-100">
+                              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '—'}
+                            </span>
                           </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">Name</span>
-                          <span className="font-medium text-gray-900 dark:text-slate-100">{lead.name}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">Phone</span>
-                          <span className="font-medium text-blue-600 dark:text-blue-300">{lead.phone}</span>
-                        </div>
-                        {lead.email && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500 dark:text-slate-400">Email</span>
-                            <span className="text-gray-700 dark:text-slate-200 truncate max-w-[55%] text-right">{lead.email}</span>
+                            <span className="text-gray-500 dark:text-slate-400">Course</span>
+                            <span className="font-medium text-gray-900 dark:text-slate-100">{lead.courseInterested || '—'}</span>
                           </div>
-                        )}
-                        {lead.fatherPhone && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500 dark:text-slate-400">Father Phone</span>
-                            <span className="text-gray-700 dark:text-slate-200">{lead.fatherPhone}</span>
+                            <span className="text-gray-500 dark:text-slate-400">Source</span>
+                            <span className="font-medium text-gray-900 dark:text-slate-100">{lead.source || '—'}</span>
                           </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">Mandal</span>
-                          <span className="text-gray-700 dark:text-slate-200">{lead.mandal}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">Village</span>
-                          <span className="text-gray-700 dark:text-slate-200">{lead.village}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">District</span>
-                          <span className="text-gray-700 dark:text-slate-200">{lead.district}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">State</span>
-                          <span className="text-gray-700 dark:text-slate-200">{lead.state}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">Gender</span>
-                          <span className="text-gray-700 dark:text-slate-200">{lead.gender || '—'}</span>
-                        </div>
-                        {lead.interCollege && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500 dark:text-slate-400">Inter College</span>
-                            <span className="text-gray-700 dark:text-slate-200 truncate max-w-[55%] text-right">{lead.interCollege}</span>
+                            <span className="text-gray-500 dark:text-slate-400">Status</span>
+                            <span className="font-medium text-gray-900 dark:text-slate-100">{lead.applicationStatus || 'Not Provided'}</span>
                           </div>
-                        )}
-                        {lead.rank !== undefined && lead.rank !== null && (
                           <div className="flex justify-between">
-                            <span className="text-gray-500 dark:text-slate-400">Rank</span>
-                            <span className="text-gray-700 dark:text-slate-200">{lead.rank}</span>
+                            <span className="text-gray-500 dark:text-slate-400">Counsellor Assigned</span>
+                            <span className="font-medium text-gray-900 dark:text-slate-100">{assignedUserName}</span>
                           </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">Application Status</span>
-                          <span className="text-gray-700 dark:text-slate-200">{lead.applicationStatus || 'Not Provided'}</span>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 dark:text-slate-400">Student Mobile</span>
+                            <span className="font-medium text-blue-600 dark:text-blue-300">{lead.phone}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <span className="text-gray-500 dark:text-slate-400">Lead Status</span>
+                            <span
+                              className={`px-2 py-0.5 inline-flex text-[11px] leading-4 font-semibold rounded-full ${getStatusColor(lead.leadStatus)}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenCommentModal(lead, e as unknown as React.MouseEvent);
+                              }}
+                            >
+                              {lead.leadStatus || 'New'}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-slate-400">Quota</span>
-                          <span className="text-gray-700 dark:text-slate-200">{lead.quota}</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          <span className="text-gray-500 dark:text-slate-400">Lead Status</span>
-                          <span
-                            className={`px-2 py-0.5 inline-flex text-[11px] leading-4 font-semibold rounded-full ${getStatusColor(lead.leadStatus)}`}
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/superadmin/leads/${lead._id}`);
+                            }}
+                          >
+                            View Details
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenCommentModal(lead, e as unknown as React.MouseEvent);
                             }}
                           >
-                            {lead.leadStatus || 'New'}
-                          </span>
+                            Comment / Update Status
+                          </Button>
                         </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/superadmin/leads/${lead._id}`);
-                          }}
-                        >
-                          View Details
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenCommentModal(lead, e as unknown as React.MouseEvent);
-                          }}
-                        >
-                          Comment / Update Status
-                        </Button>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    );
+                  })}
                 </div>
 
                 <Card className="hidden md:block overflow-hidden">
                   <div className="overflow-x-auto w-full">
-                    <table className="w-full divide-y divide-gray-200 dark:divide-slate-700 min-w-[1000px]">
+                    <table className="w-full divide-y divide-gray-200 dark:divide-slate-700">
                       <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-slate-900/60 dark:to-slate-900/40">
                         <tr>
                           <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider w-10 dark:text-slate-200">
@@ -1128,12 +1109,12 @@ export default function LeadsPage() {
                             />
                           </th>
                           <th 
-                            className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60 w-24"
-                            onClick={() => handleSort('enquiryNumber')}
+                            className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                            onClick={() => handleSort('createdAt')}
                           >
                             <div className="flex items-center gap-1">
-                              Enquiry #
-                              {sortField === 'enquiryNumber' && (
+                              Lead Date
+                              {sortField === 'createdAt' && (
                                 <span className="text-blue-600 dark:text-blue-300">
                                   {sortOrder === 'asc' ? '↑' : '↓'}
                                 </span>
@@ -1141,24 +1122,11 @@ export default function LeadsPage() {
                             </div>
                           </th>
                           <th 
-                            className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60 hidden lg:table-cell w-28"
-                            onClick={() => handleSort('hallTicketNumber')}
-                          >
-                            <div className="flex items-center gap-1">
-                              Hall Ticket
-                              {sortField === 'hallTicketNumber' && (
-                                <span className="text-blue-600 dark:text-blue-300">
-                                  {sortOrder === 'asc' ? '↑' : '↓'}
-                                </span>
-                              )}
-                            </div>
-                          </th>
-                          <th 
-                            className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60 w-32"
+                            className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                             onClick={() => handleSort('name')}
                           >
                             <div className="flex items-center gap-1">
-                              Name
+                              Student Name
                               {sortField === 'name' && (
                                 <span className="text-blue-600 dark:text-blue-300">
                                   {sortOrder === 'asc' ? '↑' : '↓'}
@@ -1167,11 +1135,53 @@ export default function LeadsPage() {
                             </div>
                           </th>
                           <th 
-                            className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60 w-28"
+                            className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                            onClick={() => handleSort('courseInterested')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Course
+                              {sortField === 'courseInterested' && (
+                                <span className="text-blue-600 dark:text-blue-300">
+                                  {sortOrder === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                            onClick={() => handleSort('source')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Source
+                              {sortField === 'source' && (
+                                <span className="text-blue-600 dark:text-blue-300">
+                                  {sortOrder === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                            onClick={() => handleSort('applicationStatus')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Status
+                              {sortField === 'applicationStatus' && (
+                                <span className="text-blue-600 dark:text-blue-300">
+                                  {sortOrder === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </div>
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider dark:text-slate-200">
+                            Counsellor Assigned
+                          </th>
+                          <th 
+                            className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                             onClick={() => handleSort('phone')}
                           >
                             <div className="flex items-center gap-1">
-                              Phone
+                              Student Mobile
                               {sortField === 'phone' && (
                                 <span className="text-blue-600 dark:text-blue-300">
                                   {sortOrder === 'asc' ? '↑' : '↓'}
@@ -1179,48 +1189,8 @@ export default function LeadsPage() {
                               )}
                             </div>
                           </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell dark:text-slate-200 w-40">
-                            Email
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell dark:text-slate-200 w-28">
-                            Father Phone
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider dark:text-slate-200 w-24">
-                            Mandal
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider dark:text-slate-200 hidden xl:table-cell w-28">
-                            Village
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell dark:text-slate-200 w-28">
-                            District
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden xl:table-cell dark:text-slate-200 w-20">
-                            Gender
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden 2xl:table-cell dark:text-slate-200 w-32">
-                            Inter College
-                          </th>
                           <th 
-                            className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60 w-20"
-                            onClick={() => handleSort('rank')}
-                          >
-                            <div className="flex items-center gap-1">
-                              Rank
-                              {sortField === 'rank' && (
-                                <span className="text-blue-600 dark:text-blue-300">
-                                  {sortOrder === 'asc' ? '↑' : '↓'}
-                                </span>
-                              )}
-                            </div>
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden 2xl:table-cell dark:text-slate-200 w-20">
-                            Quota
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden xl:table-cell dark:text-slate-200 w-32">
-                            Application Status
-                          </th>
-                          <th 
-                            className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60 w-28"
+                            className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                             onClick={() => handleSort('leadStatus')}
                           >
                             <div className="flex items-center gap-1">
@@ -1232,119 +1202,68 @@ export default function LeadsPage() {
                               )}
                             </div>
                           </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell dark:text-slate-200 w-24">
-                            Created
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider dark:text-slate-200 w-24">
-                            Actions
-                          </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white/50 dark:bg-slate-900/30 divide-y divide-gray-200 dark:divide-slate-700">
-                        {displayedLeads.map((lead: Lead) => (
-                          <tr
-                            key={lead._id}
-                            className="hover:bg-blue-50/50 dark:hover:bg-slate-800/60 transition-colors duration-200 cursor-pointer"
-                            onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
-                          >
-                            <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={selectedLeads.has(lead._id)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  toggleLeadSelection(lead._id, e.target.checked);
-                                }}
-                                className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                              />
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs font-mono font-medium text-blue-600 dark:text-blue-300 max-w-[96px] truncate" title={lead.enquiryNumber || '-'}>
-                              {lead.enquiryNumber || '-'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden lg:table-cell max-w-[112px] truncate" title={lead.hallTicketNumber || '—'}>
-                              {lead.hallTicketNumber || '—'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs font-medium text-gray-900 dark:text-slate-100 max-w-[128px] truncate" title={lead.name}>
-                              {lead.name}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 max-w-[112px] truncate" title={lead.phone}>
-                              {lead.phone}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden sm:table-cell max-w-[160px] truncate" title={lead.email || '-'}>
-                              {lead.email || '-'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden md:table-cell max-w-[112px] truncate" title={lead.fatherPhone || '—'}>
-                              {lead.fatherPhone || '—'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 max-w-[96px] truncate" title={lead.mandal}>
-                              {lead.mandal}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden xl:table-cell max-w-[112px] truncate" title={lead.village}>
-                              {lead.village}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden lg:table-cell max-w-[112px] truncate" title={lead.district}>
-                              {lead.district}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden xl:table-cell max-w-[80px] truncate" title={lead.gender || '—'}>
-                              {lead.gender || '—'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden 2xl:table-cell max-w-[128px] truncate" title={lead.interCollege || '—'}>
-                              {lead.interCollege || '—'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden lg:table-cell max-w-[80px] truncate" title={lead.rank?.toString() || '—'}>
-                              {lead.rank ?? '—'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden 2xl:table-cell max-w-[80px] truncate" title={lead.quota}>
-                              {lead.quota}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden xl:table-cell max-w-[128px] truncate" title={lead.applicationStatus || 'Not Provided'}>
-                              {lead.applicationStatus || 'Not Provided'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap max-w-[112px]">
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenCommentModal(lead, e);
-                                }}
-                                className={`px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded-full transition-all cursor-pointer hover:opacity-80 truncate max-w-full ${getStatusColor(
-                                  lead.leadStatus
-                                )}`}
-                                title="Click to update status"
-                              >
-                                {lead.leadStatus || 'New'}
-                              </span>
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300 hidden md:table-cell max-w-[96px] truncate" title={lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '-'}>
-                              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '-'}
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap text-xs max-w-[96px]">
-                              <div className="flex gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
+                        {displayedLeads.map((lead: Lead) => {
+                          const assignedUserName = typeof lead.assignedTo === 'object' && lead.assignedTo !== null 
+                            ? lead.assignedTo.name 
+                            : '—';
+                          return (
+                            <tr
+                              key={lead._id}
+                              className="hover:bg-blue-50/50 dark:hover:bg-slate-800/60 transition-colors duration-200 cursor-pointer"
+                              onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
+                            >
+                              <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedLeads.has(lead._id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleLeadSelection(lead._id, e.target.checked);
+                                  }}
+                                  className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                                />
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '-'}>
+                                {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '-'}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-xs font-medium text-gray-900 dark:text-slate-100" title={lead.name}>
+                                {lead.name}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.courseInterested || '—'}>
+                                {lead.courseInterested || '—'}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.source || '—'}>
+                                {lead.source || '—'}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.applicationStatus || 'Not Provided'}>
+                                {lead.applicationStatus || 'Not Provided'}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={assignedUserName}>
+                                {assignedUserName}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.phone}>
+                                {lead.phone}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap max-w-[112px]">
+                                <span
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleOpenCommentModal(lead, e);
                                   }}
-                                  className="text-[10px] px-2 py-1"
+                                  className={`px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded-full transition-all cursor-pointer hover:opacity-80 truncate max-w-full ${getStatusColor(
+                                    lead.leadStatus
+                                  )}`}
+                                  title="Click to update status"
                                 >
-                                  Comment
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(`/superadmin/leads/${lead._id}`);
-                                  }}
-                                  className="text-[10px] px-2 py-1"
-                                >
-                                  View
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                                  {lead.leadStatus || 'New'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

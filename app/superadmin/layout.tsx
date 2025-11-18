@@ -26,14 +26,9 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
   { href: '/superadmin/dashboard', label: 'Overview', icon: HomeIcon, permissionKey: DASHBOARD_PERMISSION_KEY },
   {
     href: '/superadmin/leads',
-    label: 'Lead Console',
+    label: 'Leads',
     icon: ListIcon,
     permissionKey: 'leads',
-    children: [
-      { href: '/superadmin/leads/individual', label: 'Individual Lead', icon: UserIcon, permissionKey: 'leads' },
-      { href: '/superadmin/leads/upload', label: 'Bulk Upload', icon: UploadIcon, permissionKey: 'leads' },
-      { href: '/superadmin/leads/assign', label: 'Assign Leads', icon: UserIcon, permissionKey: 'leads' },
-    ],
   },
   {
     href: '/superadmin/joining',

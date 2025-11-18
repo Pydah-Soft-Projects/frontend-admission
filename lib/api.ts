@@ -153,6 +153,10 @@ export const leadAPI = {
     const response = await api.put(`/leads/${id}`, data);
     return response.data;
   },
+  assignToUser: async (id: string, userId: string) => {
+    const response = await api.put(`/leads/${id}`, { assignedTo: userId });
+    return response.data;
+  },
   delete: async (id: string) => {
     const response = await api.delete(`/leads/${id}`);
     return response.data;

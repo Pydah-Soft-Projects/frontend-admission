@@ -4,24 +4,33 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { leadAPI, communicationAPI } from '@/lib/api';
+import { leadAPI, communicationAPI, userAPI } from '@/lib/api';
 import {
   Lead,
   LeadUpdatePayload,
   User,
   ActivityLog,
+  CommunicationRecord,
   MessageTemplate,
   MessageTemplateVariable,
-  CommunicationRecord,
   CommunicationStatsEntry,
-  CommunicationHistoryResponse,
 } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Skeleton } from '@/components/ui/Skeleton';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
+
+// Timeline item type
+interface TimelineItem {
+  id: string;
+  type: 'enquiry_created' | 'assigned' | 'call' | 'sms' | 'field_update' | 'status_change' | 'comment';
+  date: string;
+  title: string;
+  description: string;
+  performedBy?: string;
+  metadata?: Record<string, any>;
+}
 
 export default function LeadDetailPage() {
   const router = useRouter();
@@ -30,51 +39,56 @@ export default function LeadDetailPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const leadId = params?.id as string;
   const [user, setUser] = useState<User | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Edit state
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<LeadUpdatePayload>({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [showStatusUpdate, setShowStatusUpdate] = useState(false);
-  const [newStatus, setNewStatus] = useState('');
-  const [newQuota, setNewQuota] = useState('Not Applicable');
-  const [comment, setComment] = useState('');
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  
+  // Action bar modals
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-  const quotaOptions = ['Not Applicable', 'Management', 'Convenor'];
-  const leadStatusOptions = [
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [newStatus, setNewStatus] = useState('');
+  const [statusComment, setStatusComment] = useState('');
+  
+  // Comment modal state
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  
+  // Communication modals
+  const [showCallNumberModal, setShowCallNumberModal] = useState(false);
+  const [selectedCallNumber, setSelectedCallNumber] = useState('');
+  const [showCallRemarksModal, setShowCallRemarksModal] = useState(false);
+  const [callData, setCallData] = useState({
+    contactNumber: '',
+    remarks: '',
+    outcome: '',
+    durationSeconds: 0,
+  });
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsData, setSmsData] = useState({
+    selectedNumbers: [] as string[],
+    selectedTemplates: {} as Record<string, { template: MessageTemplate; variables: Record<string, string> }>,
+    languageFilter: 'all' as string,
+  });
+  
+  // Status options
+  const statusOptions = [
     'New',
-    'Contacted',
-    'Qualified',
-    'Converted',
-    'Confirmed',
-    'Lost',
+    'Assigned',
+    'Interested',
+    'Not Interest',
+    'Wrong Data',
     'Admitted',
+    'Admission Cancelled',
   ];
-  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [callNumber, setCallNumber] = useState('');
-  const [callRemarks, setCallRemarks] = useState('');
-  const [callOutcome, setCallOutcome] = useState('');
-  const [callDuration, setCallDuration] = useState('');
-  const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
-  const [selectedNumbers, setSelectedNumbers] = useState<string[]>([]);
-  const [selectedTemplatesState, setSelectedTemplatesState] = useState<
-    Record<string, { template: MessageTemplate; variables: Record<string, string> }>
-  >({});
-  const [smsLanguageFilter, setSmsLanguageFilter] = useState<'all' | string>('all');
-  const [communicationPage, setCommunicationPage] = useState(1);
-  const [communicationLimit] = useState(20);
-  const [communicationTypeFilter, setCommunicationTypeFilter] = useState<'all' | 'call' | 'sms'>(
-    'all'
-  );
-  const sanitizePhoneNumber = useCallback((value: string | undefined | null) => {
-    if (!value) return '';
-    return String(value).replace(/[^\d+]/g, '');
-  }, []);
+  
+  const quotaOptions = ['Not Applicable', 'Management', 'Convenor'];
+  const isSuperAdmin = user?.roleName === 'Super Admin' || user?.roleName === 'Sub Super Admin';
 
-  // Check authentication and mount state
+  // Check authentication
   useEffect(() => {
     setIsMounted(true);
     const currentUser = auth.getUser();
@@ -99,24 +113,321 @@ export default function LeadDetailPage() {
     queryKey: ['lead', leadId],
     queryFn: async () => {
       const response = await leadAPI.getById(leadId);
-      // Backend returns: { success: true, data: lead, message: "..." }
-      // API client extracts response.data, so we get: { success: true, data: lead, message: "..." }
-      // Extract the actual lead from response.data
       return response.data || response;
     },
     enabled: !!leadId && !!user,
     staleTime: 30000,
   });
 
-  // Extract lead from response structure
-  // Response structure: { success: true, data: lead, message: "..." }
   const lead = (leadData?.data || leadData) as Lead | undefined;
-  const normalizedLeadStatus = (lead?.leadStatus || '').toLowerCase();
-  const canAccessJoiningForm = ['confirmed', 'admitted', 'joined'].includes(normalizedLeadStatus);
-  const joiningButtonLabel =
-    normalizedLeadStatus === 'admitted' || normalizedLeadStatus === 'joined'
-      ? 'View Joining Form'
-      : 'Join Lead';
+
+  // Fetch activity logs
+  const {
+    data: activityLogsData,
+    isLoading: isLoadingLogs,
+  } = useQuery({
+    queryKey: ['lead', leadId, 'activityLogs'],
+    queryFn: async () => {
+      const response = await leadAPI.getActivityLogs(leadId);
+      return response.data?.logs || response.logs || [];
+    },
+    enabled: !!leadId && !!user,
+  });
+
+  const activityLogs = (activityLogsData || []) as ActivityLog[];
+
+  // Fetch communication history
+  const {
+    data: communicationHistoryResponse,
+    isLoading: isLoadingCommunications,
+  } = useQuery({
+    queryKey: ['lead', leadId, 'communications'],
+    queryFn: async () => {
+      const response = await communicationAPI.getHistory(leadId, {
+        page: 1,
+        limit: 100,
+      });
+      return response.data || response;
+    },
+    enabled: !!leadId && !!user,
+  });
+
+  const communications: CommunicationRecord[] = 
+    communicationHistoryResponse?.data?.items || 
+    communicationHistoryResponse?.items || 
+    [];
+
+  // Fetch communication stats
+  const { data: communicationStatsResponse } = useQuery({
+    queryKey: ['lead', leadId, 'communicationStats'],
+    queryFn: async () => {
+      const response = await communicationAPI.getStats(leadId);
+      return response.data || response;
+    },
+    enabled: !!leadId && !!user,
+    staleTime: 30000,
+  });
+
+  const communicationStats: CommunicationStatsEntry[] = 
+    communicationStatsResponse?.stats || communicationStatsResponse || [];
+
+  // Fetch users for assignment
+  const { data: usersData } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const response = await userAPI.getAll();
+      return response.data || response;
+    },
+    enabled: showAssignModal && isSuperAdmin,
+  });
+
+  const users: User[] = (usersData?.data || usersData || []).filter(
+    (u: User) => u.isActive && u.roleName !== 'Super Admin' && u.roleName !== 'Sub Super Admin'
+  );
+
+  // Separate call logs for Call History section - MUST be before early returns
+  const callLogs = useMemo(() => {
+    if (!communications || communications.length === 0) {
+      return [];
+    }
+
+    // Group calls by contact number and sort chronologically
+    const callsByNumber = new Map<string, CommunicationRecord[]>();
+    
+    communications
+      .filter((comm) => comm.type === 'call')
+      .forEach((comm) => {
+        const number = comm.contactNumber || 'Unknown';
+        if (!callsByNumber.has(number)) {
+          callsByNumber.set(number, []);
+        }
+        callsByNumber.get(number)!.push(comm);
+      });
+
+    // Sort each group chronologically and assign sequence numbers
+    const allCalls: Array<CommunicationRecord & { sequenceNumber: number; ordinal: string }> = [];
+    
+    callsByNumber.forEach((calls, contactNumber) => {
+      const sortedCalls = [...calls].sort((a, b) => 
+        new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+      );
+
+      sortedCalls.forEach((call, index) => {
+        const sequenceNumber = index + 1;
+        const ordinal = sequenceNumber === 1 ? '1st' : 
+                       sequenceNumber === 2 ? '2nd' : 
+                       sequenceNumber === 3 ? '3rd' : 
+                       `${sequenceNumber}th`;
+        
+        allCalls.push({
+          ...call,
+          sequenceNumber,
+          ordinal,
+        });
+      });
+    });
+
+    // Sort all calls by date (newest first for display)
+    return allCalls.sort((a, b) => 
+      new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()
+    );
+  }, [communications]);
+
+  // Separate comments from timeline - MUST be before early returns
+  const comments = useMemo(() => {
+    return activityLogs.filter((log) => log.type === 'comment');
+  }, [activityLogs]);
+
+  // Separate status changes from timeline - MUST be before early returns
+  const statusChanges = useMemo(() => {
+    return activityLogs.filter((log) => log.type === 'status_change');
+  }, [activityLogs]);
+
+  // Build timeline from all activities
+  const timelineItems: TimelineItem[] = useMemo(() => {
+    const items: TimelineItem[] = [];
+
+    // 1. Enquiry creation
+    if (lead?.createdAt) {
+      items.push({
+        id: `enquiry-${lead._id}`,
+        type: 'enquiry_created',
+        date: lead.createdAt,
+        title: 'Enquiry Created',
+        description: `Enquiry #${lead.enquiryNumber || 'N/A'} was created`,
+        performedBy: typeof lead.uploadedBy === 'object' ? lead.uploadedBy.name : undefined,
+      });
+    }
+
+    // 2. Assignment - check activity logs first, then fallback to lead.assignedAt
+    const assignmentLog = activityLogs.find((log) => 
+      log.type === 'status_change' && 
+      log.metadata?.assignment
+    );
+    
+    if (assignmentLog) {
+      const assignedUserName = assignmentLog.metadata?.assignment?.assignedTo 
+        ? 'Counsellor' 
+        : 'Unknown';
+      items.push({
+        id: `assigned-${assignmentLog._id}`,
+        type: 'assigned',
+        date: assignmentLog.createdAt,
+        title: 'Assigned to Counsellor',
+        description: assignmentLog.comment || `Assigned to counsellor`,
+        performedBy: typeof assignmentLog.performedBy === 'object' ? assignmentLog.performedBy.name : undefined,
+        metadata: assignmentLog.metadata,
+      });
+    } else if (lead?.assignedAt && lead?.assignedTo) {
+      const assignedUserName = typeof lead.assignedTo === 'object' 
+        ? lead.assignedTo.name 
+        : 'Unknown';
+      items.push({
+        id: `assigned-${lead._id}`,
+        type: 'assigned',
+        date: lead.assignedAt,
+        title: 'Assigned to Counsellor',
+        description: `Assigned to ${assignedUserName}`,
+        performedBy: typeof lead.assignedBy === 'object' ? lead.assignedBy.name : undefined,
+      });
+    }
+
+    // 3. Calls and SMS from communication records with sequence numbers
+    // Group communications by contact number and type, then sort chronologically
+    const communicationsByNumber = new Map<string, { calls: typeof communications; sms: typeof communications }>();
+    
+    communications.forEach((comm) => {
+      const number = comm.contactNumber || 'Unknown';
+      if (!communicationsByNumber.has(number)) {
+        communicationsByNumber.set(number, { calls: [], sms: [] });
+      }
+      const group = communicationsByNumber.get(number)!;
+      if (comm.type === 'call') {
+        group.calls.push(comm);
+      } else if (comm.type === 'sms') {
+        group.sms.push(comm);
+      }
+    });
+
+    // Sort each group chronologically and assign sequence numbers
+    communicationsByNumber.forEach((group, contactNumber) => {
+      // Sort calls by date (oldest first for sequence numbering)
+      const sortedCalls = [...group.calls].sort((a, b) => 
+        new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+      );
+      
+      // Sort SMS by date (oldest first for sequence numbering)
+      const sortedSms = [...group.sms].sort((a, b) => 
+        new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+      );
+
+      // Add calls with sequence numbers
+      sortedCalls.forEach((comm, index) => {
+        const sequenceNumber = index + 1;
+        const ordinal = sequenceNumber === 1 ? '1st' : 
+                       sequenceNumber === 2 ? '2nd' : 
+                       sequenceNumber === 3 ? '3rd' : 
+                       `${sequenceNumber}th`;
+        
+        items.push({
+          id: `call-${comm._id}`,
+          type: 'call',
+          date: comm.sentAt,
+          title: `${ordinal} Call - ${contactNumber}`,
+          description: comm.remarks || comm.callOutcome || 'Call logged',
+          performedBy: typeof comm.sentBy === 'object' ? comm.sentBy.name : undefined,
+          metadata: {
+            outcome: comm.callOutcome,
+            duration: comm.durationSeconds,
+            contactNumber: contactNumber,
+            sequenceNumber: sequenceNumber,
+          },
+        });
+      });
+
+      // Add SMS with sequence numbers
+      sortedSms.forEach((comm, index) => {
+        const sequenceNumber = index + 1;
+        const ordinal = sequenceNumber === 1 ? '1st' : 
+                       sequenceNumber === 2 ? '2nd' : 
+                       sequenceNumber === 3 ? '3rd' : 
+                       `${sequenceNumber}th`;
+        
+        const messageText = comm.template?.renderedContent || 
+                           comm.template?.originalContent || 
+                           'Message sent';
+        const templateName = comm.template?.name || 'Unknown Template';
+        
+        items.push({
+          id: `sms-${comm._id}`,
+          type: 'sms',
+          date: comm.sentAt,
+          title: `${ordinal} Message - ${contactNumber}`,
+          description: `Template: ${templateName}\n${messageText}`,
+          performedBy: typeof comm.sentBy === 'object' ? comm.sentBy.name : undefined,
+          metadata: {
+            contactNumber: contactNumber,
+            sequenceNumber: sequenceNumber,
+            templateName: templateName,
+            messageText: messageText,
+            templateId: comm.template?.templateId,
+            status: comm.status,
+          },
+        });
+      });
+    });
+
+    // 4. Activity logs (status changes, comments, field updates)
+    // Skip status_change logs that are assignments (already added above)
+    activityLogs.forEach((log) => {
+      // Skip assignment status changes as they're already in timeline
+      if (log.type === 'status_change' && log.metadata?.assignment) {
+        return; // Already added as assignment above
+      }
+      
+      if (log.type === 'status_change') {
+        items.push({
+          id: `status-${log._id}`,
+          type: 'status_change',
+          date: log.createdAt,
+          title: 'Status Changed',
+          description: `Changed from "${log.oldStatus || 'N/A'}" to "${log.newStatus || 'N/A'}"${log.comment ? ` - ${log.comment}` : ''}`,
+          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          metadata: {
+            oldStatus: log.oldStatus,
+            newStatus: log.newStatus,
+            comment: log.comment,
+          },
+        });
+      } else if (log.type === 'comment') {
+        items.push({
+          id: `comment-${log._id}`,
+          type: 'comment',
+          date: log.createdAt,
+          title: 'Comment Added',
+          description: log.comment || '',
+          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+        });
+      } else if (log.type === 'quota_change' || log.metadata?.fieldUpdate) {
+        items.push({
+          id: `update-${log._id}`,
+          type: 'field_update',
+          date: log.createdAt,
+          title: 'Details Updated',
+          description: log.comment || 'Student details were updated',
+          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          metadata: log.metadata,
+        });
+      }
+    });
+
+    // Sort by date (newest first)
+    return items.sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }, [lead, activityLogs, communications]);
+
+  // Set header
   useEffect(() => {
     if (!lead) {
       return () => clearHeaderContent();
@@ -133,224 +444,16 @@ export default function LeadDetailPage() {
             {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => router.push('/superadmin/leads')}>
-            Back to Leads
-          </Button>
-          {canAccessJoiningForm && (
-            <Button
-              variant="secondary"
-              onClick={() => router.push(`/superadmin/joining/${lead._id}`)}
-            >
-              {joiningButtonLabel}
-            </Button>
-          )}
-        </div>
+        <Button variant="outline" onClick={() => router.push('/superadmin/leads')}>
+          Back to Leads
+        </Button>
       </div>
     );
 
     return () => clearHeaderContent();
-  }, [lead, canAccessJoiningForm, joiningButtonLabel, router, setHeaderContent, clearHeaderContent]);
+  }, [lead, router, setHeaderContent, clearHeaderContent]);
 
-  const contactOptions = useMemo(() => {
-    if (!lead) return [];
-
-    const options: { label: string; number: string; display: string }[] = [];
-
-    const addNumber = (label: string, rawValue: string | number | undefined | null) => {
-      if (rawValue === undefined || rawValue === null) return;
-      const stringValue = String(rawValue);
-      const sanitized = sanitizePhoneNumber(stringValue);
-      if (!sanitized) return;
-      const numericDigits = sanitized.replace(/\D/g, '');
-      if (numericDigits.length < 10 || numericDigits.length > 13) {
-        return;
-      }
-      if (options.some((option) => option.number === sanitized)) return;
-      options.push({
-        label,
-        number: sanitized,
-        display: stringValue,
-      });
-    };
-
-    addNumber('Primary Phone', lead.phone);
-    addNumber('Father Phone', lead.fatherPhone);
-
-    if (lead.dynamicFields && typeof lead.dynamicFields === 'object') {
-      Object.entries(lead.dynamicFields).forEach(([key, value]) => {
-        if (typeof value === 'string' || typeof value === 'number') {
-          addNumber(key, value);
-        }
-      });
-    }
-
-    return options;
-  }, [lead, sanitizePhoneNumber]);
-
-  const buildDefaultTemplateValues = useCallback(
-    (template: MessageTemplate) => {
-      const values: Record<string, string> = {};
-      if (template.variables && template.variables.length > 0) {
-        template.variables.forEach((variable, index) => {
-          const key = variable.key || `var${index + 1}`;
-          if (index === 0 && lead?.name) {
-            values[key] = lead.name;
-          } else if (variable.defaultValue) {
-            values[key] = variable.defaultValue;
-          } else {
-            values[key] = '';
-          }
-        });
-      } else if (template.variableCount > 0) {
-        for (let index = 0; index < template.variableCount; index += 1) {
-          const key = `var${index + 1}`;
-          values[key] = index === 0 && lead?.name ? lead.name : '';
-        }
-      }
-      return values;
-    },
-    [lead?.name]
-  );
-
-  const isCommunicationActivity = useCallback((log: ActivityLog) => {
-    if (!log?.metadata) return false;
-    const metadata: any = log.metadata;
-    if (typeof metadata.get === 'function') {
-      return Boolean(metadata.get('communicationType'));
-    }
-    return Boolean(metadata.communicationType);
-  }, []);
-
-  const loadActivityLogs = useCallback(async () => {
-    if (!leadId) return;
-    try {
-      setIsLoadingLogs(true);
-      const response = await leadAPI.getActivityLogs(leadId);
-      const logs = response.data?.logs || response.logs || [];
-      setActivityLogs(logs);
-    } catch (activityError) {
-      console.error('Error loading activity logs:', activityError);
-    } finally {
-      setIsLoadingLogs(false);
-    }
-  }, [leadId]);
-
-  // Fetch activity logs
-  useEffect(() => {
-    if (leadId && lead) {
-      loadActivityLogs();
-    }
-  }, [leadId, lead, loadActivityLogs]);
-
-  const {
-    data: communicationHistoryResponse,
-    isLoading: isLoadingCommunications,
-    refetch: refetchCommunications,
-  } = useQuery({
-    queryKey: ['lead', leadId, 'communications', communicationPage, communicationTypeFilter],
-    queryFn: async () => {
-      const response = await communicationAPI.getHistory(leadId, {
-        page: communicationPage,
-        limit: communicationLimit,
-        type: communicationTypeFilter === 'all' ? undefined : communicationTypeFilter,
-      });
-      return response.data || response;
-    },
-    enabled: !!leadId && !!user,
-    placeholderData: (previousData) => previousData,
-  });
-
-  const communicationHistory = (
-    communicationHistoryResponse?.data || communicationHistoryResponse
-  ) as CommunicationHistoryResponse | undefined;
-
-  const communications: CommunicationRecord[] = communicationHistory?.items ?? [];
-  const communicationPagination = communicationHistory?.pagination ?? {
-    page: 1,
-    limit: communicationLimit,
-    total: 0,
-    pages: 1,
-  };
-
-  const { data: communicationStatsResponse, refetch: refetchCommunicationStats } = useQuery({
-    queryKey: ['lead', leadId, 'communicationStats'],
-    queryFn: async () => {
-      const response = await communicationAPI.getStats(leadId);
-      return response.data || response;
-    },
-    enabled: !!leadId && !!user,
-    staleTime: 60000,
-  });
-
-  const communicationStats =
-    (communicationStatsResponse?.data || communicationStatsResponse)?.stats || [];
-
-  const {
-    data: activeTemplatesResponse,
-    isLoading: isLoadingTemplates,
-  } = useQuery({
-    queryKey: ['communicationTemplatesActive', isSmsModalOpen],
-    queryFn: async () => {
-      const response = await communicationAPI.getActiveTemplates();
-      return response?.data ?? [];
-    },
-    enabled: isSmsModalOpen,
-  });
-
-  const activeTemplates: MessageTemplate[] = useMemo(() => {
-    if (!Array.isArray(activeTemplatesResponse)) return [];
-    return activeTemplatesResponse.filter((template) => template.isActive);
-  }, [activeTemplatesResponse]);
-
-  const selectedTemplateEntries = useMemo(
-    () => Object.values(selectedTemplatesState),
-    [selectedTemplatesState]
-  );
-
-  const availableTemplateLanguages = useMemo(() => {
-    const languages = new Set<string>();
-    activeTemplates.forEach((template) => {
-      if (template.language) {
-        languages.add(template.language);
-      }
-    });
-    return Array.from(languages);
-  }, [activeTemplates]);
-
-  const filteredTemplates = useMemo(() => {
-    return activeTemplates.filter((template) =>
-      smsLanguageFilter === 'all' ? true : template.language === smsLanguageFilter
-    );
-  }, [activeTemplates, smsLanguageFilter]);
-
-  const selectedNumberSet = useMemo(() => new Set(selectedNumbers), [selectedNumbers]);
-  const communicationStatsMap = useMemo(() => {
-    const map = new Map<string, CommunicationStatsEntry>();
-    communicationStats.forEach((entry: CommunicationStatsEntry) => {
-      map.set(entry.contactNumber, entry);
-    });
-    return map;
-  }, [communicationStats]);
-
-  useEffect(() => {
-    setCommunicationPage(1);
-  }, [communicationTypeFilter]);
-
-  useEffect(() => {
-    if (!isSmsModalOpen) return;
-    setSelectedNumbers((prev) => {
-      const validNumbers = prev.filter((number) =>
-        contactOptions.some((option) => option.number === number)
-      );
-      if (validNumbers.length > 0) {
-        return validNumbers;
-      }
-      return contactOptions.map((option) => option.number);
-    });
-  }, [contactOptions, isSmsModalOpen]);
-
-  // Initialize form data when lead is loaded
+  // Initialize form data
   useEffect(() => {
     if (lead && !isEditing) {
       setFormData({
@@ -366,9 +469,6 @@ export default function LeadDetailPage() {
         district: lead.district,
         state: lead.state || 'Andhra Pradesh',
         quota: lead.quota || 'Not Applicable',
-        leadStatus: lead.leadStatus,
-        notes: lead.notes,
-        lastFollowUp: lead.lastFollowUp,
         applicationStatus: lead.applicationStatus,
         hallTicketNumber: lead.hallTicketNumber,
         gender: lead.gender,
@@ -378,7 +478,7 @@ export default function LeadDetailPage() {
     }
   }, [lead, isEditing]);
 
-  // Update mutation
+  // Mutations
   const updateMutation = useMutation({
     mutationFn: async (data: LeadUpdatePayload) => {
       return await leadAPI.update(leadId, data);
@@ -387,17 +487,29 @@ export default function LeadDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       setIsEditing(false);
-      setIsSaving(false);
       showToast.success('Lead updated successfully!');
     },
     onError: (error: any) => {
-      console.error('Error updating lead:', error);
       showToast.error(error.response?.data?.message || 'Failed to update lead');
-      setIsSaving(false);
     },
   });
 
-  // Delete mutation
+  const assignMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await leadAPI.assignToUser(leadId, userId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      setShowAssignModal(false);
+      setSelectedUserId('');
+      showToast.success('Lead assigned successfully!');
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to assign lead');
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       return await leadAPI.delete(leadId);
@@ -408,399 +520,275 @@ export default function LeadDetailPage() {
       router.push('/superadmin/leads');
     },
     onError: (error: any) => {
-      console.error('Error deleting lead:', error);
       showToast.error(error.response?.data?.message || 'Failed to delete lead');
-      setIsDeleting(false);
-      setShowDeleteModal(false);
     },
   });
 
-  const logCallMutation = useMutation({
-    mutationFn: (data: {
-      contactNumber: string;
-      remarks?: string;
-      outcome?: string;
-      durationSeconds?: number;
-    }) => communicationAPI.logCall(leadId, data),
-    onSuccess: () => {
-      showToast.success('Call logged successfully');
-      setIsCallModalOpen(false);
-      setCallRemarks('');
-      setCallOutcome('');
-      setCallDuration('');
-      refetchCommunications();
-      refetchCommunicationStats();
-      loadActivityLogs();
-    },
-    onError: (error: any) => {
-      console.error('Error logging call:', error);
-      showToast.error(error.response?.data?.message || 'Failed to log call');
-    },
-  });
-
-  const sendSmsMutation = useMutation({
-    mutationFn: (payload: {
-      contactNumbers: string[];
-      templates: Array<{
-        templateId: string;
-        variables?: { key?: string; value?: string; defaultValue?: string }[];
-      }>;
-    }) => communicationAPI.sendSms(leadId, payload),
-    onSuccess: (response, variables) => {
-      const resultPayload = response.data || response;
-      const results = resultPayload?.results || [];
-      const successCount = results.filter((item: any) => item.success).length;
-      const totalCount =
-        results.length || variables.templates.length || selectedTemplateEntries.length || 0;
-      showToast.success(
-        `Messages processed: ${successCount}/${totalCount || results.length || 0}`
-      );
-      setIsSmsModalOpen(false);
-      setSelectedTemplatesState({});
-      refetchCommunications();
-      refetchCommunicationStats();
-      loadActivityLogs();
-    },
-    onError: (error: any) => {
-      console.error('Error sending SMS:', error);
-      showToast.error(error.response?.data?.message || 'Failed to send SMS');
-    },
-  });
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    updateMutation.mutate(formData);
-  };
-
-  const handleCancel = () => {
-    if (lead) {
-      setFormData({
-        name: lead.name,
-        phone: lead.phone,
-        email: lead.email,
-        fatherName: lead.fatherName,
-        fatherPhone: lead.fatherPhone,
-        motherName: lead.motherName,
-        courseInterested: lead.courseInterested,
-        village: lead.village,
-        mandal: lead.mandal,
-        district: lead.district,
-        state: lead.state || 'Andhra Pradesh',
-        quota: lead.quota || 'Not Applicable',
-        leadStatus: lead.leadStatus,
-        notes: lead.notes,
-        lastFollowUp: lead.lastFollowUp,
-        applicationStatus: lead.applicationStatus,
-        hallTicketNumber: lead.hallTicketNumber,
-        gender: lead.gender,
-        interCollege: lead.interCollege,
-        rank: lead.rank,
-      });
-    }
-    setIsEditing(false);
-  };
-
-  // Handle status change with confirmation
-  const handleStatusChange = (status: string) => {
-    setNewStatus(status);
-    // Don't show confirmation modal immediately - let user save first
-    // Confirmation will show when they click Save if status changed
-  };
-
-  const handleTemplateSelectionChange = (template: MessageTemplate, checked: boolean) => {
-    setSelectedTemplatesState((prev) => {
-      const next = { ...prev };
-      if (checked) {
-        next[template._id] = {
-          template,
-          variables: buildDefaultTemplateValues(template),
-        };
-      } else {
-        delete next[template._id];
-      }
-      return next;
-    });
-  };
-
-  const handleTemplateVariableChange = (templateId: string, key: string, value: string) => {
-    setSelectedTemplatesState((prev) => {
-      const current = prev[templateId];
-      if (!current) return prev;
-      return {
-        ...prev,
-        [templateId]: {
-          ...current,
-          variables: {
-            ...current.variables,
-            [key]: value,
-          },
-        },
-      };
-    });
-  };
-
-  const handleToggleNumberSelection = (number: string, checked: boolean) => {
-    const sanitized = sanitizePhoneNumber(number);
-    if (!sanitized) return;
-    setSelectedNumbers((prev) => {
-      if (checked) {
-        return prev.includes(sanitized) ? prev : [...prev, sanitized];
-      }
-      return prev.filter((item) => item !== sanitized);
-    });
-  };
-
-  const handleCallClick = (rawNumber: string | undefined | null) => {
-    const sanitized = sanitizePhoneNumber(rawNumber || '');
-    if (!sanitized) {
-      showToast.error('Invalid phone number');
-      return;
-    }
-    if (typeof window !== 'undefined') {
-      window.open(`tel:${sanitized}`);
-    }
-    setCallNumber(sanitized);
-    setCallRemarks('');
-    setCallOutcome('');
-    setCallDuration('');
-    setIsCallModalOpen(true);
-  };
-
-  const handleOpenSmsModal = () => {
-    if (contactOptions.length === 0) {
-      showToast.error('No contact numbers available for this lead');
-      return;
-    }
-    setSelectedNumbers(contactOptions.map((option) => option.number));
-    setSelectedTemplatesState({});
-    setSmsLanguageFilter('all');
-    setIsSmsModalOpen(true);
-  };
-
-  const closeCallModal = () => {
-    if (logCallMutation.isPending) return;
-    setIsCallModalOpen(false);
-    setCallRemarks('');
-    setCallOutcome('');
-    setCallDuration('');
-  };
-
-  const closeSmsModal = () => {
-    if (sendSmsMutation.isPending) return;
-    setIsSmsModalOpen(false);
-    setSelectedTemplatesState({});
-  };
-
-  const renderTemplatePreview = useCallback(
-    (template: MessageTemplate, values: Record<string, string>) => {
-      const keys =
-        template.variables && template.variables.length > 0
-          ? template.variables.map((variable, index) => variable.key || `var${index + 1}`)
-          : Array.from({ length: template.variableCount }).map((_, index) => `var${index + 1}`);
-
-      let pointer = 0;
-      return template.content.replace(/\{#var#\}/gi, () => {
-        const key = keys[pointer] || `var${pointer + 1}`;
-        pointer += 1;
-        return values[key] || '';
-      });
-    },
-    []
-  );
-
-  const handleSubmitCallLog = () => {
-    if (!callNumber) {
-      showToast.error('Phone number is required to log the call');
-      return;
-    }
-    const trimmedDuration = callDuration.trim();
-    let durationSeconds: number | undefined;
-    if (trimmedDuration) {
-      const parsed = Number(trimmedDuration);
-      if (Number.isNaN(parsed) || parsed < 0) {
-        showToast.error('Call duration must be a positive number');
-        return;
-      }
-      durationSeconds = parsed;
-    }
-
-    logCallMutation.mutate({
-      contactNumber: callNumber,
-      remarks: callRemarks.trim() ? callRemarks.trim() : undefined,
-      outcome: callOutcome.trim() ? callOutcome.trim() : undefined,
-      durationSeconds,
-    });
-  };
-
-  const handleSendSms = () => {
-    if (selectedNumbers.length === 0) {
-      showToast.error('Select at least one contact number');
-      return;
-    }
-    if (selectedTemplateEntries.length === 0) {
-      showToast.error('Select at least one template');
-      return;
-    }
-
-    const templatesPayload = selectedTemplateEntries.map(({ template, variables }) => {
-      const variablesArray =
-        template.variables && template.variables.length > 0
-          ? template.variables.map((variable, index) => ({
-              key: variable.key || `var${index + 1}`,
-              value: variables[variable.key || `var${index + 1}`] || '',
-            }))
-          : Array.from({ length: template.variableCount }).map((_, index) => {
-              const key = `var${index + 1}`;
-              return {
-                key,
-                value: variables[key] || '',
-              };
-            });
-      return {
-        templateId: template._id,
-        variables: variablesArray,
-      };
-    });
-
-    const payload = {
-      contactNumbers: selectedNumbers,
-      templates: templatesPayload,
-    };
-
-    // Debug log to verify payload before sending
-    // eslint-disable-next-line no-console
-    console.log('[Communications][SMS] Dispatch payload', {
-      leadId,
-      payload,
-    });
-
-    sendSmsMutation.mutate(payload);
-  };
-
-  // Mutation for adding activity (status/quota update)
-  const addActivityMutation = useMutation({
-    mutationFn: async (data: { comment?: string; newStatus?: string; newQuota?: string }) => {
+  const statusUpdateMutation = useMutation({
+    mutationFn: async (data: { newStatus?: string; comment?: string }) => {
       return await leadAPI.addActivity(leadId, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
-      setShowStatusUpdate(false);
-      setShowConfirmModal(false);
-      setComment('');
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'activityLogs'] });
+      setShowStatusModal(false);
       setNewStatus('');
-      setNewQuota('Not Applicable');
+      setStatusComment('');
       showToast.success('Status updated successfully!');
-      loadActivityLogs();
     },
     onError: (error: any) => {
-      console.error('Error adding activity:', error);
       showToast.error(error.response?.data?.message || 'Failed to update status');
     },
   });
 
-  // Handle save status update
-  const handleSaveStatusUpdate = () => {
-    if (!lead) return;
-    
-    const hasComment = comment.trim().length > 0;
-    const hasStatusChange = newStatus && newStatus !== lead.leadStatus;
-    const currentQuota = lead.quota || 'Not Applicable';
-    const hasQuotaChange = newQuota && newQuota !== currentQuota;
+  // Comment mutation - MUST be before early returns
+  const commentMutation = useMutation({
+    mutationFn: async (comment: string) => {
+      return await leadAPI.addActivity(leadId, { comment });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'activityLogs'] });
+      setShowCommentModal(false);
+      setCommentText('');
+      showToast.success('Comment added successfully!');
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to add comment');
+    },
+  });
 
-    if (!hasComment && !hasStatusChange && !hasQuotaChange) {
-      showToast.error('Please add a comment or change the status/quota');
-      return;
+  // Call mutation
+  const callMutation = useMutation({
+    mutationFn: async (data: typeof callData) => {
+      return await communicationAPI.logCall(leadId, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communications'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communicationStats'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'activityLogs'] });
+      setShowCallRemarksModal(false);
+      setCallData({ contactNumber: '', remarks: '', outcome: '', durationSeconds: 0 });
+      setSelectedCallNumber('');
+      showToast.success('Call logged successfully!');
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to log call');
+    },
+  });
+
+  // Fetch active templates for SMS
+  const { data: templatesData, isLoading: isLoadingTemplates } = useQuery({
+    queryKey: ['activeTemplates', smsData.languageFilter],
+    queryFn: async () => {
+      const response = await communicationAPI.getActiveTemplates(smsData.languageFilter !== 'all' ? smsData.languageFilter : undefined);
+      return response.data || response;
+    },
+    enabled: showSmsModal,
+  });
+
+  const templates: MessageTemplate[] = Array.isArray(templatesData) ? templatesData : templatesData?.data || [];
+
+  // Get available phone numbers from lead
+  const contactOptions = useMemo(() => {
+    if (!lead) return [];
+    const options: { label: string; number: string }[] = [];
+    if (lead.phone) {
+      options.push({ label: 'Primary Phone', number: lead.phone });
     }
+    if (lead.fatherPhone) {
+      options.push({ label: 'Father Phone', number: lead.fatherPhone });
+    }
+    return options;
+  }, [lead]);
 
-    // If status is changing, show confirmation first
-    if (hasStatusChange) {
-      setShowConfirmModal(true);
-    } else {
-      // Just save comment without confirmation
-      addActivityMutation.mutate({
-        comment: hasComment ? comment.trim() : undefined,
-        newStatus: undefined,
-        newQuota: hasQuotaChange ? newQuota : undefined,
+  // Get available template languages
+  const availableLanguages = useMemo(() => {
+    const languages = new Set<string>();
+    templates.forEach((template) => {
+      if (template.language) languages.add(template.language);
+    });
+    return Array.from(languages);
+  }, [templates]);
+
+  // Filter templates by language
+  const filteredTemplates = useMemo(() => {
+    if (smsData.languageFilter === 'all') return templates;
+    return templates.filter((t) => t.language === smsData.languageFilter);
+  }, [templates, smsData.languageFilter]);
+
+  // Build default template values
+  const buildDefaultTemplateValues = useCallback((template: MessageTemplate) => {
+    const values: Record<string, string> = {};
+    if (template.variables && template.variables.length > 0) {
+      template.variables.forEach((variable, index) => {
+        const key = variable.key || `var${index + 1}`;
+        if (index === 0 && lead?.name) {
+          values[key] = lead.name;
+        } else if (variable.defaultValue) {
+          values[key] = variable.defaultValue;
+        } else {
+          values[key] = '';
+        }
       });
+    } else if (template.variableCount > 0) {
+      for (let i = 0; i < template.variableCount; i++) {
+        const key = `var${i + 1}`;
+        values[key] = i === 0 && lead?.name ? lead.name : '';
+      }
     }
+    return values;
+  }, [lead?.name]);
+
+  // Render template preview
+  const renderTemplatePreview = useCallback((template: MessageTemplate, values: Record<string, string>) => {
+    const keys = template.variables && template.variables.length > 0
+      ? template.variables.map((v, i) => v.key || `var${i + 1}`)
+      : Array.from({ length: template.variableCount }).map((_, i) => `var${i + 1}`);
+    
+    let pointer = 0;
+    return template.content.replace(/\{#var#\}/gi, () => {
+      const key = keys[pointer] || `var${pointer + 1}`;
+      pointer += 1;
+      return values[key] || '';
+    });
+  }, []);
+
+  // Communication stats map
+  const communicationStatsMap = useMemo(() => {
+    const map = new Map<string, CommunicationStatsEntry>();
+    communicationStats.forEach((entry) => {
+      map.set(entry.contactNumber, entry);
+    });
+    return map;
+  }, [communicationStats]);
+
+  // SMS mutation - send templates to multiple numbers
+  const smsMutation = useMutation({
+    mutationFn: async (data: { 
+      contactNumbers: string[]; 
+      templates: Array<{ templateId: string; variables: Array<{ key: string; value: string }> }> 
+    }) => {
+      return await communicationAPI.sendSms(leadId, data);
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communications'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communicationStats'] });
+      const resultData = response.data || response;
+      const results = resultData?.results || [];
+      const successCount = results.filter((r: any) => r.success).length;
+      const totalCount = results.length;
+      if (successCount === totalCount) {
+        showToast.success(`All ${successCount} message(s) sent successfully!`);
+      } else {
+        showToast.success(`${successCount}/${totalCount} message(s) sent successfully`);
+      }
+      setShowSmsModal(false);
+      setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to send SMS');
+    },
+  });
+
+  // Handlers
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    updateMutation.mutate(formData);
   };
 
-  // Confirm status change
-  const handleConfirmStatusChange = () => {
-    if (!lead) return;
-    setShowConfirmModal(false);
-    // Save with status change
-    addActivityMutation.mutate({
-      comment: comment.trim() ? comment.trim() : undefined,
-      newStatus: newStatus && newStatus !== lead.leadStatus ? newStatus : undefined,
-      newQuota: newQuota && newQuota !== (lead.quota || 'Not Applicable') ? newQuota : undefined,
+  const handleAssign = () => {
+    if (!selectedUserId) {
+      showToast.error('Please select a counsellor');
+      return;
+    }
+    assignMutation.mutate(selectedUserId);
+  };
+
+  const handleStatusUpdate = () => {
+    if (!newStatus || newStatus === lead?.leadStatus) {
+      if (!statusComment.trim()) {
+        showToast.error('Please select a new status or add a comment');
+        return;
+      }
+    }
+    statusUpdateMutation.mutate({
+      newStatus: newStatus && newStatus !== lead?.leadStatus ? newStatus : undefined,
+      comment: statusComment.trim() || undefined,
     });
   };
 
-  // Handle delete
-  const handleDelete = () => {
-    setShowDeleteModal(true);
-  };
-
-  // Confirm delete
-  const handleConfirmDelete = () => {
-    setIsDeleting(true);
-    deleteMutation.mutate();
-  };
-
-  const getStatusColor = (status?: string) => {
-    switch ((status || '').toLowerCase()) {
-      case 'interested':
-        return 'bg-green-100 text-green-800';
-      case 'contacted':
-        return 'bg-sky-100 text-sky-800';
-      case 'qualified':
-        return 'bg-indigo-100 text-indigo-800';
-      case 'converted':
-        return 'bg-teal-100 text-teal-800';
-      case 'confirmed':
-        return 'bg-purple-100 text-purple-800';
-      case 'admitted':
-      case 'joined':
-        return 'bg-emerald-100 text-emerald-800';
-      case 'not interested':
-        return 'bg-red-100 text-red-800';
-      case 'partial':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'lost':
-        return 'bg-gray-300 text-gray-800';
-      case 'new':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getCommunicationStatusBadge = (status?: string) => {
-    switch (status) {
-      case 'success':
-        return 'bg-green-100 text-green-800 dark:bg-emerald-900/50 dark:text-emerald-200';
-      case 'failed':
-        return 'bg-red-100 text-red-800 dark:bg-rose-900/50 dark:text-rose-200';
-      case 'pending':
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-slate-800/60 dark:text-slate-200';
-    }
-  };
-
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleString('en-US', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
     });
   };
 
-  // Prevent hydration mismatch by not rendering until mounted
+  const getStatusColor = (status?: string) => {
+    switch ((status || '').toLowerCase()) {
+      case 'interested':
+        return 'bg-green-100 text-green-800';
+      case 'assigned':
+        return 'bg-blue-100 text-blue-800';
+      case 'admitted':
+        return 'bg-emerald-100 text-emerald-800';
+      case 'not interest':
+        return 'bg-red-100 text-red-800';
+      case 'wrong data':
+        return 'bg-orange-100 text-orange-800';
+      case 'admission cancelled':
+        return 'bg-red-100 text-red-800';
+      case 'new':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getCallOutcomeColor = (outcome?: string) => {
+    if (!outcome) return 'bg-gray-100 text-gray-700';
+    
+    const outcomeLower = outcome.toLowerCase().trim();
+    
+    // Positive outcomes - Green
+    if (outcomeLower.includes('answered') || 
+        outcomeLower.includes('interested') ||
+        outcomeLower.includes('yes') ||
+        outcomeLower.includes('confirmed') ||
+        outcomeLower.includes('agreed') ||
+        outcomeLower.includes('accepted')) {
+      return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+    }
+    
+    // Negative outcomes - Red
+    if (outcomeLower.includes('not interested') ||
+        outcomeLower.includes('rejected') ||
+        outcomeLower.includes('declined') ||
+        outcomeLower.includes('wrong number') ||
+        outcomeLower.includes('wrong data') ||
+        outcomeLower.includes('no') && !outcomeLower.includes('answer')) {
+      return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+    }
+    
+    // Neutral/Warning outcomes - Yellow/Orange
+    if (outcomeLower.includes('busy') ||
+        outcomeLower.includes('not answered') ||
+        outcomeLower.includes('no answer') ||
+        outcomeLower.includes('missed') ||
+        outcomeLower.includes('call back') ||
+        outcomeLower.includes('follow up')) {
+      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
+    }
+    
+    // Default - Gray
+    return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+  };
+
   if (!isMounted || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -840,88 +828,28 @@ export default function LeadDetailPage() {
     );
   }
 
-  return (
-    <div className="mx-auto max-w-7xl space-y-8 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-      <div className="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="text-sm text-slate-500 dark:text-slate-400">
-              <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                {lead.name}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                {lead.enquiryNumber && <span>Enquiry #{lead.enquiryNumber}</span>}
-                {lead.leadStatus && (
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 font-semibold ${getStatusColor(
-                      lead.leadStatus
-                    )}`}
-                  >
-                    {lead.leadStatus}
-                  </span>
-                )}
-                {lead.quota && <span>· {lead.quota}</span>}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-              {lead.phone && <span>📞 {lead.phone}</span>}
-              {lead.email && <span>✉️ {lead.email}</span>}
-              {lead.village && <span>{lead.village}</span>}
-              {lead.district && <span>{lead.district}</span>}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {isEditing ? (
-              <Button variant="secondary" onClick={() => setIsEditing(false)}>
-                Exit Editing
-              </Button>
-            ) : (
-              <>
-                {canAccessJoiningForm && (
-                  <Button
-                    variant="primary"
-                    onClick={() => router.push(`/superadmin/joining/${lead._id}`)}
-                  >
-                    {joiningButtonLabel}
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setShowStatusUpdate(true);
-                    setNewStatus(lead?.leadStatus || '');
-                    setNewQuota(lead?.quota || 'Not Applicable');
-                    setComment('');
-                  }}
-                >
-                  Update Status
-                </Button>
-                <Button variant="primary" onClick={() => setIsEditing(true)}>
-                  Edit Lead
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleDelete}
-                  className="bg-red-50 hover:bg-red-100 text-red-600 border-red-300 hover:border-red-400"
-                >
-                  Delete Lead
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+  const handleAddComment = () => {
+    if (!commentText.trim()) {
+      showToast.error('Please enter a comment');
+      return;
+    }
+    commentMutation.mutate(commentText.trim());
+  };
 
-      <div className="space-y-8">
-          {isEditing ? (
-            <Card>
-              <h2 className="text-xl font-semibold mb-6">Edit Lead</h2>
+  return (
+    <div className="mx-auto w-full max-w-[98vw] space-y-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      {/* MAIN CONTENT - 2 Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* LEFT COLUMN - Student Details & History */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* SECTION 1: STUDENT DETAILS */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-6">Student Details</h2>
+            {isEditing ? (
               <form onSubmit={handleSave} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Name *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                     <Input
                       value={formData.name || ''}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -929,9 +857,7 @@ export default function LeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
                     <Input
                       value={formData.phone || ''}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -939,9 +865,7 @@ export default function LeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <Input
                       type="email"
                       value={formData.email || ''}
@@ -949,9 +873,7 @@ export default function LeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Father Name *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Father Name *</label>
                     <Input
                       value={formData.fatherName || ''}
                       onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
@@ -959,9 +881,7 @@ export default function LeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Father Phone *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Father Phone *</label>
                     <Input
                       value={formData.fatherPhone || ''}
                       onChange={(e) => setFormData({ ...formData, fatherPhone: e.target.value })}
@@ -969,27 +889,21 @@ export default function LeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mother Name
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mother Name</label>
                     <Input
                       value={formData.motherName || ''}
                       onChange={(e) => setFormData({ ...formData, motherName: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Course Interested
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Course Interested</label>
                     <Input
                       value={formData.courseInterested || ''}
                       onChange={(e) => setFormData({ ...formData, courseInterested: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Village *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Village *</label>
                     <Input
                       value={formData.village || ''}
                       onChange={(e) => setFormData({ ...formData, village: e.target.value })}
@@ -997,9 +911,7 @@ export default function LeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mandal *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mandal *</label>
                     <Input
                       value={formData.mandal || ''}
                       onChange={(e) => setFormData({ ...formData, mandal: e.target.value })}
@@ -1007,20 +919,24 @@ export default function LeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">District *</label>
+                    <Input
+                      value={formData.district || ''}
+                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
                     <Input
                       value={formData.state || 'Andhra Pradesh'}
                       onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quota *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quota</label>
                     <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       value={formData.quota || 'Not Applicable'}
                       onChange={(e) => setFormData({ ...formData, quota: e.target.value })}
                     >
@@ -1031,1164 +947,1303 @@ export default function LeadDetailPage() {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Status
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                      value={formData.leadStatus || 'New'}
-                      onChange={(e) => setFormData({ ...formData, leadStatus: e.target.value })}
-                    >
-                      {leadStatusOptions.map((statusOption) => (
-                        <option key={statusOption} value={statusOption}>
-                          {statusOption}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm min-h-[100px]"
-                    value={formData.notes || ''}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Add notes about this lead..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Last Follow Up
-                  </label>
-                  <Input
-                    type="datetime-local"
-                    value={formData.lastFollowUp ? new Date(formData.lastFollowUp).toISOString().slice(0, 16) : ''}
-                    onChange={(e) => setFormData({ ...formData, lastFollowUp: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-                  />
-                </div>
-                <div className="flex gap-2 pt-4">
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={isSaving}
-                  >
-                    {isSaving ? 'Saving...' : 'Save Changes'}
+                <div className="flex gap-2">
+                  <Button type="submit" variant="primary" disabled={updateMutation.isPending}>
+                    {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                  >
+                  <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
                     Cancel
                   </Button>
                 </div>
               </form>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Main Details */}
-              <div className="lg:col-span-2 space-y-6">
+            ) : (
+              <div className="space-y-6">
                 {/* Basic Information */}
-                <Card>
-                  <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Enquiry Number
-                      </label>
-                      <p className="text-lg font-mono font-semibold text-blue-600">
-                        {lead.enquiryNumber || '-'}
-                      </p>
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Enquiry Number</label>
+                      <p className="text-lg font-mono font-semibold text-blue-600">{lead.enquiryNumber || '-'}</p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Status
-                      </label>
-                      <span
-                        onClick={() => {
-                          setShowStatusUpdate(true);
-                          setNewStatus(lead?.leadStatus || '');
-                          setNewQuota(lead?.quota || 'Not Applicable');
-                          setComment('');
-                        }}
-                        className={`px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full cursor-pointer hover:opacity-80 transition-opacity ${getStatusColor(
-                          lead.leadStatus
-                        )}`}
-                        title="Click to update status"
-                      >
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Status</label>
+                      <span className={`px-3 py-1 inline-flex rounded-full text-sm font-semibold ${getStatusColor(lead.leadStatus)}`}>
                         {lead.leadStatus || 'New'}
                       </span>
                     </div>
-                    {lead.admissionNumber && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-500 mb-1">
-                          Admission Number
-                        </label>
-                        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200">
-                          {lead.admissionNumber}
-                        </p>
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Name
-                      </label>
-                      <p className="text-gray-900 font-medium">{lead.name}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Phone
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <span className="text-gray-900">{lead.phone || '-'}</span>
-                        {lead.phone && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleCallClick(lead.phone)}
-                          >
-                            Call
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Email
-                      </label>
-                      <p className="text-gray-900">{lead.email || '-'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Course Interested
-                      </label>
-                      <p className="text-gray-900">{lead.courseInterested || '-'}</p>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Course Interested</label>
+                      <p className="text-gray-900 font-medium">{lead.courseInterested || '-'}</p>
                     </div>
                   </div>
-                </Card>
+                </div>
 
-                <Card>
-                  <h2 className="text-xl font-semibold mb-4">Communication Summary</h2>
+                {/* Student Information */}
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Student Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Name</label>
+                      <p className="text-gray-900 font-semibold text-lg">{lead.name}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Phone</label>
+                      <p className="text-gray-900 font-medium">{lead.phone || '-'}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Email</label>
+                      <p className="text-gray-900 font-medium">{lead.email || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Parent Information */}
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Parent Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Father Name</label>
+                      <p className="text-gray-900 font-medium">{lead.fatherName}</p>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Father Phone</label>
+                      <p className="text-gray-900 font-medium">{lead.fatherPhone}</p>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Mother Name</label>
+                      <p className="text-gray-900 font-medium">{lead.motherName || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address Information */}
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Address Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Village</label>
+                      <p className="text-gray-900 font-medium">{lead.village}</p>
+                    </div>
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Mandal</label>
+                      <p className="text-gray-900 font-medium">{lead.mandal}</p>
+                    </div>
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">District</label>
+                      <p className="text-gray-900 font-medium">{lead.district}</p>
+                    </div>
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">State</label>
+                      <p className="text-gray-900 font-medium">{lead.state}</p>
+                    </div>
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Quota</label>
+                      <p className="text-gray-900 font-medium">{lead.quota}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Information */}
+                {(lead.assignedTo || lead.hallTicketNumber) && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {lead.assignedTo && (
+                        <div className="bg-amber-50 p-3 rounded-lg">
+                          <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Assigned To</label>
+                          <p className="text-gray-900 font-medium">
+                            {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : '-'}
+                          </p>
+                        </div>
+                      )}
+                      {lead.hallTicketNumber && (
+                        <div className="bg-amber-50 p-3 rounded-lg">
+                          <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Hall Ticket Number</label>
+                          <p className="text-gray-900 font-medium">{lead.hallTicketNumber}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          {/* COMMUNICATION SUMMARY */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-4">Communication Summary</h2>
+            {contactOptions.length === 0 ? (
+              <p className="text-sm text-gray-500">No phone numbers available for this lead.</p>
+            ) : (
+              <div className="space-y-4">
+                {contactOptions.map((option) => {
+                  const stats = communicationStatsMap.get(option.number);
+                  const callCount = stats?.callCount || 0;
+                  const smsCount = stats?.smsCount || 0;
+                  const templateUsage = stats?.templateUsage || [];
+                  
+                  return (
+                    <div
+                      key={option.number}
+                      className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
+                            {option.label}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                            {option.number}
+                          </div>
+                        </div>
+                        <div className="text-right text-sm">
+                          <div className="text-gray-600 dark:text-slate-300">
+                            Calls: <span className="font-semibold text-gray-900 dark:text-slate-100">{callCount}</span>
+                          </div>
+                          <div className="text-gray-600 dark:text-slate-300">
+                            SMS: <span className="font-semibold text-gray-900 dark:text-slate-100">{smsCount}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {templateUsage.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
+                          <div className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">
+                            Template Usage:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {templateUsage.map((usage) => (
+                              <span
+                                key={usage.templateId}
+                                className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs"
+                              >
+                                {usage.templateName || usage.templateId}: {usage.count}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-2 mt-3">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setCallData({ contactNumber: option.number, remarks: '', outcome: '', durationSeconds: 0 });
+                            setShowCallNumberModal(true);
+                          }}
+                        >
+                          Call {option.label}
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setSmsData({ 
+                              selectedNumbers: [option.number], 
+                              selectedTemplates: {}, 
+                              languageFilter: 'all' 
+                            });
+                            setShowSmsModal(true);
+                          }}
+                        >
+                          Send Message
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {/* SECTION 2: HISTORY & REMARKS */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-6">History & Remarks</h2>
+            {isLoadingLogs ? (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : timelineItems.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No history available</p>
+            ) : (
+              <div className="relative">
+                {/* Timeline */}
+                <div className="space-y-6">
+                  {timelineItems.map((item, index) => {
+                    const isCall = item.type === 'call';
+                    const isSms = item.type === 'sms';
+                    const dotColor = isCall ? 'bg-green-500' : isSms ? 'bg-purple-500' : 'bg-blue-500';
+                    const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : 'border-blue-500';
+                    
+                    return (
+                      <div key={item.id} className="relative pl-8 pb-6 last:pb-0">
+                        {/* Timeline line */}
+                        {index !== timelineItems.length - 1 && (
+                          <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gray-300 dark:bg-slate-700"></div>
+                        )}
+                        {/* Timeline dot */}
+                        <div className={`absolute left-0 top-1 w-6 h-6 rounded-full ${dotColor} border-2 border-white shadow-md flex items-center justify-center`}>
+                          {isCall ? (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                          ) : isSms ? (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                          ) : (
+                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                          )}
+                        </div>
+                        {/* Content */}
+                        <div className={`bg-gray-50 dark:bg-slate-800/50 rounded-lg p-4 border-l-2 ${borderColor}`}>
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                                {item.title}
+                              </h3>
+                              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                {formatDate(item.date)}
+                              </p>
+                            </div>
+                            {item.performedBy && (
+                              <span className="text-xs text-gray-500 dark:text-slate-400">
+                                by {item.performedBy}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Call details */}
+                          {isCall && (
+                            <>
+                              <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                                {item.description}
+                              </p>
+                              {item.metadata?.outcome && (
+                                <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">
+                                  Outcome: {item.metadata.outcome}
+                                </p>
+                              )}
+                              {item.metadata?.duration && (
+                                <p className="text-xs text-gray-500 dark:text-slate-400">
+                                  Duration: {item.metadata.duration}s
+                                </p>
+                              )}
+                            </>
+                          )}
+                          
+                          {/* SMS details */}
+                          {isSms && (
+                            <div className="space-y-2">
+                              {item.metadata?.templateName && (
+                                <div>
+                                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Template: </span>
+                                  <span className="text-xs text-gray-700 dark:text-slate-200">{item.metadata.templateName}</span>
+                                  {item.metadata?.status && (
+                                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                                      item.metadata.status === 'success' 
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
+                                        : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                    }`}>
+                                      {item.metadata.status === 'success' ? 'Sent' : 'Failed'}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {item.metadata?.messageText && (
+                                <div className="bg-white dark:bg-slate-700 rounded p-3 border border-gray-200 dark:border-slate-600">
+                                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Message:</p>
+                                  <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                                    {item.metadata.messageText}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Other types */}
+                          {!isCall && !isSms && (
+                            <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                              {item.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* RIGHT COLUMN - Action Bar, Metadata, Status Changes, Comments */}
+        <div className="space-y-6">
+          {/* ACTION BAR - Grid Layout with Icons */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-4">Actions</h2>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Assign */}
+              <button
+                onClick={() => {
+                  setShowAssignModal(true);
+                  setSelectedUserId('');
+                }}
+                className="flex flex-col items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border-2 border-blue-200 hover:border-blue-300 transition-all group"
+              >
+                <svg className="w-6 h-6 text-blue-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="text-sm font-semibold text-blue-700">Assign</span>
+              </button>
+
+              {/* Call */}
+              <button
+                onClick={() => {
+                  if (lead) {
+                    setShowCallNumberModal(true);
+                  }
+                }}
+                className="flex flex-col items-center justify-center p-4 bg-green-50 hover:bg-green-100 rounded-lg border-2 border-green-200 hover:border-green-300 transition-all group"
+              >
+                <svg className="w-6 h-6 text-green-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                <span className="text-sm font-semibold text-green-700">Call</span>
+              </button>
+
+              {/* SMS */}
+              <button
+                onClick={() => {
+                  if (lead) {
+                    // Initialize with all available numbers selected
+                    const numbers = contactOptions.map(opt => opt.number);
+                    setSmsData({ 
+                      selectedNumbers: numbers, 
+                      selectedTemplates: {}, 
+                      languageFilter: 'all' 
+                    });
+                    setShowSmsModal(true);
+                  }
+                }}
+                className="flex flex-col items-center justify-center p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border-2 border-purple-200 hover:border-purple-300 transition-all group"
+              >
+                <svg className="w-6 h-6 text-purple-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span className="text-sm font-semibold text-purple-700">SMS</span>
+              </button>
+
+              {/* Update Status */}
+              <button
+                onClick={() => {
+                  setNewStatus(lead.leadStatus || '');
+                  setStatusComment('');
+                  setShowStatusModal(true);
+                }}
+                className="flex flex-col items-center justify-center p-4 bg-orange-50 hover:bg-orange-100 rounded-lg border-2 border-orange-200 hover:border-orange-300 transition-all group"
+              >
+                <svg className="w-6 h-6 text-orange-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="text-sm font-semibold text-orange-700">Status</span>
+              </button>
+
+              {/* Edit - Super Admin Only */}
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex flex-col items-center justify-center p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg border-2 border-indigo-200 hover:border-indigo-300 transition-all group"
+                >
+                  <svg className="w-6 h-6 text-indigo-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-indigo-700">Edit</span>
+                </button>
+              )}
+
+              {/* Delete - Super Admin Only */}
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="flex flex-col items-center justify-center p-4 bg-red-50 hover:bg-red-100 rounded-lg border-2 border-red-200 hover:border-red-300 transition-all group"
+                >
+                  <svg className="w-6 h-6 text-red-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span className="text-sm font-semibold text-red-700">Delete</span>
+                </button>
+              )}
+            </div>
+            {lead.leadStatus && (
+              <div className="mt-4 text-center">
+                <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getStatusColor(lead.leadStatus)}`}>
+                  Current: {lead.leadStatus}
+                </span>
+              </div>
+            )}
+          </Card>
+
+          {/* Metadata */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-4">Metadata</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Source</label>
+                <p className="text-gray-900">{lead.source || '-'}</p>
+              </div>
+              {lead.assignedTo && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Assigned To</label>
+                  <p className="text-gray-900">
+                    {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : '-'}
+                  </p>
+                </div>
+              )}
+              {lead.uploadedBy && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Uploaded By</label>
+                  <p className="text-gray-900">
+                    {typeof lead.uploadedBy === 'object' ? lead.uploadedBy.name : '-'}
+                  </p>
+                </div>
+              )}
+              {lead.lastFollowUp && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Last Follow Up</label>
+                  <p className="text-gray-900">{formatDate(lead.lastFollowUp)}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Created At</label>
+                <p className="text-gray-900">{formatDate(lead.createdAt)}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Updated At</label>
+                <p className="text-gray-900">{formatDate(lead.updatedAt)}</p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Status Changes Timeline */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-4">Status Changes</h2>
+            {isLoadingLogs ? (
+              <div className="text-center py-4">
+                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : statusChanges.length === 0 ? (
+              <p className="text-gray-500 text-center py-4 text-sm">No status changes yet</p>
+            ) : (
+              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+                {statusChanges.map((log: ActivityLog, index: number) => (
+                  <div key={log._id} className="relative pl-8 pb-6 last:pb-0">
+                    {index !== statusChanges.length - 1 && (
+                      <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 to-blue-200"></div>
+                    )}
+                    <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-white shadow-md flex items-center justify-center">
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-50/50 to-transparent rounded-lg p-3 border-l-2 border-blue-400">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
+                          </span>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {formatDate(log.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.oldStatus || '')}`}>
+                          {log.oldStatus || 'N/A'}
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.newStatus || '')}`}>
+                          {log.newStatus || 'N/A'}
+                        </span>
+                      </div>
+                      {log.comment && (
+                        <p className="text-xs text-gray-600 mt-2 italic">"{log.comment}"</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Comments Timeline */}
+          <Card>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Comments</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCommentText('');
+                  setShowCommentModal(true);
+                }}
+              >
+                Add Comment
+              </Button>
+            </div>
+            {isLoadingLogs ? (
+              <div className="text-center py-4">
+                <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : comments.length === 0 ? (
+              <p className="text-gray-500 text-center py-4 text-sm">No comments yet</p>
+            ) : (
+              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+                {comments.map((log: ActivityLog, index: number) => (
+                  <div key={log._id} className="relative pl-8 pb-6 last:pb-0">
+                    {index !== comments.length - 1 && (
+                      <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b from-purple-400 to-purple-200"></div>
+                    )}
+                    <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 border-2 border-white shadow-md flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="bg-gradient-to-r from-purple-50/50 to-transparent rounded-lg p-3 border-l-2 border-purple-400">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
+                          </span>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {formatDate(log.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white/60 p-3 rounded-lg border border-purple-100">
+                        {log.comment}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Call History Timeline */}
+          <Card>
+            <h2 className="text-xl font-semibold mb-4">Call History</h2>
+            {isLoadingCommunications ? (
+              <div className="text-center py-4">
+                <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : callLogs.length === 0 ? (
+              <p className="text-gray-500 text-center py-4 text-sm">No call history yet</p>
+            ) : (
+              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+                {callLogs.map((call, index) => {
+                  const callWithSequence = call as CommunicationRecord & { sequenceNumber: number; ordinal: string };
+                  return (
+                    <div key={call._id} className="relative pl-8 pb-6 last:pb-0">
+                      {index !== callLogs.length - 1 && (
+                        <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b from-green-400 to-green-200"></div>
+                      )}
+                      <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-gradient-to-br from-green-500 to-green-600 border-2 border-white shadow-md flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                      </div>
+                      <div className="bg-gradient-to-r from-green-50/50 to-transparent rounded-lg p-3 border-l-2 border-green-400">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {callWithSequence.ordinal} Call - {call.contactNumber}
+                            </span>
+                            <span className="text-xs text-gray-500 ml-2">
+                              {formatDate(call.sentAt)}
+                            </span>
+                          </div>
+                          {typeof call.sentBy === 'object' && call.sentBy && (
+                            <span className="text-xs text-gray-500">
+                              by {call.sentBy.name}
+                            </span>
+                          )}
+                        </div>
+                        {call.remarks && (
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white/60 p-3 rounded-lg border border-green-100 mb-2">
+                            {call.remarks}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {call.callOutcome && (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCallOutcomeColor(call.callOutcome)}`}>
+                              Outcome: {call.callOutcome}
+                            </span>
+                          )}
+                          {call.durationSeconds && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                              Duration: {call.durationSeconds}s
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* Assign Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4">Assign to Counsellor</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Counsellor
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                >
+                  <option value="">Select a counsellor...</option>
+                  {users.map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.name} {u.designation ? `(${u.designation})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={handleAssign}
+                  disabled={!selectedUserId || assignMutation.isPending}
+                >
+                  {assignMutation.isPending ? 'Assigning...' : 'Assign'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowAssignModal(false);
+                    setSelectedUserId('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Status Update Modal */}
+      {showStatusModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4">Update Status</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Current Status: <span className="font-semibold">{lead.leadStatus || 'New'}</span>
+                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 mt-3">
+                  New Status
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                >
+                  <option value="">Keep Current Status</option>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Remarks (Optional)
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                  value={statusComment}
+                  onChange={(e) => setStatusComment(e.target.value)}
+                  placeholder="Add remarks about this status change..."
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={handleStatusUpdate}
+                  disabled={statusUpdateMutation.isPending}
+                >
+                  {statusUpdateMutation.isPending ? 'Updating...' : 'Update Status'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowStatusModal(false);
+                    setNewStatus('');
+                    setStatusComment('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Lead</h2>
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                Are you sure you want to delete this lead? This action cannot be undone.
+              </p>
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold">Enquiry Number:</span> {lead.enquiryNumber || 'N/A'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold">Name:</span> {lead.name}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {deleteMutation.isPending ? 'Deleting...' : 'Delete Lead'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteModal(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Comment Modal */}
+      {showCommentModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4">Add Comment</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Comment
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="Add a comment..."
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={handleAddComment}
+                  disabled={!commentText.trim() || commentMutation.isPending}
+                >
+                  {commentMutation.isPending ? 'Adding...' : 'Add Comment'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCommentModal(false);
+                    setCommentText('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Call Number Selection Modal */}
+      {showCallNumberModal && lead && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4">Select Number to Call</h2>
+            <div className="space-y-3">
+              {contactOptions.map((option) => {
+                const stats = communicationStatsMap.get(option.number);
+                const callCount = stats?.callCount || 0;
+                
+                return (
+                  <button
+                    key={option.number}
+                    onClick={() => {
+                      setSelectedCallNumber(option.number);
+                      setShowCallNumberModal(false);
+                      // Open phone dialer
+                      window.location.href = `tel:${option.number}`;
+                      // After a delay, show remarks modal
+                      setTimeout(() => {
+                        setCallData({ 
+                          contactNumber: option.number, 
+                          remarks: '', 
+                          outcome: '', 
+                          durationSeconds: 0 
+                        });
+                        setShowCallRemarksModal(true);
+                      }, 1000);
+                    }}
+                    className="w-full p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border-2 border-blue-200 hover:border-blue-300 transition-all text-left"
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-blue-900">{option.label}</div>
+                        <div className="text-sm text-blue-700">{option.number}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500">Calls: {callCount}</div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCallNumberModal(false);
+                  setSelectedCallNumber('');
+                }}
+                className="w-full"
+              >
+                Cancel
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Call Remarks Modal - Shows after call */}
+      {showCallRemarksModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4">Log Call Details</h2>
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Contact Number</label>
+                    <p className="text-gray-900 font-medium">{callData.contactNumber}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">Call #</div>
+                    <div className="text-lg font-bold text-blue-600">
+                      {(communicationStatsMap.get(callData.contactNumber)?.callCount || 0) + 1}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Outcome *
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={callData.outcome}
+                  onChange={(e) => setCallData({ ...callData, outcome: e.target.value })}
+                  required
+                >
+                  <option value="">Select outcome...</option>
+                  <option value="answered">Answered</option>
+                  <option value="no_answer">No Answer</option>
+                  <option value="busy">Busy</option>
+                  <option value="voicemail">Voicemail</option>
+                  <option value="interested">Interested</option>
+                  <option value="not_interested">Not Interested</option>
+                  <option value="callback_requested">Callback Requested</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duration (seconds) - Optional
+                </label>
+                <Input
+                  type="number"
+                  value={callData.durationSeconds || ''}
+                  onChange={(e) => setCallData({ ...callData, durationSeconds: parseInt(e.target.value) || 0 })}
+                  placeholder="Call duration in seconds"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Remarks - Optional
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                  value={callData.remarks}
+                  onChange={(e) => setCallData({ ...callData, remarks: e.target.value })}
+                  placeholder="Add call remarks..."
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={() => callMutation.mutate(callData)}
+                  disabled={!callData.outcome || callMutation.isPending}
+                >
+                  {callMutation.isPending ? 'Logging...' : 'Log Call'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCallRemarksModal(false);
+                    setCallData({ contactNumber: '', remarks: '', outcome: '', durationSeconds: 0 });
+                    setSelectedCallNumber('');
+                  }}
+                >
+                  Skip
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* SMS Modal */}
+      {showSmsModal && lead && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold mb-1">Send SMS</h2>
+                <p className="text-sm text-gray-500">
+                  Select recipients and DLT templates to send compliant messages.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSmsModal(false);
+                  setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
+                }}
+                className="text-gray-400 hover:text-gray-600"
+                disabled={smsMutation.isPending}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left: Recipients */}
+              <div className="lg:col-span-1 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">Recipients</h3>
                   {contactOptions.length === 0 ? (
-                    <p className="text-sm text-gray-500">
-                      No phone numbers available for this lead.
-                    </p>
+                    <p className="text-sm text-gray-500">No phone numbers available.</p>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {contactOptions.map((option) => {
                         const stats = communicationStatsMap.get(option.number);
+                        const smsCount = stats?.smsCount || 0;
+                        const isSelected = smsData.selectedNumbers.includes(option.number);
+                        
                         return (
-                          <div
+                          <label
                             key={option.number}
-                            className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-slate-700 px-3 py-2"
+                            className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                              isSelected
+                                ? 'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-600'
+                                : 'bg-white border-gray-200 hover:bg-gray-50 dark:bg-slate-900/50 dark:border-slate-700 dark:hover:bg-slate-800/60'
+                            }`}
                           >
-                            <div>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSmsData({
+                                    ...smsData,
+                                    selectedNumbers: [...smsData.selectedNumbers, option.number],
+                                  });
+                                } else {
+                                  setSmsData({
+                                    ...smsData,
+                                    selectedNumbers: smsData.selectedNumbers.filter((n) => n !== option.number),
+                                  });
+                                }
+                              }}
+                              className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <div className="flex-1">
                               <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
                                 {option.label}
                               </div>
                               <div className="text-xs text-gray-500 dark:text-slate-400">
-                                {option.display}
+                                {option.number}
+                              </div>
+                              <div className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                                Sent: {smsCount} message(s)
                               </div>
                             </div>
-                            <div className="text-right text-xs text-gray-600 dark:text-slate-300">
-                              <div>
-                                Calls:{' '}
-                                <span className="font-semibold text-gray-900 dark:text-slate-100">
-                                  {stats?.callCount ?? 0}
-                                </span>
-                              </div>
-                              <div>
-                                SMS:{' '}
-                                <span className="font-semibold text-gray-900 dark:text-slate-100">
-                                  {stats?.smsCount ?? 0}
-                                </span>
-                              </div>
-                              {stats?.lastContactedAt && (
-                                <div className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
-                                  Last: {new Date(stats.lastContactedAt).toLocaleString()}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          </label>
                         );
                       })}
                     </div>
                   )}
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {contactOptions.map((option) => (
-                      <Button
-                        key={`call-${option.number}`}
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleCallClick(option.number)}
-                      >
-                        Call {option.label}
-                      </Button>
-                    ))}
-                    <Button variant="primary" size="sm" onClick={handleOpenSmsModal}>
-                      Send Message
-                    </Button>
+                  <div className="text-sm text-gray-500 mt-2">
+                    Selected {smsData.selectedNumbers.length} recipient{smsData.selectedNumbers.length === 1 ? '' : 's'}.
                   </div>
-                </Card>
-
-                <Card>
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                    <h2 className="text-xl font-semibold">Communication History</h2>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600 dark:text-slate-400">Filter:</span>
-                      <select
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                        value={communicationTypeFilter}
-                        onChange={(e) => setCommunicationTypeFilter(e.target.value as 'all' | 'call' | 'sms')}
-                      >
-                        <option value="all">All</option>
-                        <option value="call">Calls</option>
-                        <option value="sms">SMS</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    {isLoadingCommunications ? (
-                      <div className="space-y-2">
-                        <Skeleton className="w-full h-16" />
-                        <Skeleton className="w-full h-16" />
-                      </div>
-                    ) : communications.length === 0 ? (
-                      <p className="text-sm text-gray-500">
-                        No communications logged yet. Use the buttons above to record calls or send messages.
-                      </p>
-                    ) : (
-                      <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
-                        <thead className="bg-gray-50 dark:bg-slate-900/60">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                              Type
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                              Number
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                              Details
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                              User
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                              Time
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                              Status
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-slate-800 bg-white/60 dark:bg-slate-900/50">
-                          {communications.map((communication) => (
-                            <tr key={communication._id}>
-                              <td className="px-4 py-3 text-sm capitalize text-gray-700 dark:text-slate-200">
-                                {communication.type}
-                              </td>
-                              <td className="px-4 py-3 text-sm font-mono text-blue-600">
-                                {communication.contactNumber}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-700 dark:text-slate-200 space-y-1">
-                                {communication.type === 'sms' ? (
-                                  <>
-                                    <div>
-                                      Template:{' '}
-                                      <span className="font-semibold">
-                                        {communication.template?.name || '—'}
-                                      </span>
-                                    </div>
-                                    {communication.template?.renderedContent && (
-                                      <div className="text-xs text-gray-500 dark:text-slate-400 whitespace-pre-wrap">
-                                        {communication.template.renderedContent}
-                                      </div>
-                                    )}
-                                    {communication.providerMessageIds?.length ? (
-                                      <div className="text-xs text-gray-400">
-                                        ID(s): {communication.providerMessageIds.join(', ')}
-                                      </div>
-                                    ) : null}
-                                  </>
-                                ) : (
-                                  <>
-                                    {communication.callOutcome && (
-                                      <div>
-                                        Outcome:{' '}
-                                        <span className="font-semibold">
-                                          {communication.callOutcome}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {communication.remarks && (
-                                      <div className="text-xs text-gray-500 dark:text-slate-400 whitespace-pre-wrap">
-                                        {communication.remarks}
-                                      </div>
-                                    )}
-                                    {communication.durationSeconds ? (
-                                      <div className="text-xs text-gray-400">
-                                        Duration: {communication.durationSeconds}s
-                                      </div>
-                                    ) : null}
-                                  </>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-700 dark:text-slate-200">
-                                {typeof communication.sentBy === 'object'
-                                  ? communication.sentBy.name
-                                  : '—'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600 dark:text-slate-300">
-                                {new Date(communication.sentAt).toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span
-                                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getCommunicationStatusBadge(
-                                    communication.status
-                                  )}`}
-                                >
-                                  {communication.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                  {communicationPagination.total > communicationLimit && (
-                    <div className="flex items-center justify-between mt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setCommunicationPage((prev) => Math.max(1, prev - 1))
-                        }
-                        disabled={communicationPagination.page <= 1 || isLoadingCommunications}
-                      >
-                        Previous
-                      </Button>
-                      <div className="text-sm text-gray-600 dark:text-slate-300">
-                        Page {communicationPagination.page} of {communicationPagination.pages}{' '}
-                        ({communicationPagination.total} records)
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setCommunicationPage((prev) =>
-                            Math.min(communicationPagination.pages, prev + 1)
-                          )
-                        }
-                        disabled={
-                          communicationPagination.page >= communicationPagination.pages ||
-                          isLoadingCommunications
-                        }
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  )}
-                </Card>
-
-                {/* Parent Information */}
-                <Card>
-                  <h2 className="text-xl font-semibold mb-4">Parent Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Father Name
-                      </label>
-                      <p className="text-gray-900 font-medium">{lead.fatherName}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Father Phone
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <span className="text-gray-900">{lead.fatherPhone || '-'}</span>
-                        {lead.fatherPhone && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleCallClick(lead.fatherPhone)}
-                          >
-                            Call
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Mother Name
-                      </label>
-                      <p className="text-gray-900">{lead.motherName || '-'}</p>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* Location Information */}
-                <Card>
-                  <h2 className="text-xl font-semibold mb-4">Location Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Mandal
-                      </label>
-                      <p className="text-gray-900">{lead.mandal}</p>
-                    </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">
-                      Village
-                    </label>
-                    <p className="text-gray-900">{lead.village}</p>
-                  </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        State
-                      </label>
-                      <p className="text-gray-900">{lead.state}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Quota
-                      </label>
-                      <p className="text-gray-900">{lead.quota}</p>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* Notes */}
-                {lead.notes && (
-                  <Card>
-                    <h2 className="text-xl font-semibold mb-4">Notes</h2>
-                    <p className="text-gray-700 whitespace-pre-wrap">{lead.notes}</p>
-                  </Card>
-                )}
-
-                {/* Dynamic Fields */}
-                {lead.dynamicFields && Object.keys(lead.dynamicFields).length > 0 && (
-                  <Card>
-                    <h2 className="text-xl font-semibold mb-4">Additional Information</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries(lead.dynamicFields).map(([key, value]) => (
-                        <div key={key}>
-                          <label className="block text-sm font-medium text-gray-500 mb-1">
-                            {key}
-                          </label>
-                          <p className="text-gray-900">{String(value)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                )}
-
-              </div>
-
-              {/* Sidebar */}
-              <div className="space-y-6">
-                {/* Metadata */}
-                <Card>
-                  <h2 className="text-xl font-semibold mb-4">Metadata</h2>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Source
-                      </label>
-                      <p className="text-gray-900">{lead.source || '-'}</p>
-                    </div>
-                    {lead.assignedTo && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-500 mb-1">
-                          Assigned To
-                        </label>
-                        <p className="text-gray-900">
-                          {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : '-'}
-                        </p>
-                      </div>
-                    )}
-                    {lead.uploadedBy && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-500 mb-1">
-                          Uploaded By
-                        </label>
-                        <p className="text-gray-900">
-                          {typeof lead.uploadedBy === 'object' ? lead.uploadedBy.name : '-'}
-                        </p>
-                      </div>
-                    )}
-                    {lead.lastFollowUp && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-500 mb-1">
-                          Last Follow Up
-                        </label>
-                        <p className="text-gray-900">{formatDate(lead.lastFollowUp)}</p>
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Created At
-                      </label>
-                      <p className="text-gray-900">{formatDate(lead.createdAt)}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">
-                        Updated At
-                      </label>
-                      <p className="text-gray-900">{formatDate(lead.updatedAt)}</p>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* Status Changes Timeline */}
-                <Card>
-                  <h2 className="text-xl font-semibold mb-4">Status & Quota Changes</h2>
-                  {isLoadingLogs ? (
-                    <div className="text-center py-4">
-                      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    </div>
-                  ) : (
-                    (() => {
-                      const statusChanges = activityLogs.filter(
-                        (log: ActivityLog) => log.type === 'status_change' || log.type === 'quota_change'
-                      );
-                      return statusChanges.length === 0 ? (
-                        <p className="text-gray-500 text-center py-4 text-sm">No status changes yet</p>
-                      ) : (
-                        <div className="space-y-0 max-h-[400px] overflow-y-auto">
-                          {statusChanges.map((log: ActivityLog, index: number) => (
-                            <div key={log._id} className="relative pl-8 pb-6 last:pb-0">
-                              {/* Timeline line */}
-                              {index !== statusChanges.length - 1 && (
-                                <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 to-blue-200"></div>
-                              )}
-                              {/* Timeline dot */}
-                              <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-white shadow-md flex items-center justify-center">
-                                <div className="w-2 h-2 rounded-full bg-white"></div>
-                              </div>
-                              {/* Content */}
-                              <div className="bg-gradient-to-r from-blue-50/50 to-transparent rounded-lg p-3 border-l-2 border-blue-400">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                    <span className="text-sm font-semibold text-gray-900">
-                                      {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
-                                    </span>
-                                    <span className="text-xs text-gray-500 ml-2">
-                                      {formatDate(log.createdAt)}
-                                    </span>
-                                  </div>
-                                </div>
-                                {log.type === 'status_change' ? (
-                                  <div className="flex items-center gap-2 text-sm">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.oldStatus || '')}`}>
-                                      {log.oldStatus || 'N/A'}
-                                    </span>
-                                    <span className="text-gray-400">→</span>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.newStatus || '')}`}>
-                                      {log.newStatus || 'N/A'}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  (() => {
-                                    const quotaChange =
-                                      (log.metadata && (log.metadata as Record<string, any>).quotaChange) || undefined;
-                                    const oldQuota = quotaChange?.oldQuota || 'Not Applicable';
-                                    const newQuota = quotaChange?.newQuota || 'Not Applicable';
-                                    return (
-                                      <div className="text-sm">
-                                        <p className="text-gray-600">
-                                          Quota updated from <span className="font-semibold text-gray-800">{oldQuota}</span> to{' '}
-                                          <span className="font-semibold text-gray-800">{newQuota}</span>
-                                        </p>
-                                      </div>
-                                    );
-                                  })()
-                                )}
-                                {log.comment && (
-                                  <p className="text-xs text-gray-600 mt-2 italic">"{log.comment}"</p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()
-                  )}
-                </Card>
-
-                {/* Comments Timeline */}
-                <Card>
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold">Comments</h2>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowStatusUpdate(true);
-                        setNewStatus(lead?.leadStatus || '');
-                        setNewQuota(lead?.quota || 'Not Applicable');
-                        setComment('');
-                      }}
-                    >
-                      Add Comment
-                    </Button>
-                  </div>
-                  {isLoadingLogs ? (
-                    <div className="text-center py-4">
-                      <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    </div>
-                  ) : (
-                    (() => {
-      const comments = activityLogs.filter(
-        (log: ActivityLog) => log.type === 'comment' && !isCommunicationActivity(log)
-      );
-                      return comments.length === 0 ? (
-                        <p className="text-gray-500 text-center py-4 text-sm">No comments yet</p>
-                      ) : (
-                        <div className="space-y-0 max-h-[400px] overflow-y-auto">
-                          {comments.map((log: ActivityLog, index: number) => (
-                            <div key={log._id} className="relative pl-8 pb-6 last:pb-0">
-                              {/* Timeline line */}
-                              {index !== comments.length - 1 && (
-                                <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b from-purple-400 to-purple-200"></div>
-                              )}
-                              {/* Timeline dot */}
-                              <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 border-2 border-white shadow-md flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                              {/* Content */}
-                              <div className="bg-gradient-to-r from-purple-50/50 to-transparent rounded-lg p-3 border-l-2 border-purple-400">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                    <span className="text-sm font-semibold text-gray-900">
-                                      {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
-                                    </span>
-                                    <span className="text-xs text-gray-500 ml-2">
-                                      {formatDate(log.createdAt)}
-                                    </span>
-                                  </div>
-                                </div>
-                                <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white/60 p-3 rounded-lg border border-purple-100">
-                                  {log.comment}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()
-                  )}
-                </Card>
-              </div>
-            </div>
-          )}
-
-          {/* Call Log Modal */}
-          {isCallModalOpen && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="max-w-md w-full space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Log Call</h2>
-                  <button
-                    type="button"
-                    onClick={closeCallModal}
-                    className="text-gray-400 hover:text-gray-600"
-                    aria-label="Close call log modal"
-                    disabled={logCallMutation.isPending}
-                  >
-                    ✕
-                  </button>
-                </div>
-                {(() => {
-                  const selectedContact = contactOptions.find(
-                    (option) => option.number === callNumber
-                  );
-                  return (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Contact Number
-                        </label>
-                        <p className="text-sm text-gray-900">
-                          {selectedContact
-                            ? `${selectedContact.label}: ${selectedContact.display}`
-                            : callNumber}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Call Outcome
-                        </label>
-                        <Input
-                          value={callOutcome}
-                          onChange={(e) => setCallOutcome(e.target.value)}
-                          placeholder="e.g., Spoke to parent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Duration (seconds)
-                        </label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={callDuration}
-                          onChange={(e) => setCallDuration(e.target.value)}
-                          placeholder="Optional"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Remarks
-                        </label>
-                        <textarea
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm min-h-[100px]"
-                          value={callRemarks}
-                          onChange={(e) => setCallRemarks(e.target.value)}
-                          placeholder="Add remarks about the call"
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={closeCallModal}
-                    disabled={logCallMutation.isPending}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleSubmitCallLog}
-                    isLoading={logCallMutation.isPending}
-                  >
-                    Save Call Log
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* SMS Modal */}
-          {isSmsModalOpen && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-1">Send SMS</h2>
-                    <p className="text-sm text-gray-500">
-                      Select recipients and DLT templates to send compliant messages.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={closeSmsModal}
-                    className="text-gray-400 hover:text-gray-600"
-                    aria-label="Close SMS modal"
-                    disabled={sendSmsMutation.isPending}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-1 space-y-4">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">Recipients</h3>
-                      {contactOptions.length === 0 ? (
-                        <p className="text-sm text-gray-500">
-                          No phone numbers available for this lead.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {contactOptions.map((option) => (
-                            <label
-                              key={`sms-${option.number}`}
-                              className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer dark:border-slate-700 dark:hover:bg-slate-800/60"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedNumberSet.has(option.number)}
-                                onChange={(e) =>
-                                  handleToggleNumberSelection(option.number, e.target.checked)
-                                }
-                                className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                              />
-                              <div>
-                                <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
-                                  {option.label}
-                                </div>
-                                <div className="text-xs text-gray-500 dark:text-slate-400">
-                                  {option.display}
-                                </div>
-                                {communicationStatsMap.get(option.number) && (
-                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">
-                                    Sent:{' '}
-                                    {communicationStatsMap.get(option.number)?.smsCount ?? 0}{' '}
-                                    message(s)
-                                  </div>
-                                )}
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Selected {selectedNumbers.length} recipient
-                      {selectedNumbers.length === 1 ? '' : 's'}.
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Language Filter
-                      </label>
-                      <select
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                        value={smsLanguageFilter}
-                        onChange={(e) => setSmsLanguageFilter(e.target.value)}
-                      >
-                        <option value="all">All Languages</option>
-                        {availableTemplateLanguages.map((lang) => (
-                          <option key={lang} value={lang}>
-                            {lang.toUpperCase()}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="lg:col-span-2 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold">Templates</h3>
-                      <div className="text-sm text-gray-500">
-                        Selected: {selectedTemplateEntries.length}
-                      </div>
-                    </div>
-                    {isLoadingTemplates ? (
-                      <div className="space-y-3">
-                        <Skeleton className="w-full h-24" />
-                        <Skeleton className="w-full h-24" />
-                      </div>
-                    ) : filteredTemplates.length === 0 ? (
-                      <p className="text-sm text-gray-500">
-                        No active templates available. Add templates from the communications
-                        admin page.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {filteredTemplates.map((template) => {
-                          const templateState = selectedTemplatesState[template._id];
-                          const variableDescriptors: MessageTemplateVariable[] =
-                            template.variables && template.variables.length > 0
-                              ? template.variables
-                              : (Array.from({ length: template.variableCount }).map((_, index) => ({
-                                  key: `var${index + 1}`,
-                                  label: `Variable ${index + 1}`,
-                                })) as MessageTemplateVariable[]);
-
-                          return (
-                            <div
-                              key={template._id}
-                              className="border border-gray-200 rounded-lg p-4 space-y-3 dark:border-slate-700"
-                            >
-                              <label className="flex items-start gap-3 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(templateState)}
-                                  onChange={(e) =>
-                                    handleTemplateSelectionChange(template, e.target.checked)
-                                  }
-                                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                />
-                                <div>
-                                  <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
-                                    {template.name}
-                                  </div>
-                                  <div className="text-xs text-gray-500 dark:text-slate-400">
-                                    DLT ID: {template.dltTemplateId} · Language:{' '}
-                                    {template.language?.toUpperCase()}
-                                  </div>
-                                  <div className="text-xs text-gray-400 dark:text-slate-500">
-                                    Placeholders: {template.variableCount}
-                                  </div>
-                                </div>
-                              </label>
-                              {templateState && (
-                                <div className="space-y-3">
-                                  {variableDescriptors.length > 0 && (
-                                    <div className="space-y-2">
-                                      {variableDescriptors.map((variable, index) => {
-                                        const key = variable.key || `var${index + 1}`;
-                                        return (
-                                          <div
-                                            key={`${template._id}-${key}`}
-                                            className="grid grid-cols-1 md:grid-cols-2 gap-3"
-                                          >
-                                            <div>
-                                              <label className="block text-xs font-medium text-gray-600 mb-1">
-                                                {variable.label || `Variable ${index + 1}`}
-                                              </label>
-                                              <Input
-                                                value={templateState.variables[key] || ''}
-                                                onChange={(e) =>
-                                                  handleTemplateVariableChange(
-                                                    template._id,
-                                                    key,
-                                                    e.target.value
-                                                  )
-                                                }
-                                                placeholder={
-                                                  index === 0 && lead?.name
-                                                    ? lead.name
-                                                    : variable.defaultValue || ''
-                                                }
-                                              />
-                                            </div>
-                                            <div className="text-xs text-gray-400 flex items-end">
-                                              Placeholder: {`{#var#}`}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                  <div className="bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-lg p-3 text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap">
-                                    {renderTemplatePreview(template, templateState.variables)}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center gap-3 pt-2 flex-wrap">
-                  <div className="text-xs text-gray-500">
-                    {selectedNumbers.length === 0
-                      ? 'Select at least one contact number.'
-                      : selectedTemplateEntries.length === 0
-                      ? 'Select at least one template to send.'
-                      : `Ready to send using ${selectedTemplateEntries.length} template${
-                          selectedTemplateEntries.length > 1 ? 's' : ''
-                        }.`}
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={closeSmsModal}
-                    disabled={sendSmsMutation.isPending}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleSendSms}
-                    isLoading={sendSmsMutation.isPending}
-                    disabled={
-                      sendSmsMutation.isPending ||
-                      contactOptions.length === 0 ||
-                      selectedNumbers.length === 0 ||
-                      selectedTemplateEntries.length === 0
-                    }
-                  >
-                    Send Message
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* Status Update Modal */}
-    {showStatusUpdate && lead && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="max-w-md w-full">
-                <h2 className="text-xl font-semibold mb-4">Update Status / Quota / Comment</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Current Status: <span className="font-semibold">{lead.leadStatus || 'New'}</span>
-                    </label>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Update Status
+                  
+                  <div className="space-y-2 mt-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">
+                      Language Filter
                     </label>
                     <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                      value={newStatus}
-                      onChange={(e) => handleStatusChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                      value={smsData.languageFilter}
+                      onChange={(e) => setSmsData({ ...smsData, languageFilter: e.target.value })}
                     >
-                      <option value="">Keep Current Status</option>
-                      <option value="interested">Interested</option>
-                      <option value="not interested">Not Interested</option>
-                      <option value="partial">Partial</option>
-                      <option value="Confirmed">Confirmed</option>
-                      <option value="Admitted">Admitted</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Current Quota: <span className="font-semibold">{lead.quota || 'Not Applicable'}</span>
-                    </label>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Update Quota
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                      value={newQuota}
-                      onChange={(e) => setNewQuota(e.target.value)}
-                    >
-                      {quotaOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
+                      <option value="all">All Languages</option>
+                      {availableLanguages.map((lang) => (
+                        <option key={lang} value={lang}>
+                          {lang.toUpperCase()}
                         </option>
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Comment
-                    </label>
-                    <textarea
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm min-h-[100px]"
-                      value={comment}
-                      onChange={(e) => setComment(e.target.value)}
-                      placeholder="Add a comment..."
-                    />
-                  </div>
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      variant="primary"
-                      onClick={handleSaveStatusUpdate}
-                      disabled={
-                        addActivityMutation.isPending ||
-                        (
-                          !comment.trim() &&
-                          newStatus === lead.leadStatus &&
-                          newQuota === (lead.quota || 'Not Applicable')
-                        )
-                      }
-                    >
-                      {addActivityMutation.isPending ? 'Saving...' : 'Save'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowStatusUpdate(false);
-                        setShowConfirmModal(false);
-                        setComment('');
-                        setNewStatus('');
-                        setNewQuota('Not Applicable');
-                      }}
-                      disabled={addActivityMutation.isPending}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
                 </div>
-              </Card>
-            </div>
-          )}
+              </div>
 
-          {/* Confirmation Modal */}
-          {showConfirmModal && lead && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="max-w-md w-full">
-                <h2 className="text-xl font-semibold mb-4">Confirm Status Change</h2>
-                <div className="space-y-4">
-                  <p className="text-gray-700">
-                    Are you sure you want to change the status from{' '}
-                    <span className="font-semibold">{lead.leadStatus || 'New'}</span> to{' '}
-                    <span className="font-semibold">{newStatus}</span>?
-                  </p>
-                  {newQuota !== (lead.quota || 'Not Applicable') && (
-                    <p className="text-gray-700">
-                      Quota will also be updated from{' '}
-                      <span className="font-semibold">{lead.quota || 'Not Applicable'}</span> to{' '}
-                      <span className="font-semibold">{newQuota}</span>.
-                    </p>
-                  )}
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      variant="primary"
-                      onClick={handleConfirmStatusChange}
-                      disabled={addActivityMutation.isPending}
-                    >
-                      {addActivityMutation.isPending ? 'Saving...' : 'Confirm'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowConfirmModal(false);
-                        setNewStatus(lead.leadStatus || '');
-                        setNewQuota(lead.quota || 'Not Applicable');
-                      }}
-                      disabled={addActivityMutation.isPending}
-                    >
-                      Cancel
-                    </Button>
+              {/* Right: Templates */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Templates</h3>
+                  <div className="text-sm text-gray-500">
+                    Selected: {Object.keys(smsData.selectedTemplates).length}
                   </div>
                 </div>
-              </Card>
-            </div>
-          )}
 
-          {/* Delete Confirmation Modal */}
-          {showDeleteModal && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="max-w-md w-full">
-                <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Lead</h2>
-                <div className="space-y-4">
-                  <p className="text-gray-700">
-                    Are you sure you want to delete this lead? This action cannot be undone.
-                  </p>
-                  {lead && (
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-sm text-gray-600">
-                        <span className="font-semibold">Enquiry Number:</span> {lead.enquiryNumber || 'N/A'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <span className="font-semibold">Name:</span> {lead.name}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <span className="font-semibold">Phone:</span> {lead.phone}
-                      </p>
-                    </div>
-                  )}
-                  <p className="text-sm text-red-600 font-medium">
-                    ⚠️ This will also delete all activity logs associated with this lead.
-                  </p>
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      variant="primary"
-                      onClick={handleConfirmDelete}
-                      disabled={isDeleting || deleteMutation.isPending}
-                      className="bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700"
-                    >
-                      {isDeleting || deleteMutation.isPending ? 'Deleting...' : 'Delete Lead'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowDeleteModal(false);
-                        setIsDeleting(false);
-                      }}
-                      disabled={isDeleting || deleteMutation.isPending}
-                    >
-                      Cancel
-                    </Button>
+                {isLoadingTemplates ? (
+                  <div className="text-center py-8">
+                    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
                   </div>
-                </div>
-              </Card>
+                ) : filteredTemplates.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    No active templates available. Add templates from the communications admin page.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredTemplates.map((template) => {
+                      const templateState = smsData.selectedTemplates[template._id];
+                      const variableDescriptors: MessageTemplateVariable[] =
+                        template.variables && template.variables.length > 0
+                          ? template.variables
+                          : Array.from({ length: template.variableCount }).map((_, index) => ({
+                              key: `var${index + 1}`,
+                              label: `Variable ${index + 1}`,
+                            })) as MessageTemplateVariable[];
+
+                      return (
+                        <div
+                          key={template._id}
+                          className="border border-gray-200 rounded-lg p-4 space-y-3 dark:border-slate-700"
+                        >
+                          <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(templateState)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSmsData({
+                                    ...smsData,
+                                    selectedTemplates: {
+                                      ...smsData.selectedTemplates,
+                                      [template._id]: {
+                                        template,
+                                        variables: buildDefaultTemplateValues(template),
+                                      },
+                                    },
+                                  });
+                                } else {
+                                  const newTemplates = { ...smsData.selectedTemplates };
+                                  delete newTemplates[template._id];
+                                  setSmsData({
+                                    ...smsData,
+                                    selectedTemplates: newTemplates,
+                                  });
+                                }
+                              }}
+                              className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <div className="flex-1">
+                              <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
+                                {template.name}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-slate-400">
+                                DLT ID: {template.dltTemplateId} · Language: {template.language?.toUpperCase() || 'N/A'}
+                              </div>
+                              <div className="text-xs text-gray-400 dark:text-slate-500">
+                                Placeholders: {template.variableCount}
+                              </div>
+                            </div>
+                          </label>
+
+                          {templateState && (
+                            <div className="space-y-3 ml-7">
+                              {variableDescriptors.length > 0 && (
+                                <div className="space-y-2">
+                                  {variableDescriptors.map((variable, index) => {
+                                    const key = variable.key || `var${index + 1}`;
+                                    return (
+                                      <div
+                                        key={`${template._id}-${key}`}
+                                        className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                                      >
+                                        <div>
+                                          <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+                                            {variable.label || `Variable ${index + 1}`}
+                                          </label>
+                                          <Input
+                                            value={templateState.variables[key] || ''}
+                                            onChange={(e) => {
+                                              setSmsData({
+                                                ...smsData,
+                                                selectedTemplates: {
+                                                  ...smsData.selectedTemplates,
+                                                  [template._id]: {
+                                                    ...templateState,
+                                                    variables: {
+                                                      ...templateState.variables,
+                                                      [key]: e.target.value,
+                                                    },
+                                                  },
+                                                },
+                                              });
+                                            }}
+                                            placeholder={
+                                              index === 0 && lead?.name
+                                                ? lead.name
+                                                : variable.defaultValue || ''
+                                            }
+                                          />
+                                        </div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500 flex items-end">
+                                          Placeholder: {`{#var#}`}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <div className="bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-lg p-3">
+                                <div className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">
+                                  Preview:
+                                </div>
+                                <div className="text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap">
+                                  {renderTemplatePreview(template, templateState.variables)}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-        )}
-      </div>
+
+            <div className="flex justify-between items-center gap-3 pt-2 flex-wrap border-t border-gray-200 dark:border-slate-700">
+              <div className="text-xs text-gray-500">
+                {smsData.selectedNumbers.length === 0
+                  ? 'Select at least one contact number.'
+                  : Object.keys(smsData.selectedTemplates).length === 0
+                  ? 'Select at least one template to send.'
+                  : `Ready to send using ${Object.keys(smsData.selectedTemplates).length} template${
+                      Object.keys(smsData.selectedTemplates).length > 1 ? 's' : ''
+                    }.`}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowSmsModal(false);
+                    setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
+                  }}
+                  disabled={smsMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    if (smsData.selectedNumbers.length === 0) {
+                      showToast.error('Please select at least one contact number');
+                      return;
+                    }
+                    if (Object.keys(smsData.selectedTemplates).length === 0) {
+                      showToast.error('Please select at least one template');
+                      return;
+                    }
+
+                    // Build templates payload
+                    const templatesPayload = Object.values(smsData.selectedTemplates).map(({ template, variables }) => {
+                      const variablesArray =
+                        template.variables && template.variables.length > 0
+                          ? template.variables.map((variable, index) => ({
+                              key: variable.key || `var${index + 1}`,
+                              value: variables[variable.key || `var${index + 1}`] || '',
+                            }))
+                          : Array.from({ length: template.variableCount }).map((_, index) => {
+                              const key = `var${index + 1}`;
+                              return {
+                                key,
+                                value: variables[key] || '',
+                              };
+                            });
+
+                      return {
+                        templateId: template._id,
+                        variables: variablesArray,
+                      };
+                    });
+
+                    smsMutation.mutate({
+                      contactNumbers: smsData.selectedNumbers,
+                      templates: templatesPayload,
+                    });
+                  }}
+                  disabled={
+                    smsMutation.isPending ||
+                    smsData.selectedNumbers.length === 0 ||
+                    Object.keys(smsData.selectedTemplates).length === 0
+                  }
+                >
+                  {smsMutation.isPending ? 'Sending...' : 'Send Message'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
-
