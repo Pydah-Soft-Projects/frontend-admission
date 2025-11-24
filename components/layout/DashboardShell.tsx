@@ -294,6 +294,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     } else if (pathname.includes('/superadmin/users/')) {
       // If on user detail page, go to users list
       router.push('/superadmin/users');
+    } else if (pathname.includes('/manager/leads/')) {
+      // If on manager lead detail page, go to manager leads list
+      router.push('/manager/leads');
+    } else if (pathname.startsWith('/manager/')) {
+      // If on any manager page, go to manager dashboard
+      router.push('/manager/dashboard');
     } else {
       // Default: go back in history
       router.back();

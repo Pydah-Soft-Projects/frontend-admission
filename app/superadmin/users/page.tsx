@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { userAPI } from '@/lib/api';
+import { userAPI, managerAPI } from '@/lib/api';
 import type { User, ModulePermission, RoleName } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -40,6 +40,9 @@ const UserManagementPage = () => {
     createEmptyPermissions()
   );
   const [searchTerm, setSearchTerm] = useState('');
+  const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false);
+  const [selectedUserForAssignment, setSelectedUserForAssignment] = useState<User | null>(null);
+  const [selectedManagerId, setSelectedManagerId] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -110,6 +113,67 @@ const UserManagementPage = () => {
     },
   });
 
+  const assignTeamMemberMutation = useMutation({
+    mutationFn: async ({ userId, managerId }: { userId: string; managerId: string | null }) =>
+      userAPI.update(userId, { managedBy: managerId }),
+    onSuccess: () => {
+      showToast.success('Team assignment updated successfully');
+      setShowTeamAssignmentModal(false);
+      setSelectedUserForAssignment(null);
+      setSelectedManagerId('');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to update team assignment');
+    },
+  });
+
+  const toggleManagerRoleMutation = useMutation({
+    mutationFn: async (user: User) => {
+      // Toggle isManager boolean - this preserves the original roleName
+      // Backend will handle clearing team members' managedBy when revoking
+      const newIsManager = !user.isManager;
+      return userAPI.update(user._id, { isManager: newIsManager });
+    },
+    onSuccess: (_, user) => {
+      const action = user.isManager ? 'promoted to' : 'revoked';
+      showToast.success(`User ${action} Manager successfully`);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to update user role');
+    },
+  });
+
+  const managers = useMemo(() => {
+    return users.filter((u) => u.isManager === true);
+  }, [users]);
+
+  const handleOpenTeamAssignment = (user: User, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedUserForAssignment(user);
+    // Safely get manager ID - handle null, object, or string
+    let managerId = '';
+    if (user.managedBy) {
+      if (typeof user.managedBy === 'object' && user.managedBy._id) {
+        managerId = user.managedBy._id;
+      } else if (typeof user.managedBy === 'string') {
+        managerId = user.managedBy;
+      }
+    }
+    setSelectedManagerId(managerId);
+    setShowTeamAssignmentModal(true);
+  };
+
+  const handleAssignTeamMember = () => {
+    if (!selectedUserForAssignment) return;
+    const managerId = selectedManagerId || null;
+    assignTeamMemberMutation.mutate({
+      userId: selectedUserForAssignment._id,
+      managerId,
+    });
+  };
+
   const handleCreateUser = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canManageUsers) {
@@ -167,6 +231,7 @@ const UserManagementPage = () => {
     if (roleName === 'Sub Super Admin') {
       setPermissionState(createEmptyPermissions());
     }
+    // Note: Manager is now handled via isManager boolean, not roleName
   };
 
   const toggleModuleAccess = (moduleKey: PermissionModuleKey) => {
@@ -190,6 +255,9 @@ const UserManagementPage = () => {
   };
 
   const displayRole = (user: User) => {
+    if (user.isManager) {
+      return `${user.roleName} (Manager)`;
+    }
     if (user.roleName === 'User') {
       return user.designation || 'User';
     }
@@ -240,6 +308,9 @@ const UserManagementPage = () => {
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Status
                   </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Manager
+                  </th>
                   <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Actions
                   </th>
@@ -259,47 +330,101 @@ const UserManagementPage = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((user) => (
-                    <tr
-                      key={user._id}
-                      className="cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60"
-                      onClick={() => router.push(`/superadmin/users/${user._id}/leads`)}
-                    >
-                      <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {user.name}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                        {user.email}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                        {displayRole(user)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                            user.isActive
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
-                              : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
-                          }`}
-                        >
-                          {user.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                      <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleActiveMutation.mutate(user);
-                          }}
-                          disabled={toggleActiveMutation.isPending || !canManageUsers}
-                        >
-                          {user.isActive ? 'Deactivate' : 'Activate'}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
+                  filteredUsers.map((user) => {
+                    // Safely get manager - handle null, object, or string
+                    let manager: User | undefined = undefined;
+                    if (user.managedBy) {
+                      if (typeof user.managedBy === 'object') {
+                        manager = user.managedBy;
+                      } else if (typeof user.managedBy === 'string') {
+                        manager = users.find((u) => u._id === user.managedBy);
+                      }
+                    }
+                    return (
+                      <tr
+                        key={user._id}
+                        className="cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60"
+                        onClick={() => router.push(`/superadmin/users/${user._id}/leads`)}
+                      >
+                        <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {user.name}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                          {user.email}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                          {displayRole(user)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                              user.isActive
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
+                                : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
+                            }`}
+                          >
+                            {user.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                          {manager ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200">
+                              {manager.name}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">No Manager</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin') && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(event) => handleOpenTeamAssignment(user, event)}
+                                disabled={!canManageUsers}
+                              >
+                                {manager ? 'Change Manager' : 'Assign Manager'}
+                              </Button>
+                            )}
+                            {/* Manager Role Toggle - Show for User and Sub Super Admin (not Super Admin) */}
+                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin') && (
+                              <Button
+                                variant={user.isManager ? 'primary' : 'outline'}
+                                size="sm"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (user.isManager) {
+                                    if (window.confirm(`Are you sure you want to revoke Manager privileges from ${user.name}? This will remove them as manager of their team.`)) {
+                                      toggleManagerRoleMutation.mutate(user);
+                                    }
+                                  } else {
+                                    if (window.confirm(`Are you sure you want to grant Manager privileges to ${user.name}?`)) {
+                                      toggleManagerRoleMutation.mutate(user);
+                                    }
+                                  }
+                                }}
+                                disabled={toggleManagerRoleMutation.isPending || !canManageUsers}
+                              >
+                                {user.isManager ? 'Revoke Manager' : 'Make Manager'}
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleActiveMutation.mutate(user);
+                              }}
+                              disabled={toggleActiveMutation.isPending || !canManageUsers}
+                            >
+                              {user.isActive ? 'Deactivate' : 'Activate'}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -355,9 +480,9 @@ const UserManagementPage = () => {
                       onChange={(event) => handleRoleChange(event.target.value)}
                       className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     >
-                      <option value="User">User</option>
-                      <option value="Sub Super Admin">Sub Super Admin</option>
-                      <option value="Super Admin">Super Admin</option>
+                    <option value="User">User</option>
+                    <option value="Sub Super Admin">Sub Super Admin</option>
+                    <option value="Super Admin">Super Admin</option>
                     </select>
                   </div>
 
@@ -466,7 +591,202 @@ const UserManagementPage = () => {
           </Card>
         </div>
       )}
+
+      {/* Team Assignment Modal */}
+      {showTeamAssignmentModal && selectedUserForAssignment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <Card className="w-full max-w-md space-y-6 p-6 shadow-xl shadow-blue-100/40 dark:shadow-none">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Assign Team Member
+              </h2>
+              <button
+                type="button"
+                className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                onClick={() => {
+                  setShowTeamAssignmentModal(false);
+                  setSelectedUserForAssignment(null);
+                  setSelectedManagerId('');
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  User
+                </label>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {selectedUserForAssignment.name} ({selectedUserForAssignment.email})
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Assign to Manager
+                </label>
+                {managers.length === 0 ? (
+                  <div className="rounded-xl border-2 border-amber-200 bg-amber-50/80 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/20">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      No managers available. Please create a manager first by creating a user with the "Manager" role.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedManagerId}
+                    onChange={(e) => setSelectedManagerId(e.target.value)}
+                    className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  >
+                    <option value="">No Manager (Remove Assignment)</option>
+                    {managers.map((manager) => (
+                      <option key={manager._id} value={manager._id}>
+                        {manager.name} ({manager.email})
+                        {manager.isActive ? '' : ' - Inactive'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {managers.length > 0 && (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Select a manager to assign this user to their team, or select "No Manager" to remove the assignment.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowTeamAssignmentModal(false);
+                  setSelectedUserForAssignment(null);
+                  setSelectedManagerId('');
+                }}
+                disabled={assignTeamMemberMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleAssignTeamMember}
+                disabled={assignTeamMemberMutation.isPending || !canManageUsers || managers.length === 0}
+              >
+                {assignTeamMemberMutation.isPending ? 'Updating…' : 'Update Assignment'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Team Cards Section - Show team metrics for managers */}
+      {managers.length > 0 && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-6">
+            Manager Teams
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {managers.map((manager) => (
+              <ManagerTeamCard key={manager._id} manager={manager} />
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
+  );
+};
+
+// Manager Team Card Component
+const ManagerTeamCard = ({ manager }: { manager: User }) => {
+  const { data: teamData, isLoading: isLoadingTeam } = useQuery({
+    queryKey: ['manager-team', manager._id],
+    queryFn: async () => {
+      // We need to fetch team data - but managerAPI requires manager authentication
+      // So we'll calculate from users list instead
+      return null;
+    },
+    enabled: false, // Disable for now, we'll calculate from users
+  });
+
+  const { data: allUsers } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const response = await userAPI.getAll();
+      return response.data || response;
+    },
+  });
+
+  const teamMembers = useMemo(() => {
+    if (!allUsers) return [];
+    const users = Array.isArray(allUsers) ? allUsers : allUsers.data || [];
+    return users.filter((user: User) => {
+      if (typeof user.managedBy === 'object') {
+        return user.managedBy?._id === manager._id;
+      }
+      return user.managedBy === manager._id;
+    });
+  }, [allUsers, manager._id]);
+
+  const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
+
+  return (
+    <Card className="p-4 border-2 border-blue-200 dark:border-blue-800">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {manager.name}
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{manager.email}</p>
+        </div>
+        <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200">
+          Manager
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-600 dark:text-slate-400">Team Members</span>
+          <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {isLoadingTeam ? '...' : formatNumber(teamMembers.length)}
+          </span>
+        </div>
+
+        {teamMembers.length > 0 && (
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+              Team Members:
+            </p>
+            <div className="space-y-1">
+              {teamMembers.slice(0, 3).map((member: User) => (
+                <div
+                  key={member._id}
+                  className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2"
+                >
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  {member.name} ({member.roleName})
+                </div>
+              ))}
+              {teamMembers.length > 3 && (
+                <div className="text-xs text-slate-500 dark:text-slate-500">
+                  +{teamMembers.length - 3} more
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {teamMembers.length === 0 && (
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              No team members assigned yet
+            </p>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 };
 

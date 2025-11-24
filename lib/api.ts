@@ -838,6 +838,68 @@ export const utmAPI = {
   },
 };
 
+// Manager API
+export const managerAPI = {
+  getTeamMembers: async () => {
+    const response = await api.get('/manager/team');
+    return response.data?.data || response.data;
+  },
+  getLeads: async (filters?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    enquiryNumber?: string;
+    mandal?: string;
+    state?: string;
+    district?: string;
+    leadStatus?: string;
+    applicationStatus?: string;
+    courseInterested?: string;
+    source?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.page) params.append('page', String(filters.page));
+    if (filters?.limit) params.append('limit', String(filters.limit));
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.enquiryNumber) params.append('enquiryNumber', filters.enquiryNumber);
+    if (filters?.mandal) params.append('mandal', filters.mandal);
+    if (filters?.state) params.append('state', filters.state);
+    if (filters?.district) params.append('district', filters.district);
+    if (filters?.leadStatus) params.append('leadStatus', filters.leadStatus);
+    if (filters?.applicationStatus) params.append('applicationStatus', filters.applicationStatus);
+    if (filters?.courseInterested) params.append('courseInterested', filters.courseInterested);
+    if (filters?.source) params.append('source', filters.source);
+    if (filters?.startDate) params.append('startDate', filters.startDate);
+    if (filters?.endDate) params.append('endDate', filters.endDate);
+    const response = await api.get(`/manager/leads?${params.toString()}`);
+    return response.data?.data || response.data;
+  },
+  getAnalytics: async (filters?: { startDate?: string; endDate?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.startDate) params.append('startDate', filters.startDate);
+    if (filters?.endDate) params.append('endDate', filters.endDate);
+    const response = await api.get(`/manager/analytics?${params.toString()}`);
+    return response.data?.data || response.data;
+  },
+  getUnfollowedLeads: async (days?: number) => {
+    const params = new URLSearchParams();
+    if (days) params.append('days', String(days));
+    const response = await api.get(`/manager/unfollowed-leads?${params.toString()}`);
+    return response.data?.data || response.data;
+  },
+  notifyTeam: async (data: {
+    userIds: string[];
+    message: string;
+    subject?: string;
+    type?: 'email' | 'push';
+  }) => {
+    const response = await api.post('/manager/notify-team', data);
+    return response.data?.data || response.data;
+  },
+};
+
 export default api;
 
 

@@ -15,6 +15,8 @@ export interface User {
   roleName: RoleName;
   designation?: string;
   permissions?: Record<string, ModulePermission>;
+  managedBy?: string | User;
+  previousRoleName?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

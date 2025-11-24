@@ -57,6 +57,8 @@ export default function LoginPage() {
       // Redirect based on role
       if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
         router.push('/superadmin/dashboard');
+      } else if (user.isManager) {
+        router.push('/manager/dashboard');
       } else {
         router.push('/user/dashboard');
       }
