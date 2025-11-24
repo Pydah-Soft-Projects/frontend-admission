@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { userAPI, leadAPI, leadAssignmentAPI, managerAPI } from '@/lib/api';
+import { userAPI, leadAPI, managerAPI } from '@/lib/api';
 import { User, Lead } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -205,7 +205,7 @@ export default function TeamMemberDetailPage() {
   const { data: analyticsData, isLoading: isLoadingAnalytics } = useQuery({
     queryKey: ['user-analytics', memberId, dateRangeParams.startDate, dateRangeParams.endDate],
     queryFn: async () => {
-      const response = await leadAssignmentAPI.getUserAnalytics({
+      const response = await leadAPI.getUserAnalytics({
         startDate: dateRangeParams.startDate,
         endDate: dateRangeParams.endDate,
       });
@@ -225,7 +225,7 @@ export default function TeamMemberDetailPage() {
   const { data: todayAnalytics, isLoading: isLoadingToday } = useQuery({
     queryKey: ['user-analytics-today', memberId, todayParams.startDate, todayParams.endDate],
     queryFn: async () => {
-      const response = await leadAssignmentAPI.getUserAnalytics({
+      const response = await leadAPI.getUserAnalytics({
         startDate: todayParams.startDate,
         endDate: todayParams.endDate,
       });
