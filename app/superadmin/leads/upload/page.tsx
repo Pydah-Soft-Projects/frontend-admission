@@ -232,11 +232,21 @@ export default function BulkUploadPage() {
         if (!status) {
           throw new Error('Failed to fetch import status. Please try again.');
         }
+        
+        // Log status for debugging
+        console.log('[Upload] Job status received:', {
+          jobId: status.jobId,
+          status: status.status,
+          stats: status.stats,
+          hasStats: !!status.stats,
+        });
+        
         setJobStatus(status);
 
         if (status.status === 'completed' || status.status === 'failed') {
           stopJobPolling();
           setIsProcessing(false);
+          setUploadProgress(100);
 
           const info = jobInfoRef.current;
           if (status.status === 'failed') {
@@ -245,16 +255,22 @@ export default function BulkUploadPage() {
 
           if (info) {
             const stats = status.stats || {};
-            setUploadResult({
+            // Ensure we're using numbers, not strings
+            const uploadResultData: BulkUploadResponse = {
               batchId: info.batchId,
-              total: stats.totalProcessed,
-              success: stats.totalSuccess,
-              errors: stats.totalErrors,
-              durationMs: stats.durationMs,
-              sheetsProcessed: stats.sheetsProcessed,
-              errorDetails: status.errorDetails,
-              message: status.message,
-            });
+              total: Number(stats.totalProcessed) || 0,
+              success: Number(stats.totalSuccess) || 0,
+              errors: Number(stats.totalErrors) || 0,
+              durationMs: Number(stats.durationMs) || 0,
+              sheetsProcessed: Array.isArray(stats.sheetsProcessed) ? stats.sheetsProcessed : [],
+              errorDetails: Array.isArray(status.errorDetails) ? status.errorDetails : [],
+              message: status.message || `Processed ${stats.totalProcessed || 0} row(s). ${stats.totalSuccess || 0} succeeded, ${stats.totalErrors || 0} failed`,
+            };
+            
+            console.log('[Upload] Setting upload result:', uploadResultData);
+            setUploadResult(uploadResultData);
+          } else {
+            console.warn('[Upload] No job info available when job completed');
           }
         }
       } catch (err: any) {
@@ -342,30 +358,35 @@ export default function BulkUploadPage() {
         throw new Error('Upload response was empty');
       }
       
-      // Backend processes uploads synchronously and returns results immediately
-      // Response structure: { batchId, total, success, errors, sheetsProcessed, errorDetails, durationMs }
-      setIsProcessing(false);
-      setUploadProgress(100);
-      
-      // Set upload result directly from response
-      const uploadResultData: BulkUploadResponse = {
-        batchId: response.batchId,
-        total: response.total ?? 0,
-        success: response.success ?? 0,
-        errors: response.errors ?? 0,
-        durationMs: response.durationMs,
-        sheetsProcessed: response.sheetsProcessed ?? [],
-        errorDetails: response.errorDetails ?? [],
-        message: `Processed ${response.total ?? 0} row(s). ${response.success ?? 0} succeeded, ${response.errors ?? 0} failed`,
-      };
-      
-      setUploadResult(uploadResultData);
-      
-      // Clear job-related state since we don't need polling
-      setJobInfo(null);
-      jobInfoRef.current = null;
-      setJobStatus(null);
-      stopJobPolling();
+      // Backend queues the job and processes asynchronously
+      // Response structure: { jobId, uploadId, batchId, status: 'queued' }
+      if (response.jobId) {
+        // Store job info and start polling
+        const jobInfoData: BulkUploadJobResponse = {
+          jobId: response.jobId,
+          uploadId: response.uploadId || '',
+          batchId: response.batchId || '',
+          status: response.status || 'queued',
+        };
+        setJobInfo(jobInfoData);
+        jobInfoRef.current = jobInfoData;
+        startJobPolling(response.jobId);
+      } else {
+        // Fallback: if no jobId, treat as immediate response (legacy support)
+        setIsProcessing(false);
+        setUploadProgress(100);
+        const uploadResultData: BulkUploadResponse = {
+          batchId: response.batchId || '',
+          total: response.total ?? 0,
+          success: response.success ?? 0,
+          errors: response.errors ?? 0,
+          durationMs: response.durationMs,
+          sheetsProcessed: response.sheetsProcessed ?? [],
+          errorDetails: response.errorDetails ?? [],
+          message: `Processed ${response.total ?? 0} row(s). ${response.success ?? 0} succeeded, ${response.errors ?? 0} failed`,
+        };
+        setUploadResult(uploadResultData);
+      }
     } catch (err: any) {
       const message = err.response?.data?.message || err.message || 'Upload failed. Please try again.';
       setError(message);
