@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -45,8 +45,8 @@ export default function CourseManagementPage() {
           Course &amp; Branch Setup
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Maintain the official list of courses and branches. These drive joining form selections and
-          payment fee mapping.
+          View courses and branches from the external system. These drive joining form selections and
+          payment fee mapping. <span className="font-medium text-amber-600 dark:text-amber-400">Read-only mode: Courses and branches are managed externally.</span>
         </p>
       </div>
     );
@@ -104,6 +104,7 @@ export default function CourseManagementPage() {
     description: '',
     isActive: true,
   });
+  const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
 
   const createCourseMutation = useMutation({
     mutationFn: (payload: { name: string; code?: string; description?: string }) =>
@@ -381,6 +382,18 @@ export default function CourseManagementPage() {
     });
   };
 
+  const toggleCourseExpansion = (courseId: string) => {
+    setExpandedCourses((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseId)) {
+        next.delete(courseId);
+      } else {
+        next.add(courseId);
+      }
+      return next;
+    });
+  };
+
   const isBusy =
     createCourseMutation.isPending ||
     updateCourseMutation.isPending ||
@@ -408,14 +421,16 @@ export default function CourseManagementPage() {
             <Button variant="secondary" onClick={() => refetch()} disabled={isBusy || isLoading}>
               Refresh
             </Button>
+            {/* Create Course button disabled - courses are managed externally */}
             <Button
               variant="primary"
               onClick={() => {
-                setNewCourse({ name: '', code: '', description: '' });
-                setIsCreateCourseOpen(true);
+                showToast.error('Courses are managed in the external system. Cannot create courses from this interface.');
               }}
+              disabled={true}
+              title="Courses are read-only from external system"
             >
-              Create Course
+              Create Course (Disabled)
             </Button>
           </div>
         </div>
@@ -426,126 +441,201 @@ export default function CourseManagementPage() {
           </div>
         ) : courses.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-400">
-            No courses yet. Create your first course to begin mapping branches and fees.
+            No courses found in the external system. Please ensure the secondary database connection is configured correctly.
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {courses.map((course) => (
-              <div
-                key={course._id}
-                className="group relative flex h-full flex-col rounded-3xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                          {course.name}
-                        </h3>
-                        {!course.isActive && (
-                          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                            Inactive
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {course.code ? `Code · ${course.code}` : 'No course code'}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-300">
-                      {(course.branches?.length || 0).toString().padStart(2, '0')} branch
-                      {(course.branches?.length || 0) === 1 ? '' : 'es'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-500 line-clamp-3 dark:text-slate-400">
-                    {course.description || 'No description provided.'}
-                  </p>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                      <Button variant="secondary" onClick={() => openCourseEditModal(course)} disabled={!canEditPayments}>
-                    Edit
-                  </Button>
-                      <Button variant="secondary" onClick={() => handleToggleCourse(course)} disabled={!canEditPayments}>
-                    {course.isActive ? 'Deactivate' : 'Activate'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setBranchForms((prev) => ({
-                        ...prev,
-                        [course._id]: emptyBranchForm,
-                      }));
-                      setBranchModalCourseId(course._id);
-                    }}
-                        disabled={!canEditPayments}
-                  >
-                    Add Branch
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleDeleteCourse(course)}
-                        disabled={deleteCourseMutation.isPending || !canEditPayments}
-                  >
-                    Delete
-                  </Button>
-                </div>
-
-                <div className="mt-6 space-y-3">
-                  <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                    Branches
-                  </h4>
-                  {course.branches && course.branches.length > 0 ? (
-                    <div className="grid gap-3">
-                      {course.branches.map((branch) => (
-                        <div
-                          key={branch._id}
-                          className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm shadow-sm transition hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900/60"
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="bg-slate-50 dark:bg-slate-800">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Course
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Code
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Description
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Branches
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900">
+                  {courses.map((course) => {
+                    const isExpanded = expandedCourses.has(course._id);
+                    const branchCount = course.branches?.length || 0;
+                    return (
+                      <React.Fragment key={course._id}>
+                        <tr
+                          className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-semibold text-slate-900 dark:text-slate-100">
-                                {branch.name}
-                              </p>
-                              <p className="text-xs text-slate-500 dark:text-slate-400">
-                                {branch.code ? `Code · ${branch.code}` : 'No branch code'}
-                              </p>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => toggleCourseExpansion(course._id)}
+                                className="flex-shrink-0 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+                                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                              >
+                                <svg
+                                  className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
+                              <div>
+                                <div className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {course.name}
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                            {course.code || '-'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                            <div className="max-w-xs truncate" title={course.description || undefined}>
+                              {course.description || '-'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                              {branchCount} {branchCount === 1 ? 'branch' : 'branches'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {course.isActive ? (
+                              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                Active
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                Inactive
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex justify-end gap-2">
                               <Button
                                 variant="secondary"
                                 size="sm"
-                                onClick={() => openBranchEditModal(course._id, branch)}
-                                disabled={!canEditPayments}
+                                onClick={() => {
+                                  showToast.error('Courses are managed in the external system. Cannot edit courses from this interface.');
+                                }}
+                                disabled={true}
+                                title="Courses are read-only from external system"
                               >
                                 Edit
                               </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleToggleBranch(course._id, branch)}
-                                disabled={!canEditPayments}
-                              >
-                                {branch.isActive ? 'Deactivate' : 'Activate'}
-                              </Button>
                             </div>
-                          </div>
-                          {branch.description && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {branch.description}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
-                      No branches added yet.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
+                          </td>
+                        </tr>
+                        {isExpanded && course.branches && course.branches.length > 0 && (
+                          <tr className="bg-slate-50/50 dark:bg-slate-800/30">
+                            <td colSpan={6} className="px-6 py-4">
+                              <div className="space-y-2">
+                                <h4 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                  Branches for {course.name}
+                                </h4>
+                                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                                  <table className="w-full border-collapse">
+                                    <thead className="bg-slate-100 dark:bg-slate-800">
+                                      <tr>
+                                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                          Branch Name
+                                        </th>
+                                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                          Code
+                                        </th>
+                                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                          Description
+                                        </th>
+                                        <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                          Status
+                                        </th>
+                                        <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                          Actions
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                      {course.branches.map((branch) => (
+                                        <tr
+                                          key={branch._id}
+                                          className="bg-white transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50"
+                                        >
+                                          <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                            {branch.name}
+                                          </td>
+                                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                                            {branch.code || '-'}
+                                          </td>
+                                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                                            <div className="max-w-xs truncate" title={branch.description || undefined}>
+                                              {branch.description || '-'}
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-3 text-center">
+                                            {branch.isActive ? (
+                                              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                                Active
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                Inactive
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="px-4 py-3 text-right">
+                                            <div className="flex justify-end gap-2">
+                                              <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => {
+                                                  showToast.error('Branches are managed in the external system. Cannot edit branches from this interface.');
+                                                }}
+                                                disabled={true}
+                                                title="Branches are read-only from external system"
+                                              >
+                                                Edit
+                                              </Button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {isExpanded && (!course.branches || course.branches.length === 0) && (
+                          <tr className="bg-slate-50/50 dark:bg-slate-800/30">
+                            <td colSpan={6} className="px-6 py-4">
+                              <div className="rounded-lg border border-dashed border-slate-300 px-4 py-3 text-center text-sm text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                                No branches available for this course.
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>

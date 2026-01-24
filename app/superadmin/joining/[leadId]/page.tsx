@@ -361,13 +361,30 @@ const JoiningDetailPage = () => {
 
   const courseSettings: CoursePaymentSettings[] = useMemo(() => {
     const payload = courseSettingsResponse?.data;
+    let settings: CoursePaymentSettings[] = [];
+    
     if (Array.isArray(payload)) {
-      return payload as CoursePaymentSettings[];
+      settings = payload as CoursePaymentSettings[];
+    } else if (payload && Array.isArray((payload as any).data)) {
+      settings = (payload as any).data as CoursePaymentSettings[];
     }
-    if (payload && Array.isArray((payload as any).data)) {
-      return (payload as any).data as CoursePaymentSettings[];
-    }
-    return [];
+    
+    // Deduplicate branches for each course (frontend safety check)
+    return settings.map((setting) => {
+      const uniqueBranchesMap = new Map<string, typeof setting.branches[0]>();
+      setting.branches.forEach((branch) => {
+        // Use both _id and id for deduplication (some branches might have both)
+        const branchId = branch._id || branch.id;
+        if (branchId && !uniqueBranchesMap.has(branchId)) {
+          uniqueBranchesMap.set(branchId, branch);
+        }
+      });
+      
+      return {
+        ...setting,
+        branches: Array.from(uniqueBranchesMap.values()),
+      };
+    });
   }, [courseSettingsResponse]);
 
   const { data: cashfreeConfigResponse } = useQuery({
@@ -472,7 +489,21 @@ const JoiningDetailPage = () => {
 
   const selectedCourseSetting = useMemo(() => {
     if (!formState.courseInfo.courseId) return undefined;
-    return courseSettings.find((item) => item.course._id === formState.courseInfo.courseId);
+    const setting = courseSettings.find((item) => item.course._id === formState.courseInfo.courseId);
+    if (!setting) return undefined;
+    
+    // Deduplicate branches by ID (frontend safety check)
+    const uniqueBranchesMap = new Map<string, typeof setting.branches[0]>();
+    setting.branches.forEach((branch) => {
+      if (!uniqueBranchesMap.has(branch._id)) {
+        uniqueBranchesMap.set(branch._id, branch);
+      }
+    });
+    
+    return {
+      ...setting,
+      branches: Array.from(uniqueBranchesMap.values()),
+    };
   }, [courseSettings, formState.courseInfo.courseId]);
 
   const selectedBranchSetting = useMemo(() => {
@@ -1553,12 +1584,27 @@ const JoiningDetailPage = () => {
                     <option value="">
                       {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
                     </option>
-                    {selectedCourseSetting?.branches.map((branch) => (
-                      <option key={branch._id} value={branch._id}>
-                        {branch.name}
-                        {branch.code ? ` (${branch.code})` : ''}
-                      </option>
-                    ))}
+                    {(() => {
+                      // Additional frontend deduplication as final safety check
+                      const branchMap = new Map<string, typeof selectedCourseSetting.branches[0]>();
+                      selectedCourseSetting?.branches.forEach((branch) => {
+                        const branchId = branch._id || branch.id;
+                        if (branchId && !branchMap.has(branchId)) {
+                          branchMap.set(branchId, branch);
+                        }
+                      });
+                      const uniqueBranches = Array.from(branchMap.values());
+                      
+                      return uniqueBranches.map((branch) => {
+                        const branchId = branch._id || branch.id;
+                        return (
+                          <option key={branchId} value={branchId}>
+                            {branch.name}
+                            {branch.code ? ` (${branch.code})` : ''}
+                          </option>
+                        );
+                      });
+                    })()}
                   </select>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     Branch list updates based on the selected course.
