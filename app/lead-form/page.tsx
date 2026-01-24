@@ -3,17 +3,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { leadAPI, utmAPI } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { leadAPI, utmAPI, formBuilderAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
 
 export default function LeadFormPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formId, setFormId] = useState<string | null>(null);
+  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
   
   // Capture UTM parameters from URL
   const [utmParams, setUtmParams] = useState({
@@ -24,7 +26,7 @@ export default function LeadFormPage() {
     utm_content: '',
   });
 
-  // Extract UTM parameters from URL on mount and track click if needed
+  // Extract UTM parameters and form_id from URL on mount and track click if needed
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -36,76 +38,73 @@ export default function LeadFormPage() {
         utm_content: urlParams.get('utm_content') || '',
       });
 
+      // Check for form_id in URL parameters (from short URL redirect)
+      const formIdFromUrl = urlParams.get('form_id');
+      if (formIdFromUrl) {
+        setFormId(formIdFromUrl);
+      }
+
       // Track click if redirect=false or redirect parameter is missing (long URL direct click)
       const redirectParam = urlParams.get('redirect');
-      if (redirectParam !== 'true') {
-        // This is a long URL click - track it
-        utmAPI.trackClick(window.location.href).catch((err: any) => {
-          // Silently fail - tracking is not critical
-          console.log('Click tracking failed:', err);
-        });
+      if (redirectParam !== 'true' && !formIdFromUrl) {
+        // This is a long URL click - track it and get form_id
+        utmAPI.trackClick(window.location.href)
+          .then((response: any) => {
+            // Response structure from backend: { success: true, data: { tracked: true, formId: ... }, message: ... }
+            // trackClick returns response.data from axios, so response is { success: true, data: {...}, message: ... }
+            const formIdFromResponse = response?.data?.formId || null;
+            if (formIdFromResponse) {
+              setFormId(formIdFromResponse);
+            }
+          })
+          .catch((err: any) => {
+            // Silently fail - tracking is not critical
+          });
       }
     }
   }, []);
 
-  const [formData, setFormData] = useState({
-    hallTicketNumber: '',
-    name: '',
-    phone: '',
-    email: '',
-    fatherName: '',
-    fatherPhone: '',
-    motherName: '',
-    gender: '',
-    courseInterested: '',
-    interCollege: '',
-    rank: '',
-    village: '',
-    district: '',
-    mandal: '',
-    state: '',
-    quota: 'Not Applicable',
-    applicationStatus: '',
-    isNRI: false,
+  // No static form data - only dynamic fields
+
+  // Fetch form definition if formId is available
+  const { data: formDataResponse, isLoading: isLoadingForm, error: formError } = useQuery({
+    queryKey: ['form-builder', 'form', formId],
+    queryFn: async () => {
+      if (!formId) return null;
+      try {
+        // Use public endpoint for lead form
+        const response = await formBuilderAPI.getForm(formId, { includeFields: true, showInactive: false, public: true });
+        return response;
+      } catch (error) {
+        return null;
+      }
+    },
+    enabled: !!formId,
   });
 
-  // Get all states
-  const states = useMemo(() => getAllStates(), []);
+  const dynamicForm = useMemo(() => {
+    if (!formDataResponse) return null;
+    // Response structure: { success: true, data: { id, name, fields: [...] }, message: ... }
+    const formData = formDataResponse?.data || formDataResponse;
+    return formData;
+  }, [formDataResponse]);
 
-  // Get districts based on selected state
-  const districts = useMemo(() => {
-    if (!formData.state) return [];
-    return getDistrictsByState(formData.state);
-  }, [formData.state]);
-
-  // Get mandals based on selected state and district
-  const mandals = useMemo(() => {
-    if (!formData.state || !formData.district) return [];
-    return getMandalsByStateAndDistrict(formData.state, formData.district);
-  }, [formData.state, formData.district]);
-
-  // Reset district and mandal when state changes
-  useEffect(() => {
-    if (formData.state) {
-      setFormData((prev) => ({ ...prev, district: '', mandal: '' }));
+  const sortedFormFields = useMemo(() => {
+    if (!dynamicForm?.fields) {
+      return [];
     }
-  }, [formData.state]);
+    const fields = Array.isArray(dynamicForm.fields) ? dynamicForm.fields : [];
+    const sorted = [...fields].sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
+    return sorted;
+  }, [dynamicForm]);
 
-  // Reset mandal when district changes
-  useEffect(() => {
-    if (formData.district) {
-      setFormData((prev) => ({ ...prev, mandal: '' }));
-    }
-  }, [formData.district]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleDynamicFieldChange = (fieldName: string, value: any) => {
+    setDynamicFormData((prev) => ({
+      ...prev,
+      [fieldName]: value,
+    }));
     setError(null);
-    // Reset mandal if district is changed
-    if (name === 'district') {
-      setFormData((prev) => ({ ...prev, mandal: '' }));
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,40 +112,61 @@ export default function LeadFormPage() {
     setError(null);
     setIsSubmitting(true);
 
-    // Validate required fields
-    if (
-      !formData.name ||
-      !formData.phone ||
-      !formData.fatherName ||
-      !formData.fatherPhone ||
-      !formData.village ||
-      !formData.state ||
-      !formData.district ||
-      !formData.mandal
-    ) {
-      setError('Please fill in all required fields');
-      setIsSubmitting(false);
-      return;
+    // Validate required dynamic form fields
+    if (sortedFormFields.length > 0) {
+      const missingFields: string[] = [];
+      sortedFormFields.forEach((field: any) => {
+        const value = dynamicFormData[field.fieldName];
+        // Check if required field is empty (handle different types)
+        if (field.isRequired && (value === undefined || value === null || value === '' || (typeof value === 'string' && value.trim() === ''))) {
+          missingFields.push(field.fieldLabel);
+        }
+      });
+      if (missingFields.length > 0) {
+        setError(`Please fill in required fields: ${missingFields.join(', ')}`);
+        setIsSubmitting(false);
+        return;
+      }
     }
 
     try {
+      // Build dynamic fields object for submission
+      const dynamicFields: Record<string, any> = {};
+      sortedFormFields.forEach((field: any) => {
+        const value = dynamicFormData[field.fieldName];
+        if (value !== undefined && value !== null && value !== '') {
+          dynamicFields[field.fieldName] = value;
+        }
+      });
+
+      // Extract common field names from dynamic fields (case-insensitive matching)
+      const getFieldValue = (fieldNames: string[]) => {
+        for (const fieldName of fieldNames) {
+          const key = Object.keys(dynamicFields).find(
+            k => k.toLowerCase() === fieldName.toLowerCase()
+          );
+          if (key && dynamicFields[key]) return dynamicFields[key];
+        }
+        return '';
+      };
+
+      // Submit with dynamic fields mapped to expected backend fields
       await leadAPI.submitPublicLead({
-        hallTicketNumber: formData.hallTicketNumber || undefined,
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email || undefined,
-        fatherName: formData.fatherName,
-        fatherPhone: formData.fatherPhone,
-        motherName: formData.motherName || undefined,
-        gender: formData.gender || undefined,
-        courseInterested: formData.courseInterested || undefined,
-        interCollege: formData.interCollege || undefined,
-        rank: formData.rank ? Number(formData.rank) : undefined,
-        village: formData.village,
-        state: formData.state,
-        district: formData.district,
-        mandal: formData.mandal,
-        isNRI: formData.isNRI,
+        name: getFieldValue(['name', 'fullName', 'studentName']) || '',
+        phone: getFieldValue(['phone', 'phoneNumber', 'mobile', 'contactNumber']) || '',
+        email: getFieldValue(['email', 'emailAddress']) || undefined,
+        fatherName: getFieldValue(['fatherName', 'father_name', 'fathersName']) || '',
+        fatherPhone: getFieldValue(['fatherPhone', 'father_phone', 'fathersPhone', 'fatherPhoneNumber']) || '',
+        motherName: getFieldValue(['motherName', 'mother_name', 'mothersName']) || undefined,
+        gender: getFieldValue(['gender']) || undefined,
+        courseInterested: getFieldValue(['courseInterested', 'course', 'courseName']) || undefined,
+        interCollege: getFieldValue(['interCollege', 'college', 'collegeName']) || undefined,
+        rank: getFieldValue(['rank']) ? Number(getFieldValue(['rank'])) : undefined,
+        village: getFieldValue(['village', 'city', 'town']) || '',
+        state: getFieldValue(['state']) || '',
+        district: getFieldValue(['district']) || '',
+        mandal: getFieldValue(['mandal', 'tehsil']) || '',
+        isNRI: getFieldValue(['isNRI', 'nri']) === true || getFieldValue(['isNRI', 'nri']) === 'true' || false,
         quota: 'Not Applicable',
         applicationStatus: 'Not Provided',
         source: 'Public Form',
@@ -155,6 +175,7 @@ export default function LeadFormPage() {
         utmCampaign: utmParams.utm_campaign || undefined,
         utmTerm: utmParams.utm_term || undefined,
         utmContent: utmParams.utm_content || undefined,
+        dynamicFields: Object.keys(dynamicFields).length > 0 ? dynamicFields : undefined,
       });
 
       // Show success message
@@ -162,26 +183,7 @@ export default function LeadFormPage() {
 
       // Reset form after 2 seconds
       setTimeout(() => {
-        setFormData({
-          hallTicketNumber: '',
-          name: '',
-          phone: '',
-          email: '',
-          fatherName: '',
-          fatherPhone: '',
-          motherName: '',
-          gender: '',
-          courseInterested: '',
-          interCollege: '',
-          rank: '',
-          village: '',
-          district: '',
-          mandal: '',
-          state: '',
-          quota: 'Not Applicable',
-          applicationStatus: '',
-          isNRI: false,
-        });
+        setDynamicFormData({});
         setShowSuccess(false);
       }, 3000);
     } catch (err: any) {
@@ -239,248 +241,182 @@ export default function LeadFormPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Hall Ticket Number */}
+                {/* Show message if no form is loaded */}
+                {!formId && !isLoadingForm && (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No form is associated with this URL.</p>
+                    <p className="text-sm mt-2">Please use a valid UTM URL with a form selected.</p>
+                  </div>
+                )}
+
+                {/* Dynamic Form Fields from Form Builder */}
+                {isLoadingForm && formId && (
+                  <div className="text-center py-8 text-sm text-gray-500">
+                    Loading form fields...
+                  </div>
+                )}
+
+                {formError && (
+                  <div className="text-center py-8 text-sm text-red-500">
+                    Error loading form. Please try again.
+                  </div>
+                )}
+
+                {sortedFormFields.length > 0 && (
                   <div>
-                    <Input
-                      label="Hall Ticket Number"
-                      name="hallTicketNumber"
-                      value={formData.hallTicketNumber}
-                      onChange={handleChange}
-                      placeholder="Enter Hall Ticket Number"
-                    />
-                  </div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-6">
+                      {dynamicForm?.name || 'Please fill in your details'}
+                    </h3>
+                    {dynamicForm?.description && (
+                      <p className="text-sm text-gray-600 mb-6">{dynamicForm.description}</p>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {sortedFormFields.map((field: any) => {
+                        const fieldValue = dynamicFormData[field.fieldName] || field.defaultValue || '';
+                        
+                        // Render based on field type
+                        if (field.fieldType === 'dropdown') {
+                          return (
+                            <div key={field._id}>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                              </label>
+                              <select
+                                value={fieldValue}
+                                onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
+                                required={field.isRequired}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                              >
+                                <option value="">Select {field.fieldLabel}</option>
+                                {field.options && field.options.length > 0 && field.options.map((option: any) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {field.helpText && (
+                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                              )}
+                            </div>
+                          );
+                        }
 
-                  {/* Name */}
-                  <div>
-                    <Input
-                      label="Name *"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
+                        if (field.fieldType === 'radio') {
+                          return (
+                            <div key={field._id}>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                              </label>
+                              <div className="space-y-2">
+                                {field.options && field.options.length > 0 && field.options.map((option: any) => (
+                                  <label key={option.value} className="flex items-center gap-2 cursor-pointer group">
+                                    <input
+                                      type="radio"
+                                      name={field.fieldName}
+                                      value={option.value}
+                                      checked={fieldValue === option.value}
+                                      onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
+                                      required={field.isRequired}
+                                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700">{option.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                              {field.helpText && (
+                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                              )}
+                            </div>
+                          );
+                        }
 
-                  {/* Phone */}
-                  <div>
-                    <Input
-                      label="Phone Number *"
-                      name="phone"
-                      type="tel"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
+                        if (field.fieldType === 'checkbox') {
+                          return (
+                            <div key={field._id} className="md:col-span-2">
+                              <label className="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={fieldValue === true || fieldValue === 'true'}
+                                  onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.checked)}
+                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                                />
+                                <span className="text-sm font-medium text-gray-700">
+                                  {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                                </span>
+                              </label>
+                              {field.helpText && (
+                                <p className="text-xs text-gray-500 mt-1 ml-6">{field.helpText}</p>
+                              )}
+                            </div>
+                          );
+                        }
 
-                  {/* Email */}
-                  <div>
-                    <Input
-                      label="Email (Optional)"
-                      name="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                    />
-                  </div>
+                        if (field.fieldType === 'textarea') {
+                          return (
+                            <div key={field._id} className="md:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                              </label>
+                              <textarea
+                                value={fieldValue}
+                                onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
+                                placeholder={field.placeholder || ''}
+                                required={field.isRequired}
+                                rows={4}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                              />
+                              {field.helpText && (
+                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                              )}
+                            </div>
+                          );
+                        }
 
-                  {/* Father Name */}
-                  <div>
-                    <Input
-                      label="Father's Name *"
-                      name="fatherName"
-                      value={formData.fatherName}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
+                        if (field.fieldType === 'file') {
+                          return (
+                            <div key={field._id} className="md:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                              </label>
+                              <input
+                                type="file"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleDynamicFieldChange(field.fieldName, file.name);
+                                  }
+                                }}
+                                required={field.isRequired}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                              />
+                              {field.helpText && (
+                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                              )}
+                            </div>
+                          );
+                        }
 
-                  {/* Father Phone */}
-                  <div>
-                    <Input
-                      label="Father's Phone Number *"
-                      name="fatherPhone"
-                      type="tel"
-                      value={formData.fatherPhone}
-                      onChange={handleChange}
-                      required
-                    />
+                        // Default: text, number, email, tel, date
+                        return (
+                          <div key={field._id}>
+                            <Input
+                              label={`${field.fieldLabel} ${field.isRequired ? '*' : ''}`}
+                              name={field.fieldName}
+                              type={field.fieldType === 'date' ? 'date' : field.fieldType === 'number' ? 'number' : field.fieldType === 'email' ? 'email' : field.fieldType === 'tel' ? 'tel' : 'text'}
+                              value={fieldValue}
+                              onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
+                              placeholder={field.placeholder || ''}
+                              required={field.isRequired}
+                            />
+                            {field.helpText && (
+                              <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-
-                  {/* Mother's Name */}
-                  <div>
-                    <Input
-                      label="Mother's Name (Optional)"
-                      name="motherName"
-                      value={formData.motherName}
-                      onChange={handleChange}
-                    />
-                  </div>
-
-                  {/* Gender */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Gender
-                    </label>
-                    <select
-                      name="gender"
-                      value={formData.gender}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                      <option value="Not Specified">Prefer not to say</option>
-                    </select>
-                  </div>
-
-                  {/* Village */}
-                  <div>
-                    <Input
-                      label="Village *"
-                      name="village"
-                      value={formData.village}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  {/* State */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State *
-                    </label>
-                    <select
-                      name="state"
-                      value={formData.state}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                    >
-                      <option value="">Select State</option>
-                      {states && states.length > 0 ? (
-                        states.map((state) => (
-                          <option key={state} value={state}>
-                            {state}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled>Loading states...</option>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* District */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      District *
-                    </label>
-                    <select
-                      name="district"
-                      value={formData.district}
-                      onChange={handleChange}
-                      required
-                      disabled={!formData.state}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">
-                        {formData.state ? 'Select District' : 'Select State first'}
-                      </option>
-                      {districts && districts.length > 0 ? (
-                        districts.map((district) => (
-                          <option key={district} value={district}>
-                            {district}
-                          </option>
-                        ))
-                      ) : formData.state ? (
-                        <option value="" disabled>No districts found for this state</option>
-                      ) : null}
-                    </select>
-                  </div>
-
-                  {/* Mandal */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mandal/Tehsil *
-                    </label>
-                    <select
-                      name="mandal"
-                      value={formData.mandal}
-                      onChange={handleChange}
-                      required
-                      disabled={!formData.district}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">
-                        {formData.district ? 'Select Mandal/Tehsil' : 'Select District first'}
-                      </option>
-                      {mandals && mandals.length > 0 ? (
-                        mandals.map((mandal) => (
-                          <option key={mandal} value={mandal}>
-                            {mandal}
-                          </option>
-                        ))
-                      ) : formData.district ? (
-                        <option value="" disabled>No mandals/tehsils found for this district</option>
-                      ) : null}
-                    </select>
-                  </div>
-
-                  {/* NRI Checkbox */}
-                  <div className="md:col-span-2">
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        name="isNRI"
-                        checked={formData.isNRI}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, isNRI: e.target.checked }))}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 transition-all group-hover:border-blue-400"
-                      />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 transition-colors">
-                        Non-Resident Indian (NRI)
-                      </span>
-                    </label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-                      Check this if you are a Non-Resident Indian
-                    </p>
-                  </div>
-
-                  {/* Course Interested */}
-                  <div>
-                    <Input
-                      label="Course Interested (Optional)"
-                      name="courseInterested"
-                      value={formData.courseInterested}
-                      onChange={handleChange}
-                    />
-                  </div>
-
-                  {/* Inter College */}
-                  <div>
-                    <Input
-                      label="Inter College (Optional)"
-                      name="interCollege"
-                      value={formData.interCollege}
-                      onChange={handleChange}
-                    />
-                  </div>
-
-                  {/* Rank */}
-                  <div>
-                    <Input
-                      label="Rank (Optional)"
-                      name="rank"
-                      type="number"
-                      min="0"
-                      value={formData.rank}
-                      onChange={handleChange}
-                    />
-                  </div>
-
-                </div>
+                )}
 
                 <div className="flex gap-4 pt-4">
                   <Button
