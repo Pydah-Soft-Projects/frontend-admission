@@ -78,15 +78,82 @@ export const registerServiceWorker = async (): Promise<ServiceWorkerRegistration
   }
 
   try {
+    // First, check if the service worker file is accessible
+    try {
+      const response = await fetch('/sw.js', { method: 'HEAD' });
+      if (!response.ok) {
+        throw new Error(`Service worker file not accessible: ${response.status} ${response.statusText}`);
+      }
+      const contentType = response.headers.get('content-type');
+      if (contentType && !contentType.includes('javascript') && !contentType.includes('text')) {
+        console.warn('[PushNotifications] Service worker file has unexpected content type:', contentType);
+      }
+    } catch (fetchError: any) {
+      console.error('[PushNotifications] Cannot access service worker file:', fetchError);
+      throw new Error(`Service worker file not found or not accessible: ${fetchError?.message || 'Unknown error'}`);
+    }
+
     registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/',
     });
 
     console.log('[PushNotifications] Service worker registered:', registration.scope);
+    
+    // Wait for the service worker to be ready and check for errors
+    if (registration.installing) {
+      registration.installing.addEventListener('error', (event) => {
+        console.error('[PushNotifications] Service worker error during installation:', event);
+        const errorEvent = event as ErrorEvent;
+        console.error('[PushNotifications] Error details:', {
+          message: errorEvent.message,
+          filename: errorEvent.filename,
+          lineno: errorEvent.lineno,
+          colno: errorEvent.colno,
+          error: errorEvent.error,
+        });
+      });
+    }
+
+    registration.addEventListener('updatefound', () => {
+      if (registration) {
+        const newWorker = registration.installing;
+        if (newWorker) {
+          newWorker.addEventListener('error', (event) => {
+            console.error('[PushNotifications] Service worker error during update:', event);
+            const errorEvent = event as ErrorEvent;
+            console.error('[PushNotifications] Error details:', {
+              message: errorEvent.message,
+              filename: errorEvent.filename,
+              lineno: errorEvent.lineno,
+              colno: errorEvent.colno,
+              error: errorEvent.error,
+            });
+          });
+        }
+      }
+    });
+
     return registration;
   } catch (error: any) {
     console.error('[PushNotifications] Error registering service worker:', error);
-    throw new Error('Failed to register service worker');
+    console.error('[PushNotifications] Error details:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack,
+      // Check if it's a network error
+      isNetworkError: error?.message?.includes('Failed to fetch') || error?.message?.includes('network'),
+      // Check if it's a syntax error
+      isSyntaxError: error?.message?.includes('syntax') || error?.message?.includes('parse'),
+    });
+    
+    // Provide more helpful error message
+    if (error?.message?.includes('Failed to fetch') || error?.message?.includes('network') || error?.message?.includes('not accessible')) {
+      throw new Error('Service worker file not found. Make sure sw.js exists in the public folder and is accessible.');
+    } else if (error?.message?.includes('syntax') || error?.message?.includes('parse') || error?.message?.includes('evaluation failed')) {
+      throw new Error('Service worker has a syntax error. Check the browser console and sw.js file for details.');
+    } else {
+      throw new Error(`Failed to register service worker: ${error?.message || 'Unknown error'}`);
+    }
   }
 };
 

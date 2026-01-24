@@ -25,8 +25,13 @@ export function PushNotificationProvider({ children }: { children: React.ReactNo
         // Initialize push notifications (automatically requests permission and subscribes)
         await initializePushNotifications();
         setIsInitialized(true);
-      } catch (error) {
+      } catch (error: any) {
         console.error('[PushNotifications] Error initializing:', error);
+        // Don't break the app if push notifications fail - just log the error
+        // This is expected in some environments (e.g., localhost without HTTPS, unsupported browsers)
+        if (error?.message?.includes('Service worker')) {
+          console.warn('[PushNotifications] Service worker registration failed. Push notifications will not work, but the app will continue to function.');
+        }
       }
     };
 
