@@ -8,6 +8,8 @@ import { formBuilderAPI } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { useRouter } from 'next/navigation';
+import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
+import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 type FormField = {
   id: string;
@@ -63,6 +65,20 @@ const emptyFieldForm: FieldFormState = {
   helpText: '',
 };
 
+// Type for fields being created during form creation (before form is saved)
+type DraftField = {
+  id: string; // Temporary ID
+  fieldName: string;
+  fieldType: string;
+  fieldLabel: string;
+  placeholder?: string;
+  isRequired: boolean;
+  displayOrder: number;
+  options: Array<{ value: string; label: string }>;
+  defaultValue?: string;
+  helpText?: string;
+};
+
 const fieldTypes = [
   { value: 'text', label: 'Text' },
   { value: 'number', label: 'Number' },
@@ -76,6 +92,18 @@ const fieldTypes = [
   { value: 'file', label: 'File Upload' },
 ];
 
+// Helper function to convert string to snake_case
+const toSnakeCase = (str: string): string => {
+  return str
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2') // Insert underscore between lowercase and uppercase
+    .replace(/[\s\-]+/g, '_') // Replace spaces and hyphens with underscores
+    .replace(/[^a-zA-Z0-9_]/g, '') // Remove special characters
+    .toLowerCase()
+    .replace(/_+/g, '_') // Replace multiple underscores with single
+    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+};
+
 export default function FormBuilderPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const router = useRouter();
@@ -87,6 +115,14 @@ export default function FormBuilderPage() {
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [newForm, setNewForm] = useState({ name: '', description: '' });
   const [fieldForm, setFieldForm] = useState<FieldFormState>(emptyFieldForm);
+  
+  // State for form creation modal with field management
+  const [draftFields, setDraftFields] = useState<DraftField[]>([]);
+  const [editingDraftField, setEditingDraftField] = useState<DraftField | null>(null);
+  const [draftFieldForm, setDraftFieldForm] = useState<FieldFormState>(emptyFieldForm);
+  const [includeAddress, setIncludeAddress] = useState(false);
+  const [isCreatingForm, setIsCreatingForm] = useState(false);
+  const [showAddFieldForm, setShowAddFieldForm] = useState(false);
 
   useEffect(() => {
     setHeaderContent(
@@ -240,7 +276,97 @@ export default function FormBuilderPage() {
     },
   });
 
-  const handleCreateForm = () => {
+  // Handle address toggle - auto-create address fields
+  useEffect(() => {
+    if (includeAddress) {
+      // Check if address fields already exist
+      const hasState = draftFields.some(f => f.fieldName.toLowerCase() === 'state');
+      const hasDistrict = draftFields.some(f => f.fieldName.toLowerCase() === 'district');
+      const hasMandal = draftFields.some(f => f.fieldName.toLowerCase() === 'mandal');
+      const hasVillage = draftFields.some(f => f.fieldName.toLowerCase() === 'village');
+
+      const maxOrder = draftFields.length > 0 ? Math.max(...draftFields.map(f => f.displayOrder)) : -1;
+      let nextOrder = maxOrder + 1;
+
+      if (!hasState) {
+        const states = getAllStates();
+        setDraftFields(prev => [...prev, {
+          id: `temp-state-${Date.now()}`,
+          fieldName: 'state',
+          fieldType: 'dropdown',
+          fieldLabel: 'State',
+          placeholder: 'Select state',
+          isRequired: true,
+          displayOrder: nextOrder++,
+          options: states.map(s => ({ value: s, label: s })),
+          helpText: 'Select your state',
+        }]);
+      }
+
+      if (!hasDistrict) {
+        // District dropdown will be populated dynamically based on state selection
+        // We'll store a special marker in validationRules to indicate this is a dynamic field
+        setDraftFields(prev => [...prev, {
+          id: `temp-district-${Date.now()}`,
+          fieldName: 'district',
+          fieldType: 'dropdown',
+          fieldLabel: 'District',
+          placeholder: 'Select district',
+          isRequired: true,
+          displayOrder: nextOrder++,
+          options: [],
+          helpText: 'Select your district (options depend on selected state)',
+        }]);
+      }
+
+      if (!hasMandal) {
+        // Mandal dropdown will be populated dynamically based on district selection
+        setDraftFields(prev => [...prev, {
+          id: `temp-mandal-${Date.now()}`,
+          fieldName: 'mandal',
+          fieldType: 'dropdown',
+          fieldLabel: 'Mandal',
+          placeholder: 'Select mandal',
+          isRequired: true,
+          displayOrder: nextOrder++,
+          options: [],
+          helpText: 'Select your mandal (options depend on selected district)',
+        }]);
+      }
+
+      if (!hasVillage) {
+        setDraftFields(prev => [...prev, {
+          id: `temp-village-${Date.now()}`,
+          fieldName: 'village',
+          fieldType: 'text',
+          fieldLabel: 'Village',
+          placeholder: 'Enter village name',
+          isRequired: true,
+          displayOrder: nextOrder++,
+          options: [],
+          helpText: 'Enter your village name',
+        }]);
+      }
+    } else {
+      // Remove address fields when toggle is off
+      setDraftFields(prev => prev.filter(f => 
+        !['state', 'district', 'mandal', 'village'].includes(f.fieldName.toLowerCase())
+      ));
+    }
+  }, [includeAddress]);
+
+  // Update district options when state changes
+  useEffect(() => {
+    const stateField = draftFields.find(f => f.fieldName.toLowerCase() === 'state');
+    const districtField = draftFields.find(f => f.fieldName.toLowerCase() === 'district');
+    const mandalField = draftFields.find(f => f.fieldName.toLowerCase() === 'mandal');
+
+    if (stateField && districtField) {
+      // This will be handled when form is rendered - we'll update dynamically
+    }
+  }, [draftFields]);
+
+  const handleCreateForm = async () => {
     if (!canEditForms) {
       showToast.error('You do not have permission to create forms');
       return;
@@ -249,11 +375,162 @@ export default function FormBuilderPage() {
       showToast.error('Form name is required');
       return;
     }
-    createFormMutation.mutate({
-      name: newForm.name.trim(),
-      description: newForm.description?.trim() || undefined,
+
+    setIsCreatingForm(true);
+    try {
+      // First create the form
+      const formResponse = await formBuilderAPI.createForm({
+        name: newForm.name.trim(),
+        description: newForm.description?.trim() || undefined,
+      });
+
+      const createdForm = formResponse.data;
+      const formId = createdForm.id || createdForm._id;
+
+      if (!formId) {
+        showToast.error('Failed to create form');
+        setIsCreatingForm(false);
+        return;
+      }
+
+      // Then create all draft fields
+      const sortedDraftFields = [...draftFields].sort((a, b) => a.displayOrder - b.displayOrder);
+      
+      for (const draftField of sortedDraftFields) {
+        await formBuilderAPI.createField(formId, {
+          fieldName: draftField.fieldName,
+          fieldType: draftField.fieldType,
+          fieldLabel: draftField.fieldLabel,
+          placeholder: draftField.placeholder || undefined,
+          isRequired: draftField.isRequired,
+          displayOrder: draftField.displayOrder,
+          options: draftField.options,
+          defaultValue: draftField.defaultValue || undefined,
+          helpText: draftField.helpText || undefined,
+        });
+      }
+
+      showToast.success('Form created successfully with all fields');
+      setNewForm({ name: '', description: '' });
+      setDraftFields([]);
+      setIncludeAddress(false);
+      setDraftFieldForm(emptyFieldForm);
+      setEditingDraftField(null);
+      setShowAddFieldForm(false);
+      setIsCreateFormOpen(false);
+      refetchForms();
+      
+      // Select the newly created form
+      setSelectedFormId(formId);
+    } catch (error: any) {
+      showToast.error(error?.response?.data?.message || 'Failed to create form');
+    } finally {
+      setIsCreatingForm(false);
+    }
+  };
+
+  const handleAddDraftField = () => {
+    if (!draftFieldForm.fieldName.trim()) {
+      showToast.error('Field name is required');
+      return;
+    }
+    if (!draftFieldForm.fieldLabel.trim()) {
+      showToast.error('Field label is required');
+      return;
+    }
+
+    const maxOrder = draftFields.length > 0 ? Math.max(...draftFields.map(f => f.displayOrder)) : -1;
+
+    if (editingDraftField) {
+      // Update existing draft field
+      setDraftFields(prev => prev.map(f => 
+        f.id === editingDraftField.id
+          ? {
+              ...f,
+              fieldName: draftFieldForm.fieldName.trim(),
+              fieldType: draftFieldForm.fieldType,
+              fieldLabel: draftFieldForm.fieldLabel.trim(),
+              placeholder: draftFieldForm.placeholder || undefined,
+              isRequired: draftFieldForm.isRequired,
+              options: draftFieldForm.fieldType === 'dropdown' || draftFieldForm.fieldType === 'radio' 
+                ? draftFieldForm.options 
+                : [],
+              defaultValue: draftFieldForm.defaultValue || undefined,
+              helpText: draftFieldForm.helpText || undefined,
+            }
+          : f
+      ));
+      setEditingDraftField(null);
+      setShowAddFieldForm(false);
+    } else {
+      // Add new draft field
+      setDraftFields(prev => [...prev, {
+        id: `temp-${Date.now()}-${Math.random()}`,
+        fieldName: draftFieldForm.fieldName.trim(),
+        fieldType: draftFieldForm.fieldType,
+        fieldLabel: draftFieldForm.fieldLabel.trim(),
+        placeholder: draftFieldForm.placeholder || undefined,
+        isRequired: draftFieldForm.isRequired,
+        displayOrder: maxOrder + 1,
+        options: draftFieldForm.fieldType === 'dropdown' || draftFieldForm.fieldType === 'radio' 
+          ? draftFieldForm.options 
+          : [],
+        defaultValue: draftFieldForm.defaultValue || undefined,
+        helpText: draftFieldForm.helpText || undefined,
+      }]);
+      setShowAddFieldForm(false);
+    }
+
+    setDraftFieldForm(emptyFieldForm);
+  };
+
+  const handleEditDraftField = (field: DraftField) => {
+    setEditingDraftField(field);
+    setShowAddFieldForm(true);
+    setDraftFieldForm({
+      fieldName: field.fieldName,
+      fieldType: field.fieldType,
+      fieldLabel: field.fieldLabel,
+      placeholder: field.placeholder || '',
+      isRequired: field.isRequired,
+      validationRules: {},
+      displayOrder: field.displayOrder,
+      options: field.options || [],
+      defaultValue: field.defaultValue || '',
+      helpText: field.helpText || '',
     });
   };
+
+  const handleDeleteDraftField = (fieldId: string) => {
+    const field = draftFields.find(f => f.id === fieldId);
+    if (field && ['state', 'district', 'mandal', 'village'].includes(field.fieldName.toLowerCase())) {
+      setIncludeAddress(false);
+    }
+    setDraftFields(prev => prev.filter(f => f.id !== fieldId));
+  };
+
+  const handleMoveDraftField = (fieldId: string, direction: 'up' | 'down') => {
+    const sorted = [...draftFields].sort((a, b) => a.displayOrder - b.displayOrder);
+    const index = sorted.findIndex(f => f.id === fieldId);
+    if (index === -1) return;
+
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= sorted.length) return;
+
+    const newFields = [...sorted];
+    [newFields[index], newFields[newIndex]] = [newFields[newIndex], newFields[index]];
+
+    // Update display orders
+    newFields.forEach((f, i) => {
+      f.displayOrder = i;
+    });
+
+    setDraftFields(newFields);
+  };
+
+  const sortedDraftFields = useMemo(() => {
+    return [...draftFields].sort((a, b) => a.displayOrder - b.displayOrder);
+  }, [draftFields]);
 
   const handleDeleteForm = (form: Form) => {
     if (!canEditForms) {
@@ -629,15 +906,16 @@ export default function FormBuilderPage() {
         </div>
       </div>
 
-      {/* Create Form Modal */}
+      {/* Create Form Modal with Split View */}
       {isCreateFormOpen && !editingField && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
-          <div className="w-full max-w-2xl rounded-3xl border border-white/60 bg-white/95 p-6 shadow-xl shadow-blue-100/30 dark:border-slate-800 dark:bg-slate-900/95">
-            <div className="flex items-start justify-between gap-4 mb-6">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm">
+          <div className="flex min-h-full items-center justify-center px-4 py-8">
+            <div className="w-full max-w-7xl rounded-3xl border border-white/60 bg-white/95 shadow-xl shadow-blue-100/30 dark:border-slate-800 dark:bg-slate-900/95">
+            <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-200 dark:border-slate-700">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create Form</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Create a new form that can be used in UTM Builder and lead forms.
+                  Create a new form with fields. Preview on the left, manage fields on the right.
                 </p>
               </div>
               <button
@@ -645,6 +923,11 @@ export default function FormBuilderPage() {
                 onClick={() => {
                   setIsCreateFormOpen(false);
                   setNewForm({ name: '', description: '' });
+                  setDraftFields([]);
+                  setIncludeAddress(false);
+                  setDraftFieldForm(emptyFieldForm);
+                  setEditingDraftField(null);
+                  setShowAddFieldForm(false);
                 }}
                 className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               >
@@ -654,42 +937,405 @@ export default function FormBuilderPage() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <Input
-                label="Form Name *"
-                value={newForm.name}
-                onChange={(e) => setNewForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g. Student Details"
-              />
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Description
-                </label>
-                <textarea
-                  value={newForm.description}
-                  onChange={(e) => setNewForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Optional description for this form"
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                  rows={3}
-                />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+              {/* Left Side - Preview */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Form Preview</h4>
+                  <div className="rounded-xl border-2 border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-900">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                          {newForm.name || 'Form Name'}
+                        </h3>
+                        {newForm.description && (
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{newForm.description}</p>
+                        )}
+                      </div>
+                      <div className="space-y-4 mt-6">
+                        {sortedDraftFields.length === 0 ? (
+                          <p className="text-sm text-slate-400 italic">No fields added yet. Add fields on the right.</p>
+                        ) : (
+                          sortedDraftFields.map((field) => (
+                            <div key={field.id} className="space-y-1">
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                                {field.fieldLabel}
+                                {field.isRequired && <span className="text-red-500 ml-1">*</span>}
+                              </label>
+                              {field.fieldType === 'dropdown' && (
+                                <select
+                                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                  disabled
+                                >
+                                  <option>{field.placeholder || 'Select an option'}</option>
+                                  {field.options.map((opt, idx) => (
+                                    <option key={idx} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              )}
+                              {field.fieldType === 'textarea' && (
+                                <textarea
+                                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                  placeholder={field.placeholder}
+                                  disabled
+                                  rows={3}
+                                />
+                              )}
+                              {field.fieldType === 'checkbox' && (
+                                <div className="flex items-center gap-2">
+                                  <input type="checkbox" disabled className="rounded border-gray-300" />
+                                  <span className="text-sm text-slate-500">{field.placeholder || 'Check this option'}</span>
+                                </div>
+                              )}
+                              {field.fieldType === 'radio' && (
+                                <div className="space-y-2">
+                                  {field.options.map((opt, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      <input type="radio" name={field.fieldName} disabled className="rounded border-gray-300" />
+                                      <span className="text-sm text-slate-500">{opt.label}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {!['dropdown', 'textarea', 'checkbox', 'radio'].includes(field.fieldType) && (
+                                <input
+                                  type={field.fieldType}
+                                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                  placeholder={field.placeholder}
+                                  disabled
+                                />
+                              )}
+                              {field.helpText && (
+                                <p className="text-xs text-slate-400">{field.helpText}</p>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side - Form Details & Field Management */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Form Details</h4>
+                  <div className="space-y-4">
+                    <Input
+                      label="Form Name *"
+                      value={newForm.name}
+                      onChange={(e) => setNewForm((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g. Student Details"
+                    />
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                        Description
+                      </label>
+                      <textarea
+                        value={newForm.description}
+                        onChange={(e) => setNewForm((prev) => ({ ...prev, description: e.target.value }))}
+                        placeholder="Optional description for this form"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-2 mb-1">
+                        <input
+                          type="checkbox"
+                          checked={includeAddress}
+                          onChange={(e) => setIncludeAddress(e.target.checked)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                          Include Address Fields (State, District, Mandal, Village)
+                        </span>
+                      </label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Automatically adds state, district, mandal, and village fields with proper dropdowns
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Fields</h4>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => {
+                        setEditingDraftField(null);
+                        setDraftFieldForm(emptyFieldForm);
+                        setShowAddFieldForm(true);
+                      }}
+                    >
+                      Add Field
+                    </Button>
+                  </div>
+
+                  {sortedDraftFields.length === 0 ? (
+                    <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        No fields added yet. Click "Add Field" to get started.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                      {sortedDraftFields.map((field, index) => (
+                        <div
+                          key={field.id}
+                          className="flex items-start gap-2 p-3 rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-medium text-slate-500">{index + 1}.</span>
+                              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                {field.fieldLabel}
+                              </span>
+                              {field.isRequired && <span className="text-xs text-red-500">*</span>}
+                              <span className="px-2 py-0.5 text-xs bg-slate-200 text-slate-700 rounded dark:bg-slate-700 dark:text-slate-300">
+                                {field.fieldType}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500">{field.fieldName}</p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleMoveDraftField(field.id, 'up')}
+                              disabled={index === 0}
+                              className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-50"
+                              title="Move up"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleMoveDraftField(field.id, 'down')}
+                              disabled={index === sortedDraftFields.length - 1}
+                              className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-50"
+                              title="Move down"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleEditDraftField(field)}
+                              className="p-1 text-blue-500 hover:text-blue-700"
+                              title="Edit"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDraftField(field.id)}
+                              className="p-1 text-red-500 hover:text-red-700"
+                              title="Delete"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add/Edit Field Form */}
+                {(showAddFieldForm || editingDraftField) && (
+                  <div className="rounded-lg border-2 border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                    <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">
+                      {editingDraftField ? 'Edit Field' : 'Add New Field'}
+                    </h5>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-200">
+                            Field Name * <span className="text-slate-400 font-normal">(Auto-generated)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={draftFieldForm.fieldName}
+                            disabled
+                            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm bg-slate-100 text-slate-600 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                            placeholder="Auto-generated from field label"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-200">
+                            Field Type *
+                          </label>
+                          <select
+                            value={draftFieldForm.fieldType}
+                            onChange={(e) => {
+                              setDraftFieldForm((prev) => ({
+                                ...prev,
+                                fieldType: e.target.value,
+                                options: e.target.value === 'dropdown' || e.target.value === 'radio' ? prev.options : [],
+                              }));
+                            }}
+                            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                          >
+                            {fieldTypes.map((type) => (
+                              <option key={type.value} value={type.value}>
+                                {type.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <Input
+                        label="Field Label *"
+                        value={draftFieldForm.fieldLabel}
+                        onChange={(e) => {
+                          const newLabel = e.target.value;
+                          const newFieldName = toSnakeCase(newLabel);
+                          setDraftFieldForm((prev) => {
+                            // Auto-populate field name if it's empty or matches the previous snake_case version
+                            const previousSnakeCase = toSnakeCase(prev.fieldLabel);
+                            const shouldUpdateFieldName = !prev.fieldName || prev.fieldName === previousSnakeCase;
+                            return {
+                              ...prev,
+                              fieldLabel: newLabel,
+                              fieldName: shouldUpdateFieldName ? newFieldName : prev.fieldName,
+                            };
+                          });
+                        }}
+                        placeholder="e.g. Student Name"
+                      />
+                      <Input
+                        label="Placeholder"
+                        value={draftFieldForm.placeholder}
+                        onChange={(e) => setDraftFieldForm((prev) => ({ ...prev, placeholder: e.target.value }))}
+                        placeholder="Enter placeholder text"
+                      />
+                      <div>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={draftFieldForm.isRequired}
+                            onChange={(e) => setDraftFieldForm((prev) => ({ ...prev, isRequired: e.target.checked }))}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-xs font-medium text-slate-700 dark:text-slate-200">Required Field</span>
+                        </label>
+                      </div>
+                      {(draftFieldForm.fieldType === 'dropdown' || draftFieldForm.fieldType === 'radio') && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Options</label>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setDraftFieldForm((prev) => ({
+                                  ...prev,
+                                  options: [...prev.options, { value: '', label: '' }],
+                                }));
+                              }}
+                            >
+                              Add Option
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {draftFieldForm.options.map((option, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <Input
+                                  value={option.value}
+                                  onChange={(e) => {
+                                    const newOptions = [...draftFieldForm.options];
+                                    newOptions[index] = { ...newOptions[index], value: e.target.value };
+                                    setDraftFieldForm((prev) => ({ ...prev, options: newOptions }));
+                                  }}
+                                  placeholder="Value"
+                                  className="flex-1"
+                                />
+                                <Input
+                                  value={option.label}
+                                  onChange={(e) => {
+                                    const newOptions = [...draftFieldForm.options];
+                                    newOptions[index] = { ...newOptions[index], label: e.target.value };
+                                    setDraftFieldForm((prev) => ({ ...prev, options: newOptions }));
+                                  }}
+                                  placeholder="Label"
+                                  className="flex-1"
+                                />
+                                <button
+                                  onClick={() => {
+                                    setDraftFieldForm((prev) => ({
+                                      ...prev,
+                                      options: prev.options.filter((_, i) => i !== index),
+                                    }));
+                                  }}
+                                  className="p-2 text-red-500 hover:text-red-700"
+                                >
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleAddDraftField}
+                          className="flex-1"
+                        >
+                          {editingDraftField ? 'Update Field' : 'Add Field'}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setEditingDraftField(null);
+                            setDraftFieldForm(emptyFieldForm);
+                            setShowAddFieldForm(false);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="flex justify-end gap-2 p-6 border-t border-slate-200 dark:border-slate-700">
               <Button
                 variant="secondary"
                 onClick={() => {
                   setIsCreateFormOpen(false);
                   setNewForm({ name: '', description: '' });
+                  setDraftFields([]);
+                  setIncludeAddress(false);
+                  setDraftFieldForm(emptyFieldForm);
+                  setEditingDraftField(null);
+                  setShowAddFieldForm(false);
                 }}
-                disabled={createFormMutation.isPending}
+                disabled={isCreatingForm}
               >
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleCreateForm} disabled={createFormMutation.isPending}>
-                {createFormMutation.isPending ? 'Creating...' : 'Create Form'}
+              <Button
+                variant="primary"
+                onClick={handleCreateForm}
+                disabled={isCreatingForm || !newForm.name.trim()}
+              >
+                {isCreatingForm ? 'Creating...' : 'Create Form'}
               </Button>
             </div>
+          </div>
           </div>
         </div>
       )}
@@ -724,12 +1370,18 @@ export default function FormBuilderPage() {
 
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
               <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Field Name *"
-                  value={fieldForm.fieldName}
-                  onChange={(e) => setFieldForm((prev) => ({ ...prev, fieldName: e.target.value }))}
-                  placeholder="e.g. student_name"
-                />
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Field Name * <span className="text-slate-400 font-normal">(Auto-generated)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={fieldForm.fieldName}
+                    disabled
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm bg-slate-100 text-slate-600 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                    placeholder="Auto-generated from field label"
+                  />
+                </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                     Field Type *
@@ -757,7 +1409,20 @@ export default function FormBuilderPage() {
               <Input
                 label="Field Label *"
                 value={fieldForm.fieldLabel}
-                onChange={(e) => setFieldForm((prev) => ({ ...prev, fieldLabel: e.target.value }))}
+                onChange={(e) => {
+                  const newLabel = e.target.value;
+                  const newFieldName = toSnakeCase(newLabel);
+                  setFieldForm((prev) => {
+                    // Auto-populate field name if it's empty or matches the previous snake_case version
+                    const previousSnakeCase = toSnakeCase(prev.fieldLabel);
+                    const shouldUpdateFieldName = !prev.fieldName || prev.fieldName === previousSnakeCase;
+                    return {
+                      ...prev,
+                      fieldLabel: newLabel,
+                      fieldName: shouldUpdateFieldName ? newFieldName : prev.fieldName,
+                    };
+                  });
+                }}
                 placeholder="e.g. Student Name"
               />
 

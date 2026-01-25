@@ -8,6 +8,8 @@ import { leadAPI, utmAPI, formBuilderAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
+import { getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 export default function LeadFormPage() {
   const router = useRouter();
@@ -99,11 +101,45 @@ export default function LeadFormPage() {
   }, [dynamicForm]);
 
 
+  // Get selected state, district for cascading dropdowns
+  const selectedState = dynamicFormData.state || '';
+  const selectedDistrict = dynamicFormData.district || '';
+
+  // Get districts based on selected state
+  const availableDistricts = useMemo(() => {
+    if (!selectedState) return [];
+    return getDistrictsByState(selectedState);
+  }, [selectedState]);
+
+  // Get mandals based on selected state and district
+  const availableMandals = useMemo(() => {
+    if (!selectedState || !selectedDistrict) return [];
+    // Try Indian states data first
+    const mandals = getMandalsByStateAndDistrict(selectedState, selectedDistrict);
+    if (mandals.length > 0) return mandals;
+    // Fallback to Andhra Pradesh data if state is Andhra Pradesh
+    if (selectedState.toLowerCase() === 'andhra pradesh') {
+      return getAPMandals(selectedDistrict);
+    }
+    return [];
+  }, [selectedState, selectedDistrict]);
+
   const handleDynamicFieldChange = (fieldName: string, value: any) => {
-    setDynamicFormData((prev) => ({
-      ...prev,
-      [fieldName]: value,
-    }));
+    setDynamicFormData((prev) => {
+      const newData = { ...prev, [fieldName]: value };
+      
+      // Clear dependent fields when parent field changes
+      if (fieldName === 'state') {
+        // Clear district and mandal when state changes
+        delete newData.district;
+        delete newData.mandal;
+      } else if (fieldName === 'district') {
+        // Clear mandal when district changes
+        delete newData.mandal;
+      }
+      
+      return newData;
+    });
     setError(null);
   };
 
@@ -276,6 +312,23 @@ export default function LeadFormPage() {
                         
                         // Render based on field type
                         if (field.fieldType === 'dropdown') {
+                          // Handle cascading dropdowns for state, district, mandal
+                          let dropdownOptions: Array<{ value: string; label: string }> = [];
+                          
+                          if (field.fieldName.toLowerCase() === 'state') {
+                            // State dropdown - use all states
+                            dropdownOptions = getAllStates().map(state => ({ value: state, label: state }));
+                          } else if (field.fieldName.toLowerCase() === 'district') {
+                            // District dropdown - populate based on selected state
+                            dropdownOptions = availableDistricts.map(district => ({ value: district, label: district }));
+                          } else if (field.fieldName.toLowerCase() === 'mandal') {
+                            // Mandal dropdown - populate based on selected district
+                            dropdownOptions = availableMandals.map(mandal => ({ value: mandal, label: mandal }));
+                          } else {
+                            // Regular dropdown - use options from field definition
+                            dropdownOptions = field.options || [];
+                          }
+
                           return (
                             <div key={field._id}>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -285,14 +338,28 @@ export default function LeadFormPage() {
                                 value={fieldValue}
                                 onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
                                 required={field.isRequired}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                                disabled={
+                                  (field.fieldName.toLowerCase() === 'district' && !selectedState) ||
+                                  (field.fieldName.toLowerCase() === 'mandal' && (!selectedState || !selectedDistrict))
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                               >
-                                <option value="">Select {field.fieldLabel}</option>
-                                {field.options && field.options.length > 0 && field.options.map((option: any) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
+                                <option value="">
+                                  {field.fieldName.toLowerCase() === 'district' && !selectedState
+                                    ? 'Select state first'
+                                    : field.fieldName.toLowerCase() === 'mandal' && (!selectedState || !selectedDistrict)
+                                    ? 'Select district first'
+                                    : `Select ${field.fieldLabel}`}
+                                </option>
+                                {dropdownOptions.map((option: any) => {
+                                  const optionValue = typeof option === 'string' ? option : option.value;
+                                  const optionLabel = typeof option === 'string' ? option : option.label;
+                                  return (
+                                    <option key={optionValue} value={optionValue}>
+                                      {optionLabel}
+                                    </option>
+                                  );
+                                })}
                               </select>
                               {field.helpText && (
                                 <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
