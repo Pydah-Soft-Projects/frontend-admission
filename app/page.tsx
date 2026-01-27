@@ -28,7 +28,7 @@ export default function Home() {
         setIsChecking(false);
       }
     };
-    
+
     // Use setTimeout to avoid synchronous setState in effect
     const timer = setTimeout(checkAuth, 0);
     return () => clearTimeout(timer);
@@ -46,14 +46,14 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden">
       {/* Background gradient effects */}
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 via-blue-50/40 to-pink-50/50 dark:bg-gradient-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
+      <div className="absolute inset-0 bg-linear-to-br from-purple-50/50 via-blue-50/40 to-pink-50/50 dark:bg-linear-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-200/30 dark:bg-purple-900/30 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-200/30 dark:bg-blue-900/30 rounded-full blur-3xl animate-pulse delay-1000"></div>
 
       <div className="absolute top-6 right-6 z-20">
         <ThemeToggle />
-        </div>
-      
+      </div>
+
       <div className="flex flex-col items-center gap-6 text-center relative z-10">
         {/* Icon and Title */}
         <div className="flex items-center gap-4 group">
@@ -71,14 +71,14 @@ export default function Home() {
             <rect x="24" y="32" width="8" height="28" rx="2" fill="currentColor" opacity="0.9" />
             <rect x="36" y="24" width="8" height="36" rx="2" fill="currentColor" />
             <rect x="48" y="28" width="8" height="32" rx="2" fill="currentColor" opacity="0.85" />
-            
+
             {/* Target/Arrow pointing up */}
             <path
               d="M36 12L40 18H32L36 12Z"
               fill="currentColor"
             />
             <circle cx="36" cy="20" r="3" fill="currentColor" />
-            
+
             {/* Connection lines */}
             <path
               d="M16 40L20 32L28 24L36 20L44 28L52 28"
@@ -90,7 +90,7 @@ export default function Home() {
               opacity="0.6"
             />
           </svg>
-          
+
           <div className="text-left">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-gray-900 dark:text-slate-100">
               Lead Management Tracker
@@ -100,27 +100,25 @@ export default function Home() {
             </p>
           </div>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row gap-4 items-center">
           <Button
-            size="lg"
+            size="xl"
             variant="primary"
-            className="px-8 py-3 text-lg"
             onClick={() => router.push('/auth/login')}
           >
             Get Started
           </Button>
           <Link href="/lead-form">
             <Button
-              size="lg"
+              size="xl"
               variant="outline"
-              className="px-8 py-3 text-lg"
             >
               Submit Lead Form
             </Button>
           </Link>
         </div>
-        
+
         <p className="text-sm text-gray-500 dark:text-slate-400">
           Already onboarded?{' '}
           <Link href="/auth/login" className="text-purple-600 dark:text-purple-300 font-semibold hover:underline">

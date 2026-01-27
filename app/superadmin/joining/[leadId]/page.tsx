@@ -236,15 +236,15 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       },
       relatives: joining?.address?.relatives?.length
         ? joining.address.relatives.map((relative) => ({
-            name: relative.name || '',
-            relationship: relative.relationship || '',
-            doorOrStreet: relative.doorOrStreet || '',
-            landmark: relative.landmark || '',
-            villageOrCity: relative.villageOrCity || '',
-            mandal: relative.mandal || '',
-            district: relative.district || '',
-            pinCode: relative.pinCode || '',
-          }))
+          name: relative.name || '',
+          relationship: relative.relationship || '',
+          doorOrStreet: relative.doorOrStreet || '',
+          landmark: relative.landmark || '',
+          villageOrCity: relative.villageOrCity || '',
+          mandal: relative.mandal || '',
+          district: relative.district || '',
+          pinCode: relative.pinCode || '',
+        }))
         : [],
     },
     qualifications: {
@@ -258,24 +258,24 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
     },
     educationHistory: joining?.educationHistory?.length
       ? joining.educationHistory.map((item) => ({
-          level: item.level,
-          otherLevelLabel: item.otherLevelLabel || '',
-          courseOrBranch: item.courseOrBranch || '',
-          yearOfPassing: item.yearOfPassing || '',
-          institutionName: item.institutionName || '',
-          institutionAddress: item.institutionAddress || '',
-          hallTicketNumber: item.hallTicketNumber || '',
-          totalMarksOrGrade: item.totalMarksOrGrade || '',
-          cetRank: item.cetRank || '',
-        }))
+        level: item.level,
+        otherLevelLabel: item.otherLevelLabel || '',
+        courseOrBranch: item.courseOrBranch || '',
+        yearOfPassing: item.yearOfPassing || '',
+        institutionName: item.institutionName || '',
+        institutionAddress: item.institutionAddress || '',
+        hallTicketNumber: item.hallTicketNumber || '',
+        totalMarksOrGrade: item.totalMarksOrGrade || '',
+        cetRank: item.cetRank || '',
+      }))
       : [],
     siblings: joining?.siblings?.length
       ? joining.siblings.map((sibling) => ({
-          name: sibling.name || '',
-          relation: sibling.relation || '',
-          studyingStandard: sibling.studyingStandard || '',
-          institutionName: sibling.institutionName || '',
-        }))
+        name: sibling.name || '',
+        relation: sibling.relation || '',
+        studyingStandard: sibling.studyingStandard || '',
+        institutionName: sibling.institutionName || '',
+      }))
       : [],
     documents: {
       ...defaultDocuments,
@@ -334,7 +334,7 @@ const JoiningDetailPage = () => {
   });
 
   const isNewJoining = leadId === 'new';
-  
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['joining', leadId],
     enabled: !!leadId,
@@ -362,24 +362,24 @@ const JoiningDetailPage = () => {
   const courseSettings: CoursePaymentSettings[] = useMemo(() => {
     const payload = courseSettingsResponse?.data;
     let settings: CoursePaymentSettings[] = [];
-    
+
     if (Array.isArray(payload)) {
       settings = payload as CoursePaymentSettings[];
     } else if (payload && Array.isArray((payload as any).data)) {
       settings = (payload as any).data as CoursePaymentSettings[];
     }
-    
+
     // Deduplicate branches for each course (frontend safety check)
     return settings.map((setting) => {
       const uniqueBranchesMap = new Map<string, typeof setting.branches[0]>();
       setting.branches.forEach((branch) => {
-        // Use both _id and id for deduplication (some branches might have both)
-        const branchId = branch._id || branch.id;
+        // Use _id for deduplication
+        const branchId = branch._id;
         if (branchId && !uniqueBranchesMap.has(branchId)) {
           uniqueBranchesMap.set(branchId, branch);
         }
       });
-      
+
       return {
         ...setting,
         branches: Array.from(uniqueBranchesMap.values()),
@@ -417,9 +417,9 @@ const JoiningDetailPage = () => {
     queryKey: ['payments', 'transactions', leadId, joiningRecord?._id],
     enabled: !!leadId && !!joiningRecord?._id,
     queryFn: async () => {
-      const response = await paymentAPI.listTransactions({ 
+      const response = await paymentAPI.listTransactions({
         joiningId: joiningRecord?._id,
-        leadId: leadId as string 
+        leadId: leadId as string
       });
       return response;
     },
@@ -491,7 +491,7 @@ const JoiningDetailPage = () => {
     if (!formState.courseInfo.courseId) return undefined;
     const setting = courseSettings.find((item) => item.course._id === formState.courseInfo.courseId);
     if (!setting) return undefined;
-    
+
     // Deduplicate branches by ID (frontend safety check)
     const uniqueBranchesMap = new Map<string, typeof setting.branches[0]>();
     setting.branches.forEach((branch) => {
@@ -499,7 +499,7 @@ const JoiningDetailPage = () => {
         uniqueBranchesMap.set(branch._id, branch);
       }
     });
-    
+
     return {
       ...setting,
       branches: Array.from(uniqueBranchesMap.values()),
@@ -791,8 +791,8 @@ const JoiningDetailPage = () => {
       isAdditionalFeeMode
         ? null
         : outstandingBalance && outstandingBalance > 0
-        ? outstandingBalance
-        : configuredFee ?? effectiveTotalFee ?? 0;
+          ? outstandingBalance
+          : configuredFee ?? effectiveTotalFee ?? 0;
     const normalizedValue =
       defaultAmountValue && defaultAmountValue > 0
         ? Number(defaultAmountValue.toFixed(2))
@@ -1244,7 +1244,7 @@ const JoiningDetailPage = () => {
   const payloadForSave = useMemo(() => {
     // Ensure course and branch names are stored when IDs are present
     const courseInfo = { ...formState.courseInfo };
-    
+
     // If courseId is present, ensure course name is also present
     if (courseInfo.courseId && !courseInfo.course) {
       const selectedCourse = courseSettings.find((item) => item.course._id === courseInfo.courseId);
@@ -1252,7 +1252,7 @@ const JoiningDetailPage = () => {
         courseInfo.course = selectedCourse.course.name;
       }
     }
-    
+
     // If branchId is present, ensure branch name is also present
     if (courseInfo.branchId && !courseInfo.branch) {
       const selectedCourse = courseSettings.find((item) => item.course._id === courseInfo.courseId);
@@ -1261,7 +1261,7 @@ const JoiningDetailPage = () => {
         courseInfo.branch = selectedBranch.name;
       }
     }
-    
+
     return {
       courseInfo,
       studentInfo: formState.studentInfo,
@@ -1421,14 +1421,14 @@ const JoiningDetailPage = () => {
     status === 'approved'
       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
       : status === 'pending_approval'
-      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
-      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200';
+        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
+        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200';
 
   const statusLabel = status.replace('_', ' ');
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-    <div className="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+      <div className="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
@@ -1479,1238 +1479,1235 @@ const JoiningDetailPage = () => {
             </div>
           </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Link href={`/superadmin/joining/${leadId}/detail`}>
-                <Button variant="outline" className="group inline-flex items-center gap-2">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  View Details
-                </Button>
-              </Link>
-              {status === 'draft' && canWriteJoining && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Link href={`/superadmin/joining/${leadId}/detail`}>
+              <Button variant="outline" className="group inline-flex items-center gap-2">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                View Details
+              </Button>
+            </Link>
+            {status === 'draft' && canWriteJoining && (
+              <Button
+                variant="primary"
+                onClick={() => setIsEditModalOpen(true)}
+                className="group inline-flex items-center gap-2"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Form
+              </Button>
+            )}
+            {isAdmissionEditable ? (
+              <>
                 <Button
                   variant="primary"
-                  onClick={() => setIsEditModalOpen(true)}
+                  disabled={isUpdatingAdmission || isBusy || !canWriteJoining}
+                  onClick={handleSaveAdmissionRecord}
                   className="group inline-flex items-center gap-2"
                 >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Edit Form
-                </Button>
-              )}
-              {isAdmissionEditable ? (
-                <>
-                  <Button
-                    variant="primary"
-                    disabled={isUpdatingAdmission || isBusy || !canWriteJoining}
-                    onClick={handleSaveAdmissionRecord}
-                    className="group inline-flex items-center gap-2"
+                  {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
+                  <svg
+                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
-                    <svg
-                      className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </Button>
-                  <Button variant="outline" onClick={() => router.push('/superadmin/joining')}>
-                    Joining List
-                  </Button>
-                </>
-              ) : null}
-            </div>
-      </div>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </Button>
+                <Button variant="outline" onClick={() => router.push('/superadmin/joining')}>
+                  Joining List
+                </Button>
+              </>
+            ) : null}
+          </div>
+        </div>
 
-      {isBusy ? (
-            <div className="rounded-2xl border border-white/60 bg-white/90 p-12 text-center shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
-              <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
-              <p className="mt-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-                {status === 'approved' ? 'Loading admission record…' : 'Loading joining details…'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-10">
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              Course & Quota
-            </h2>
-            <p className="text-sm text-gray-500">
-              These values default from the confirmed lead. Adjust if the student opted for a
-              different program.
+        {isBusy ? (
+          <div className="rounded-2xl border border-white/60 bg-white/90 p-12 text-center shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
+            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
+            <p className="mt-4 text-sm font-medium text-slate-600 dark:text-slate-300">
+              {status === 'approved' ? 'Loading admission record…' : 'Loading joining details…'}
             </p>
-            {isLoadingCourseSettings ? (
-              <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">
-                Loading course and branch directory…
+          </div>
+        ) : (
+          <div className="space-y-10">
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                Course & Quota
+              </h2>
+              <p className="text-sm text-gray-500">
+                These values default from the confirmed lead. Adjust if the student opted for a
+                different program.
               </p>
-            ) : courseSettings.length > 0 ? (
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {isLoadingCourseSettings ? (
+                <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">
+                  Loading course and branch directory…
+                </p>
+              ) : courseSettings.length > 0 ? (
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      Select Managed Course
+                    </label>
+                    <select
+                      value={formState.courseInfo.courseId || ''}
+                      onChange={(event) => handleManagedCourseSelect(event.target.value)}
+                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    >
+                      <option value="">Choose a course</option>
+                      {courseSettings.map((item) => (
+                        <option key={item.course._id} value={item.course._id}>
+                          {item.course.name}
+                          {item.course.code ? ` (${item.course.code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Managed in Course &amp; Branch Setup. Selecting here keeps payments in sync.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      Select Managed Branch
+                    </label>
+                    <select
+                      value={formState.courseInfo.branchId || ''}
+                      onChange={(event) => handleManagedBranchSelect(event.target.value)}
+                      disabled={!formState.courseInfo.courseId}
+                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                    >
+                      <option value="">
+                        {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
+                      </option>
+                      {(() => {
+                        // Additional frontend deduplication as final safety check
+                        const branchMap = new Map<string, typeof selectedCourseSetting.branches[0]>();
+                        selectedCourseSetting?.branches.forEach((branch) => {
+                          const branchId = branch._id || branch.id;
+                          if (branchId && !branchMap.has(branchId)) {
+                            branchMap.set(branchId, branch);
+                          }
+                        });
+                        const uniqueBranches = Array.from(branchMap.values());
+
+                        return uniqueBranches.map((branch) => {
+                          const branchId = branch._id || branch.id;
+                          return (
+                            <option key={branchId} value={branchId}>
+                              {branch.name}
+                              {branch.code ? ` (${branch.code})` : ''}
+                            </option>
+                          );
+                        });
+                      })()}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Branch list updates based on the selected course.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <div
+                className={`mt-6 grid gap-4 ${admissionNumberDisplay ? 'md:grid-cols-2' : 'md:grid-cols-1'
+                  }`}
+              >
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Select Managed Course
+                    Quota
                   </label>
                   <select
-                    value={formState.courseInfo.courseId || ''}
-                    onChange={(event) => handleManagedCourseSelect(event.target.value)}
+                    value={formState.courseInfo.quota || ''}
+                    onChange={(event) => handleCourseFieldChange('quota', event.target.value)}
                     className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                   >
-                    <option value="">Choose a course</option>
-                    {courseSettings.map((item) => (
-                      <option key={item.course._id} value={item.course._id}>
-                        {item.course.name}
-                        {item.course.code ? ` (${item.course.code})` : ''}
+                    <option value="">Select quota</option>
+                    {formState.courseInfo.quota &&
+                      !quotaOptions.includes(formState.courseInfo.quota as (typeof quotaOptions)[number]) && (
+                        <option value={formState.courseInfo.quota}>{formState.courseInfo.quota}</option>
+                      )}
+                    {quotaOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Managed in Course &amp; Branch Setup. Selecting here keeps payments in sync.
-                  </p>
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Select Managed Branch
-                  </label>
-                  <select
-                    value={formState.courseInfo.branchId || ''}
-                    onChange={(event) => handleManagedBranchSelect(event.target.value)}
-                    disabled={!formState.courseInfo.courseId}
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
-                  >
-                    <option value="">
-                      {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
-                    </option>
-                    {(() => {
-                      // Additional frontend deduplication as final safety check
-                      const branchMap = new Map<string, typeof selectedCourseSetting.branches[0]>();
-                      selectedCourseSetting?.branches.forEach((branch) => {
-                        const branchId = branch._id || branch.id;
-                        if (branchId && !branchMap.has(branchId)) {
-                          branchMap.set(branchId, branch);
-                        }
-                      });
-                      const uniqueBranches = Array.from(branchMap.values());
-                      
-                      return uniqueBranches.map((branch) => {
-                        const branchId = branch._id || branch.id;
-                        return (
-                          <option key={branchId} value={branchId}>
-                            {branch.name}
-                            {branch.code ? ` (${branch.code})` : ''}
-                          </option>
-                        );
-                      });
-                    })()}
-                  </select>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Branch list updates based on the selected course.
+                {admissionNumberDisplay && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200">
+                    Admission Number
+                    <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
+                  </div>
+                )}
+              </div>
+              {configuredFee !== null && (
+                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 shadow-sm dark:border-blue-900/50 dark:bg-blue-900/30 dark:text-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-blue-500 dark:text-blue-300">
+                        Configured Admission Fee
+                      </p>
+                      <p className="text-lg font-semibold">{formatCurrency(configuredFee)}</p>
+                    </div>
+                    {selectedBranchSetting?.branch ? (
+                      <p className="text-right text-xs text-blue-500 dark:text-blue-300">
+                        Branch: {selectedBranchSetting.branch.name}
+                      </p>
+                    ) : selectedCourseSetting ? (
+                      <p className="text-right text-xs text-blue-500 dark:text-blue-300">
+                        Course-wide default fee
+                      </p>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-xs text-blue-500/80 dark:text-blue-200/70">
+                    Update fee amounts any time under Payment Configuration settings.
                   </p>
-                </div>
-              </div>
-            ) : null}
-            <div
-              className={`mt-6 grid gap-4 ${
-                admissionNumberDisplay ? 'md:grid-cols-2' : 'md:grid-cols-1'
-              }`}
-            >
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  Quota
-                </label>
-                <select
-                  value={formState.courseInfo.quota || ''}
-                  onChange={(event) => handleCourseFieldChange('quota', event.target.value)}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                >
-                  <option value="">Select quota</option>
-                  {formState.courseInfo.quota &&
-                    !quotaOptions.includes(formState.courseInfo.quota as (typeof quotaOptions)[number]) && (
-                      <option value={formState.courseInfo.quota}>{formState.courseInfo.quota}</option>
-                    )}
-                  {quotaOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {admissionNumberDisplay && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200">
-                  Admission Number
-                  <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
                 </div>
               )}
-            </div>
-            {configuredFee !== null && (
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 shadow-sm dark:border-blue-900/50 dark:bg-blue-900/30 dark:text-blue-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-blue-500 dark:text-blue-300">
-                      Configured Admission Fee
-                    </p>
-                    <p className="text-lg font-semibold">{formatCurrency(configuredFee)}</p>
-                  </div>
-                  {selectedBranchSetting?.branch ? (
-                    <p className="text-right text-xs text-blue-500 dark:text-blue-300">
-                      Branch: {selectedBranchSetting.branch.name}
-                    </p>
-                  ) : selectedCourseSetting ? (
-                    <p className="text-right text-xs text-blue-500 dark:text-blue-300">
-                      Course-wide default fee
-                    </p>
-                  ) : null}
-                </div>
-                <p className="mt-2 text-xs text-blue-500/80 dark:text-blue-200/70">
-                  Update fee amounts any time under Payment Configuration settings.
-                </p>
-              </div>
-            )}
-          </section>
+            </section>
 
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              1. Student Information
-            </h2>
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <div>
-                <Input
-                  label="Student Name"
-                  value={formState.studentInfo.name}
-                  onChange={(event) => handleStudentInfoChange('name', event.target.value)}
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  Aadhaar Number
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type={showStudentAadhaar ? 'text' : 'password'}
-                    value={formState.studentInfo.aadhaarNumber || ''}
-                    onChange={(event) =>
-                      handleStudentInfoChange('aadhaarNumber', event.target.value)
-                    }
-                    placeholder="12-digit Aadhaar number"
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
-                    maxLength={14}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setShowStudentAadhaar((prev) => !prev)}
-                  >
-                    {showStudentAadhaar ? 'Hide' : 'Show'}
-                  </Button>
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Stored securely. Masked by default for privacy.
-                </p>
-              </div>
-              <Input
-                label="Student Phone (10 digits)"
-                value={formState.studentInfo.phone || ''}
-                onChange={(event) => handleStudentInfoChange('phone', event.target.value)}
-                maxLength={10}
-                placeholder="Enter 10-digit number"
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Gender
-                  </label>
-                  <select
-                    value={formState.studentInfo.gender || ''}
-                    onChange={(event) => handleStudentInfoChange('gender', event.target.value)}
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                  >
-                    <option value="">Select</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                1. Student Information
+              </h2>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <div>
                   <Input
-                    label="Date of Birth"
-                    value={formState.studentInfo.dateOfBirth || ''}
-                    onChange={(event) => handleStudentInfoChange('dateOfBirth', event.target.value)}
-                    type="date"
+                    label="Student Name"
+                    value={formState.studentInfo.name}
+                    onChange={(event) => handleStudentInfoChange('name', event.target.value)}
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              2. Parents Details
-            </h2>
-            <div className="mt-6 grid gap-6 md:grid-cols-2">
-              <div>
-                <h3 className="text-md font-semibold text-gray-800 dark:text-slate-200">
-                  Father Information
-                </h3>
-                <div className="mt-4 space-y-3">
-                  <div>
-                    <Input
-                      label="Father Name"
-                      value={formState.parents.father.name || ''}
-                      onChange={(event) => handleParentChange('father', 'name', event.target.value)}
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
-                  </div>
-                  <Input
-                    label="Father Phone"
-                    value={formState.parents.father.phone || ''}
-                    onChange={(event) => handleParentChange('father', 'phone', event.target.value)}
-                    maxLength={10}
-                  />
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      Father Aadhaar Number
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type={showFatherAadhaar ? 'text' : 'password'}
-                        value={formState.parents.father.aadhaarNumber || ''}
-                        onChange={(event) =>
-                          handleParentChange('father', 'aadhaarNumber', event.target.value)
-                        }
-                        placeholder="12-digit Aadhaar number"
-                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
-                        maxLength={14}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setShowFatherAadhaar((prev) => !prev)}
-                      >
-                        {showFatherAadhaar ? 'Hide' : 'Show'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-md font-semibold text-gray-800 dark:text-slate-200">
-                  Mother Information
-                </h3>
-                <div className="mt-4 space-y-3">
-                  <div>
-                    <Input
-                      label="Mother Name"
-                      value={formState.parents.mother.name || ''}
-                      onChange={(event) => handleParentChange('mother', 'name', event.target.value)}
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
-                  </div>
-                  <Input
-                    label="Mother Phone"
-                    value={formState.parents.mother.phone || ''}
-                    onChange={(event) => handleParentChange('mother', 'phone', event.target.value)}
-                    maxLength={10}
-                  />
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      Mother Aadhaar Number
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type={showMotherAadhaar ? 'text' : 'password'}
-                        value={formState.parents.mother.aadhaarNumber || ''}
-                        onChange={(event) =>
-                          handleParentChange('mother', 'aadhaarNumber', event.target.value)
-                        }
-                        placeholder="12-digit Aadhaar number"
-                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
-                        maxLength={14}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setShowMotherAadhaar((prev) => !prev)}
-                      >
-                        {showMotherAadhaar ? 'Hide' : 'Show'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              3. Reservation Category
-            </h2>
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  General Reservation Category<span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formState.reservation.general}
-                  onChange={(event) =>
-                    handleReservationGeneralChange(
-                      event.target.value as JoiningReservation['general']
-                    )
-                  }
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                >
-                  <option value="oc">OC</option>
-                  <option value="ews">EWS</option>
-                  <option value="bc-a">BC-A</option>
-                  <option value="bc-b">BC-B</option>
-                  <option value="bc-c">BC-C</option>
-                  <option value="bc-d">BC-D</option>
-                  <option value="bc-e">BC-E</option>
-                  <option value="sc">SC</option>
-                  <option value="st">ST</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  Other Reservations
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    value={otherReservationInput}
-                    onChange={(event) => setOtherReservationInput(event.target.value)}
-                    placeholder="Add NCC, Sports, PH, etc."
-                  />
-                  <Button type="button" variant="secondary" onClick={addOtherReservation}>
-                    Add
-                  </Button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(formState.reservation.other || []).map((value) => (
-                    <span
-                      key={value}
-                      className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
-                    >
-                      {value}
-                      <button
-                        className="text-blue-500"
-                        onClick={() => removeOtherReservation(value)}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  {(formState.reservation.other || []).length === 0 && (
-                    <span className="text-xs text-gray-500">No additional reservations added.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              4. Address for Communication (Uppercase)
-            </h2>
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <Input
-                label="Door No / Street Name"
-                value={formState.address.communication.doorOrStreet || ''}
-                onChange={(event) =>
-                  handleCommunicationAddressChange('doorOrStreet', event.target.value.toUpperCase())
-                }
-              />
-              <Input
-                label="Landmark"
-                value={formState.address.communication.landmark || ''}
-                onChange={(event) =>
-                  handleCommunicationAddressChange('landmark', event.target.value.toUpperCase())
-                }
-              />
-              <Input
-                label="Village / Town / City"
-                value={formState.address.communication.villageOrCity || ''}
-                onChange={(event) =>
-                  handleCommunicationAddressChange('villageOrCity', event.target.value.toUpperCase())
-                }
-              />
-              <Input
-                label="Mandal"
-                value={formState.address.communication.mandal || ''}
-                onChange={(event) =>
-                  handleCommunicationAddressChange('mandal', event.target.value.toUpperCase())
-                }
-              />
-              <Input
-                label="District"
-                value={formState.address.communication.district || ''}
-                onChange={(event) =>
-                  handleCommunicationAddressChange('district', event.target.value.toUpperCase())
-                }
-              />
-              <Input
-                label="PIN Code"
-                value={formState.address.communication.pinCode || ''}
-                onChange={(event) =>
-                  handleCommunicationAddressChange('pinCode', event.target.value)
-                }
-                maxLength={6}
-              />
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  5. Relatives / Friends (Optional)
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Capture additional contact addresses. Add as many as required.
-                </p>
-              </div>
-              <Button type="button" variant="secondary" onClick={addRelative}>
-                Add Address
-              </Button>
-            </div>
-            <div className="mt-6 space-y-6">
-              {formState.address.relatives.length === 0 && (
-                <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-                  No relative or friend addresses added.
-                </p>
-              )}
-              {formState.address.relatives.map((relative, index) => (
-                <div
-                  key={`relative-${index}`}
-                  className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
-                      Address #{index + 1}
-                    </h3>
-                    <button
-                      className="text-sm text-red-500"
-                      onClick={() => removeRelative(index)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <Input
-                      label="Name"
-                      value={relative.name || ''}
-                      onChange={(event) => updateRelative(index, 'name', event.target.value)}
-                    />
-                    <Input
-                      label="Relationship"
-                      value={relative.relationship || ''}
-                      onChange={(event) =>
-                        updateRelative(index, 'relationship', event.target.value)
-                      }
-                    />
-                    <Input
-                      label="Door / Street"
-                      value={relative.doorOrStreet || ''}
-                      onChange={(event) =>
-                        updateRelative(index, 'doorOrStreet', event.target.value.toUpperCase())
-                      }
-                    />
-                    <Input
-                      label="Landmark"
-                      value={relative.landmark || ''}
-                      onChange={(event) =>
-                        updateRelative(index, 'landmark', event.target.value.toUpperCase())
-                      }
-                    />
-                    <Input
-                      label="Village / City"
-                      value={relative.villageOrCity || ''}
-                      onChange={(event) =>
-                        updateRelative(index, 'villageOrCity', event.target.value.toUpperCase())
-                      }
-                    />
-                    <Input
-                      label="Mandal"
-                      value={relative.mandal || ''}
-                      onChange={(event) =>
-                        updateRelative(index, 'mandal', event.target.value.toUpperCase())
-                      }
-                    />
-                    <Input
-                      label="District"
-                      value={relative.district || ''}
-                      onChange={(event) =>
-                        updateRelative(index, 'district', event.target.value.toUpperCase())
-                      }
-                    />
-                    <Input
-                      label="PIN Code"
-                      value={relative.pinCode || ''}
-                      onChange={(event) => updateRelative(index, 'pinCode', event.target.value)}
-                      maxLength={6}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              6. Qualified Examinations
-            </h2>
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <div className="space-y-3">
-                {[
-                  { key: 'ssc' as const, label: 'SSC' },
-                  { key: 'interOrDiploma' as const, label: 'Inter / Diploma' },
-                  { key: 'ug' as const, label: 'UG' },
-                ].map((item) => (
-                  <label key={item.key} className="flex items-center gap-3 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(formState.qualifications[item.key])}
-                      onChange={() => toggleQualification(item.key)}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    {item.label}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Aadhaar Number
                   </label>
-                ))}
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  Medium of Instruction
-                </label>
-                <div className="flex flex-wrap gap-3">
-                  {mediumOptions.map((option) => (
-                    <label
-                      key={option.value}
-                      className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:border-blue-300 focus-within:border-blue-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+                  <div className="flex gap-2">
+                    <input
+                      type={showStudentAadhaar ? 'text' : 'password'}
+                      value={formState.studentInfo.aadhaarNumber || ''}
+                      onChange={(event) =>
+                        handleStudentInfoChange('aadhaarNumber', event.target.value)
+                      }
+                      placeholder="12-digit Aadhaar number"
+                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                      maxLength={14}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setShowStudentAadhaar((prev) => !prev)}
                     >
-                      <input
-                        type="checkbox"
-                        checked={Array.isArray(formState.qualifications.mediums) && formState.qualifications.mediums.includes(option.value)}
-                        onChange={() => toggleMediumSelection(option.value)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-                {Array.isArray(formState.qualifications.mediums) &&
-                  formState.qualifications.mediums.includes('other') && (
-                  <Input
-                    className="mt-3"
-                    placeholder="Specify medium"
-                    value={formState.qualifications.otherMediumLabel || ''}
-                    onChange={(event) => handleMediumOtherLabelChange(event.target.value)}
-                  />
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  7. Education History
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Add every school or college the student has studied. Include year, course, and
-                  identifiers.
-                </p>
-              </div>
-              <Button type="button" variant="secondary" onClick={addEducationHistory}>
-                Add Entry
-              </Button>
-            </div>
-            <div className="mt-6 space-y-6">
-              {formState.educationHistory.length === 0 && (
-                <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-                  No education history added. Include SSC, Inter/Diploma, UG, and others if
-                  applicable.
-                </p>
-              )}
-              {formState.educationHistory.map((entry, index) => (
-                <div
-                  key={`edu-${index}`}
-                  className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
-                      Entry #{index + 1}
-                    </h3>
-                    <button className="text-sm text-red-500" onClick={() => removeEducationHistory(index)}>
-                      Remove
-                    </button>
+                      {showStudentAadhaar ? 'Hide' : 'Show'}
+                    </Button>
                   </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <p className="mt-1 text-xs text-gray-500">
+                    Stored securely. Masked by default for privacy.
+                  </p>
+                </div>
+                <Input
+                  label="Student Phone (10 digits)"
+                  value={formState.studentInfo.phone || ''}
+                  onChange={(event) => handleStudentInfoChange('phone', event.target.value)}
+                  maxLength={10}
+                  placeholder="Enter 10-digit number"
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      Gender
+                    </label>
+                    <select
+                      value={formState.studentInfo.gender || ''}
+                      onChange={(event) => handleStudentInfoChange('gender', event.target.value)}
+                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    >
+                      <option value="">Select</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Input
+                      label="Date of Birth"
+                      value={formState.studentInfo.dateOfBirth || ''}
+                      onChange={(event) => handleStudentInfoChange('dateOfBirth', event.target.value)}
+                      type="date"
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                2. Parents Details
+              </h2>
+              <div className="mt-6 grid gap-6 md:grid-cols-2">
+                <div>
+                  <h3 className="text-md font-semibold text-gray-800 dark:text-slate-200">
+                    Father Information
+                  </h3>
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <Input
+                        label="Father Name"
+                        value={formState.parents.father.name || ''}
+                        onChange={(event) => handleParentChange('father', 'name', event.target.value)}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
+                    </div>
+                    <Input
+                      label="Father Phone"
+                      value={formState.parents.father.phone || ''}
+                      onChange={(event) => handleParentChange('father', 'phone', event.target.value)}
+                      maxLength={10}
+                    />
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                        Level
+                        Father Aadhaar Number
                       </label>
-                      <select
-                        value={entry.level}
-                        onChange={(event) =>
-                          updateEducationHistory(index, 'level', event.target.value)
-                        }
-                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                      >
-                        <option value="ssc">SSC</option>
-                        <option value="inter_diploma">Inter / Diploma</option>
-                        <option value="ug">UG</option>
-                        <option value="other">Other</option>
-                      </select>
+                      <div className="flex gap-2">
+                        <input
+                          type={showFatherAadhaar ? 'text' : 'password'}
+                          value={formState.parents.father.aadhaarNumber || ''}
+                          onChange={(event) =>
+                            handleParentChange('father', 'aadhaarNumber', event.target.value)
+                          }
+                          placeholder="12-digit Aadhaar number"
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                          maxLength={14}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setShowFatherAadhaar((prev) => !prev)}
+                        >
+                          {showFatherAadhaar ? 'Hide' : 'Show'}
+                        </Button>
+                      </div>
                     </div>
-                    {entry.level === 'other' && (
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-md font-semibold text-gray-800 dark:text-slate-200">
+                    Mother Information
+                  </h3>
+                  <div className="mt-4 space-y-3">
+                    <div>
                       <Input
-                        label="Specify Level"
-                        value={entry.otherLevelLabel || ''}
+                        label="Mother Name"
+                        value={formState.parents.mother.name || ''}
+                        onChange={(event) => handleParentChange('mother', 'name', event.target.value)}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
+                    </div>
+                    <Input
+                      label="Mother Phone"
+                      value={formState.parents.mother.phone || ''}
+                      onChange={(event) => handleParentChange('mother', 'phone', event.target.value)}
+                      maxLength={10}
+                    />
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        Mother Aadhaar Number
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type={showMotherAadhaar ? 'text' : 'password'}
+                          value={formState.parents.mother.aadhaarNumber || ''}
+                          onChange={(event) =>
+                            handleParentChange('mother', 'aadhaarNumber', event.target.value)
+                          }
+                          placeholder="12-digit Aadhaar number"
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                          maxLength={14}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setShowMotherAadhaar((prev) => !prev)}
+                        >
+                          {showMotherAadhaar ? 'Hide' : 'Show'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                3. Reservation Category
+              </h2>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    General Reservation Category<span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formState.reservation.general}
+                    onChange={(event) =>
+                      handleReservationGeneralChange(
+                        event.target.value as JoiningReservation['general']
+                      )
+                    }
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  >
+                    <option value="oc">OC</option>
+                    <option value="ews">EWS</option>
+                    <option value="bc-a">BC-A</option>
+                    <option value="bc-b">BC-B</option>
+                    <option value="bc-c">BC-C</option>
+                    <option value="bc-d">BC-D</option>
+                    <option value="bc-e">BC-E</option>
+                    <option value="sc">SC</option>
+                    <option value="st">ST</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Other Reservations
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={otherReservationInput}
+                      onChange={(event) => setOtherReservationInput(event.target.value)}
+                      placeholder="Add NCC, Sports, PH, etc."
+                    />
+                    <Button type="button" variant="secondary" onClick={addOtherReservation}>
+                      Add
+                    </Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(formState.reservation.other || []).map((value) => (
+                      <span
+                        key={value}
+                        className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
+                      >
+                        {value}
+                        <button
+                          className="text-blue-500"
+                          onClick={() => removeOtherReservation(value)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    {(formState.reservation.other || []).length === 0 && (
+                      <span className="text-xs text-gray-500">No additional reservations added.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                4. Address for Communication (Uppercase)
+              </h2>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <Input
+                  label="Door No / Street Name"
+                  value={formState.address.communication.doorOrStreet || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('doorOrStreet', event.target.value.toUpperCase())
+                  }
+                />
+                <Input
+                  label="Landmark"
+                  value={formState.address.communication.landmark || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('landmark', event.target.value.toUpperCase())
+                  }
+                />
+                <Input
+                  label="Village / Town / City"
+                  value={formState.address.communication.villageOrCity || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('villageOrCity', event.target.value.toUpperCase())
+                  }
+                />
+                <Input
+                  label="Mandal"
+                  value={formState.address.communication.mandal || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('mandal', event.target.value.toUpperCase())
+                  }
+                />
+                <Input
+                  label="District"
+                  value={formState.address.communication.district || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('district', event.target.value.toUpperCase())
+                  }
+                />
+                <Input
+                  label="PIN Code"
+                  value={formState.address.communication.pinCode || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('pinCode', event.target.value)
+                  }
+                  maxLength={6}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                    5. Relatives / Friends (Optional)
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Capture additional contact addresses. Add as many as required.
+                  </p>
+                </div>
+                <Button type="button" variant="secondary" onClick={addRelative}>
+                  Add Address
+                </Button>
+              </div>
+              <div className="mt-6 space-y-6">
+                {formState.address.relatives.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                    No relative or friend addresses added.
+                  </p>
+                )}
+                {formState.address.relatives.map((relative, index) => (
+                  <div
+                    key={`relative-${index}`}
+                    className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                        Address #{index + 1}
+                      </h3>
+                      <button
+                        className="text-sm text-red-500"
+                        onClick={() => removeRelative(index)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <Input
+                        label="Name"
+                        value={relative.name || ''}
+                        onChange={(event) => updateRelative(index, 'name', event.target.value)}
+                      />
+                      <Input
+                        label="Relationship"
+                        value={relative.relationship || ''}
                         onChange={(event) =>
-                          updateEducationHistory(index, 'otherLevelLabel', event.target.value)
+                          updateRelative(index, 'relationship', event.target.value)
                         }
                       />
-                    )}
-                    <Input
-                      label="Course / Branch"
-                      value={entry.courseOrBranch || ''}
-                      onChange={(event) =>
-                        updateEducationHistory(index, 'courseOrBranch', event.target.value)
-                      }
-                    />
-                    <Input
-                      label="Year of Passing"
-                      value={entry.yearOfPassing || ''}
-                      onChange={(event) => handleYearOfPassingChange(index, event.target.value)}
-                      inputMode="numeric"
-                      maxLength={4}
-                    />
-                    <Input
-                      label="School / College Name"
-                      value={entry.institutionName || ''}
-                      onChange={(event) =>
-                        updateEducationHistory(index, 'institutionName', event.target.value)
-                      }
-                    />
-                    <Input
-                      label="School / College Address"
-                      value={entry.institutionAddress || ''}
-                      onChange={(event) =>
-                        updateEducationHistory(index, 'institutionAddress', event.target.value)
-                      }
-                    />
-                    <Input
-                      label="Hall Ticket Number"
-                      value={entry.hallTicketNumber || ''}
-                      onChange={(event) =>
-                        updateEducationHistory(index, 'hallTicketNumber', event.target.value)
-                      }
-                    />
-                    <Input
-                      label="Total Marks / Grade / %"
-                      value={entry.totalMarksOrGrade || ''}
-                      onChange={(event) => handleTotalMarksChange(index, event.target.value)}
-                      inputMode="decimal"
-                    />
-                    <Input
-                      label="CET Rank (Optional)"
-                      value={entry.cetRank || ''}
-                      onChange={(event) =>
-                        updateEducationHistory(index, 'cetRank', event.target.value)
-                      }
-                    />
+                      <Input
+                        label="Door / Street"
+                        value={relative.doorOrStreet || ''}
+                        onChange={(event) =>
+                          updateRelative(index, 'doorOrStreet', event.target.value.toUpperCase())
+                        }
+                      />
+                      <Input
+                        label="Landmark"
+                        value={relative.landmark || ''}
+                        onChange={(event) =>
+                          updateRelative(index, 'landmark', event.target.value.toUpperCase())
+                        }
+                      />
+                      <Input
+                        label="Village / City"
+                        value={relative.villageOrCity || ''}
+                        onChange={(event) =>
+                          updateRelative(index, 'villageOrCity', event.target.value.toUpperCase())
+                        }
+                      />
+                      <Input
+                        label="Mandal"
+                        value={relative.mandal || ''}
+                        onChange={(event) =>
+                          updateRelative(index, 'mandal', event.target.value.toUpperCase())
+                        }
+                      />
+                      <Input
+                        label="District"
+                        value={relative.district || ''}
+                        onChange={(event) =>
+                          updateRelative(index, 'district', event.target.value.toUpperCase())
+                        }
+                      />
+                      <Input
+                        label="PIN Code"
+                        value={relative.pinCode || ''}
+                        onChange={(event) => updateRelative(index, 'pinCode', event.target.value)}
+                        maxLength={6}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  8. Siblings (Optional)
-                </h2>
-                <p className="text-sm text-gray-500">Record siblings currently studying.</p>
+                ))}
               </div>
-              <Button type="button" variant="secondary" onClick={addSibling}>
-                Add Sibling
-              </Button>
-            </div>
-            <div className="mt-6 space-y-6">
-              {formState.siblings.length === 0 && (
-                <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-                  No siblings recorded.
-                </p>
-              )}
-              {formState.siblings.map((sibling, index) => (
-                <div
-                  key={`sibling-${index}`}
-                  className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
-                      Sibling #{index + 1}
-                    </h3>
-                    <button className="text-sm text-red-500" onClick={() => removeSibling(index)}>
-                      Remove
-                    </button>
-                  </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <Input
-                      label="Name"
-                      value={sibling.name || ''}
-                      onChange={(event) => updateSibling(index, 'name', event.target.value)}
-                    />
-                    <Input
-                      label="Relation"
-                      value={sibling.relation || ''}
-                      onChange={(event) => updateSibling(index, 'relation', event.target.value)}
-                    />
-                    <Input
-                      label="Studying Standard"
-                      value={sibling.studyingStandard || ''}
-                      onChange={(event) =>
-                        updateSibling(index, 'studyingStandard', event.target.value)
-                      }
-                    />
-                    <Input
-                      label="College / School Name"
-                      value={sibling.institutionName || ''}
-                      onChange={(event) =>
-                        updateSibling(index, 'institutionName', event.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+            </section>
 
-          <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-              9. Documents Checklist
-            </h2>
-            <p className="text-sm text-gray-500">
-              Mark each document as received to track joining completeness.
-            </p>
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              {Object.entries(documentLabels).map(([key, label]) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
-                  </div>
-                  <div className="flex gap-3">
-                    {documentStatusOptions.map((statusOption) => (
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                6. Qualified Examinations
+              </h2>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  {[
+                    { key: 'ssc' as const, label: 'SSC' },
+                    { key: 'interOrDiploma' as const, label: 'Inter / Diploma' },
+                    { key: 'ug' as const, label: 'UG' },
+                  ].map((item) => (
+                    <label key={item.key} className="flex items-center gap-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(formState.qualifications[item.key])}
+                        onChange={() => toggleQualification(item.key)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      {item.label}
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Medium of Instruction
+                  </label>
+                  <div className="flex flex-wrap gap-3">
+                    {mediumOptions.map((option) => (
                       <label
-                        key={`${key}-${statusOption}`}
-                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${
-                          (formState.documents[key as keyof JoiningDocuments] || 'pending') ===
-                          statusOption
-                            ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
-                            : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
-                        }`}
+                        key={option.value}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:border-blue-300 focus-within:border-blue-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
                       >
                         <input
-                          type="radio"
-                          name={`document-${key}`}
-                          value={statusOption}
-                          checked={
-                            (formState.documents[key as keyof JoiningDocuments] || 'pending') ===
-                            statusOption
-                          }
-                          onChange={() =>
-                            updateDocumentStatus(key as keyof JoiningDocuments, statusOption)
-                          }
-                          className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
+                          type="checkbox"
+                          checked={Array.isArray(formState.qualifications.mediums) && formState.qualifications.mediums.includes(option.value)}
+                          onChange={() => toggleMediumSelection(option.value)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
-                        <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
+                        {option.label}
                       </label>
                     ))}
                   </div>
+                  {Array.isArray(formState.qualifications.mediums) &&
+                    formState.qualifications.mediums.includes('other') && (
+                      <Input
+                        className="mt-3"
+                        placeholder="Specify medium"
+                        value={formState.qualifications.otherMediumLabel || ''}
+                        onChange={(event) => handleMediumOtherLabelChange(event.target.value)}
+                      />
+                    )}
                 </div>
-              ))}
-            </div>
-          </section>
+              </div>
+            </section>
 
-          {canAccessPaymentsModule && (
-            <section
-              id="payment-panel"
-              className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${
-                shouldPromptPayment
-                  ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
-                  : ''
-              }`}
-            >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  10. Payments &amp; Transactions
-                </h2>
-                <p className="text-sm text-gray-500 dark:text-slate-400">
-                  Collect admission fees in parts or full. Every transaction updates the balance and is
-                  logged for audit.
-                </p>
-                {paymentSummary?.lastPaymentAt && (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Last payment updated on{' '}
-                    <span className="font-semibold">
-                      {formatDateTime(paymentSummary.lastPaymentAt)}
-                    </span>
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                    7. Education History
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Add every school or college the student has studied. Include year, course, and
+                    identifiers.
+                  </p>
+                </div>
+                <Button type="button" variant="secondary" onClick={addEducationHistory}>
+                  Add Entry
+                </Button>
+              </div>
+              <div className="mt-6 space-y-6">
+                {formState.educationHistory.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                    No education history added. Include SSC, Inter/Diploma, UG, and others if
+                    applicable.
                   </p>
                 )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="primary"
-                  onClick={() => openPaymentModal('cash')}
-                  disabled={paymentActionsDisabled}
-                >
-                  {isAdditionalFeeMode ? 'Record Additional Cash Payment' : 'Record Cash Payment'}
-                </Button>
-                <Button
-                  variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                  onClick={() => openPaymentModal('online')}
-                  disabled={!canUseCashfree || paymentActionsDisabled}
-                >
-                  {isAdditionalFeeMode
-                    ? 'Collect Additional Fee via Cashfree'
-                    : 'Collect via Cashfree UPI / QR'}
-                </Button>
-                {shouldShowAdditionalFeeButton && (
-                  <Button
-                    variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                    onClick={() => {
-                      if (paymentFormState.isProcessing) return;
-                      setIsAdditionalFeeMode((prev) => {
-                        if (prev) {
-                          resetPaymentForm();
-                        }
-                        return !prev;
-                      });
-                    }}
-                    disabled={paymentFormState.isProcessing || !canWritePayments}
+                {formState.educationHistory.map((entry, index) => (
+                  <div
+                    key={`edu-${index}`}
+                    className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
                   >
-                    {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
-                  </Button>
-                )}
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                        Entry #{index + 1}
+                      </h3>
+                      <button className="text-sm text-red-500" onClick={() => removeEducationHistory(index)}>
+                        Remove
+                      </button>
+                    </div>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Level
+                        </label>
+                        <select
+                          value={entry.level}
+                          onChange={(event) =>
+                            updateEducationHistory(index, 'level', event.target.value)
+                          }
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        >
+                          <option value="ssc">SSC</option>
+                          <option value="inter_diploma">Inter / Diploma</option>
+                          <option value="ug">UG</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      {entry.level === 'other' && (
+                        <Input
+                          label="Specify Level"
+                          value={entry.otherLevelLabel || ''}
+                          onChange={(event) =>
+                            updateEducationHistory(index, 'otherLevelLabel', event.target.value)
+                          }
+                        />
+                      )}
+                      <Input
+                        label="Course / Branch"
+                        value={entry.courseOrBranch || ''}
+                        onChange={(event) =>
+                          updateEducationHistory(index, 'courseOrBranch', event.target.value)
+                        }
+                      />
+                      <Input
+                        label="Year of Passing"
+                        value={entry.yearOfPassing || ''}
+                        onChange={(event) => handleYearOfPassingChange(index, event.target.value)}
+                        inputMode="numeric"
+                        maxLength={4}
+                      />
+                      <Input
+                        label="School / College Name"
+                        value={entry.institutionName || ''}
+                        onChange={(event) =>
+                          updateEducationHistory(index, 'institutionName', event.target.value)
+                        }
+                      />
+                      <Input
+                        label="School / College Address"
+                        value={entry.institutionAddress || ''}
+                        onChange={(event) =>
+                          updateEducationHistory(index, 'institutionAddress', event.target.value)
+                        }
+                      />
+                      <Input
+                        label="Hall Ticket Number"
+                        value={entry.hallTicketNumber || ''}
+                        onChange={(event) =>
+                          updateEducationHistory(index, 'hallTicketNumber', event.target.value)
+                        }
+                      />
+                      <Input
+                        label="Total Marks / Grade / %"
+                        value={entry.totalMarksOrGrade || ''}
+                        onChange={(event) => handleTotalMarksChange(index, event.target.value)}
+                        inputMode="decimal"
+                      />
+                      <Input
+                        label="CET Rank (Optional)"
+                        value={entry.cetRank || ''}
+                        onChange={(event) =>
+                          updateEducationHistory(index, 'cetRank', event.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                    8. Siblings (Optional)
+                  </h2>
+                  <p className="text-sm text-gray-500">Record siblings currently studying.</p>
+                </div>
+                <Button type="button" variant="secondary" onClick={addSibling}>
+                  Add Sibling
+                </Button>
+              </div>
+              <div className="mt-6 space-y-6">
+                {formState.siblings.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                    No siblings recorded.
+                  </p>
+                )}
+                {formState.siblings.map((sibling, index) => (
+                  <div
+                    key={`sibling-${index}`}
+                    className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                        Sibling #{index + 1}
+                      </h3>
+                      <button className="text-sm text-red-500" onClick={() => removeSibling(index)}>
+                        Remove
+                      </button>
+                    </div>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <Input
+                        label="Name"
+                        value={sibling.name || ''}
+                        onChange={(event) => updateSibling(index, 'name', event.target.value)}
+                      />
+                      <Input
+                        label="Relation"
+                        value={sibling.relation || ''}
+                        onChange={(event) => updateSibling(index, 'relation', event.target.value)}
+                      />
+                      <Input
+                        label="Studying Standard"
+                        value={sibling.studyingStandard || ''}
+                        onChange={(event) =>
+                          updateSibling(index, 'studyingStandard', event.target.value)
+                        }
+                      />
+                      <Input
+                        label="College / School Name"
+                        value={sibling.institutionName || ''}
+                        onChange={(event) =>
+                          updateSibling(index, 'institutionName', event.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                9. Documents Checklist
+              </h2>
+              <p className="text-sm text-gray-500">
+                Mark each document as received to track joining completeness.
+              </p>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                {Object.entries(documentLabels).map(([key, label]) => (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
+                    </div>
+                    <div className="flex gap-3">
+                      {documentStatusOptions.map((statusOption) => (
+                        <label
+                          key={`${key}-${statusOption}`}
+                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${(formState.documents[key as keyof JoiningDocuments] || 'pending') ===
+                              statusOption
+                              ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
+                              : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
+                            }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`document-${key}`}
+                            value={statusOption}
+                            checked={
+                              (formState.documents[key as keyof JoiningDocuments] || 'pending') ===
+                              statusOption
+                            }
+                            onChange={() =>
+                              updateDocumentStatus(key as keyof JoiningDocuments, statusOption)
+                            }
+                            className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {canAccessPaymentsModule && (
+              <section
+                id="payment-panel"
+                className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${shouldPromptPayment
+                    ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
+                    : ''
+                  }`}
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                      10. Payments &amp; Transactions
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-slate-400">
+                      Collect admission fees in parts or full. Every transaction updates the balance and is
+                      logged for audit.
+                    </p>
+                    {paymentSummary?.lastPaymentAt && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Last payment updated on{' '}
+                        <span className="font-semibold">
+                          {formatDateTime(paymentSummary.lastPaymentAt)}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => openPaymentModal('cash')}
+                      disabled={paymentActionsDisabled}
+                    >
+                      {isAdditionalFeeMode ? 'Record Additional Cash Payment' : 'Record Cash Payment'}
+                    </Button>
+                    <Button
+                      variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
+                      onClick={() => openPaymentModal('online')}
+                      disabled={!canUseCashfree || paymentActionsDisabled}
+                    >
+                      {isAdditionalFeeMode
+                        ? 'Collect Additional Fee via Cashfree'
+                        : 'Collect via Cashfree UPI / QR'}
+                    </Button>
+                    {shouldShowAdditionalFeeButton && (
+                      <Button
+                        variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
+                        onClick={() => {
+                          if (paymentFormState.isProcessing) return;
+                          setIsAdditionalFeeMode((prev) => {
+                            if (prev) {
+                              resetPaymentForm();
+                            }
+                            return !prev;
+                          });
+                        }}
+                        disabled={paymentFormState.isProcessing || !canWritePayments}
+                      >
+                        {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
+                      </Button>
+                    )}
+                  </div>
+                  {isAdditionalFeeMode && (
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                      Additional fee mode active
+                    </div>
+                  )}
+                </div>
+
+                {!canUseCashfree && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/40 dark:text-amber-200">
+                    Cashfree credentials are not configured or inactive. Update them under Payment Settings
+                    to enable online collections.
+                  </div>
+                )}
+
+                <div className="mt-6 grid gap-6 lg:grid-cols-2">
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Total Fee
+                        </span>
+                        <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          {formatCurrency(baseFeeTarget)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Paid Fee
+                        </span>
+                        <span className="text-base font-semibold text-emerald-600 dark:text-emerald-300">
+                          {formatCurrency(baseFeePaid)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Balance Fee
+                        </span>
+                        <span className="text-base font-semibold text-blue-600 dark:text-blue-300">
+                          {formatCurrency(outstandingBalance)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Additional Fee
+                        </span>
+                        <span className="text-base font-semibold text-amber-600 dark:text-amber-300">
+                          {formatCurrency(additionalFeePaid)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Total Amount Paid
+                        </span>
+                        <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          {formatCurrency(totalAmountPaid)}
+                        </span>
+                      </div>
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-semibold uppercase tracking-wide">
+                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ${paymentStatusBadgeClass}`}>
+                          <span className="inline-block h-2 w-2 rounded-full bg-current opacity-75" />
+                          {paymentStatusLabel}
+                        </span>
+                        {cashfreeConfig && (
+                          <span className="text-[10px] uppercase text-slate-400 dark:text-slate-500">
+                            Cashfree mode: production
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {configuredFee !== null && outstandingBalance > configuredFee && (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-600 shadow-sm dark:border-rose-900/60 dark:bg-rose-900/40 dark:text-rose-200">
+                        Awaiting fee configuration update. Balance exceeds configured amount—verify course
+                        selection and fee setup.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Payment Activity
+                    </h3>
+                    {isLoadingTransactions ? (
+                      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                        Loading transactions…
+                      </p>
+                    ) : transactions.length === 0 ? (
+                      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                        No payments recorded yet. Collect fees using the actions above.
+                      </p>
+                    ) : (
+                      <ul className="mt-4 space-y-3">
+                        {transactions.map((transaction) => {
+                          const modeLabel =
+                            transaction.mode === 'cash'
+                              ? 'Cash'
+                              : transaction.mode === 'online'
+                                ? 'Cashfree'
+                                : 'UPI QR';
+                          const statusClass =
+                            transaction.status === 'success'
+                              ? 'text-emerald-600 dark:text-emerald-300'
+                              : transaction.status === 'failed'
+                                ? 'text-rose-600 dark:text-rose-300'
+                                : 'text-amber-600 dark:text-amber-300';
+                          const collectorName =
+                            typeof transaction.collectedBy === 'object'
+                              ? transaction.collectedBy?.name
+                              : undefined;
+                          return (
+                            <li
+                              key={transaction._id}
+                              className="rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm dark:border-slate-700"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-slate-800 dark:text-slate-100">
+                                    {modeLabel}
+                                  </span>
+                                  {transaction.isAdditionalFee && (
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                                      Additional
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`text-xs font-semibold uppercase ${statusClass}`}>
+                                  {transaction.status}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                <span>{formatDateTime(transaction.processedAt || transaction.createdAt)}</span>
+                                <span>{formatCurrency(transaction.amount)}</span>
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {collectorName && (
+                                  <span>
+                                    Collected by <span className="font-semibold">{collectorName}</span>
+                                  </span>
+                                )}
+                                {transaction.referenceId && (
+                                  <span className="ml-2">
+                                    Ref: <span className="font-mono">{transaction.referenceId}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Action Buttons at Bottom - Always visible for draft/pending status */}
+            {!isAdmissionEditable && status !== 'approved' && (
+              <div className="sticky bottom-0 z-10 rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {status === 'draft' && (
+                    <Button
+                      variant="secondary"
+                      disabled={isSaving || !canWriteJoining}
+                      onClick={() => {
+                        if (!canWriteJoining) {
+                          showToast.error('You have read-only access to the joining desk');
+                          return;
+                        }
+                        saveDraftMutation.mutate();
+                      }}
+                    >
+                      {isSaving ? 'Saving…' : 'Save Draft'}
+                    </Button>
+                  )}
+                  {status === 'draft' && (
+                    <Button
+                      variant="primary"
+                      disabled={!canSubmit || isSubmitting}
+                      onClick={() => {
+                        if (!canWriteJoining) {
+                          showToast.error('You have read-only access to the joining desk');
+                          return;
+                        }
+                        submitMutation.mutate();
+                      }}
+                    >
+                      {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
+                    </Button>
+                  )}
+                  {canApprove && (
+                    <Button
+                      variant="primary"
+                      disabled={isApproving}
+                      onClick={() => {
+                        if (!canWriteJoining) {
+                          showToast.error('You have read-only access to the joining desk');
+                          return;
+                        }
+                        approveMutation.mutate();
+                      }}
+                    >
+                      {isApproving ? 'Approving…' : 'Approve'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {openPaymentMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-white/40 bg-white/95 p-6 shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900/95">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {isAdditionalFeeMode
+                    ? openPaymentMode === 'cash'
+                      ? 'Record Additional Cash Payment'
+                      : 'Collect Additional Fee via Cashfree'
+                    : openPaymentMode === 'cash'
+                      ? 'Record Cash Payment'
+                      : 'Collect via Cashfree'}
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {isAdditionalFeeMode
+                    ? 'Capture any additional fee collected beyond the scheduled admission fee.'
+                    : openPaymentMode === 'cash'
+                      ? 'Confirm the amount received in cash. The logged-in user is marked as collector.'
+                      : 'Enter the amount to collect. The Cashfree checkout modal opens next for secure UPI/QR payment.'}
+                </p>
+              </div>
+              <button
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                onClick={closePaymentModal}
+                aria-label="Close payment dialog"
+                disabled={paymentFormState.isProcessing}
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
               {isAdditionalFeeMode && (
-                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                  Additional fee mode active
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-200">
+                  This transaction is marked as an additional fee. It will be tracked separately from the admission balance.
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Amount (INR)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={paymentFormState.amount}
+                  onChange={(event) =>
+                    setPaymentFormState((prev) => ({
+                      ...prev,
+                      amount: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  placeholder={
+                    isAdditionalFeeMode
+                      ? 'Enter additional amount'
+                      : configuredFee
+                        ? String(configuredFee)
+                        : 'Enter amount'
+                  }
+                  disabled={paymentFormState.isProcessing}
+                />
+              </div>
+
+
+              {openPaymentMode === 'online' && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-900/60 dark:bg-blue-900/30 dark:text-blue-200">
+                  The Cashfree modal appears once you continue. Students can pay via UPI apps or card.
+                  Stay on this screen until the modal completes.
                 </div>
               )}
             </div>
 
-            {!canUseCashfree && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/40 dark:text-amber-200">
-                Cashfree credentials are not configured or inactive. Update them under Payment Settings
-                to enable online collections.
-              </div>
-            )}
-
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
-              <div className="space-y-4">
-                <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                      Total Fee
-                    </span>
-                    <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                      {formatCurrency(baseFeeTarget)}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                      Paid Fee
-                    </span>
-                    <span className="text-base font-semibold text-emerald-600 dark:text-emerald-300">
-                      {formatCurrency(baseFeePaid)}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                      Balance Fee
-                    </span>
-                    <span className="text-base font-semibold text-blue-600 dark:text-blue-300">
-                      {formatCurrency(outstandingBalance)}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                      Additional Fee
-                    </span>
-                    <span className="text-base font-semibold text-amber-600 dark:text-amber-300">
-                      {formatCurrency(additionalFeePaid)}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                      Total Amount Paid
-                    </span>
-                    <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                      {formatCurrency(totalAmountPaid)}
-                    </span>
-                  </div>
-                  <div className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-semibold uppercase tracking-wide">
-                    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ${paymentStatusBadgeClass}`}>
-                      <span className="inline-block h-2 w-2 rounded-full bg-current opacity-75" />
-                      {paymentStatusLabel}
-                    </span>
-                    {cashfreeConfig && (
-                      <span className="text-[10px] uppercase text-slate-400 dark:text-slate-500">
-                        Cashfree mode: production
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {configuredFee !== null && outstandingBalance > configuredFee && (
-                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-600 shadow-sm dark:border-rose-900/60 dark:bg-rose-900/40 dark:text-rose-200">
-                    Awaiting fee configuration update. Balance exceeds configured amount—verify course
-                    selection and fee setup.
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Payment Activity
-                </h3>
-                {isLoadingTransactions ? (
-                  <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                    Loading transactions…
-                  </p>
-                ) : transactions.length === 0 ? (
-                  <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                    No payments recorded yet. Collect fees using the actions above.
-                  </p>
-                ) : (
-                  <ul className="mt-4 space-y-3">
-                    {transactions.map((transaction) => {
-                      const modeLabel =
-                        transaction.mode === 'cash'
-                          ? 'Cash'
-                          : transaction.mode === 'online'
-                          ? 'Cashfree'
-                          : 'UPI QR';
-                      const statusClass =
-                        transaction.status === 'success'
-                          ? 'text-emerald-600 dark:text-emerald-300'
-                          : transaction.status === 'failed'
-                          ? 'text-rose-600 dark:text-rose-300'
-                          : 'text-amber-600 dark:text-amber-300';
-                      const collectorName =
-                        typeof transaction.collectedBy === 'object'
-                          ? transaction.collectedBy?.name
-                          : undefined;
-                      return (
-                        <li
-                          key={transaction._id}
-                          className="rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm dark:border-slate-700"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-slate-800 dark:text-slate-100">
-                                {modeLabel}
-                              </span>
-                              {transaction.isAdditionalFee && (
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                                  Additional
-                                </span>
-                              )}
-                            </div>
-                            <span className={`text-xs font-semibold uppercase ${statusClass}`}>
-                              {transaction.status}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                            <span>{formatDateTime(transaction.processedAt || transaction.createdAt)}</span>
-                            <span>{formatCurrency(transaction.amount)}</span>
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {collectorName && (
-                              <span>
-                                Collected by <span className="font-semibold">{collectorName}</span>
-                              </span>
-                            )}
-                            {transaction.referenceId && (
-                              <span className="ml-2">
-                                Ref: <span className="font-mono">{transaction.referenceId}</span>
-                              </span>
-                            )}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={closePaymentModal}
+                disabled={paymentFormState.isProcessing}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={openPaymentMode === 'cash' ? handleCashPaymentSubmit : handleCashfreePayment}
+                disabled={paymentFormState.isProcessing}
+              >
+                {paymentFormState.isProcessing
+                  ? 'Processing…'
+                  : openPaymentMode === 'cash'
+                    ? 'Record Payment'
+                    : 'Collect Payment'}
+              </Button>
             </div>
-            </section>
-          )}
-
-          {/* Action Buttons at Bottom - Always visible for draft/pending status */}
-          {!isAdmissionEditable && status !== 'approved' && (
-            <div className="sticky bottom-0 z-10 rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                {status === 'draft' && (
-                  <Button
-                    variant="secondary"
-                    disabled={isSaving || !canWriteJoining}
-                    onClick={() => {
-                      if (!canWriteJoining) {
-                        showToast.error('You have read-only access to the joining desk');
-                        return;
-                      }
-                      saveDraftMutation.mutate();
-                    }}
-                  >
-                    {isSaving ? 'Saving…' : 'Save Draft'}
-                  </Button>
-                )}
-                {status === 'draft' && (
-                  <Button
-                    variant="primary"
-                    disabled={!canSubmit || isSubmitting}
-                    onClick={() => {
-                      if (!canWriteJoining) {
-                        showToast.error('You have read-only access to the joining desk');
-                        return;
-                      }
-                      submitMutation.mutate();
-                    }}
-                  >
-                    {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
-                  </Button>
-                )}
-                {canApprove && (
-                  <Button
-                    variant="primary"
-                    disabled={isApproving}
-                    onClick={() => {
-                      if (!canWriteJoining) {
-                        showToast.error('You have read-only access to the joining desk');
-                        return;
-                      }
-                      approveMutation.mutate();
-                    }}
-                  >
-                    {isApproving ? 'Approving…' : 'Approve'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>
-    {openPaymentMode && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-        <div className="w-full max-w-lg rounded-2xl border border-white/40 bg-white/95 p-6 shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900/95">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {isAdditionalFeeMode
-                  ? openPaymentMode === 'cash'
-                    ? 'Record Additional Cash Payment'
-                    : 'Collect Additional Fee via Cashfree'
-                  : openPaymentMode === 'cash'
-                  ? 'Record Cash Payment'
-                  : 'Collect via Cashfree'}
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {isAdditionalFeeMode
-                  ? 'Capture any additional fee collected beyond the scheduled admission fee.'
-                  : openPaymentMode === 'cash'
-                  ? 'Confirm the amount received in cash. The logged-in user is marked as collector.'
-                  : 'Enter the amount to collect. The Cashfree checkout modal opens next for secure UPI/QR payment.'}
-              </p>
-            </div>
-            <button
-              className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-              onClick={closePaymentModal}
-              aria-label="Close payment dialog"
-              disabled={paymentFormState.isProcessing}
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            {isAdditionalFeeMode && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-200">
-                This transaction is marked as an additional fee. It will be tracked separately from the admission balance.
-              </div>
-            )}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                Amount (INR)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={paymentFormState.amount}
-                onChange={(event) =>
-                  setPaymentFormState((prev) => ({
-                    ...prev,
-                    amount: event.target.value,
-                  }))
-                }
-                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                placeholder={
-                  isAdditionalFeeMode
-                    ? 'Enter additional amount'
-                    : configuredFee
-                    ? String(configuredFee)
-                    : 'Enter amount'
-                }
-                disabled={paymentFormState.isProcessing}
-              />
-            </div>
-
-
-            {openPaymentMode === 'online' && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-900/60 dark:bg-blue-900/30 dark:text-blue-200">
-                The Cashfree modal appears once you continue. Students can pay via UPI apps or card.
-                Stay on this screen until the modal completes.
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6 flex items-center justify-end gap-3">
-            <Button
-              variant="secondary"
-              onClick={closePaymentModal}
-              disabled={paymentFormState.isProcessing}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={openPaymentMode === 'cash' ? handleCashPaymentSubmit : handleCashfreePayment}
-              disabled={paymentFormState.isProcessing}
-            >
-              {paymentFormState.isProcessing
-                ? 'Processing…'
-                : openPaymentMode === 'cash'
-                ? 'Record Payment'
-                : 'Collect Payment'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
   );
 };
 

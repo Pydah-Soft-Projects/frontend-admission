@@ -38,7 +38,7 @@ export default function LoginPage() {
 
     try {
       const response = await authAPI.login(data);
-      
+
       // Backend returns: { success: true, message: '...', data: { token, user } }
       // Axios extracts response.data, so we get: { success: true, message: '...', data: { token, user } }
       const responseData = response.data || response;
@@ -65,9 +65,9 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('Login error:', err);
       console.error('Error response:', err.response);
-      const errorMessage = err.response?.data?.message || 
-                          err.message || 
-                          'Login failed. Please check your credentials and try again.';
+      const errorMessage = err.response?.data?.message ||
+        err.message ||
+        'Login failed. Please check your credentials and try again.';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -77,14 +77,14 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background gradient effects */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 dark:bg-gradient-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
+      <div className="absolute inset-0 bg-linear-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 dark:bg-linear-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-200/20 dark:bg-blue-900/20 rounded-full blur-3xl"></div>
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-200/20 dark:bg-purple-900/20 rounded-full blur-3xl"></div>
 
       <div className="absolute top-6 right-6 z-20">
         <ThemeToggle />
       </div>
-      
+
       <div className="max-w-md w-full relative z-10">
         <Card className="backdrop-blur-xl bg-white/90 dark:bg-slate-900/70 border-gray-300/50 dark:border-slate-700/70 shadow-2xl">
           <div className="text-center mb-6">
@@ -93,7 +93,7 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-red-100/50 dark:from-rose-900/30 dark:to-rose-900/20 border-2 border-red-200 dark:border-rose-700/50 rounded-xl shadow-sm animate-pulse">
+            <div className="mb-4 p-4 bg-linear-to-r from-red-50 to-red-100/50 dark:from-rose-900/30 dark:to-rose-900/20 border-2 border-red-200 dark:border-rose-700/50 rounded-xl shadow-sm animate-pulse">
               <p className="text-sm text-red-700 dark:text-rose-200 font-medium">{error}</p>
             </div>
           )}

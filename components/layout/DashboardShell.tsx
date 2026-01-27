@@ -313,63 +313,59 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         const Icon = item.icon;
         const isActive = pathname.startsWith(item.href);
         const isGroupOpen = openGroups.has(item.href);
-        const paddingLeft = isCollapsed ? undefined : 12 + level * 14;
+        const paddingLeft = isCollapsed ? undefined : level * 16;
 
         return (
           <div key={item.href} className="space-y-1">
             <div
               className={cn(
-                'group flex items-center rounded-2xl py-2 pr-2 text-sm font-medium transition-all',
-                isCollapsed ? 'justify-center px-2' : 'px-0',
-                isActive
-                  ? 'bg-gradient-to-r from-blue-500/10 via-blue-500/15 to-transparent text-blue-600 dark:text-blue-300'
-                  : 'text-slate-500 hover:bg-blue-50/70 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100'
+                'group relative flex items-center',
+                isCollapsed ? 'justify-center px-2' : 'px-0'
               )}
               style={paddingLeft ? { paddingLeft } : undefined}
             >
               <Link
                 href={item.href}
-                className={cn('flex flex-1 items-center gap-3 rounded-xl px-3 py-2 transition', isCollapsed && 'justify-center')}
+                className={cn(
+                  'flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 outline-none select-none',
+                  isCollapsed && 'justify-center',
+                  isActive
+                    ? 'bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/20 dark:text-blue-400'
+                    : 'text-slate-600 hover:bg-slate-100/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/40 dark:hover:text-slate-200'
+                )}
                 title={isCollapsed ? item.label : undefined}
               >
-                <span
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-xl border border-transparent bg-white shadow-sm transition-all',
-                    isActive
-                      ? 'border-blue-100 bg-white text-blue-600 shadow-blue-100/80 dark:border-blue-500/40 dark:bg-slate-900 dark:text-blue-300'
-                      : 'border-slate-200 bg-white/70 text-slate-400 shadow-slate-100/70 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-400'
-                  )}
-                >
-                  {Icon ? <Icon className="h-4 w-4" /> : null}
-                </span>
+                {Icon && (
+                  <Icon
+                    className={cn(
+                      'h-5 w-5 flex-shrink-0 transition-colors duration-200',
+                      isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
+                    )}
+                  />
+                )}
+
                 <div
                   className={cn(
                     'flex min-w-0 flex-1 items-center gap-3',
-                    isCollapsed ? 'justify-center' : 'pl-1'
+                    isCollapsed ? 'hidden' : 'block'
                   )}
                 >
-                  {isCollapsed ? (
-                    hasChildren ? (
-                      <ChevronDownIcon
-                        className={cn(
-                          'h-3 w-3 text-slate-400 transition-transform',
-                          isGroupOpen ? 'rotate-180' : 'rotate-0'
-                        )}
-                      />
-                    ) : null
-                  ) : null}
-                  {!isCollapsed && (
-                  <>
-                    <span>{item.label}</span>
-                    {item.badge && (
-                      <span className="ml-auto inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-600 dark:bg-blue-900/60 dark:text-blue-200">
-                        {item.badge}
-                      </span>
-                    )}
-                  </>
+                  <span className="truncate">{item.label}</span>
+                  {item.badge && (
+                    <span
+                      className={cn(
+                        'ml-auto inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full',
+                        isActive
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                      )}
+                    >
+                      {item.badge}
+                    </span>
                   )}
                 </div>
               </Link>
+
               {hasChildren && !isCollapsed && (
                 <button
                   type="button"
@@ -378,14 +374,21 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                     event.stopPropagation();
                     toggleGroup(item.href);
                   }}
-                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-transparent text-slate-400 transition hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:text-slate-300 dark:hover:text-slate-100"
+                  className={cn(
+                    "absolute right-1 p-1.5 rounded-md transition-colors",
+                    isActive
+                      ? "text-blue-600 hover:bg-blue-100/50 dark:text-blue-400"
+                      : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800"
+                  )}
                 >
-                  <ChevronDownIcon className={cn('h-4 w-4 transition-transform', isGroupOpen ? 'rotate-180' : 'rotate-0')} />
+                  <ChevronDownIcon className={cn('h-3.5 w-3.5 transition-transform duration-200', isGroupOpen ? 'rotate-180' : 'rotate-0')} />
                 </button>
               )}
             </div>
             {hasChildren && isGroupOpen && (
-              <div className={cn('space-y-1', isCollapsed ? 'pl-0' : 'pl-4')}>
+              <div className={cn('space-y-1 relative', isCollapsed ? 'hidden' : 'pl-4')}>
+                {/* Connection line for nested items */}
+                <div className="absolute left-[26px] top-0 bottom-0 w-px bg-slate-200 dark:bg-slate-800" />
                 {renderNavItems(item.children!, level + 1)}
               </div>
             )}
@@ -398,27 +401,29 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const renderSidebar = (variant: 'desktop' | 'mobile' = 'desktop') => (
     <aside
       className={cn(
-        'relative flex flex-col overflow-hidden border border-slate-200 bg-white shadow-lg shadow-blue-100/40 transition-[width] duration-300',
-        'dark:border-slate-800 dark:bg-slate-950 dark:shadow-none',
-        isCollapsed ? 'w-20' : 'w-64',
+        'relative flex flex-col overflow-hidden border border-slate-100 bg-white/50 backdrop-blur-xl shadow-2xl shadow-blue-900/5 transition-[width] duration-300',
+        'dark:border-slate-800 dark:bg-slate-950/50 dark:shadow-none',
+        isCollapsed ? 'w-24' : 'w-72',
         variant === 'desktop'
-          ? 'my-4 h-[calc(100vh-2rem)] rounded-tr-[28px] rounded-br-[28px] lg:sticky lg:top-4'
+          ? 'sticky top-6 my-6 h-[calc(100vh-3rem)] rounded-4xl ml-6 z-30'
           : 'h-full rounded-3xl'
       )}
     >
-      <div className="flex items-center gap-3 px-4 py-4">
+      <div className="flex items-center gap-4 px-6 py-6 border-b border-transparent">
         {!isCollapsed && (
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">Admission</p>
-            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Command Center</p>
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-500/80">Admission</p>
+            <p className="text-xl font-bold bg-clip-text text-transparent bg-linear-to-r from-slate-900 via-slate-700 to-slate-900 dark:from-white dark:via-slate-200 dark:to-slate-400">
+              Command Center
+            </p>
           </div>
         )}
       </div>
 
       <nav
         className={cn(
-          'flex-1 space-y-1 px-2.5',
-          variant === 'desktop' ? 'overflow-y-auto pb-6 pr-3' : 'pb-6'
+          'flex-1 space-y-2 px-4',
+          variant === 'desktop' ? 'overflow-y-auto pb-8 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800' : 'pb-6'
         )}
       >
         {renderNavItems(filteredNavItems)}
@@ -426,7 +431,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
       <button
         type="button"
-              className="absolute top-1/2 -right-4 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-lg transition hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-500 lg:flex z-10"
+        className="absolute top-8 -right-4 hidden h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-400 shadow-[0_8px_16px_-4px_rgba(0,0,0,0.1)] transition-all hover:scale-110 hover:border-blue-100 hover:text-blue-600 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500 lg:flex z-10"
         onClick={() => setIsCollapsed((prev) => !prev)}
         aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
@@ -447,9 +452,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   return (
     <DashboardHeaderContext.Provider value={headerContextValue}>
       <PermissionContext.Provider value={permissionContextValue}>
-        <div className="relative min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-          <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,#e2e8f01f_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f01f_1px,transparent_1px)] bg-[size:28px_28px] dark:bg-[linear-gradient(to_right,rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.12)_1px,transparent_1px)]" />
-          <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-blue-50/40 via-indigo-50/35 to-transparent dark:from-slate-900/60 dark:via-slate-900/65 dark:to-slate-900/80" />
+        <div className="relative min-h-screen bg-slate-50/50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 selection:bg-blue-100 selection:text-blue-700">
+          {/* Refined Background Pattern */}
+          <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,#e2e8f080_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f080_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] dark:bg-[linear-gradient(to_right,rgba(148,163,184,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.05)_1px,transparent_1px)]" />
+
+          {/* Ambient Glows */}
+          <div className="pointer-events-none fixed top-0 left-0 right-0 h-[500px] bg-linear-to-br from-blue-100/40 via-purple-100/20 to-transparent blur-3xl dark:from-blue-900/20 dark:via-purple-900/10" />
 
           <div className="relative flex min-h-screen">
             <div className="hidden lg:flex">{renderSidebar('desktop')}</div>
@@ -461,12 +469,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               )}
             >
               <div
-                className={cn('fixed inset-0 bg-slate-900/60 transition-opacity', isMobileOpen ? 'opacity-100' : 'opacity-0')}
+                className={cn('fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300', isMobileOpen ? 'opacity-100' : 'opacity-0')}
                 onClick={() => setIsMobileOpen(false)}
               />
               <div
                 className={cn(
-                  'relative z-50 w-72 max-w-full px-3 py-4 transition-transform duration-300',
+                  'relative z-50 w-72 max-w-full px-4 py-4 transition-transform duration-300',
                   isMobileOpen ? 'translate-x-0' : '-translate-x-full'
                 )}
               >
@@ -474,43 +482,42 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-1 flex-col">
-              <header className="px-4 pt-4 sm:px-6 lg:px-10">
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_8px_26px_rgba(30,64,175,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none sm:px-5 lg:px-6">
+            <div className="flex flex-1 flex-col min-w-0">
+              <header className="px-4 pt-6 sm:px-6 lg:px-8 pb-4 sticky top-0 z-20">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/60 bg-white/80 px-4 py-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl ring-1 ring-black/5 dark:border-slate-800/60 dark:bg-slate-900/80 dark:shadow-none dark:ring-white/10 sm:px-5 lg:px-6 transition-all duration-300">
                   {/* Left Section: Mobile Menu, Back Icon, Header Content */}
-                  <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                  <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
                     <button
                       type="button"
-                      className="inline-flex rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 lg:hidden dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-500"
+                      className="inline-flex rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition hover:border-blue-200 hover:text-blue-600 hover:shadow-md focus:outline-none lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
                       onClick={() => setIsMobileOpen(true)}
                       aria-label="Toggle navigation menu"
                     >
                       <MenuIcon className="h-5 w-5" />
                     </button>
-                    
+
                     {/* Back Icon */}
                     <button
                       type="button"
                       onClick={handleBack}
-                      className="group relative inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-500 flex-shrink-0"
+                      className="group relative inline-flex items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:border-blue-200 hover:text-blue-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 flex-shrink-0"
                       aria-label="Go back"
                       title="Back"
                     >
                       <BackIcon className="h-5 w-5" />
-                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-hover:block dark:bg-slate-700">
-                        Back
-                      </span>
                     </button>
 
                     {/* Header Content (Lead Details, etc.) */}
-                    <div className="flex flex-col gap-2 text-left min-w-0 flex-1">
+                    <div className="flex flex-col gap-1 text-left min-w-0 flex-1 ml-1">
                       {headerContent ? (
                         headerContent
                       ) : (
                         <>
-                          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
+                          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-linear-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 truncate">
+                            {title}
+                          </h1>
                           {description && (
-                            <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+                            <p className="text-sm font-medium text-slate-500/90 dark:text-slate-400 truncate">{description}</p>
                           )}
                         </>
                       )}
@@ -520,19 +527,21 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   {/* Right Section: Workspace Logo, Workspace Title, Notification Bell, Logout Icon */}
                   <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
                     {/* Workspace Logo */}
-                    <Link href="/" className="flex items-center gap-2">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-xs font-semibold uppercase text-white shadow-sm">
+                    <Link href="/" className="flex items-center gap-3 group">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-transform group-hover:scale-105 ring-2 ring-white dark:ring-slate-800">
                         {(userName || 'SA').slice(0, 2)}
                       </span>
                     </Link>
 
                     {/* Workspace Title */}
                     <div className="hidden sm:block">
-                      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-blue-500 dark:text-blue-300">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-500/90 dark:text-blue-400">
                         {role ? `${role} Space` : 'Workspace'}
                       </p>
                     </div>
-                    
+
+                    <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block" />
+
                     {/* Notification Bell */}
                     <div className="flex-shrink-0">
                       <NotificationBell />
@@ -542,21 +551,20 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="group relative inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-red-200 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-red-500"
+                      className="group relative inline-flex items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:border-red-900/30 dark:hover:text-red-400"
                       aria-label="Logout"
                       title="Logout"
                     >
                       <LogoutIcon className="h-5 w-5" />
-                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-hover:block dark:bg-slate-700">
-                        Logout
-                      </span>
                     </button>
                   </div>
                 </div>
               </header>
 
-              <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden">
-                <div className="w-full px-1 py-8 sm:px-2 lg:px-3">{children}</div>
+              <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+                <div className="mx-auto max-w-[1600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  {children}
+                </div>
               </main>
             </div>
           </div>
@@ -565,5 +573,3 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     </DashboardHeaderContext.Provider>
   );
 };
-
-
