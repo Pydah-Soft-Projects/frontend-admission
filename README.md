@@ -44,7 +44,13 @@ Create a `.env.local` file in the frontend directory:
 
 ```
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_CRM_BACKEND_URL=http://localhost:3000
+NEXT_PUBLIC_CRM_FRONTEND_URL=http://localhost:5173
 ```
+
+**SSO Configuration:**
+- `NEXT_PUBLIC_CRM_BACKEND_URL`: URL of the CRM backend for SSO token verification
+- `NEXT_PUBLIC_CRM_FRONTEND_URL`: URL of the CRM frontend (for redirects on error)
 
 ## Installation
 

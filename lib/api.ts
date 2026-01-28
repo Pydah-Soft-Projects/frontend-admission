@@ -17,6 +17,10 @@ import type {
 // API Base URL - Update this with your backend URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+// CRM Backend URL for SSO token verification
+export const CRM_BACKEND_URL = process.env.NEXT_PUBLIC_CRM_BACKEND_URL || 'http://localhost:3000';
+export const CRM_FRONTEND_URL = process.env.NEXT_PUBLIC_CRM_FRONTEND_URL || 'http://localhost:5173';
+
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -70,6 +74,27 @@ export const authAPI = {
     // Backend returns { success: true, data: {...}, message: "..." }
     // Extract the nested data property for consistency
     return response.data?.data || response.data;
+  },
+  // SSO Token Verification (calls CRM backend)
+  verifySSOToken: async (encryptedToken: string) => {
+    const response = await fetch(`${CRM_BACKEND_URL}/auth/verify-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ encryptedToken }),
+    });
+    return response.json();
+  },
+  // Create SSO session (calls admissions backend)
+  createSSOSession: async (ssoData: {
+    userId: string;
+    role: string;
+    portalId: string;
+    ssoToken: string;
+  }) => {
+    const response = await api.post('/auth/sso-session', ssoData);
+    return response.data;
   },
 };
 
