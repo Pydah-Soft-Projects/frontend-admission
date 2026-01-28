@@ -18,6 +18,7 @@ import {
   JoiningSibling,
   JoiningStatus,
   Admission,
+  Branch,
   PaymentSummary,
   CoursePaymentSettings,
   PaymentTransaction,
@@ -1585,10 +1586,11 @@ const JoiningDetailPage = () => {
                         {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
                       </option>
                       {(() => {
+                        if (!selectedCourseSetting) return null;
                         // Additional frontend deduplication as final safety check
-                        const branchMap = new Map<string, typeof selectedCourseSetting.branches[0]>();
-                        selectedCourseSetting?.branches.forEach((branch) => {
-                          const branchId = branch._id || branch.id;
+                        const branchMap = new Map<string, Branch>();
+                        selectedCourseSetting.branches.forEach((branch) => {
+                          const branchId = branch._id;
                           if (branchId && !branchMap.has(branchId)) {
                             branchMap.set(branchId, branch);
                           }
@@ -1596,7 +1598,7 @@ const JoiningDetailPage = () => {
                         const uniqueBranches = Array.from(branchMap.values());
 
                         return uniqueBranches.map((branch) => {
-                          const branchId = branch._id || branch.id;
+                          const branchId = branch._id;
                           return (
                             <option key={branchId} value={branchId}>
                               {branch.name}
@@ -2311,9 +2313,9 @@ const JoiningDetailPage = () => {
                         <label
                           key={`${key}-${statusOption}`}
                           className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${(formState.documents[key as keyof JoiningDocuments] || 'pending') ===
-                              statusOption
-                              ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
-                              : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
+                            statusOption
+                            ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
+                            : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
                             }`}
                         >
                           <input
@@ -2342,8 +2344,8 @@ const JoiningDetailPage = () => {
               <section
                 id="payment-panel"
                 className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${shouldPromptPayment
-                    ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
-                    : ''
+                  ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
+                  : ''
                   }`}
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
