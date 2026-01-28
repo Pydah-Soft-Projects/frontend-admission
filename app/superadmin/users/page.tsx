@@ -19,6 +19,8 @@ const UserManagementPage = () => {
   const router = useRouter();
   const { hasAccess: canAccessUsers, canWrite: canManageUsers } = useModulePermission('users');
   const [showCreateUser, setShowCreateUser] = useState(false);
+  const [showEditUser, setShowEditUser] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formState, setFormState] = useState({
     name: '',
     email: '',
@@ -40,6 +42,20 @@ const UserManagementPage = () => {
   const [permissionState, setPermissionState] = useState<Record<PermissionModuleKey, ModulePermission>>(
     createEmptyPermissions()
   );
+  const [editFormState, setEditFormState] = useState<{
+    name: string;
+    email: string;
+    roleName: RoleName;
+    designation: string;
+  }>({
+    name: '',
+    email: '',
+    roleName: 'User',
+    designation: '',
+  });
+  const [editPermissionState, setEditPermissionState] = useState<
+    Record<PermissionModuleKey, ModulePermission>
+  >(createEmptyPermissions());
   const [searchTerm, setSearchTerm] = useState('');
   const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false);
   const [selectedUserForAssignment, setSelectedUserForAssignment] = useState<User | null>(null);
@@ -146,6 +162,31 @@ const UserManagementPage = () => {
     },
   });
 
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, data }: { userId: string; data: Parameters<typeof userAPI.update>[1] }) =>
+      userAPI.update(userId, data),
+    onSuccess: () => {
+      showToast.success('User updated successfully');
+      setShowEditUser(false);
+      setEditingUser(null);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to update user');
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => userAPI.delete(userId),
+    onSuccess: () => {
+      showToast.success('User deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to delete user');
+    },
+  });
+
   const managers = useMemo(() => {
     return users.filter((u) => u.isManager === true);
   }, [users]);
@@ -235,6 +276,17 @@ const UserManagementPage = () => {
     // Note: Manager is now handled via isManager boolean, not roleName
   };
 
+  const handleEditRoleChange = (roleName: string) => {
+    setEditFormState((prev) => ({
+      ...prev,
+      roleName: roleName as RoleName,
+      designation: roleName === 'User' ? prev.designation : '',
+    }));
+    if (roleName === 'Sub Super Admin') {
+      setEditPermissionState(createEmptyPermissions());
+    }
+  };
+
   const toggleModuleAccess = (moduleKey: PermissionModuleKey) => {
     setPermissionState((prev) => ({
       ...prev,
@@ -320,13 +372,13 @@ const UserManagementPage = () => {
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/50">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                       Loading users…
                     </td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                       No users match the current search.
                     </td>
                   </tr>
@@ -420,6 +472,63 @@ const UserManagementPage = () => {
                               disabled={toggleActiveMutation.isPending || !canManageUsers}
                             >
                               {user.isActive ? 'Deactivate' : 'Activate'}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (!canManageUsers) return;
+                                setEditingUser(user);
+                                setEditFormState({
+                                  name: user.name,
+                                  email: user.email,
+                                  roleName: user.roleName,
+                                  designation: user.designation || '',
+                                });
+                                // Seed edit permissions for sub super admins
+                                if (user.roleName === 'Sub Super Admin') {
+                                  const base = createEmptyPermissions();
+                                  const userPerms = user.permissions || {};
+                                  const seeded: Record<PermissionModuleKey, ModulePermission> = {
+                                    ...base,
+                                  };
+                                  PERMISSION_MODULES.forEach((module) => {
+                                    const entry = userPerms[module.key];
+                                    if (entry?.access) {
+                                      seeded[module.key] = {
+                                        access: true,
+                                        permission: entry.permission === 'read' ? 'read' : 'write',
+                                      };
+                                    }
+                                  });
+                                  setEditPermissionState(seeded);
+                                } else {
+                                  setEditPermissionState(createEmptyPermissions());
+                                }
+                                setShowEditUser(true);
+                              }}
+                              disabled={!canManageUsers}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (!canManageUsers) return;
+                                if (
+                                  window.confirm(
+                                    `Are you sure you want to delete ${user.name}? This action cannot be undone.`
+                                  )
+                                ) {
+                                  deleteUserMutation.mutate(user._id);
+                                }
+                              }}
+                              disabled={deleteUserMutation.isPending || !canManageUsers}
+                            >
+                              Delete
                             </Button>
                           </div>
                         </td>
@@ -586,6 +695,262 @@ const UserManagementPage = () => {
                 </Button>
                 <Button type="submit" variant="primary" disabled={createMutation.isPending || !canManageUsers}>
                   {createMutation.isPending ? 'Creating…' : 'Create User'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditUser && editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <Card className="w-full max-w-4xl space-y-6 p-6 shadow-xl shadow-blue-100/40 dark:shadow-none">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Edit User
+              </h2>
+              <button
+                type="button"
+                className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                onClick={() => {
+                  setShowEditUser(false);
+                  setEditingUser(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!canManageUsers || !editingUser) return;
+                if (!editFormState.name || !editFormState.email) {
+                  showToast.error('Please fill in name and email');
+                  return;
+                }
+
+                const payload: Parameters<typeof userAPI.update>[1] = {
+                  name: editFormState.name.trim(),
+                  email: editFormState.email.trim(),
+                  roleName: editFormState.roleName,
+                };
+
+                if (editFormState.roleName === 'User') {
+                  if (!editFormState.designation.trim()) {
+                    showToast.error('Please provide a designation for this user');
+                    return;
+                  }
+                  payload.designation = editFormState.designation.trim();
+                }
+
+                if (editFormState.roleName === 'Sub Super Admin') {
+                  const selectedPermissions = Object.entries(editPermissionState).reduce(
+                    (acc, [key, value]) => {
+                      if (value.access) {
+                        acc[key as PermissionModuleKey] = {
+                          access: true,
+                          permission: value.permission === 'read' ? 'read' : 'write',
+                        };
+                      }
+                      return acc;
+                    },
+                    {} as Record<PermissionModuleKey, ModulePermission>
+                  );
+
+                  if (Object.keys(selectedPermissions).length === 0) {
+                    showToast.error('Select at least one module to grant access');
+                    return;
+                  }
+
+                  payload.permissions = selectedPermissions;
+                }
+
+                updateUserMutation.mutate({ userId: editingUser._id, data: payload });
+              }}
+              className="space-y-6"
+            >
+              <div
+                className={
+                  editFormState.roleName === 'Sub Super Admin'
+                    ? 'grid gap-6 lg:grid-cols-[minmax(0,0.55fr)_minmax(0,0.45fr)]'
+                    : 'space-y-4'
+                }
+              >
+                <div
+                  className={
+                    editFormState.roleName === 'Sub Super Admin' ? 'space-y-4' : 'space-y-4'
+                  }
+                >
+                  <Input
+                    label="Full Name"
+                    name="name"
+                    value={editFormState.name}
+                    onChange={(event) =>
+                      setEditFormState((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                    placeholder="Counsellor name"
+                  />
+                  <Input
+                    label="Email Address"
+                    name="email"
+                    type="email"
+                    value={editFormState.email}
+                    onChange={(event) =>
+                      setEditFormState((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                    placeholder="name@college.com"
+                  />
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      Role
+                    </label>
+                    <select
+                      value={editFormState.roleName}
+                      onChange={(event) => handleEditRoleChange(event.target.value)}
+                      className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    >
+                      <option value="User">User</option>
+                      <option value="Sub Super Admin">Sub Super Admin</option>
+                      <option value="Super Admin">Super Admin</option>
+                    </select>
+                  </div>
+
+                  {editFormState.roleName === 'User' && (
+                    <Input
+                      label="Role Name / Designation"
+                      name="designation"
+                      value={editFormState.designation}
+                      onChange={(event) =>
+                        setEditFormState((prev) => ({
+                          ...prev,
+                          designation: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. Senior Counsellor"
+                    />
+                  )}
+                </div>
+
+                {editFormState.roleName === 'Sub Super Admin' && (
+                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                        Module Permissions
+                      </h3>
+                      <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+                        Select which super admin modules this sub super admin can access, and
+                        whether they can edit them.
+                      </p>
+                    </div>
+                    <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-[60vh]">
+                      {PERMISSION_MODULES.map((module) => {
+                        const moduleState = editPermissionState[module.key];
+                        return (
+                          <div
+                            key={module.key}
+                            className="flex flex-col justify-between rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/80"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                  {module.label}
+                                </p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                  {module.description}
+                                </p>
+                              </div>
+                              <label className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                  checked={moduleState.access}
+                                  onChange={() =>
+                                    setEditPermissionState((prev) => ({
+                                      ...prev,
+                                      [module.key]: {
+                                        access: !prev[module.key].access,
+                                        permission: prev[module.key].access
+                                          ? prev[module.key].permission
+                                          : 'read',
+                                      },
+                                    }))
+                                  }
+                                />
+                                Access
+                              </label>
+                            </div>
+                            {moduleState.access ? (
+                              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-200/70 bg-blue-50/70 p-2 dark:border-blue-900/50 dark:bg-blue-900/30">
+                                <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200">
+                                  Permission Level
+                                </p>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={moduleState.permission === 'read' ? 'primary' : 'outline'}
+                                    onClick={() =>
+                                      setEditPermissionState((prev) => ({
+                                        ...prev,
+                                        [module.key]: {
+                                          ...prev[module.key],
+                                          permission: 'read',
+                                        },
+                                      }))
+                                    }
+                                  >
+                                    Read Only
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={moduleState.permission === 'write' ? 'primary' : 'outline'}
+                                    onClick={() =>
+                                      setEditPermissionState((prev) => ({
+                                        ...prev,
+                                        [module.key]: {
+                                          ...prev[module.key],
+                                          permission: 'write',
+                                        },
+                                      }))
+                                    }
+                                  >
+                                    Read &amp; Write
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[10px] font-medium uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500">
+                                Access disabled
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowEditUser(false);
+                    setEditingUser(null);
+                  }}
+                  disabled={updateUserMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={updateUserMutation.isPending || !canManageUsers}
+                >
+                  {updateUserMutation.isPending ? 'Saving…' : 'Save Changes'}
                 </Button>
               </div>
             </form>
