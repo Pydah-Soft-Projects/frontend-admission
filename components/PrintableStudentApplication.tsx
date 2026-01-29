@@ -4,13 +4,14 @@ import { useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import type { Joining, Admission, PaymentSummary, PaymentTransaction } from '@/types';
 
-function escapeHtml(text: string): string {
+function escapeHtml(text: string | undefined): string {
+  const s = text ?? '';
   if (typeof document !== 'undefined') {
     const span = document.createElement('span');
-    span.textContent = text;
+    span.textContent = s;
     return span.innerHTML;
   }
-  return text
+  return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -126,8 +127,8 @@ function getPrintApplicationHtml(props: {
       <div class="section-body">${body}</div>
     </div>`;
 
-  const row = (label: string, value: string) =>
-    `<div class="row"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value || '—')}</span></div>`;
+  const row = (label: string, value: string | undefined) =>
+    `<div class="row"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value ?? '—')}</span></div>`;
 
   let body = '';
 
