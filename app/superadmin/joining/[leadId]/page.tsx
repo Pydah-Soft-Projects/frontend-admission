@@ -26,6 +26,8 @@ import {
 } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
+import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
+import { getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -229,6 +231,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
     },
     address: {
       communication: {
+        state: joining?.address?.communication?.state || '',
         doorOrStreet: joining?.address?.communication?.doorOrStreet || '',
         landmark: joining?.address?.communication?.landmark || '',
         villageOrCity: joining?.address?.communication?.villageOrCity || '',
@@ -240,6 +243,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
         ? joining.address.relatives.map((relative) => ({
           name: relative.name || '',
           relationship: relative.relationship || '',
+          state: relative.state || '',
           doorOrStreet: relative.doorOrStreet || '',
           landmark: relative.landmark || '',
           villageOrCity: relative.villageOrCity || '',
@@ -336,6 +340,21 @@ const JoiningDetailPage = () => {
   });
 
   const isNewJoining = leadId === 'new';
+
+  // State/district/mandal dropdown options for communication address (same data as lead-form)
+  const commState = formState.address.communication.state ?? '';
+  const commDistrict = formState.address.communication.district ?? '';
+  const commDistricts = useMemo(() => {
+    if (!commState) return [];
+    return getDistrictsByState(commState);
+  }, [commState]);
+  const commMandals = useMemo(() => {
+    if (!commState || !commDistrict) return [];
+    const mandals = getMandalsByStateAndDistrict(commState, commDistrict);
+    if (mandals.length > 0) return mandals;
+    if (commState.toLowerCase() === 'andhra pradesh') return getAPMandals(commDistrict);
+    return [];
+  }, [commState, commDistrict]);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['joining', leadId],
@@ -1016,16 +1035,22 @@ const JoiningDetailPage = () => {
     field: keyof JoiningFormState['address']['communication'],
     value: string
   ) => {
-    setFormState((prev) => ({
-      ...prev,
-      address: {
-        ...prev.address,
-        communication: {
-          ...prev.address.communication,
-          [field]: value,
+    setFormState((prev) => {
+      const next = { ...prev.address.communication, [field]: value };
+      if (field === 'state') {
+        delete next.district;
+        delete next.mandal;
+      } else if (field === 'district') {
+        delete next.mandal;
+      }
+      return {
+        ...prev,
+        address: {
+          ...prev.address,
+          communication: next,
         },
-      },
-    }));
+      };
+    });
   };
 
   const updateRelative = (
@@ -1035,10 +1060,14 @@ const JoiningDetailPage = () => {
   ) => {
     setFormState((prev) => {
       const nextRelatives = [...prev.address.relatives];
-      nextRelatives[index] = {
-        ...nextRelatives[index],
-        [field]: value,
-      };
+      const nextEntry = { ...nextRelatives[index], [field]: value };
+      if (field === 'state') {
+        delete nextEntry.district;
+        delete nextEntry.mandal;
+      } else if (field === 'district') {
+        delete nextEntry.mandal;
+      }
+      nextRelatives[index] = nextEntry;
       return {
         ...prev,
         address: {
@@ -1059,6 +1088,7 @@ const JoiningDetailPage = () => {
           {
             name: '',
             relationship: '',
+            state: '',
             doorOrStreet: '',
             landmark: '',
             villageOrCity: '',
@@ -1939,20 +1969,45 @@ const JoiningDetailPage = () => {
                     handleCommunicationAddressChange('villageOrCity', event.target.value.toUpperCase())
                   }
                 />
-                <Input
-                  label="Mandal"
-                  value={formState.address.communication.mandal || ''}
-                  onChange={(event) =>
-                    handleCommunicationAddressChange('mandal', event.target.value.toUpperCase())
-                  }
-                />
-                <Input
-                  label="District"
-                  value={formState.address.communication.district || ''}
-                  onChange={(event) =>
-                    handleCommunicationAddressChange('district', event.target.value.toUpperCase())
-                  }
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={formState.address.communication.state || ''}
+                    onChange={(e) => handleCommunicationAddressChange('state', e.target.value)}
+                  >
+                    <option value="">Select state</option>
+                    {getAllStates().map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">District</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={formState.address.communication.district || ''}
+                    onChange={(e) => handleCommunicationAddressChange('district', e.target.value)}
+                  >
+                    <option value="">Select district</option>
+                    {commDistricts.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mandal</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={formState.address.communication.mandal || ''}
+                    onChange={(e) => handleCommunicationAddressChange('mandal', e.target.value)}
+                  >
+                    <option value="">Select mandal</option>
+                    {commMandals.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
                 <Input
                   label="PIN Code"
                   value={formState.address.communication.pinCode || ''}
@@ -2034,20 +2089,53 @@ const JoiningDetailPage = () => {
                           updateRelative(index, 'villageOrCity', event.target.value.toUpperCase())
                         }
                       />
-                      <Input
-                        label="Mandal"
-                        value={relative.mandal || ''}
-                        onChange={(event) =>
-                          updateRelative(index, 'mandal', event.target.value.toUpperCase())
-                        }
-                      />
-                      <Input
-                        label="District"
-                        value={relative.district || ''}
-                        onChange={(event) =>
-                          updateRelative(index, 'district', event.target.value.toUpperCase())
-                        }
-                      />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          value={relative.state || ''}
+                          onChange={(e) => updateRelative(index, 'state', e.target.value)}
+                        >
+                          <option value="">Select state</option>
+                          {getAllStates().map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">District</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          value={relative.district || ''}
+                          onChange={(e) => updateRelative(index, 'district', e.target.value)}
+                        >
+                          <option value="">Select district</option>
+                          {getDistrictsByState(relative.state || '').map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mandal</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          value={relative.mandal || ''}
+                          onChange={(e) => updateRelative(index, 'mandal', e.target.value)}
+                        >
+                          <option value="">Select mandal</option>
+                          {(() => {
+                            const st = relative.state || '';
+                            const dist = relative.district || '';
+                            if (!st || !dist) return [];
+                            const m = getMandalsByStateAndDistrict(st, dist);
+                            if (m.length > 0) return m;
+                            if (st.toLowerCase() === 'andhra pradesh') return getAPMandals(dist);
+                            return [];
+                          })().map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
                       <Input
                         label="PIN Code"
                         value={relative.pinCode || ''}
