@@ -25,6 +25,7 @@ import {
   CashfreeConfigPreview,
 } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
+import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -2293,12 +2294,25 @@ const JoiningDetailPage = () => {
             </section>
 
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                9. Documents Checklist
-              </h2>
-              <p className="text-sm text-gray-500">
-                Mark each document as received to track joining completeness.
-              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                    9. Documents Checklist
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Mark each document as received to track joining completeness.
+                  </p>
+                </div>
+                <PrintableDocumentChecklist
+                  documentLabels={documentLabels as Record<string, string>}
+                  documents={formState.documents as Record<string, 'pending' | 'received' | undefined>}
+                  title="Documents Checklist"
+                  studentName={formState.studentInfo.name || (lead as any)?.name || undefined}
+                  enquiryNumber={(lead as any)?.enquiryNumber || undefined}
+                  printButtonLabel="Print checklist"
+                  className="shrink-0"
+                />
+              </div>
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 {Object.entries(documentLabels).map(([key, label]) => (
                   <div

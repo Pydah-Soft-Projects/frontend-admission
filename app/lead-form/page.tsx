@@ -101,9 +101,9 @@ export default function LeadFormPage() {
   }, [dynamicForm]);
 
 
-  // Get selected state, district for cascading dropdowns
-  const selectedState = dynamicFormData.state || '';
-  const selectedDistrict = dynamicFormData.district || '';
+  // Support both state/district/mandal and address_state/address_district/address_mandal (default student form)
+  const selectedState = dynamicFormData.state ?? dynamicFormData.address_state ?? '';
+  const selectedDistrict = dynamicFormData.district ?? dynamicFormData.address_district ?? '';
 
   // Get districts based on selected state
   const availableDistricts = useMemo(() => {
@@ -127,21 +127,35 @@ export default function LeadFormPage() {
   const handleDynamicFieldChange = (fieldName: string, value: any) => {
     setDynamicFormData((prev) => {
       const newData = { ...prev, [fieldName]: value };
-      
-      // Clear dependent fields when parent field changes
-      if (fieldName === 'state') {
-        // Clear district and mandal when state changes
+      const key = fieldName.toLowerCase();
+      if (key === 'state' || key === 'address_state') {
         delete newData.district;
+        delete newData.address_district;
         delete newData.mandal;
-      } else if (fieldName === 'district') {
-        // Clear mandal when district changes
+        delete newData.address_mandal;
+      } else if (key === 'district' || key === 'address_district') {
         delete newData.mandal;
+        delete newData.address_mandal;
       }
-      
       return newData;
     });
     setError(null);
   };
+
+  const isStateField = (field: any) => {
+    const n = (field.fieldName || '').toLowerCase();
+    return n === 'state' || n === 'address_state';
+  };
+  const isDistrictField = (field: any) => {
+    const n = (field.fieldName || '').toLowerCase();
+    return n === 'district' || n === 'address_district';
+  };
+  const isMandalField = (field: any) => {
+    const n = (field.fieldName || '').toLowerCase();
+    return n === 'mandal' || n === 'address_mandal';
+  };
+  const isLocationDropdownField = (field: any) =>
+    isStateField(field) || isDistrictField(field) || isMandalField(field);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,13 +165,24 @@ export default function LeadFormPage() {
     // Validate required dynamic form fields
     if (sortedFormFields.length > 0) {
       const missingFields: string[] = [];
+      const dataCollectionType = dynamicFormData.data_collection_type ?? '';
+      const isStaffNameRequired = dataCollectionType === 'Direct' || dataCollectionType === 'Exam Center';
+
       sortedFormFields.forEach((field: any) => {
         const value = dynamicFormData[field.fieldName];
-        // Check if required field is empty (handle different types)
-        if (field.isRequired && (value === undefined || value === null || value === '' || (typeof value === 'string' && value.trim() === ''))) {
+        const isEmpty = value === undefined || value === null || value === '' || (typeof value === 'string' && value.trim() === '');
+        if (field.isRequired && isEmpty) {
           missingFields.push(field.fieldLabel);
         }
       });
+      // Staff name is required when Data Collection Type is Direct or Exam Center
+      if (isStaffNameRequired) {
+        const staffName = dynamicFormData.staff_name;
+        const staffNameEmpty = staffName === undefined || staffName === null || staffName === '' || (typeof staffName === 'string' && staffName.trim() === '');
+        if (staffNameEmpty) {
+          missingFields.push('Staff Name');
+        }
+      }
       if (missingFields.length > 0) {
         setError(`Please fill in required fields: ${missingFields.join(', ')}`);
         setIsSubmitting(false);
@@ -309,48 +334,74 @@ export default function LeadFormPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {sortedFormFields.map((field: any) => {
                         const fieldValue = dynamicFormData[field.fieldName] || field.defaultValue || '';
-                        
-                        // Render based on field type
-                        if (field.fieldType === 'dropdown') {
-                          // Handle cascading dropdowns for state, district, mandal
-                          let dropdownOptions: Array<{ value: string; label: string }> = [];
-                          
-                          if (field.fieldName.toLowerCase() === 'state') {
-                            // State dropdown - use all states
-                            dropdownOptions = getAllStates().map(state => ({ value: state, label: state }));
-                          } else if (field.fieldName.toLowerCase() === 'district') {
-                            // District dropdown - populate based on selected state
-                            dropdownOptions = availableDistricts.map(district => ({ value: district, label: district }));
-                          } else if (field.fieldName.toLowerCase() === 'mandal') {
-                            // Mandal dropdown - populate based on selected district
-                            dropdownOptions = availableMandals.map(mandal => ({ value: mandal, label: mandal }));
-                          } else {
-                            // Regular dropdown - use options from field definition
-                            dropdownOptions = field.options || [];
-                          }
+                        const dataCollectionType = dynamicFormData.data_collection_type ?? '';
+                        const isStaffNameRequired = dataCollectionType === 'Direct' || dataCollectionType === 'Exam Center';
+                        const isFieldRequired = field.isRequired || (field.fieldName === 'staff_name' && isStaffNameRequired);
 
+                        // Location dropdowns: state, district, mandal (or address_*) — render as dropdown regardless of fieldType
+                        if (isLocationDropdownField(field)) {
+                          let dropdownOptions: Array<{ value: string; label: string }> = [];
+                          if (isStateField(field)) {
+                            dropdownOptions = getAllStates().map((state) => ({ value: state, label: state }));
+                          } else if (isDistrictField(field)) {
+                            dropdownOptions = availableDistricts.map((district) => ({ value: district, label: district }));
+                          } else if (isMandalField(field)) {
+                            dropdownOptions = availableMandals.map((mandal) => ({ value: mandal, label: mandal }));
+                          }
+                          const disabled =
+                            (isDistrictField(field) && !selectedState) ||
+                            (isMandalField(field) && (!selectedState || !selectedDistrict));
                           return (
                             <div key={field._id}>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                                {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <select
                                 value={fieldValue}
                                 onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
-                                required={field.isRequired}
-                                disabled={
-                                  (field.fieldName.toLowerCase() === 'district' && !selectedState) ||
-                                  (field.fieldName.toLowerCase() === 'mandal' && (!selectedState || !selectedDistrict))
-                                }
+                                required={isFieldRequired}
+                                disabled={disabled}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                               >
                                 <option value="">
-                                  {field.fieldName.toLowerCase() === 'district' && !selectedState
+                                  {isDistrictField(field) && !selectedState
                                     ? 'Select state first'
-                                    : field.fieldName.toLowerCase() === 'mandal' && (!selectedState || !selectedDistrict)
+                                    : isMandalField(field) && (!selectedState || !selectedDistrict)
                                     ? 'Select district first'
                                     : `Select ${field.fieldLabel}`}
                                 </option>
+                                {dropdownOptions.map((option: any) => {
+                                  const optionValue = typeof option === 'string' ? option : option.value;
+                                  const optionLabel = typeof option === 'string' ? option : option.label;
+                                  return (
+                                    <option key={optionValue} value={optionValue}>
+                                      {optionLabel}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              {field.helpText && (
+                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // Other dropdowns (from field definition)
+                        if (field.fieldType === 'dropdown') {
+                          const dropdownOptions: Array<{ value: string; label: string }> = field.options || [];
+                          return (
+                            <div key={field._id}>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
+                              </label>
+                              <select
+                                value={fieldValue}
+                                onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
+                                required={isFieldRequired}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                              >
+                                <option value="">Select {field.fieldLabel}</option>
                                 {dropdownOptions.map((option: any) => {
                                   const optionValue = typeof option === 'string' ? option : option.value;
                                   const optionLabel = typeof option === 'string' ? option : option.label;
@@ -372,7 +423,7 @@ export default function LeadFormPage() {
                           return (
                             <div key={field._id}>
                               <label className="block text-sm font-medium text-gray-700 mb-2">
-                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                                {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <div className="space-y-2">
                                 {field.options && field.options.length > 0 && field.options.map((option: any) => (
@@ -383,7 +434,7 @@ export default function LeadFormPage() {
                                       value={option.value}
                                       checked={fieldValue === option.value}
                                       onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
-                                      required={field.isRequired}
+                                      required={isFieldRequired}
                                       className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                                     />
                                     <span className="text-sm text-gray-700">{option.label}</span>
@@ -408,7 +459,7 @@ export default function LeadFormPage() {
                                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                                 />
                                 <span className="text-sm font-medium text-gray-700">
-                                  {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                                  {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                                 </span>
                               </label>
                               {field.helpText && (
@@ -422,13 +473,13 @@ export default function LeadFormPage() {
                           return (
                             <div key={field._id} className="md:col-span-2">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                                {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <textarea
                                 value={fieldValue}
                                 onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
                                 placeholder={field.placeholder || ''}
-                                required={field.isRequired}
+                                required={isFieldRequired}
                                 rows={4}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
                               />
@@ -443,7 +494,7 @@ export default function LeadFormPage() {
                           return (
                             <div key={field._id} className="md:col-span-2">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {field.fieldLabel} {field.isRequired && <span className="text-red-500">*</span>}
+                                {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <input
                                 type="file"
@@ -453,7 +504,7 @@ export default function LeadFormPage() {
                                     handleDynamicFieldChange(field.fieldName, file.name);
                                   }
                                 }}
-                                required={field.isRequired}
+                                required={isFieldRequired}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
                               />
                               {field.helpText && (
@@ -467,13 +518,13 @@ export default function LeadFormPage() {
                         return (
                           <div key={field._id}>
                             <Input
-                              label={`${field.fieldLabel} ${field.isRequired ? '*' : ''}`}
+                              label={`${field.fieldLabel} ${isFieldRequired ? '*' : ''}`}
                               name={field.fieldName}
                               type={field.fieldType === 'date' ? 'date' : field.fieldType === 'number' ? 'number' : field.fieldType === 'email' ? 'email' : field.fieldType === 'tel' ? 'tel' : 'text'}
                               value={fieldValue}
                               onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
                               placeholder={field.placeholder || ''}
-                              required={field.isRequired}
+                              required={isFieldRequired}
                             />
                             {field.helpText && (
                               <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>

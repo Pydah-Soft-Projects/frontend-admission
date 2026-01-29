@@ -144,8 +144,15 @@ const IndividualLeadPage = () => {
     return [...fields].sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
   }, [dynamicForm]);
 
-  const selectedState = dynamicFormData.state || '';
-  const selectedDistrict = dynamicFormData.district || '';
+  // Support both state/district/mandal and address_state/address_district/address_mandal (default student form)
+  const selectedState =
+    dynamicFormData.state ??
+    dynamicFormData.address_state ??
+    '';
+  const selectedDistrict =
+    dynamicFormData.district ??
+    dynamicFormData.address_district ??
+    '';
 
   const availableDistricts = useMemo(() => {
     if (!selectedState) return [] as string[];
@@ -165,17 +172,36 @@ const IndividualLeadPage = () => {
   const handleDynamicFieldChange = (fieldName: string, value: any) => {
     setDynamicFormData((prev) => {
       const next = { ...prev, [fieldName]: value };
-      // Clear dependent fields when parent changes
-      if (fieldName.toLowerCase() === 'state') {
+      const key = fieldName.toLowerCase();
+      // Clear dependent location fields when parent changes (state/district/mandal or address_*)
+      if (key === 'state' || key === 'address_state') {
         delete (next as any).district;
+        delete (next as any).address_district;
         delete (next as any).mandal;
-      } else if (fieldName.toLowerCase() === 'district') {
+        delete (next as any).address_mandal;
+      } else if (key === 'district' || key === 'address_district') {
         delete (next as any).mandal;
+        delete (next as any).address_mandal;
       }
       return next;
     });
     setErrors({});
   };
+
+  const isStateField = (field: any) => {
+    const n = (field.fieldName || '').toLowerCase();
+    return n === 'state' || n === 'address_state';
+  };
+  const isDistrictField = (field: any) => {
+    const n = (field.fieldName || '').toLowerCase();
+    return n === 'district' || n === 'address_district';
+  };
+  const isMandalField = (field: any) => {
+    const n = (field.fieldName || '').toLowerCase();
+    return n === 'mandal' || n === 'address_mandal';
+  };
+  const isLocationDropdownField = (field: any) =>
+    isStateField(field) || isDistrictField(field) || isMandalField(field);
 
   const isDynamicMode = !!(selectedFormId && sortedFormFields.length > 0);
 
@@ -299,6 +325,9 @@ const IndividualLeadPage = () => {
     // Dynamic mode: validate required dynamic fields from selected template
     if (isDynamicMode) {
       const nextErrors: Record<string, string> = {};
+      const dataCollectionType = dynamicFormData.data_collection_type ?? '';
+      const isStaffNameRequired = dataCollectionType === 'Direct' || dataCollectionType === 'Exam Center';
+
       sortedFormFields.forEach((field: any) => {
         if (!field.isRequired) return;
         const value =
@@ -313,6 +342,18 @@ const IndividualLeadPage = () => {
           nextErrors[field.fieldName] = 'Required';
         }
       });
+      // Staff name is required when Data Collection Type is Direct or Exam Center
+      if (isStaffNameRequired) {
+        const staffName = dynamicFormData.staff_name;
+        const staffNameEmpty =
+          staffName === undefined ||
+          staffName === null ||
+          staffName === '' ||
+          (typeof staffName === 'string' && !staffName.trim());
+        if (staffNameEmpty) {
+          nextErrors.staff_name = 'Required when Data Collection Type is Direct or Exam Center';
+        }
+      }
       setErrors(nextErrors);
       return Object.keys(nextErrors).length === 0;
     }
@@ -415,58 +456,97 @@ const IndividualLeadPage = () => {
                       const fieldValue =
                         dynamicFormData[field.fieldName] ?? field.defaultValue ?? '';
                       const fieldError = errors[field.fieldName];
+                      const dataCollectionType = dynamicFormData.data_collection_type ?? '';
+                      const isStaffNameRequired = dataCollectionType === 'Direct' || dataCollectionType === 'Exam Center';
+                      const isFieldRequired = field.isRequired || (field.fieldName === 'staff_name' && isStaffNameRequired);
 
-                      // Dropdowns (with cascading behaviour for state/district/mandal)
-                      if (field.fieldType === 'dropdown') {
+                      // Location dropdowns: state, district, mandal (or address_*) — render as dropdown regardless of fieldType
+                      if (isLocationDropdownField(field)) {
                         let dropdownOptions: Array<{ value: string; label: string }> = [];
-
-                        if (field.fieldName.toLowerCase() === 'state') {
+                        if (isStateField(field)) {
                           dropdownOptions = getAllStates().map((state) => ({
                             value: state,
                             label: state,
                           }));
-                        } else if (field.fieldName.toLowerCase() === 'district') {
+                        } else if (isDistrictField(field)) {
                           dropdownOptions = availableDistricts.map((district) => ({
                             value: district,
                             label: district,
                           }));
-                        } else if (field.fieldName.toLowerCase() === 'mandal') {
+                        } else if (isMandalField(field)) {
                           dropdownOptions = availableMandals.map((mandal) => ({
                             value: mandal,
                             label: mandal,
                           }));
-                        } else {
-                          dropdownOptions = field.options || [];
                         }
-
                         const disabled =
-                          (field.fieldName.toLowerCase() === 'district' && !selectedState) ||
-                          (field.fieldName.toLowerCase() === 'mandal' &&
-                            (!selectedState || !selectedDistrict));
-
+                          (isDistrictField(field) && !selectedState) ||
+                          (isMandalField(field) && (!selectedState || !selectedDistrict));
                         return (
                           <div key={field._id}>
                             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                               {field.fieldLabel}{' '}
-                              {field.isRequired && <span className="text-red-500">*</span>}
+                              {isFieldRequired && <span className="text-red-500">*</span>}
                             </label>
                             <select
                               value={fieldValue}
                               onChange={(e) =>
                                 handleDynamicFieldChange(field.fieldName, e.target.value)
                               }
-                              required={field.isRequired}
+                              required={isFieldRequired}
                               disabled={disabled}
                               className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed"
                             >
                               <option value="">
-                                {field.fieldName.toLowerCase() === 'district' && !selectedState
+                                {isDistrictField(field) && !selectedState
                                   ? 'Select state first'
-                                  : field.fieldName.toLowerCase() === 'mandal' &&
-                                    (!selectedState || !selectedDistrict)
+                                  : isMandalField(field) && (!selectedState || !selectedDistrict)
                                   ? 'Select district first'
                                   : `Select ${field.fieldLabel}`}
                               </option>
+                              {dropdownOptions.map((option: any) => {
+                                const optionValue =
+                                  typeof option === 'string' ? option : option.value;
+                                const optionLabel =
+                                  typeof option === 'string' ? option : option.label;
+                                return (
+                                  <option key={optionValue} value={optionValue}>
+                                    {optionLabel}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                            {fieldError && (
+                              <p className="mt-1 text-sm text-red-600">{fieldError}</p>
+                            )}
+                            {field.helpText && (
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {field.helpText}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // Other dropdowns (from field definition)
+                      if (field.fieldType === 'dropdown') {
+                        const dropdownOptions: Array<{ value: string; label: string }> =
+                          field.options || [];
+                        return (
+                          <div key={field._id}>
+                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                              {field.fieldLabel}{' '}
+                              {isFieldRequired && <span className="text-red-500">*</span>}
+                            </label>
+                            <select
+                              value={fieldValue}
+                              onChange={(e) =>
+                                handleDynamicFieldChange(field.fieldName, e.target.value)
+                              }
+                              required={isFieldRequired}
+                              className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed"
+                            >
+                              <option value="">Select {field.fieldLabel}</option>
                               {dropdownOptions.map((option: any) => {
                                 const optionValue =
                                   typeof option === 'string' ? option : option.value;
@@ -496,7 +576,7 @@ const IndividualLeadPage = () => {
                           <div key={field._id}>
                             <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-200">
                               {field.fieldLabel}{' '}
-                              {field.isRequired && <span className="text-red-500">*</span>}
+                              {isFieldRequired && <span className="text-red-500">*</span>}
                             </label>
                             <div className="space-y-2">
                               {field.options &&
@@ -517,7 +597,7 @@ const IndividualLeadPage = () => {
                                           e.target.value
                                         )
                                       }
-                                      required={field.isRequired}
+                                      required={isFieldRequired}
                                       className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                                     />
                                     <span className="text-sm text-slate-700 dark:text-slate-200">
@@ -555,7 +635,7 @@ const IndividualLeadPage = () => {
                               />
                               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
                                 {field.fieldLabel}{' '}
-                                {field.isRequired && <span className="text-red-500">*</span>}
+                                {isFieldRequired && <span className="text-red-500">*</span>}
                               </span>
                             </label>
                             {fieldError && (
@@ -575,7 +655,7 @@ const IndividualLeadPage = () => {
                           <div key={field._id} className="md:col-span-2">
                             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                               {field.fieldLabel}{' '}
-                              {field.isRequired && <span className="text-red-500">*</span>}
+                              {isFieldRequired && <span className="text-red-500">*</span>}
                             </label>
                             <textarea
                               value={fieldValue}
@@ -583,7 +663,7 @@ const IndividualLeadPage = () => {
                                 handleDynamicFieldChange(field.fieldName, e.target.value)
                               }
                               placeholder={field.placeholder || ''}
-                              required={field.isRequired}
+                              required={isFieldRequired}
                               rows={4}
                               className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                             />
@@ -604,7 +684,7 @@ const IndividualLeadPage = () => {
                           <div key={field._id} className="md:col-span-2">
                             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                               {field.fieldLabel}{' '}
-                              {field.isRequired && <span className="text-red-500">*</span>}
+                              {isFieldRequired && <span className="text-red-500">*</span>}
                             </label>
                             <input
                               type="file"
@@ -614,7 +694,7 @@ const IndividualLeadPage = () => {
                                   handleDynamicFieldChange(field.fieldName, file.name);
                                 }
                               }}
-                              required={field.isRequired}
+                              required={isFieldRequired}
                               className="block w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                             />
                             {fieldError && (
@@ -633,7 +713,7 @@ const IndividualLeadPage = () => {
                       return (
                         <div key={field._id}>
                           <Input
-                            label={`${field.fieldLabel}${field.isRequired ? ' *' : ''}`}
+                            label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
                             name={field.fieldName}
                             type={
                               field.fieldType === 'date'

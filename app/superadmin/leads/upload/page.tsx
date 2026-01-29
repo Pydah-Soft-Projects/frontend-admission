@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { auth } from '@/lib/auth';
-import { leadAPI } from '@/lib/api';
+import { leadAPI, formBuilderAPI } from '@/lib/api';
 import {
   LeadUploadData,
   BulkUploadResponse,
@@ -40,6 +41,60 @@ export default function BulkUploadPage() {
   const jobInfoRef = useRef<BulkUploadJobResponse | null>(null);
   const [jobStatus, setJobStatus] = useState<ImportJobStatusResponse | null>(null);
   const jobPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+
+  // Form Builder: list forms for template selection
+  const { data: formsData } = useQuery({
+    queryKey: ['form-builder', 'forms'],
+    queryFn: async () => {
+      const response = await formBuilderAPI.listForms({ showInactive: false, includeFieldCount: true });
+      return response;
+    },
+  });
+
+  const forms = useMemo(() => {
+    const payload = (formsData as any)?.data ?? formsData;
+    if (!payload) return [] as any[];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray((payload as any).data)) return (payload as any).data;
+    return [] as any[];
+  }, [formsData]);
+
+  // Selected form with fields (for template generation)
+  const { data: formDataResponse } = useQuery({
+    queryKey: ['form-builder', 'form', selectedFormId],
+    queryFn: async () => {
+      if (!selectedFormId) return null;
+      const response = await formBuilderAPI.getForm(selectedFormId, {
+        includeFields: true,
+        showInactive: false,
+      });
+      return response;
+    },
+    enabled: !!selectedFormId,
+  });
+
+  const selectedForm = useMemo(() => {
+    if (!formDataResponse) return null;
+    const payload = (formDataResponse as any)?.data ?? formDataResponse;
+    return payload ?? null;
+  }, [formDataResponse]);
+
+  const selectedFormFields = useMemo(() => {
+    if (!selectedForm?.fields) return [] as any[];
+    const fields = Array.isArray(selectedForm.fields) ? selectedForm.fields : [];
+    return [...fields].sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  }, [selectedForm]);
+
+  // Auto-select default form on first load
+  useEffect(() => {
+    if (!selectedFormId && forms.length > 0) {
+      const defaultForm = forms.find((f: any) => f.isDefault) ?? forms[0];
+      if (defaultForm) {
+        setSelectedFormId(defaultForm.id || defaultForm._id);
+      }
+    }
+  }, [forms, selectedFormId]);
 
   const clearProgressInterval = () => {
     if (progressIntervalRef.current) {
@@ -349,6 +404,10 @@ export default function BulkUploadPage() {
       }
       formData.append('source', source || 'Bulk Upload');
 
+      if (selectedFormId) {
+        formData.append('formId', selectedFormId);
+      }
+
       if (fileType === 'excel') {
         formData.append('selectedSheets', JSON.stringify(selectedSheets));
       }
@@ -399,67 +458,78 @@ export default function BulkUploadPage() {
   };
 
   const downloadTemplate = (format: 'csv' | 'excel') => {
-    // Template data with sample row
-    // Note: enquiryNumber is auto-generated, not included in template
-    const templateData = [
-      {
-        hallTicketNumber: 'HT123456',
-        name: 'John Doe',
-        phone: '9876543210',
-        email: 'john@example.com',
-        fatherName: 'Father Name',
-        fatherPhone: '9876543211',
-        motherName: 'Mother Name',
-        gender: 'Male',
-        village: 'Village Name',
-        district: 'District Name',
-        courseInterested: 'Engineering',
-        interCollege: 'ABC Junior College',
-        rank: 125,
-        mandal: 'Mandal Name',
-        state: 'State Name',
-        quota: 'Not Applicable',
-        applicationStatus: 'Qualified',
-      },
-    ];
+    // When a form is selected, use its fields for template; otherwise use static template
+    const useFormTemplate = selectedFormId && selectedFormFields.length > 0;
+    const headers = useFormTemplate
+      ? selectedFormFields.map((f: any) => f.fieldName || f.field_name || '')
+      : [
+          'hallTicketNumber',
+          'name',
+          'phone',
+          'email',
+          'fatherName',
+          'fatherPhone',
+          'motherName',
+          'gender',
+          'village',
+          'district',
+          'courseInterested',
+          'interCollege',
+          'rank',
+          'mandal',
+          'state',
+          'quota',
+          'applicationStatus',
+        ];
+
+    const sampleRow: Record<string, string | number> = useFormTemplate
+      ? {}
+      : {
+          hallTicketNumber: 'HT123456',
+          name: 'John Doe',
+          phone: '9876543210',
+          email: 'john@example.com',
+          fatherName: 'Father Name',
+          fatherPhone: '9876543211',
+          motherName: 'Mother Name',
+          gender: 'Male',
+          village: 'Village Name',
+          district: 'District Name',
+          courseInterested: 'Engineering',
+          interCollege: 'ABC Junior College',
+          rank: 125,
+          mandal: 'Mandal Name',
+          state: 'State Name',
+          quota: 'Not Applicable',
+          applicationStatus: 'Qualified',
+        };
+
+    if (useFormTemplate) {
+      headers.forEach((h: string) => {
+        if (h) sampleRow[h] = '';
+      });
+    }
+
+    const templateData = [sampleRow];
 
     if (format === 'csv') {
-      // Create CSV
-      const headers = [
-        'hallTicketNumber',
-        'name',
-        'phone',
-        'email',
-        'fatherName',
-        'fatherPhone',
-        'motherName',
-        'gender',
-        'village',
-        'district',
-        'courseInterested',
-        'interCollege',
-        'rank',
-        'mandal',
-        'state',
-        'quota',
-        'applicationStatus',
-      ];
-      
       const csvContent = [
-        headers.join(','),
+        headers.filter(Boolean).join(','),
         ...templateData.map((row) =>
-          headers.map((header) => {
-            const value = row[header as keyof typeof row] || '';
-            // Escape commas and quotes in CSV
-            if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-              return `"${value.replace(/"/g, '""')}"`;
-            }
-            return value;
-          }).join(',')
+          headers
+            .filter(Boolean)
+            .map((header) => {
+              const value = row[header] ?? '';
+              const str = typeof value === 'number' ? String(value) : String(value ?? '');
+              if (str.includes(',') || str.includes('"')) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            })
+            .join(',')
         ),
       ].join('\n');
 
-      // Download CSV
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -470,12 +540,9 @@ export default function BulkUploadPage() {
       link.click();
       document.body.removeChild(link);
     } else {
-      // Create Excel
       const worksheet = XLSX.utils.json_to_sheet(templateData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
-      
-      // Download Excel
       XLSX.writeFile(workbook, 'lead_template.xlsx');
     }
   };
@@ -496,6 +563,28 @@ export default function BulkUploadPage() {
         </div>
 
         <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+              Form Template
+            </label>
+            <select
+              value={selectedFormId || ''}
+              onChange={(e) => setSelectedFormId(e.target.value || null)}
+              className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+            >
+              <option value="">Select a form (or use default columns)</option>
+              {forms.map((form: any) => (
+                <option key={form.id || form._id} value={form.id || form._id}>
+                  {form.name}
+                  {form.isDefault ? ' (Default)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+              Templates and upload columns are based on the selected form. Select the same form used for individual leads for consistent mapping.
+            </p>
+          </div>
+
           <Input
             label="Source"
             value={source}
