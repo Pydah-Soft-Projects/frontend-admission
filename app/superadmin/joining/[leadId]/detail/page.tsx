@@ -9,6 +9,7 @@ import { joiningAPI, paymentAPI, admissionAPI } from '@/lib/api';
 import { Joining, PaymentSummary, PaymentTransaction, Admission } from '@/types';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
+import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -132,6 +133,19 @@ export default function JoiningDetailPage() {
           </p>
         </div>
         <div className="flex gap-3">
+          {joining && (
+            <PrintableStudentApplication
+              application={joining}
+              enquiryNumber={lead?.enquiryNumber}
+              admissionNumber={admission?.admissionNumber}
+              courseName={getCourseName(joining.courseInfo?.courseId) || undefined}
+              branchName={getBranchName(joining.courseInfo?.branchId) || undefined}
+              paymentSummary={paymentSummary ?? undefined}
+              transactions={transactions}
+              title="Student Application"
+              printButtonLabel="Print application"
+            />
+          )}
           {joining?.status === 'draft' && (
             <Link href={`/superadmin/joining/${leadId}`}>
               <Button variant="primary">
