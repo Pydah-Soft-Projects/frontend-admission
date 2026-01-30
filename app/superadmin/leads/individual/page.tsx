@@ -11,9 +11,8 @@ import { Card } from '@/components/ui/Card';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { LeadUploadData } from '@/types';
-import { getAllDistricts, getMandalsByDistrict } from '@/lib/andhra-pradesh-data';
+import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
-import { getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 type LeadFormState = Required<
   Pick<
@@ -76,13 +75,13 @@ const IndividualLeadPage = () => {
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
 
-  // Get districts from hardcoded data
-  const districts = useMemo(() => getAllDistricts(), []);
+  // Get districts from AP data (manual form uses AP only)
+  const districts = useMemo(() => getAPDistricts(), []);
 
   // Get mandals based on selected district
   const mandals = useMemo(() => {
     if (!formState.district) return [];
-    return getMandalsByDistrict(formState.district);
+    return getAPMandals(formState.district);
   }, [formState.district]);
 
   // -------- Dynamic Form Builder integration --------
@@ -156,6 +155,7 @@ const IndividualLeadPage = () => {
 
   const availableDistricts = useMemo(() => {
     if (!selectedState) return [] as string[];
+    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
     return getDistrictsByState(selectedState);
   }, [selectedState]);
 

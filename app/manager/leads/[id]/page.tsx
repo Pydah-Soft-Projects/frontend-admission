@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
-import { getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
+import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 // Timeline item type
 interface TimelineItem {
@@ -512,6 +512,7 @@ export default function ManagerLeadDetailPage() {
   const selectedDistrict = formData.district ?? lead?.district ?? '';
   const availableDistricts = useMemo(() => {
     if (!selectedState) return [];
+    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
     return getDistrictsByState(selectedState);
   }, [selectedState]);
   const availableMandals = useMemo(() => {

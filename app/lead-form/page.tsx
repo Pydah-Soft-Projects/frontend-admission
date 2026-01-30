@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
-import { getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
+import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 export default function LeadFormPage() {
   const router = useRouter();
@@ -105,9 +105,10 @@ export default function LeadFormPage() {
   const selectedState = dynamicFormData.state ?? dynamicFormData.address_state ?? '';
   const selectedDistrict = dynamicFormData.district ?? dynamicFormData.address_district ?? '';
 
-  // Get districts based on selected state
+  // Get districts based on selected state (use AP data when state is Andhra Pradesh)
   const availableDistricts = useMemo(() => {
     if (!selectedState) return [];
+    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
     return getDistrictsByState(selectedState);
   }, [selectedState]);
 

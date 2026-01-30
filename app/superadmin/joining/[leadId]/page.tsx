@@ -27,7 +27,7 @@ import {
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
-import { getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
+import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -346,6 +346,7 @@ const JoiningDetailPage = () => {
   const commDistrict = formState.address.communication.district ?? '';
   const commDistricts = useMemo(() => {
     if (!commState) return [];
+    if (commState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
     return getDistrictsByState(commState);
   }, [commState]);
   const commMandals = useMemo(() => {
@@ -2110,7 +2111,7 @@ const JoiningDetailPage = () => {
                           onChange={(e) => updateRelative(index, 'district', e.target.value)}
                         >
                           <option value="">Select district</option>
-                          {getDistrictsByState(relative.state || '').map((d) => (
+                          {(relative.state?.toLowerCase() === 'andhra pradesh' ? getAPDistricts() : getDistrictsByState(relative.state || '')).map((d) => (
                             <option key={d} value={d}>{d}</option>
                           ))}
                         </select>
