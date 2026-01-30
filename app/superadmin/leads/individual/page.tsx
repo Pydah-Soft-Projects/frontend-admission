@@ -274,7 +274,7 @@ const IndividualLeadPage = () => {
           interCollege:
             getFieldValue(['interCollege', 'college', 'collegeName']) || undefined,
           rank: rankValue,
-          village: getFieldValue(['village', 'city', 'town']) || '',
+          village: getFieldValue(['village', 'city', 'town', 'address_village_city']) || '',
           state: getFieldValue(['state', 'address_state']) || '',
           district: getFieldValue(['district', 'address_district']) || '',
           mandal: getFieldValue(['mandal', 'tehsil', 'address_mandal']) || '',

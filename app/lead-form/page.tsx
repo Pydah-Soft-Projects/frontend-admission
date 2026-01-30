@@ -224,7 +224,7 @@ export default function LeadFormPage() {
         courseInterested: getFieldValue(['courseInterested', 'course', 'courseName']) || undefined,
         interCollege: getFieldValue(['interCollege', 'college', 'collegeName']) || undefined,
         rank: getFieldValue(['rank']) ? Number(getFieldValue(['rank'])) : undefined,
-        village: getFieldValue(['village', 'city', 'town']) || '',
+        village: getFieldValue(['village', 'city', 'town', 'address_village_city']) || '',
         state: getFieldValue(['state']) || '',
         district: getFieldValue(['district']) || '',
         mandal: getFieldValue(['mandal', 'tehsil']) || '',
