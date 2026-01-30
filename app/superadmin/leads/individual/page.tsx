@@ -260,24 +260,24 @@ const IndividualLeadPage = () => {
           rankRaw && !Number.isNaN(Number(rankRaw)) ? Number(rankRaw) : undefined;
 
         const payload = {
-          name: getFieldValue(['name', 'fullName', 'studentName']) || '',
-          phone: getFieldValue(['phone', 'phoneNumber', 'mobile', 'contactNumber']) || '',
-          email: getFieldValue(['email', 'emailAddress']) || undefined,
+          name: getFieldValue(['name', 'fullName', 'studentName', 'student_name']) || '',
+          phone: getFieldValue(['phone', 'phoneNumber', 'mobile', 'contactNumber', 'student_phone']) || '',
+          email: getFieldValue(['email', 'emailAddress', 'student_email']) || undefined,
           fatherName: getFieldValue(['fatherName', 'father_name', 'fathersName']) || '',
           fatherPhone:
             getFieldValue(['fatherPhone', 'father_phone', 'fathersPhone', 'fatherPhoneNumber']) ||
             '',
           motherName: getFieldValue(['motherName', 'mother_name', 'mothersName']) || undefined,
-          gender: getFieldValue(['gender']) || 'Not Specified',
+          gender: getFieldValue(['gender', 'student_gender']) || 'Not Specified',
           courseInterested:
             getFieldValue(['courseInterested', 'course', 'courseName']) || undefined,
           interCollege:
             getFieldValue(['interCollege', 'college', 'collegeName']) || undefined,
           rank: rankValue,
           village: getFieldValue(['village', 'city', 'town']) || '',
-          state: getFieldValue(['state']) || '',
-          district: getFieldValue(['district']) || '',
-          mandal: getFieldValue(['mandal', 'tehsil']) || '',
+          state: getFieldValue(['state', 'address_state']) || '',
+          district: getFieldValue(['district', 'address_district']) || '',
+          mandal: getFieldValue(['mandal', 'tehsil', 'address_mandal']) || '',
           quota: 'Not Applicable',
           applicationStatus: 'Not Provided',
           source: 'Manual Form',
