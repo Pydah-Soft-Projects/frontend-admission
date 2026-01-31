@@ -8,7 +8,8 @@ export type PermissionModuleKey =
   | 'payments'
   | 'users'
   | 'communications'
-  | 'reports';
+  | 'reports'
+  | 'formBuilder';
 
 export interface PermissionModuleDefinition {
   key: PermissionModuleKey;
@@ -46,6 +47,11 @@ export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
     key: 'reports',
     label: 'Reports',
     description: 'View call reports and lead conversion analytics.',
+  },
+  {
+    key: 'formBuilder',
+    label: 'Form Builder',
+    description: 'Create and manage dynamic forms for lead generation and UTM Builder.',
   },
 ];
 

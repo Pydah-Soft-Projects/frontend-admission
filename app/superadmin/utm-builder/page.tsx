@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { utmAPI } from '@/lib/api';
+import { useState, useMemo, useEffect } from 'react';
+import { utmAPI, formBuilderAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -127,6 +127,7 @@ export default function UtmBuilderPage() {
     influencerName: '',
   });
 
+  const [selectedFormId, setSelectedFormId] = useState<string>('');
   const [generatedUrl, setGeneratedUrl] = useState('');
   const [shortUrl, setShortUrl] = useState('');
   const [currentUrlId, setCurrentUrlId] = useState<string | null>(null);
@@ -136,6 +137,94 @@ export default function UtmBuilderPage() {
   // Analytics modal state
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [selectedUrlId, setSelectedUrlId] = useState<string | null>(null);
+
+  // Fetch forms for selection
+  const { data: formsData } = useQuery({
+    queryKey: ['form-builder', 'forms'],
+    queryFn: async () => {
+      const response = await formBuilderAPI.listForms({ showInactive: false });
+      return response;
+    },
+  });
+
+  const forms = useMemo(() => {
+    const payload = formsData?.data;
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    if (payload && Array.isArray((payload as any).data)) {
+      return (payload as any).data;
+    }
+    return [];
+  }, [formsData]);
+
+  // Fetch selected form details with fields for validation
+  const { data: selectedFormData } = useQuery({
+    queryKey: ['form-builder', 'form', selectedFormId],
+    queryFn: async () => {
+      if (!selectedFormId) return null;
+      const response = await formBuilderAPI.getForm(selectedFormId, { includeFields: true, showInactive: false });
+      return response;
+    },
+    enabled: !!selectedFormId,
+  });
+
+  const selectedForm = useMemo(() => {
+    if (!selectedFormData?.data) return null;
+    return selectedFormData.data;
+  }, [selectedFormData]);
+
+  // Set default form as selected by default
+  useEffect(() => {
+    if (forms.length > 0 && !selectedFormId) {
+      const defaultForm = forms.find((form: any) => form.isDefault);
+      if (defaultForm) {
+        setSelectedFormId(defaultForm._id);
+      }
+    }
+  }, [forms, selectedFormId]);
+
+  // Validation function to check if form has required fields
+  const validateFormFields = (): { isValid: boolean; error?: string } => {
+    if (!selectedFormId) {
+      return { isValid: false, error: 'Please select a form' };
+    }
+
+    if (!selectedForm?.fields || selectedForm.fields.length === 0) {
+      return { isValid: false, error: 'Selected form has no fields. Please add fields to the form first.' };
+    }
+
+    const fields = selectedForm.fields;
+    const fieldNames = fields.map((f: any) => f.fieldName?.toLowerCase() || '');
+
+    // Check for student name field (case-insensitive)
+    const nameFieldVariations = ['name', 'fullname', 'full_name', 'studentname', 'student_name', 'full name', 'student name'];
+    const hasNameField = fieldNames.some((name: string) => 
+      nameFieldVariations.some(variation => name.includes(variation))
+    );
+
+    // Check for primary phone number field (case-insensitive)
+    const phoneFieldVariations = ['phone', 'phonenumber', 'phone_number', 'mobile', 'mobilenumber', 'mobile_number', 'contactnumber', 'contact_number', 'primaryphone', 'primary_phone', 'phone number', 'mobile number', 'contact number', 'primary phone'];
+    const hasPhoneField = fieldNames.some((name: string) => 
+      phoneFieldVariations.some(variation => name.includes(variation))
+    );
+
+    if (!hasNameField) {
+      return { 
+        isValid: false, 
+        error: 'Selected form must have a student name field. Please add a field with name containing "name" (e.g., "Name", "Full Name", "Student Name").' 
+      };
+    }
+
+    if (!hasPhoneField) {
+      return { 
+        isValid: false, 
+        error: 'Selected form must have a primary phone number field. Please add a field with name containing "phone" or "mobile" (e.g., "Phone", "Phone Number", "Mobile", "Contact Number").' 
+      };
+    }
+
+    return { isValid: true };
+  };
   
   // Fetch analytics data when modal is open
   const { data: analyticsData, isLoading: isLoadingAnalytics } = useQuery({
@@ -169,6 +258,13 @@ export default function UtmBuilderPage() {
       return;
     }
 
+    // Validate form has required fields
+    const validation = validateFormFields();
+    if (!validation.isValid) {
+      showToast.error(validation.error || 'Form validation failed');
+      return;
+    }
+
     setIsGenerating(true);
     try {
       // Format influencer source with name
@@ -185,6 +281,7 @@ export default function UtmBuilderPage() {
         utmCampaign: formData.utmCampaign || undefined,
         utmTerm: formData.utmTerm || undefined,
         utmContent: formData.utmContent || undefined,
+        formId: selectedFormId || undefined,
       });
 
       const url = response.data?.url || response.url;
@@ -211,6 +308,13 @@ export default function UtmBuilderPage() {
       return;
     }
 
+    // Validate form has required fields
+    const validation = validateFormFields();
+    if (!validation.isValid) {
+      showToast.error(validation.error || 'Form validation failed');
+      return;
+    }
+
     setIsShortening(true);
     try {
       // Format influencer source with name
@@ -227,6 +331,7 @@ export default function UtmBuilderPage() {
         utmCampaign: formData.utmCampaign || undefined,
         utmTerm: formData.utmTerm || undefined,
         utmContent: formData.utmContent || undefined,
+        formId: selectedFormId || undefined,
         useMeaningfulCode: formData.useMeaningfulCode,
         expiresAt: formData.expiresAt || undefined,
       });
@@ -334,6 +439,53 @@ export default function UtmBuilderPage() {
                 required
               />
               <p className="text-xs text-gray-500 mt-1">The base URL where your lead form is located</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                Select Form (Required)
+              </label>
+              <select
+                value={selectedFormId}
+                onChange={(e) => setSelectedFormId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-sm"
+              >
+                <option value="">Select a form</option>
+                {forms.map((form: any) => (
+                  <option key={form._id} value={form._id}>
+                    {form.name} {form.isDefault && '(Default)'}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                The selected form will be used when this UTM URL is accessed. Form must include a student name field and a primary phone number field.
+              </p>
+              {selectedFormId && selectedForm && (
+                <div className="mt-2 text-xs">
+                  {(() => {
+                    const validation = validateFormFields();
+                    if (validation.isValid) {
+                      return (
+                        <div className="text-green-600 flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Form validation passed: Contains student name and phone number fields
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="text-red-600 flex items-start gap-1">
+                          <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>{validation.error}</span>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
             </div>
 
             <div>

@@ -38,7 +38,7 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
     icon: AcademicIcon,
     permissionKey: 'joining',
     children: [
-      // { href: '/superadmin/joining/in-progress', label: 'In Progress', icon: AcademicIcon, permissionKey: 'joining' },
+      { href: '/superadmin/joining', label: 'Joining Pipeline', icon: AcademicIcon, permissionKey: 'joining' },
       { href: '/superadmin/joining/confirmed', label: 'Confirmed Leads', icon: ListIcon, permissionKey: 'joining' },
       { href: '/superadmin/joining/completed', label: 'Admissions', icon: AcademicIcon, permissionKey: 'joining' },
     ],
@@ -56,6 +56,7 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
   },
   { href: '/superadmin/users', label: 'User Management', icon: UserIcon, permissionKey: 'users' },
   { href: '/superadmin/communications/templates', label: 'SMS Templates', icon: TemplateIcon, permissionKey: 'communications' },
+  { href: '/superadmin/form-builder', label: 'Form Builder', icon: TemplateIcon, permissionKey: 'formBuilder' },
   { href: '/superadmin/utm-builder', label: 'UTM Builder', icon: TemplateIcon, permissionKey: 'leads' },
   { href: '/superadmin/reports', label: 'Reports', icon: ReportIcon, permissionKey: 'reports' },
 ];

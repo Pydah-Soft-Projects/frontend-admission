@@ -340,6 +340,7 @@ export interface JoiningReservation {
 }
 
 export interface JoiningCommunicationAddress {
+  state?: string;
   doorOrStreet?: string;
   landmark?: string;
   villageOrCity?: string;

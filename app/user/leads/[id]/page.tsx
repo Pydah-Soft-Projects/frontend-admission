@@ -21,6 +21,8 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
+import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
 // Timeline item type
 interface TimelineItem {
@@ -502,6 +504,22 @@ export default function UserLeadDetailPage() {
       });
     }
   }, [lead, isEditing]);
+
+  // State/district/mandal dropdown options (same data as lead-form and individual)
+  const selectedState = formData.state ?? lead?.state ?? '';
+  const selectedDistrict = formData.district ?? lead?.district ?? '';
+  const availableDistricts = useMemo(() => {
+    if (!selectedState) return [];
+    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
+    return getDistrictsByState(selectedState);
+  }, [selectedState]);
+  const availableMandals = useMemo(() => {
+    if (!selectedState || !selectedDistrict) return [];
+    const mandals = getMandalsByStateAndDistrict(selectedState, selectedDistrict);
+    if (mandals.length > 0) return mandals;
+    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPMandals(selectedDistrict);
+    return [];
+  }, [selectedState, selectedDistrict]);
 
   // Mutations
   const updateMutation = useMutation({
@@ -1004,27 +1022,50 @@ export default function UserLeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mandal *</label>
-                    <Input
-                      value={formData.mandal || ''}
-                      onChange={(e) => setFormData({ ...formData, mandal: e.target.value })}
-                      required
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      value={formData.state || 'Andhra Pradesh'}
+                      onChange={(e) => {
+                        const state = e.target.value;
+                        setFormData({ ...formData, state, district: undefined, mandal: undefined });
+                      }}
+                    >
+                      {getAllStates().map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">District *</label>
-                    <Input
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                       value={formData.district || ''}
-                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                      onChange={(e) => {
+                        const district = e.target.value;
+                        setFormData({ ...formData, district, mandal: undefined });
+                      }}
                       required
-                    />
+                    >
+                      <option value="">Select district</option>
+                      {availableDistricts.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                    <Input
-                      value={formData.state || 'Andhra Pradesh'}
-                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mandal *</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      value={formData.mandal || ''}
+                      onChange={(e) => setFormData({ ...formData, mandal: e.target.value })}
+                      required
+                    >
+                      <option value="">Select mandal</option>
+                      {availableMandals.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Quota</label>

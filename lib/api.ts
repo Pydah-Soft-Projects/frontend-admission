@@ -17,6 +17,10 @@ import type {
 // API Base URL - Update this with your backend URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+// CRM Backend URL for SSO token verification
+export const CRM_BACKEND_URL = process.env.NEXT_PUBLIC_CRM_BACKEND_URL || 'http://localhost:3000';
+export const CRM_FRONTEND_URL = process.env.NEXT_PUBLIC_CRM_FRONTEND_URL || 'http://localhost:5173';
+
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -70,6 +74,27 @@ export const authAPI = {
     // Backend returns { success: true, data: {...}, message: "..." }
     // Extract the nested data property for consistency
     return response.data?.data || response.data;
+  },
+  // SSO Token Verification (calls CRM backend)
+  verifySSOToken: async (encryptedToken: string) => {
+    const response = await fetch(`${CRM_BACKEND_URL}/auth/verify-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ encryptedToken }),
+    });
+    return response.json();
+  },
+  // Create SSO session (calls admissions backend)
+  createSSOSession: async (ssoData: {
+    userId: string;
+    role: string;
+    portalId: string;
+    ssoToken: string;
+  }) => {
+    const response = await api.post('/auth/sso-session', ssoData);
+    return response.data;
   },
 };
 
@@ -808,12 +833,20 @@ export const utmAPI = {
     utmCampaign?: string;
     utmTerm?: string;
     utmContent?: string;
+    formId?: string;
   }) => {
     const response = await api.post('/utm/build-url', data);
     return response.data;
   },
   trackClick: async (originalUrl: string) => {
-    const response = await api.post('/utm/track-click', { originalUrl });
+    // Use public API instance since this is a public endpoint
+    const publicApi = axios.create({
+      baseURL: API_BASE_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    const response = await publicApi.post('/utm/track-click', { originalUrl });
     return response.data;
   },
   shortenUrl: async (data: {
@@ -823,6 +856,7 @@ export const utmAPI = {
     utmCampaign?: string;
     utmTerm?: string;
     utmContent?: string;
+    formId?: string;
     shortCode?: string;
     useMeaningfulCode?: boolean;
     expiresAt?: string;
@@ -839,6 +873,102 @@ export const utmAPI = {
   },
   getUrlAnalytics: async (urlId: string) => {
     const response = await api.get(`/utm/analytics/${urlId}`);
+    return response.data;
+  },
+};
+
+// Form Builder API
+export const formBuilderAPI = {
+  listForms: async (params?: { showInactive?: boolean; includeFieldCount?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.showInactive) queryParams.append('showInactive', 'true');
+    if (params?.includeFieldCount === false) queryParams.append('includeFieldCount', 'false');
+    const query = queryParams.toString();
+    const response = await api.get(`/form-builder/forms${query ? `?${query}` : ''}`);
+    return response.data;
+  },
+  getForm: async (formId: string, params?: { includeFields?: boolean; showInactive?: boolean; public?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.includeFields === false) queryParams.append('includeFields', 'false');
+    if (params?.showInactive) queryParams.append('showInactive', 'true');
+    const query = queryParams.toString();
+    
+    // Use public endpoint if requested (for lead form page)
+    const endpoint = params?.public 
+      ? `/form-builder/forms/public/${formId}${query ? `?${query}` : ''}`
+      : `/form-builder/forms/${formId}${query ? `?${query}` : ''}`;
+    
+    // For public endpoint, use public API instance
+    if (params?.public) {
+      const publicApi = axios.create({
+        baseURL: API_BASE_URL,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const response = await publicApi.get(endpoint);
+      return response.data;
+    }
+    
+    const response = await api.get(endpoint);
+    return response.data;
+  },
+  createForm: async (data: { name: string; description?: string; isDefault?: boolean }) => {
+    const response = await api.post('/form-builder/forms', data);
+    return response.data;
+  },
+  updateForm: async (formId: string, data: { name?: string; description?: string; isDefault?: boolean; isActive?: boolean }) => {
+    const response = await api.put(`/form-builder/forms/${formId}`, data);
+    return response.data;
+  },
+  deleteForm: async (formId: string) => {
+    const response = await api.delete(`/form-builder/forms/${formId}`);
+    return response.data;
+  },
+  listFields: async (formId: string, params?: { showInactive?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.showInactive) queryParams.append('showInactive', 'true');
+    const query = queryParams.toString();
+    const response = await api.get(`/form-builder/forms/${formId}/fields${query ? `?${query}` : ''}`);
+    return response.data;
+  },
+  createField: async (formId: string, data: {
+    fieldName: string;
+    fieldType: string;
+    fieldLabel: string;
+    placeholder?: string;
+    isRequired?: boolean;
+    validationRules?: Record<string, any>;
+    displayOrder?: number;
+    options?: Array<{ value: string; label: string }>;
+    defaultValue?: string;
+    helpText?: string;
+  }) => {
+    const response = await api.post(`/form-builder/forms/${formId}/fields`, data);
+    return response.data;
+  },
+  updateField: async (fieldId: string, data: {
+    fieldName?: string;
+    fieldType?: string;
+    fieldLabel?: string;
+    placeholder?: string;
+    isRequired?: boolean;
+    validationRules?: Record<string, any>;
+    displayOrder?: number;
+    options?: Array<{ value: string; label: string }>;
+    defaultValue?: string;
+    helpText?: string;
+    isActive?: boolean;
+  }) => {
+    const response = await api.put(`/form-builder/fields/${fieldId}`, data);
+    return response.data;
+  },
+  deleteField: async (fieldId: string) => {
+    const response = await api.delete(`/form-builder/fields/${fieldId}`);
+    return response.data;
+  },
+  reorderFields: async (formId: string, fieldIds: string[]) => {
+    const response = await api.put(`/form-builder/forms/${formId}/fields/reorder`, { fieldIds });
     return response.data;
   },
 };
