@@ -140,6 +140,20 @@ export default function BulkUploadPage() {
 
   const limitedPreviewRows = useMemo<PreviewRow[]>(() => previewRows.slice(0, 10), [previewRows]);
 
+  // Dynamic preview columns: use actual column names from the sheet (not fixed name/phone/mandal/state)
+  const previewColumns = useMemo(() => {
+    if (limitedPreviewRows.length === 0) return [];
+    const keys = new Set<string>();
+    limitedPreviewRows.forEach((row) => {
+      Object.keys(row).forEach((k) => {
+        if (k !== '__sheetName') keys.add(k);
+      });
+    });
+    // Use order from first row so columns match the sheet
+    const first = limitedPreviewRows[0];
+    return Object.keys(first).filter((k) => k !== '__sheetName');
+  }, [limitedPreviewRows]);
+
   useEffect(() => {
     const currentUser = auth.getUser();
     if (!currentUser || (currentUser.roleName !== 'Super Admin' && currentUser.roleName !== 'Sub Super Admin')) {
@@ -680,6 +694,9 @@ export default function BulkUploadPage() {
               {selectedSheets.length === 0 && !isAnalyzing && (
                 <p className="mt-2 text-xs text-red-600">Select at least one worksheet to include in the upload.</p>
               )}
+              <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                Only select worksheets that contain <strong>student records</strong> (e.g. Student Name, Phone, Father Name, Village, Mandal, District). Summary/count/dropdown sheets (e.g. &quot;School Wise Data Count&quot;, &quot;Mandalwise data count&quot;) have no student columns and will be skipped.
+              </p>
             </div>
           )}
 
@@ -690,30 +707,35 @@ export default function BulkUploadPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
                     <tr>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Worksheet</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Name</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Phone</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Mandal</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">State</th>
+                      <th className="sticky left-0 z-10 min-w-[120px] bg-gray-50 px-4 py-2 text-left text-xs font-semibold text-gray-700">Worksheet</th>
+                      {previewColumns.map((col) => (
+                        <th key={col} className="px-4 py-2 text-left text-xs font-semibold text-gray-700 whitespace-nowrap">
+                          {col}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white/50">
-                    {limitedPreviewRows.map((lead: PreviewRow, index) => (
+                    {limitedPreviewRows.map((row: PreviewRow, index) => (
                       <tr key={index} className="hover:bg-blue-50/50">
-                        <td className="px-4 py-2 text-sm text-gray-500">
-                          {lead.__sheetName || (fileType === 'excel' ? '-' : 'CSV')}
+                        <td className="sticky left-0 z-10 min-w-[120px] bg-white/80 px-4 py-2 text-sm text-gray-500">
+                          {row.__sheetName || (fileType === 'excel' ? '-' : 'CSV')}
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{lead.name || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{lead.phone || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{lead.mandal || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{lead.state || '-'}</td>
+                        {previewColumns.map((col) => (
+                          <td key={col} className="max-w-[200px] truncate px-4 py-2 text-sm text-gray-900" title={row[col] != null ? String(row[col]) : ''}>
+                            {row[col] != null && String(row[col]).trim() !== '' ? String(row[col]) : '-'}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="text-xs text-gray-500">
-                Note: Enquiry numbers will be auto-generated in format ENQ{new Date().getFullYear().toString().slice(-2)}000001
+                Note: Enquiry numbers will be auto-generated. Rows with the same phone as an existing lead are skipped as duplicates.
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Every row must have: <strong>Student Name</strong> and <strong>at least one phone</strong> (Phone 1 or Phone 2). Other columns (Father Name, Village, Mandal, District, etc.) are optional and will use defaults if empty.
               </p>
             </div>
           )}
@@ -834,7 +856,10 @@ export default function BulkUploadPage() {
 
             {uploadResult.errorDetails && uploadResult.errorDetails.length > 0 && (
               <div>
-                <p className="mb-2 text-sm font-medium text-gray-700">Error Details (first 100):</p>
+                <p className="mb-2 text-sm font-medium text-gray-700">Error Details (first 200):</p>
+                <p className="mb-2 text-xs text-gray-600">
+                  Common reasons: <strong>Missing required</strong> (student name and at least one phone); or <strong>Duplicate phone number</strong> — lead with this phone already exists.
+                </p>
                 <div className="max-h-60 overflow-y-auto rounded-lg border">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
