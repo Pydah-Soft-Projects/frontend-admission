@@ -134,6 +134,8 @@ export const leadAPI = {
     leadStatus?: string;
     applicationStatus?: string;
     assignedTo?: string;
+    academicYear?: number | string;
+    studentGroup?: string;
     search?: string;
     enquiryNumber?: string;
     scheduledOn?: string;
@@ -298,13 +300,19 @@ export const leadAPI = {
     const response = await api.get(`/leads/analytics/${userId}`);
     return response.data;
   },
-  getOverviewAnalytics: async (params?: { days?: number; tz?: string }) => {
+  getOverviewAnalytics: async (params?: { days?: number; tz?: string; academicYear?: number | string; studentGroup?: string }) => {
     const query = new URLSearchParams();
     if (params?.days) {
       query.append('days', String(params.days));
     }
     if (params?.tz) {
       query.append('tz', params.tz);
+    }
+    if (params?.academicYear != null && params.academicYear !== '') {
+      query.append('academicYear', String(params.academicYear));
+    }
+    if (params?.studentGroup) {
+      query.append('studentGroup', params.studentGroup);
     }
     const suffix = query.toString() ? `?${query.toString()}` : '';
     const response = await api.get(`/leads/analytics/overview${suffix}`);
@@ -970,6 +978,126 @@ export const formBuilderAPI = {
   },
   reorderFields: async (formId: string, fieldIds: string[]) => {
     const response = await api.put(`/form-builder/forms/${formId}/fields/reorder`, { fieldIds });
+    return response.data;
+  },
+};
+
+// Master Data API (states, districts, mandals, schools, colleges)
+export const masterDataAPI = {
+  // States
+  listStates: async (params?: { showInactive?: boolean }) => {
+    const q = params?.showInactive ? '?showInactive=true' : '';
+    const response = await api.get(`/master-data/states${q}`);
+    return response.data;
+  },
+  getState: async (id: string) => {
+    const response = await api.get(`/master-data/states/${id}`);
+    return response.data;
+  },
+  createState: async (data: { name: string; isActive?: boolean; displayOrder?: number }) => {
+    const response = await api.post('/master-data/states', data);
+    return response.data;
+  },
+  updateState: async (id: string, data: { name?: string; isActive?: boolean; displayOrder?: number }) => {
+    const response = await api.put(`/master-data/states/${id}`, data);
+    return response.data;
+  },
+  deleteState: async (id: string) => {
+    const response = await api.delete(`/master-data/states/${id}`);
+    return response.data;
+  },
+  // Districts
+  listDistricts: async (params?: { stateId?: string; showInactive?: boolean }) => {
+    const p = new URLSearchParams();
+    if (params?.stateId) p.append('stateId', params.stateId);
+    if (params?.showInactive) p.append('showInactive', 'true');
+    const q = p.toString() ? `?${p.toString()}` : '';
+    const response = await api.get(`/master-data/districts${q}`);
+    return response.data;
+  },
+  getDistrict: async (id: string) => {
+    const response = await api.get(`/master-data/districts/${id}`);
+    return response.data;
+  },
+  createDistrict: async (data: { stateId: string; name: string; isActive?: boolean; displayOrder?: number }) => {
+    const response = await api.post('/master-data/districts', data);
+    return response.data;
+  },
+  updateDistrict: async (id: string, data: { stateId?: string; name?: string; isActive?: boolean; displayOrder?: number }) => {
+    const response = await api.put(`/master-data/districts/${id}`, data);
+    return response.data;
+  },
+  deleteDistrict: async (id: string) => {
+    const response = await api.delete(`/master-data/districts/${id}`);
+    return response.data;
+  },
+  // Mandals
+  listMandals: async (params?: { districtId?: string; showInactive?: boolean }) => {
+    const p = new URLSearchParams();
+    if (params?.districtId) p.append('districtId', params.districtId);
+    if (params?.showInactive) p.append('showInactive', 'true');
+    const q = p.toString() ? `?${p.toString()}` : '';
+    const response = await api.get(`/master-data/mandals${q}`);
+    return response.data;
+  },
+  getMandal: async (id: string) => {
+    const response = await api.get(`/master-data/mandals/${id}`);
+    return response.data;
+  },
+  createMandal: async (data: { districtId: string; name: string; isActive?: boolean; displayOrder?: number }) => {
+    const response = await api.post('/master-data/mandals', data);
+    return response.data;
+  },
+  updateMandal: async (id: string, data: { districtId?: string; name?: string; isActive?: boolean; displayOrder?: number }) => {
+    const response = await api.put(`/master-data/mandals/${id}`, data);
+    return response.data;
+  },
+  deleteMandal: async (id: string) => {
+    const response = await api.delete(`/master-data/mandals/${id}`);
+    return response.data;
+  },
+  // Schools
+  listSchools: async (params?: { showInactive?: boolean }) => {
+    const q = params?.showInactive ? '?showInactive=true' : '';
+    const response = await api.get(`/master-data/schools${q}`);
+    return response.data;
+  },
+  createSchool: async (data: { name: string; isActive?: boolean }) => {
+    const response = await api.post('/master-data/schools', data);
+    return response.data;
+  },
+  updateSchool: async (id: string, data: { name?: string; isActive?: boolean }) => {
+    const response = await api.put(`/master-data/schools/${id}`, data);
+    return response.data;
+  },
+  deleteSchool: async (id: string) => {
+    const response = await api.delete(`/master-data/schools/${id}`);
+    return response.data;
+  },
+  bulkCreateSchools: async (names: string[]) => {
+    const response = await api.post('/master-data/schools/bulk', { names });
+    return response.data;
+  },
+  // Colleges
+  listColleges: async (params?: { showInactive?: boolean }) => {
+    const q = params?.showInactive ? '?showInactive=true' : '';
+    const response = await api.get(`/master-data/colleges${q}`);
+    return response.data;
+  },
+  createCollege: async (data: { name: string; isActive?: boolean }) => {
+    const response = await api.post('/master-data/colleges', data);
+    return response.data;
+  },
+  updateCollege: async (id: string, data: { name?: string; isActive?: boolean }) => {
+    const response = await api.put(`/master-data/colleges/${id}`, data);
+    return response.data;
+  },
+  deleteCollege: async (id: string) => {
+    const response = await api.delete(`/master-data/colleges/${id}`);
+    return response.data;
+  },
+  bulkCreateColleges: async (names: string[]) => {
+    const response = await api.post('/master-data/colleges/bulk', { names });
     return response.data;
   },
 };

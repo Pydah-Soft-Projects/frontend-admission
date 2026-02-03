@@ -512,6 +512,8 @@ export default function LeadDetailPage() {
         state: lead.state || 'Andhra Pradesh',
         quota: lead.quota || 'Not Applicable',
         applicationStatus: lead.applicationStatus,
+        academicYear: lead.academicYear,
+        studentGroup: lead.studentGroup,
         hallTicketNumber: lead.hallTicketNumber,
         gender: lead.gender,
         interCollege: lead.interCollege,
@@ -1093,6 +1095,32 @@ export default function LeadDetailPage() {
                         <option key={option} value={option}>
                           {option}
                         </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      value={formData.academicYear ?? ''}
+                      onChange={(e) => setFormData({ ...formData, academicYear: e.target.value ? Number(e.target.value) : undefined })}
+                    >
+                      <option value="">—</option>
+                      {[2024, 2025, 2026, 2027].map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Student Group</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      value={formData.studentGroup || ''}
+                      onChange={(e) => setFormData({ ...formData, studentGroup: e.target.value })}
+                    >
+                      <option value="">—</option>
+                      {['10th', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'].map((g) => (
+                        <option key={g} value={g}>{g}</option>
                       ))}
                     </select>
                   </div>

@@ -193,6 +193,8 @@ export interface Lead {
   utmContent?: string;
   lastFollowUp?: string;
   nextScheduledCall?: string;
+  academicYear?: number;
+  studentGroup?: string;
   notes?: string;
   uploadedBy?: User | string;
   uploadBatchId?: string;
@@ -225,6 +227,8 @@ export interface LeadUpdatePayload {
   notes?: string;
   lastFollowUp?: string;
   nextScheduledCall?: string;
+  academicYear?: number;
+  studentGroup?: string;
 }
 
 export interface MessageTemplateVariable {
@@ -653,6 +657,8 @@ export interface LeadFilters {
   leadStatus?: string;
   applicationStatus?: string;
   assignedTo?: string;
+  academicYear?: number | string;
+  studentGroup?: string;
   search?: string;
   enquiryNumber?: string;
   page?: number;
@@ -674,6 +680,8 @@ export interface FilterOptions {
   statuses?: string[];
   leadStatuses: string[];
   applicationStatuses: string[];
+  academicYears?: number[];
+  studentGroups?: string[];
 }
 
 export interface OverviewSeriesPoint {

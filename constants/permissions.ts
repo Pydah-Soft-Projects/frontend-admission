@@ -9,7 +9,8 @@ export type PermissionModuleKey =
   | 'users'
   | 'communications'
   | 'reports'
-  | 'formBuilder';
+  | 'formBuilder'
+  | 'masterData';
 
 export interface PermissionModuleDefinition {
   key: PermissionModuleKey;
@@ -52,6 +53,11 @@ export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
     key: 'formBuilder',
     label: 'Lead Form Builder',
     description: 'Create and manage dynamic forms for lead generation and UTM Builder.',
+  },
+  {
+    key: 'masterData',
+    label: 'States, Districts & Mandals',
+    description: 'Manage states, districts, mandals, schools, and college names for dropdowns and lead data.',
   },
 ];
 

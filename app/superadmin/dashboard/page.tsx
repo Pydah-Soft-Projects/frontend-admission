@@ -79,11 +79,15 @@ const summaryCardStyles = [
   'from-indigo-500/10 via-indigo-500/15 to-transparent text-indigo-700 dark:text-indigo-200',
 ];
 
+const STUDENT_GROUP_OPTIONS = ['10th', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
+
 export default function SuperAdminDashboard() {
   const router = useRouter();
   const { theme } = useTheme();
   const [team, setTeam] = useState<User[]>([]);
   const [isTeamLoading, setIsTeamLoading] = useState(true);
+  const [dashboardAcademicYear, setDashboardAcademicYear] = useState<number | ''>('');
+  const [dashboardStudentGroup, setDashboardStudentGroup] = useState<string>('');
 
   useEffect(() => {
     const currentUser = auth.getUser();
@@ -117,18 +121,6 @@ export default function SuperAdminDashboard() {
   }, [router]);
 
   const {
-    data: overviewData,
-    isLoading: isLoadingOverview,
-  } = useQuery({
-    queryKey: ['overview-analytics'],
-    queryFn: async () => {
-      const response = await leadAPI.getOverviewAnalytics({ days: 14 });
-      return response.data || response;
-    },
-    staleTime: 120_000,
-  });
-
-  const {
     data: userAnalyticsData,
     isLoading: isLoadingUserAnalytics,
   } = useQuery({
@@ -150,6 +142,33 @@ export default function SuperAdminDashboard() {
     staleTime: 60_000,
   });
   const scheduledLeads = Array.isArray(scheduledLeadsData) ? scheduledLeadsData : [];
+
+  const { data: filterOptionsData } = useQuery({
+    queryKey: ['filterOptions'],
+    queryFn: () => leadAPI.getFilterOptions(),
+    staleTime: 120_000,
+  });
+  const filterOptions = filterOptionsData?.data || filterOptionsData;
+  const academicYearOptions = filterOptions?.academicYears ?? (() => {
+    const y = new Date().getFullYear();
+    return [y, y - 1, y - 2, y - 3];
+  })();
+
+  const {
+    data: overviewData,
+    isLoading: isLoadingOverview,
+  } = useQuery({
+    queryKey: ['overview-analytics', dashboardAcademicYear, dashboardStudentGroup],
+    queryFn: async () => {
+      const response = await leadAPI.getOverviewAnalytics({
+        days: 14,
+        ...(dashboardAcademicYear !== '' && { academicYear: dashboardAcademicYear }),
+        ...(dashboardStudentGroup && { studentGroup: dashboardStudentGroup }),
+      });
+      return response.data || response;
+    },
+    staleTime: 120_000,
+  });
 
   const overviewAnalytics = (overviewData?.data || overviewData) as OverviewAnalytics | null;
 
@@ -318,6 +337,32 @@ export default function SuperAdminDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <span>Academic Year:</span>
+            <select
+              value={dashboardAcademicYear === '' ? '' : dashboardAcademicYear}
+              onChange={(e) => setDashboardAcademicYear(e.target.value ? Number(e.target.value) : '')}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">All</option>
+              {academicYearOptions.map((y: number) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <span>Student Group:</span>
+            <select
+              value={dashboardStudentGroup}
+              onChange={(e) => setDashboardStudentGroup(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">All</option>
+              {STUDENT_GROUP_OPTIONS.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </label>
           <Link href="/superadmin/leads/individual">
             <Button variant="primary">Create Individual Lead</Button>
           </Link>

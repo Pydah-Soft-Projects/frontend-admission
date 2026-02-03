@@ -973,6 +973,40 @@ export default function LeadsPage() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
+                      Academic Year
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                      value={filters.academicYear ?? ''}
+                      onChange={(e) => handleFilterChange('academicYear', e.target.value ? Number(e.target.value) : undefined)}
+                    >
+                      <option value="">All Years</option>
+                      {filterOptions?.academicYears?.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
+                      Student Group
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                      value={filters.studentGroup || ''}
+                      onChange={(e) => handleFilterChange('studentGroup', e.target.value)}
+                    >
+                      <option value="">All Groups</option>
+                      {filterOptions?.studentGroups?.map((group) => (
+                        <option key={group} value={group}>
+                          {group}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
           </div>
