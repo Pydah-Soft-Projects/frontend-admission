@@ -93,6 +93,8 @@ function LoginPageContent() {
       // Step 5: Redirect based on role
       if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
         router.push('/superadmin/dashboard');
+      } else if (user.roleName === 'Data Entry User') {
+        router.push('/superadmin/leads/individual');
       } else if (user.isManager) {
         router.push('/manager/dashboard');
       } else {
@@ -135,6 +137,8 @@ function LoginPageContent() {
       // Redirect based on role
       if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
         router.push('/superadmin/dashboard');
+      } else if (user.roleName === 'Data Entry User') {
+        router.push('/superadmin/leads/individual');
       } else if (user.isManager) {
         router.push('/manager/dashboard');
       } else {

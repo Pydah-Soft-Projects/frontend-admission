@@ -233,15 +233,20 @@ export default function AssignLeadsPage() {
     );
   }
 
-  // Filter users: include both Users and Sub Super Admins (exclude Super Admin)
+  // Filter users: include Users, Student Counselors, Data Entry Users, Sub Super Admins (exclude Super Admin)
   const assignableUsers = users.filter(
-    (u) => u.isActive && u.roleName !== 'Super Admin' && (u.roleName === 'User' || u.roleName === 'Sub Super Admin')
+    (u) =>
+      u.isActive &&
+      u.roleName !== 'Super Admin' &&
+      (u.roleName === 'User' || u.roleName === 'Student Counselor' || u.roleName === 'Data Entry User' || u.roleName === 'Sub Super Admin')
   );
 
   // Group users by role
   const usersByRole = {
     'Sub Super Admin': assignableUsers.filter((u) => u.roleName === 'Sub Super Admin'),
     User: assignableUsers.filter((u) => u.roleName === 'User'),
+    'Student Counselor': assignableUsers.filter((u) => u.roleName === 'Student Counselor'),
+    'Data Entry User': assignableUsers.filter((u) => u.roleName === 'Data Entry User'),
   };
 
   return (
@@ -327,6 +332,24 @@ export default function AssignLeadsPage() {
                   {usersByRole.User.length > 0 && (
                     <optgroup label="Users">
                       {usersByRole.User.map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['Student Counselor'].length > 0 && (
+                    <optgroup label="Student Counselors">
+                      {usersByRole['Student Counselor'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['Data Entry User'].length > 0 && (
+                    <optgroup label="Data Entry Users">
+                      {usersByRole['Data Entry User'].map((user) => (
                         <option key={user._id} value={user._id}>
                           {user.name} ({user.email})
                         </option>
@@ -445,6 +468,24 @@ export default function AssignLeadsPage() {
                   {usersByRole.User.length > 0 && (
                     <optgroup label="Users">
                       {usersByRole.User.map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['Student Counselor'].length > 0 && (
+                    <optgroup label="Student Counselors">
+                      {usersByRole['Student Counselor'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['Data Entry User'].length > 0 && (
+                    <optgroup label="Data Entry Users">
+                      {usersByRole['Data Entry User'].map((user) => (
                         <option key={user._id} value={user._id}>
                           {user.name} ({user.email})
                         </option>

@@ -27,6 +27,10 @@ export default function UserLayout({ children }: { children: ReactNode }) {
       router.replace('/superadmin/dashboard');
       return;
     }
+    if (user.roleName === 'Data Entry User') {
+      router.replace('/superadmin/leads/individual');
+      return;
+    }
 
     setCurrentUser(user);
     setIsReady(true);

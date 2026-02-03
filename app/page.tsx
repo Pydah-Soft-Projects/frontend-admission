@@ -19,6 +19,8 @@ export default function Home() {
         // Prevent logged-in users from accessing home - redirect to dashboard
         if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
           router.replace('/superadmin/dashboard');
+        } else if (user.roleName === 'Data Entry User') {
+          router.replace('/superadmin/leads/individual');
         } else if (user.isManager) {
           router.replace('/manager/dashboard');
         } else {

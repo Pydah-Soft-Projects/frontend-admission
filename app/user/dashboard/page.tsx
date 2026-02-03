@@ -43,6 +43,11 @@ const summaryCardStyles = [
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
 
+const getTodayDateString = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export default function UserDashboard() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -101,6 +106,18 @@ export default function UserDashboard() {
     enabled: !!user?._id,
     staleTime: 60_000,
   });
+
+  const todayStr = getTodayDateString();
+  const { data: scheduledLeadsData } = useQuery({
+    queryKey: ['leads', 'scheduled', todayStr],
+    queryFn: async () => {
+      const res = await leadAPI.getAll({ scheduledOn: todayStr, limit: 50 });
+      return res?.leads ?? [];
+    },
+    enabled: !!user?._id,
+    staleTime: 60_000,
+  });
+  const scheduledLeads = Array.isArray(scheduledLeadsData) ? scheduledLeadsData : [];
 
   const analytics = (analyticsData?.data || analyticsData) as Analytics | null;
 
@@ -236,6 +253,40 @@ export default function UserDashboard() {
           </Card>
         ))}
       </div>
+
+      <Card className="space-y-4 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Your follow-up calls for today. Set from lead details after a call.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleGoToLeads}>View my leads</Button>
+        </div>
+        {scheduledLeads.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400 py-4">No calls scheduled for today.</p>
+        ) : (
+          <ul className="divide-y divide-slate-200 dark:divide-slate-700 max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+            {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; nextScheduledCall?: string }) => (
+              <li key={lead._id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{lead.name ?? '—'}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {lead.enquiryNumber && <span>{lead.enquiryNumber}</span>}
+                    {lead.nextScheduledCall && (
+                      <span className="ml-2">
+                        {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => router.push(`/user/leads/${lead._id}`)}>Open</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {statusChartData.length > 0 && (
         <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">

@@ -8,6 +8,7 @@ import { formBuilderAPI } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { useRouter } from 'next/navigation';
+import { auth } from '@/lib/auth';
 import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
 import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
 
@@ -108,6 +109,8 @@ export default function FormBuilderPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const router = useRouter();
   const { hasAccess: canAccessFormBuilder, canWrite: canEditForms } = useModulePermission('formBuilder');
+  const [currentUser, setCurrentUser] = useState(auth.getUser());
+  const canDeleteForms = canEditForms && currentUser?.roleName === 'Super Admin';
 
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
@@ -123,18 +126,26 @@ export default function FormBuilderPage() {
   const [includeAddress, setIncludeAddress] = useState(false);
   const [isCreatingForm, setIsCreatingForm] = useState(false);
   const [showAddFieldForm, setShowAddFieldForm] = useState(false);
+  const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
+  const [dragOverFieldIndex, setDragOverFieldIndex] = useState<number | null>(null);
+  const [draggedDraftFieldId, setDraggedDraftFieldId] = useState<string | null>(null);
+  const [dragOverDraftIndex, setDragOverDraftIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setHeaderContent(
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Form Builder</h1>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Lead Form Builder</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Create and manage dynamic forms for lead generation. Forms can be used in UTM Builder and lead forms.
+          Create and manage dynamic lead forms. Forms can be used in UTM Builder and lead capture.
         </p>
       </div>
     );
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent]);
+
+  useEffect(() => {
+    setCurrentUser(auth.getUser());
+  }, []);
 
   useEffect(() => {
     if (!canAccessFormBuilder) {
@@ -502,6 +513,10 @@ export default function FormBuilderPage() {
   };
 
   const handleDeleteDraftField = (fieldId: string) => {
+    if (auth.getUser()?.roleName === 'Sub Super Admin') {
+      showToast.error('You do not have permission to delete fields');
+      return;
+    }
     const field = draftFields.find(f => f.id === fieldId);
     if (field && ['state', 'district', 'mandal', 'village'].includes(field.fieldName.toLowerCase())) {
       setIncludeAddress(false);
@@ -533,6 +548,10 @@ export default function FormBuilderPage() {
   }, [draftFields]);
 
   const handleDeleteForm = (form: Form) => {
+    if (auth.getUser()?.roleName === 'Sub Super Admin') {
+      showToast.error('You do not have permission to delete forms');
+      return;
+    }
     if (!canEditForms) {
       showToast.error('You do not have permission to delete forms');
       return;
@@ -622,6 +641,10 @@ export default function FormBuilderPage() {
   };
 
   const handleDeleteField = (field: FormField) => {
+    if (auth.getUser()?.roleName === 'Sub Super Admin') {
+      showToast.error('You do not have permission to delete fields');
+      return;
+    }
     if (!canEditForms) {
       showToast.error('You do not have permission to delete fields');
       return;
@@ -669,6 +692,70 @@ export default function FormBuilderPage() {
       formId: selectedFormId,
       fieldIds: newOrder.map((f) => f._id),
     });
+  };
+
+  const handleSavedFieldDragStart = (e: React.DragEvent, fieldId: string) => {
+    setDraggedFieldId(fieldId);
+    e.dataTransfer.setData('text/plain', fieldId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleSavedFieldDragEnd = () => {
+    setDraggedFieldId(null);
+    setDragOverFieldIndex(null);
+  };
+  const handleSavedFieldDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverFieldIndex(index);
+  };
+  const handleSavedFieldDragLeave = () => setDragOverFieldIndex(null);
+  const handleSavedFieldDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    setDraggedFieldId(null);
+    setDragOverFieldIndex(null);
+    const fieldId = e.dataTransfer.getData('text/plain');
+    if (!selectedFormId || !fieldId) return;
+    const dragIndex = sortedFields.findIndex((f) => f._id === fieldId);
+    if (dragIndex === -1 || dragIndex === dropIndex) return;
+    const newOrder = [...sortedFields];
+    const [removed] = newOrder.splice(dragIndex, 1);
+    newOrder.splice(dropIndex, 0, removed);
+    reorderFieldsMutation.mutate({
+      formId: selectedFormId,
+      fieldIds: newOrder.map((f) => f._id),
+    });
+  };
+
+  const handleDraftFieldDragStart = (e: React.DragEvent, fieldId: string) => {
+    setDraggedDraftFieldId(fieldId);
+    e.dataTransfer.setData('text/plain', fieldId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDraftFieldDragEnd = () => {
+    setDraggedDraftFieldId(null);
+    setDragOverDraftIndex(null);
+  };
+  const handleDraftFieldDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverDraftIndex(index);
+  };
+  const handleDraftFieldDragLeave = () => setDragOverDraftIndex(null);
+  const handleDraftFieldDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    setDraggedDraftFieldId(null);
+    setDragOverDraftIndex(null);
+    const fieldId = e.dataTransfer.getData('text/plain');
+    if (!fieldId) return;
+    const sorted = [...draftFields].sort((a, b) => a.displayOrder - b.displayOrder);
+    const dragIndex = sorted.findIndex((f) => f.id === fieldId);
+    if (dragIndex === -1 || dragIndex === dropIndex) return;
+    const newOrder = [...sorted];
+    const [removed] = newOrder.splice(dragIndex, 1);
+    newOrder.splice(dropIndex, 0, removed);
+    setDraftFields(
+      newOrder.map((f, i) => ({ ...f, displayOrder: i }))
+    );
   };
 
   if (!canAccessFormBuilder) {
@@ -752,7 +839,7 @@ export default function FormBuilderPage() {
                           )}
                         </div>
                       </div>
-                      {canEditForms && !form.isDefault && (
+                      {canDeleteForms && !form.isDefault && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -815,6 +902,9 @@ export default function FormBuilderPage() {
                     Add Field
                   </Button>
                 </div>
+                {canEditForms && sortedFields.length > 0 && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2 mb-2">Drag fields to change display order.</p>
+                )}
 
                 {sortedFields.length === 0 ? (
                   <div className="text-center py-8 text-sm text-slate-500 dark:text-slate-400">
@@ -825,9 +915,28 @@ export default function FormBuilderPage() {
                     {sortedFields.map((field, index) => (
                       <div
                         key={field._id}
-                        className="flex items-start gap-3 p-4 rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50"
+                        draggable={canEditForms}
+                        onDragStart={(e) => canEditForms && handleSavedFieldDragStart(e, field._id)}
+                        onDragEnd={handleSavedFieldDragEnd}
+                        onDragOver={(e) => canEditForms && handleSavedFieldDragOver(e, index)}
+                        onDragLeave={handleSavedFieldDragLeave}
+                        onDrop={(e) => canEditForms && handleSavedFieldDrop(e, index)}
+                        className={`flex items-start gap-3 p-4 rounded-lg border transition-colors ${
+                          draggedFieldId === field._id
+                            ? 'opacity-50 border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+                            : dragOverFieldIndex === index
+                              ? 'border-blue-400 border-2 bg-blue-50 dark:bg-blue-900/20'
+                              : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50'
+                        } ${canEditForms ? 'cursor-grab active:cursor-grabbing' : ''}`}
                       >
-                        <div className="flex-1">
+                        {canEditForms && (
+                          <div className="shrink-0 pt-0.5 text-slate-400" title="Drag to reorder" aria-hidden>
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                               {field.displayOrder + 1}.
@@ -874,26 +983,26 @@ export default function FormBuilderPage() {
                             </svg>
                           </button>
                           {canEditForms && (
-                            <>
-                              <button
-                                onClick={() => handleEditField(field)}
-                                className="p-1 text-blue-500 hover:text-blue-700"
-                                title="Edit field"
-                              >
-                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteField(field)}
-                                className="p-1 text-red-500 hover:text-red-700"
-                                title="Delete field"
-                              >
-                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleEditField(field)}
+                              className="p-1 text-blue-500 hover:text-blue-700"
+                              title="Edit field"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                          )}
+                          {canDeleteForms && (
+                            <button
+                              onClick={() => handleDeleteField(field)}
+                              className="p-1 text-red-500 hover:text-red-700"
+                              title="Delete field"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1074,6 +1183,9 @@ export default function FormBuilderPage() {
                       Add Field
                     </Button>
                   </div>
+                  {sortedDraftFields.length > 0 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Drag fields to change display order.</p>
+                  )}
 
                   {sortedDraftFields.length === 0 ? (
                     <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-800/50">
@@ -1086,8 +1198,25 @@ export default function FormBuilderPage() {
                       {sortedDraftFields.map((field, index) => (
                         <div
                           key={field.id}
-                          className="flex items-start gap-2 p-3 rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50"
+                          draggable
+                          onDragStart={(e) => handleDraftFieldDragStart(e, field.id)}
+                          onDragEnd={handleDraftFieldDragEnd}
+                          onDragOver={(e) => handleDraftFieldDragOver(e, index)}
+                          onDragLeave={handleDraftFieldDragLeave}
+                          onDrop={(e) => handleDraftFieldDrop(e, index)}
+                          className={`flex items-start gap-2 p-3 rounded-lg border transition-colors cursor-grab active:cursor-grabbing ${
+                            draggedDraftFieldId === field.id
+                              ? 'opacity-50 border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+                              : dragOverDraftIndex === index
+                                ? 'border-blue-400 border-2 bg-blue-50 dark:bg-blue-900/20'
+                                : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50'
+                          }`}
                         >
+                          <div className="shrink-0 pt-0.5 text-slate-400" title="Drag to reorder" aria-hidden>
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                            </svg>
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-xs font-medium text-slate-500">{index + 1}.</span>
@@ -1131,15 +1260,17 @@ export default function FormBuilderPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                             </button>
-                            <button
-                              onClick={() => handleDeleteDraftField(field.id)}
-                              className="p-1 text-red-500 hover:text-red-700"
-                              title="Delete"
-                            >
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
+                            {canDeleteForms && (
+                              <button
+                                onClick={() => handleDeleteDraftField(field.id)}
+                                className="p-1 text-red-500 hover:text-red-700"
+                                title="Delete"
+                              >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}

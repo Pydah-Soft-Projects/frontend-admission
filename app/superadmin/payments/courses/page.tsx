@@ -9,6 +9,7 @@ import { showToast } from '@/lib/toast';
 import { Branch, Course } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { useRouter } from 'next/navigation';
+import { auth } from '@/lib/auth';
 
 type ManagedCourse = Course & { branches?: Branch[] };
 
@@ -139,6 +140,7 @@ export default function CourseManagementPage() {
 
   const deleteCourseMutation = useMutation({
     mutationFn: (courseId: string) => courseAPI.delete(courseId),
+    
     onSuccess: () => {
       refetch();
       showToast.success('Course deleted');
@@ -272,6 +274,10 @@ export default function CourseManagementPage() {
   };
 
   const handleDeleteCourse = (course: ManagedCourse) => {
+    if (auth.getUser()?.roleName === 'Sub Super Admin') {
+      showToast.error('You do not have permission to delete courses');
+      return;
+    }
     if (!canEditPayments) {
       showToast.error('You do not have permission to delete courses');
       return;

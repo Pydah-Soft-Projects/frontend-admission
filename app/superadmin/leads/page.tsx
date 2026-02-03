@@ -572,9 +572,12 @@ export default function LeadsPage() {
       try {
         const response = await userAPI.getAll();
         const allUsers = response.data || response;
-        // Filter: include Users and Sub Super Admins, exclude Super Admin
+        // Filter: include Users, Student Counselors, Data Entry Users, Sub Super Admins; exclude Super Admin
         const assignable = allUsers.filter(
-          (u: User) => u.isActive && u.roleName !== 'Super Admin' && (u.roleName === 'User' || u.roleName === 'Sub Super Admin')
+          (u: User) =>
+            u.isActive &&
+            u.roleName !== 'Super Admin' &&
+            (u.roleName === 'User' || u.roleName === 'Student Counselor' || u.roleName === 'Data Entry User' || u.roleName === 'Sub Super Admin')
         );
         setAssignableUsers(assignable);
       } catch (error) {
@@ -1018,14 +1021,16 @@ export default function LeadsPage() {
                       >
                         Assign Selected
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={handleBulkDelete}
-                        className="bg-red-50 hover:bg-red-100 text-red-600 border-red-300 hover:border-red-400"
-                        size="sm"
-                      >
-                        Delete Selected
-                      </Button>
+                      {user?.roleName === 'Super Admin' && (
+                        <Button
+                          variant="outline"
+                          onClick={handleBulkDelete}
+                          className="bg-red-50 hover:bg-red-100 text-red-600 border-red-300 hover:border-red-400"
+                          size="sm"
+                        >
+                          Delete Selected
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1663,6 +1668,20 @@ export default function LeadsPage() {
                     .map((user) => (
                       <option key={user._id} value={user._id}>
                         {user.name} ({user.email})
+                      </option>
+                    ))}
+                  {assignableUsers
+                    .filter((u) => u.roleName === 'Student Counselor')
+                    .map((user) => (
+                      <option key={user._id} value={user._id}>
+                        {user.name} ({user.email}) - Counselor
+                      </option>
+                    ))}
+                  {assignableUsers
+                    .filter((u) => u.roleName === 'Data Entry User')
+                    .map((user) => (
+                      <option key={user._id} value={user._id}>
+                        {user.name} ({user.email}) - Data Entry
                       </option>
                     ))}
                 </select>

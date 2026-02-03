@@ -1,5 +1,5 @@
 // User Types
-export type RoleName = 'Super Admin' | 'Sub Super Admin' | 'User';
+export type RoleName = 'Super Admin' | 'Sub Super Admin' | 'User' | 'Student Counselor' | 'Data Entry User';
 
 export type ModulePermissionLevel = 'read' | 'write';
 
@@ -192,6 +192,7 @@ export interface Lead {
   utmTerm?: string;
   utmContent?: string;
   lastFollowUp?: string;
+  nextScheduledCall?: string;
   notes?: string;
   uploadedBy?: User | string;
   uploadBatchId?: string;
@@ -223,6 +224,7 @@ export interface LeadUpdatePayload {
   source?: string;
   notes?: string;
   lastFollowUp?: string;
+  nextScheduledCall?: string;
 }
 
 export interface MessageTemplateVariable {

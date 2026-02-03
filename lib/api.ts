@@ -136,6 +136,7 @@ export const leadAPI = {
     assignedTo?: string;
     search?: string;
     enquiryNumber?: string;
+    scheduledOn?: string;
   }) => {
     const params = new URLSearchParams();
     if (filters) {

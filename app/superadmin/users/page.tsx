@@ -12,12 +12,15 @@ import { useDashboardHeader, useModulePermission } from '@/components/layout/Das
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PERMISSION_MODULES, PermissionModuleKey } from '@/constants/permissions';
+import { auth } from '@/lib/auth';
 
 const UserManagementPage = () => {
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const router = useRouter();
   const { hasAccess: canAccessUsers, canWrite: canManageUsers } = useModulePermission('users');
+  const currentUser = auth.getUser();
+  const canDeleteUsers = canManageUsers && currentUser?.roleName !== 'Sub Super Admin';
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [showEditUser, setShowEditUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -241,6 +244,9 @@ const UserManagementPage = () => {
       }
       payload.designation = formState.designation.trim();
     }
+    if (formState.roleName === 'Student Counselor' || formState.roleName === 'Data Entry User') {
+      if (formState.designation?.trim()) payload.designation = formState.designation.trim();
+    }
 
     if (formState.roleName === 'Sub Super Admin') {
       const selectedPermissions = Object.entries(permissionState).reduce((acc, [key, value]) => {
@@ -311,8 +317,8 @@ const UserManagementPage = () => {
     if (user.isManager) {
       return `${user.roleName} (Manager)`;
     }
-    if (user.roleName === 'User') {
-      return user.designation || 'User';
+    if (user.roleName === 'User' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') {
+      return user.designation || user.roleName;
     }
     return user.roleName;
   };
@@ -430,7 +436,7 @@ const UserManagementPage = () => {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin') && (
+                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -441,7 +447,7 @@ const UserManagementPage = () => {
                               </Button>
                             )}
                             {/* Manager Role Toggle - Show for User and Sub Super Admin (not Super Admin) */}
-                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin') && (
+                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') && (
                               <Button
                                 variant={user.isManager ? 'primary' : 'outline'}
                                 size="sm"
@@ -512,24 +518,26 @@ const UserManagementPage = () => {
                             >
                               Edit
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (!canManageUsers) return;
-                                if (
-                                  window.confirm(
-                                    `Are you sure you want to delete ${user.name}? This action cannot be undone.`
-                                  )
-                                ) {
-                                  deleteUserMutation.mutate(user._id);
-                                }
-                              }}
-                              disabled={deleteUserMutation.isPending || !canManageUsers}
-                            >
-                              Delete
-                            </Button>
+                            {canDeleteUsers && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (!canManageUsers) return;
+                                  if (
+                                    window.confirm(
+                                      `Are you sure you want to delete ${user.name}? This action cannot be undone.`
+                                    )
+                                  ) {
+                                    deleteUserMutation.mutate(user._id);
+                                  }
+                                }}
+                                disabled={deleteUserMutation.isPending || !canManageUsers}
+                              >
+                                Delete
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -591,12 +599,14 @@ const UserManagementPage = () => {
                       className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     >
                     <option value="User">User</option>
+                    <option value="Student Counselor">Student Counselor</option>
+                    <option value="Data Entry User">Data Entry User</option>
                     <option value="Sub Super Admin">Sub Super Admin</option>
                     <option value="Super Admin">Super Admin</option>
                     </select>
                   </div>
 
-                  {formState.roleName === 'User' && (
+                  {(formState.roleName === 'User' || formState.roleName === 'Student Counselor' || formState.roleName === 'Data Entry User') && (
                     <Input
                       label="Role Name / Designation"
                       name="designation"
@@ -743,6 +753,9 @@ const UserManagementPage = () => {
                   }
                   payload.designation = editFormState.designation.trim();
                 }
+                if (editFormState.roleName === 'Student Counselor' || editFormState.roleName === 'Data Entry User') {
+                  payload.designation = editFormState.designation?.trim() || undefined;
+                }
 
                 if (editFormState.roleName === 'Sub Super Admin') {
                   const selectedPermissions = Object.entries(editPermissionState).reduce(
@@ -811,12 +824,14 @@ const UserManagementPage = () => {
                       className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     >
                       <option value="User">User</option>
+                      <option value="Student Counselor">Student Counselor</option>
+                      <option value="Data Entry User">Data Entry User</option>
                       <option value="Sub Super Admin">Sub Super Admin</option>
                       <option value="Super Admin">Super Admin</option>
                     </select>
                   </div>
 
-                  {editFormState.roleName === 'User' && (
+                  {(editFormState.roleName === 'User' || editFormState.roleName === 'Student Counselor' || editFormState.roleName === 'Data Entry User') && (
                     <Input
                       label="Role Name / Designation"
                       name="designation"

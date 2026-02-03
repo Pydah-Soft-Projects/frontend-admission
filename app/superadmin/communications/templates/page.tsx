@@ -343,6 +343,8 @@ export default function TemplatesPage() {
     setUser(currentUser);
   }, [router]);
 
+  const canDeactivateTemplates = user?.roleName === 'Super Admin';
+
   const {
     data: templatesResponse,
     isLoading,
@@ -582,14 +584,16 @@ export default function TemplatesPage() {
                       >
                         Edit
                       </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => deleteMutation.mutate(template._id)}
-                        disabled={!template.isActive || deleteMutation.isPending}
-                      >
-                        {deleteMutation.isPending ? 'Processing…' : 'Deactivate'}
-                      </Button>
+                      {canDeactivateTemplates && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => deleteMutation.mutate(template._id)}
+                          disabled={!template.isActive || deleteMutation.isPending}
+                        >
+                          {deleteMutation.isPending ? 'Processing…' : 'Deactivate'}
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))

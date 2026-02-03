@@ -62,6 +62,8 @@ export default function LeadDetailPage() {
   // Comment modal state
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [showScheduleCallModal, setShowScheduleCallModal] = useState(false);
+  const [scheduleCallDateTime, setScheduleCallDateTime] = useState('');
   
   // Communication modals
   const [showCallNumberModal, setShowCallNumberModal] = useState(false);
@@ -94,6 +96,7 @@ export default function LeadDetailPage() {
   
   const quotaOptions = ['Not Applicable', 'Management', 'Convenor'];
   const isSuperAdmin = user?.roleName === 'Super Admin' || user?.roleName === 'Sub Super Admin';
+  const canDeleteLead = user?.roleName === 'Super Admin';
   const isManager = user?.isManager === true;
   
   // Get the appropriate leads page URL based on user role
@@ -614,6 +617,22 @@ export default function LeadDetailPage() {
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to log call');
+    },
+  });
+
+  const scheduleCallMutation = useMutation({
+    mutationFn: async (payload: { nextScheduledCall: string | null }) => {
+      return await leadAPI.update(leadId, payload);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      setShowScheduleCallModal(false);
+      setScheduleCallDateTime('');
+      showToast.success(variables.nextScheduledCall ? 'Next call scheduled.' : 'Scheduled call cleared.');
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to update schedule');
     },
   });
 
@@ -1432,6 +1451,50 @@ export default function LeadDetailPage() {
                     <span className="text-gray-900 dark:text-gray-100">{formatDate(lead.createdAt)}</span>
                   </div>
                 )}
+                {lead.nextScheduledCall && (
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Next scheduled call:</span>
+                    <span className="text-gray-900 dark:text-gray-100">{formatDate(lead.nextScheduledCall)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (lead.nextScheduledCall) {
+                      const d = new Date(lead.nextScheduledCall);
+                      setScheduleCallDateTime(d.toISOString().slice(0, 16));
+                    } else {
+                      const now = new Date();
+                      now.setMinutes(0, 0, 0);
+                      now.setHours(now.getHours() + 1);
+                      setScheduleCallDateTime(now.toISOString().slice(0, 16));
+                    }
+                    setShowScheduleCallModal(true);
+                  }}
+                >
+                  {lead.nextScheduledCall ? 'Reschedule next call' : 'Schedule next call'}
+                </Button>
+                {lead.nextScheduledCall && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-900/20"
+                    onClick={() => {
+                      if (window.confirm('Clear scheduled call for this lead?')) {
+                        scheduleCallMutation.mutate({ nextScheduledCall: null });
+                      }
+                    }}
+                    disabled={scheduleCallMutation.isPending}
+                  >
+                    Clear schedule
+                  </Button>
+                )}
               </div>
             </div>
             {isLoadingLogs ? (
@@ -1637,8 +1700,8 @@ export default function LeadDetailPage() {
                 </button>
               )}
 
-              {/* Delete - Super Admin Only */}
-              {isSuperAdmin && (
+              {/* Delete - Super Admin only (hidden for Sub Super Admin) */}
+              {canDeleteLead && (
                 <button
                   onClick={() => setShowDeleteModal(true)}
                   className="flex flex-col items-center justify-center p-4 bg-red-50 hover:bg-red-100 rounded-lg border-2 border-red-200 hover:border-red-300 transition-all group"
@@ -1973,6 +2036,56 @@ export default function LeadDetailPage() {
                 <Button
                   variant="outline"
                   onClick={() => setShowDeleteModal(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Schedule next call Modal */}
+      {showScheduleCallModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <h2 className="text-xl font-semibold mb-4">Schedule next call</h2>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Set the date and time for the next follow-up call. This will appear on your dashboard for that day.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date & time</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleCallDateTime}
+                  onChange={(e) => setScheduleCallDateTime(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    if (!scheduleCallDateTime.trim()) {
+                      showToast.error('Please select date and time');
+                      return;
+                    }
+                    scheduleCallMutation.mutate({
+                      nextScheduledCall: new Date(scheduleCallDateTime).toISOString(),
+                    });
+                  }}
+                  disabled={scheduleCallMutation.isPending}
+                >
+                  {scheduleCallMutation.isPending ? 'Saving...' : 'Save'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowScheduleCallModal(false);
+                    setScheduleCallDateTime('');
+                  }}
                 >
                   Cancel
                 </Button>

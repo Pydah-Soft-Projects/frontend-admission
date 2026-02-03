@@ -50,7 +50,7 @@ export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
   },
   {
     key: 'formBuilder',
-    label: 'Form Builder',
+    label: 'Lead Form Builder',
     description: 'Create and manage dynamic forms for lead generation and UTM Builder.',
   },
 ];

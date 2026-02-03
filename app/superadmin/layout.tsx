@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   DashboardShell,
   DashboardNavItem,
@@ -56,9 +56,14 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
   },
   { href: '/superadmin/users', label: 'User Management', icon: UserIcon, permissionKey: 'users' },
   { href: '/superadmin/communications/templates', label: 'SMS Templates', icon: TemplateIcon, permissionKey: 'communications' },
-  { href: '/superadmin/form-builder', label: 'Form Builder', icon: TemplateIcon, permissionKey: 'formBuilder' },
+  { href: '/superadmin/form-builder', label: 'Lead Form Builder', icon: TemplateIcon, permissionKey: 'formBuilder' },
   { href: '/superadmin/utm-builder', label: 'UTM Builder', icon: TemplateIcon, permissionKey: 'leads' },
   { href: '/superadmin/reports', label: 'Reports', icon: ReportIcon, permissionKey: 'reports' },
+];
+
+/** Data Entry User sees only this: Create Individual Lead */
+const DATA_ENTRY_NAV_ITEMS: DashboardNavItem[] = [
+  { href: '/superadmin/leads/individual', label: 'Create Lead', icon: ListIcon, permissionKey: 'leads' },
 ];
 
 const buildFullAccessPermissions = (): Record<PermissionModuleKey, ModulePermission> => {
@@ -105,6 +110,7 @@ const sanitizeSubAdminPermissions = (
 
 export default function SuperAdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname() || '';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthorised, setIsAuthorised] = useState(false);
 
@@ -115,7 +121,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
       return;
     }
 
-    if (user.roleName !== 'Super Admin' && user.roleName !== 'Sub Super Admin') {
+    if (user.roleName !== 'Super Admin' && user.roleName !== 'Sub Super Admin' && user.roleName !== 'Data Entry User') {
       router.replace('/user/dashboard');
       return;
     }
@@ -123,6 +129,14 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
     setCurrentUser(user);
     setIsAuthorised(true);
   }, [router]);
+
+  // Data Entry User may only access the create individual lead page
+  useEffect(() => {
+    if (!currentUser || currentUser.roleName !== 'Data Entry User') return;
+    if (pathname !== '/superadmin/leads/individual') {
+      router.replace('/superadmin/leads/individual');
+    }
+  }, [currentUser, pathname, router]);
 
   const permissionConfig = useMemo(() => {
     if (!currentUser) {
@@ -137,16 +151,44 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
       return sanitizeSubAdminPermissions(currentUser.permissions || {});
     }
 
+    if (currentUser.roleName === 'Data Entry User') {
+      const dataEntryPerms: Record<PermissionModuleKey, ModulePermission> = {} as Record<
+        PermissionModuleKey,
+        ModulePermission
+      >;
+      PERMISSION_MODULES.forEach((module) => {
+        dataEntryPerms[module.key] = {
+          access: module.key === 'leads',
+          permission: 'write',
+        };
+      });
+      return dataEntryPerms;
+    }
+
     return {};
+  }, [currentUser]);
+
+  const navItems = useMemo(() => {
+    if (currentUser?.roleName === 'Data Entry User') return DATA_ENTRY_NAV_ITEMS;
+    return BASE_NAV_ITEMS;
   }, [currentUser]);
 
   const roleLabel = currentUser?.roleName ?? 'Super Admin';
   const userName = currentUser?.name ?? 'Super Admin';
 
   const description =
-    roleLabel === 'Sub Super Admin'
-      ? 'Access the modules delegated to you by the super admin team.'
-      : 'Navigate admissions, communications, and lead workflows with ease.';
+    roleLabel === 'Data Entry User'
+      ? 'Create a single prospect manually and add them to the admissions workflow.'
+      : roleLabel === 'Sub Super Admin'
+        ? 'Access the modules delegated to you by the super admin team.'
+        : 'Navigate admissions, communications, and lead workflows with ease.';
+
+  const title =
+    roleLabel === 'Data Entry User'
+      ? 'Data Entry'
+      : roleLabel === 'Super Admin'
+        ? 'Super Admin'
+        : 'Command Center';
 
   if (!isAuthorised) {
     return <div className="flex min-h-screen items-center justify-center bg-white dark:bg-slate-950">Preparing workspace…</div>;
@@ -154,8 +196,8 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
 
   return (
     <DashboardShell
-      navItems={BASE_NAV_ITEMS}
-      title={roleLabel === 'Super Admin' ? 'Super Admin' : 'Command Center'}
+      navItems={navItems}
+      title={title}
       description={description}
       role={roleLabel}
       userName={userName}

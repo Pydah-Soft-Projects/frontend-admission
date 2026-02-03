@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { managerAPI } from '@/lib/api';
+import { managerAPI, leadAPI } from '@/lib/api';
 import { User } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -31,6 +31,11 @@ import { UserIcon } from '@/components/layout/DashboardShell';
 const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
+
+const getTodayDateString = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export default function ManagerDashboard() {
   const router = useRouter();
@@ -88,6 +93,18 @@ export default function ManagerDashboard() {
       return response.data || response;
     },
   });
+
+  const todayStr = getTodayDateString();
+  const { data: scheduledLeadsData } = useQuery({
+    queryKey: ['leads', 'scheduled', todayStr],
+    queryFn: async () => {
+      const res = await leadAPI.getAll({ scheduledOn: todayStr, limit: 50 });
+      return res?.leads ?? [];
+    },
+    enabled: !!user?._id,
+    staleTime: 60_000,
+  });
+  const scheduledLeads = Array.isArray(scheduledLeadsData) ? scheduledLeadsData : [];
 
   if (isAuthorising) {
     return (
@@ -180,6 +197,44 @@ export default function ManagerDashboard() {
           </div>
         </Card>
       </div>
+
+      <Card className="space-y-4 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Your follow-up calls for today. Set from lead details after a call.
+            </p>
+          </div>
+          <Link href="/manager/leads">
+            <Button variant="outline" size="sm">View leads</Button>
+          </Link>
+        </div>
+        {scheduledLeads.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400 py-4">No calls scheduled for today.</p>
+        ) : (
+          <ul className="divide-y divide-slate-200 dark:divide-slate-700 max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+            {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; nextScheduledCall?: string }) => (
+              <li key={lead._id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{lead.name ?? '—'}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {lead.enquiryNumber && <span>{lead.enquiryNumber}</span>}
+                    {lead.nextScheduledCall && (
+                      <span className="ml-2">
+                        {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <Link href={`/manager/leads/${lead._id}`}>
+                  <Button variant="outline" size="sm">Open</Button>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
