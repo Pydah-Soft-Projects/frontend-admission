@@ -93,7 +93,6 @@ export default function ManagerLeadDetailPage() {
     'Admission Cancelled',
   ];
   
-  const quotaOptions = ['Not Applicable', 'Management', 'Convenor'];
   const isManager = user?.isManager === true;
   
   // Get the appropriate leads page URL for managers
@@ -489,16 +488,12 @@ export default function ManagerLeadDetailPage() {
       setFormData({
         name: lead.name,
         phone: lead.phone,
-        email: lead.email,
         fatherName: lead.fatherName,
         fatherPhone: lead.fatherPhone,
-        motherName: lead.motherName,
-        courseInterested: lead.courseInterested,
         village: lead.village,
         mandal: lead.mandal,
         district: lead.district,
         state: lead.state || 'Andhra Pradesh',
-        quota: lead.quota || 'Not Applicable',
         applicationStatus: lead.applicationStatus,
         hallTicketNumber: lead.hallTicketNumber,
         gender: lead.gender,
@@ -991,14 +986,6 @@ export default function ManagerLeadDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <Input
-                      type="email"
-                      value={formData.email || ''}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Father Name *</label>
                     <Input
                       value={formData.fatherName || ''}
@@ -1012,20 +999,6 @@ export default function ManagerLeadDetailPage() {
                       value={formData.fatherPhone || ''}
                       onChange={(e) => setFormData({ ...formData, fatherPhone: e.target.value })}
                       required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mother Name</label>
-                    <Input
-                      value={formData.motherName || ''}
-                      onChange={(e) => setFormData({ ...formData, motherName: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Course Interested</label>
-                    <Input
-                      value={formData.courseInterested || ''}
-                      onChange={(e) => setFormData({ ...formData, courseInterested: e.target.value })}
                     />
                   </div>
                   <div>
@@ -1082,20 +1055,6 @@ export default function ManagerLeadDetailPage() {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Quota</label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={formData.quota || 'Not Applicable'}
-                      onChange={(e) => setFormData({ ...formData, quota: e.target.value })}
-                    >
-                      {quotaOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button type="submit" variant="primary" disabled={updateMutation.isPending}>
@@ -1118,11 +1077,6 @@ export default function ManagerLeadDetailPage() {
                     <span className={`px-3 py-1.5 text-sm font-medium rounded-full border whitespace-nowrap flex-shrink-0 ${getStatusColor(lead.leadStatus)}`}>
                       {lead.leadStatus || 'New'}
                     </span>
-                    {lead.courseInterested && (
-                      <span className="px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded-full border border-gray-200 dark:border-gray-700 whitespace-nowrap flex-shrink-0">
-                        {lead.courseInterested}
-                      </span>
-                    )}
                     {lead.source && (
                       <span className="px-3 py-1.5 text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full border border-green-200 dark:border-green-800 whitespace-nowrap flex-shrink-0">
                         {lead.source}
@@ -1130,7 +1084,7 @@ export default function ManagerLeadDetailPage() {
                     )}
                   </div>
 
-                {/* Main student details - larger font with gender and email */}
+                {/* Main student details - larger font with gender */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
                   <div>
                     <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Name</label>
@@ -1153,12 +1107,7 @@ export default function ManagerLeadDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Phone</label>
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 break-all">{lead.phone || '-'}</p>
-                      {lead.email && (
-                        <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-all">({lead.email})</span>
-                      )}
-                    </div>
+                    <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 break-all">{lead.phone || '-'}</p>
                   </div>
                 </div>
 
@@ -1190,12 +1139,6 @@ export default function ManagerLeadDetailPage() {
                       <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Father Phone</label>
                       <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-all">{lead.fatherPhone}</p>
                     </div>
-                    {lead.motherName && (
-                      <div>
-                        <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Mother Name</label>
-                        <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-words">{lead.motherName}</p>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1242,10 +1185,6 @@ export default function ManagerLeadDetailPage() {
                           <div>
                             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">State</label>
                             <p className="text-sm text-gray-900 dark:text-gray-100">{lead.state || '-'}</p>
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Quota</label>
-                            <p className="text-sm text-gray-900 dark:text-gray-100">{lead.quota || '-'}</p>
                           </div>
                           {lead.applicationStatus && (
                             <div>
