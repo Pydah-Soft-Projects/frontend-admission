@@ -341,10 +341,11 @@ export const leadAPI = {
     // Extract the nested data property for consistency
     return response.data?.data || response.data;
   },
-  getUserAnalytics: async (params?: { startDate?: string; endDate?: string; userId?: string }) => {
+  getUserAnalytics: async (params?: { startDate?: string; endDate?: string; userId?: string; academicYear?: number | string }) => {
     const queryParams = new URLSearchParams();
     if (params?.startDate) queryParams.append('startDate', params.startDate);
     if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.academicYear != null && params.academicYear !== '') queryParams.append('academicYear', String(params.academicYear));
     if (params?.userId) queryParams.append('userId', params.userId);
     const query = queryParams.toString();
     const response = await api.get(`/leads/analytics/users${query ? `?${query}` : ''}`);
@@ -852,6 +853,15 @@ export const reportAPI = {
     // Extract the nested data property for consistency
     return response.data?.data || response.data;
   },
+  getLeadsAbstract: async (params: { academicYear: number | string; studentGroup?: string; stateId?: string; districtId?: string }) => {
+    const queryParams = new URLSearchParams();
+    queryParams.append('academicYear', String(params.academicYear));
+    if (params.studentGroup) queryParams.append('studentGroup', params.studentGroup);
+    if (params.stateId) queryParams.append('stateId', params.stateId);
+    if (params.districtId) queryParams.append('districtId', params.districtId);
+    const response = await api.get(`/reports/leads-abstract?${queryParams.toString()}`);
+    return response.data?.data || response.data;
+  },
 };
 
 // UTM API
@@ -1007,7 +1017,8 @@ export const formBuilderAPI = {
 export const locationsAPI = {
   listStates: async () => {
     const response = await api.get('/locations/states');
-    return response.data;
+    const data = response.data?.data ?? response.data;
+    return Array.isArray(data) ? data : [];
   },
   listDistricts: async (params: { stateId?: string; stateName?: string }) => {
     const p = new URLSearchParams();
@@ -1015,7 +1026,8 @@ export const locationsAPI = {
     if (params?.stateName) p.append('stateName', params.stateName);
     const q = p.toString() ? `?${p.toString()}` : '';
     const response = await api.get(`/locations/districts${q}`);
-    return response.data;
+    const data = response.data?.data ?? response.data;
+    return Array.isArray(data) ? data : [];
   },
   listMandals: async (params: { districtId?: string; stateName?: string; districtName?: string }) => {
     const p = new URLSearchParams();
@@ -1024,15 +1036,18 @@ export const locationsAPI = {
     if (params?.districtName) p.append('districtName', params.districtName);
     const q = p.toString() ? `?${p.toString()}` : '';
     const response = await api.get(`/locations/mandals${q}`);
-    return response.data;
+    const data = response.data?.data ?? response.data;
+    return Array.isArray(data) ? data : [];
   },
   listSchools: async () => {
     const response = await api.get('/locations/schools');
-    return response.data;
+    const data = response.data?.data ?? response.data;
+    return Array.isArray(data) ? data : [];
   },
   listColleges: async () => {
     const response = await api.get('/locations/colleges');
-    return response.data;
+    const data = response.data?.data ?? response.data;
+    return Array.isArray(data) ? data : [];
   },
 };
 
