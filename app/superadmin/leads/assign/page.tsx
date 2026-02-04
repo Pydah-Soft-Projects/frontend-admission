@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
-type AssignmentMode = 'bulk' | 'single';
+type AssignmentMode = 'bulk' | 'single' | 'remove';
 
 interface AssignmentStats {
   totalLeads: number;
@@ -34,8 +34,18 @@ export default function AssignLeadsPage() {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [mandal, setMandal] = useState('');
   const [state, setState] = useState('');
+  const [academicYear, setAcademicYear] = useState<number | ''>(2025);
   const [count, setCount] = useState(1000);
   const [isReady, setIsReady] = useState(false);
+
+  // Remove assignment state
+  const [removeUserId, setRemoveUserId] = useState('');
+  const [removeMandal, setRemoveMandal] = useState('');
+  const [removeState, setRemoveState] = useState('');
+  const [removeAcademicYear, setRemoveAcademicYear] = useState<number | ''>('');
+  const [removeCount, setRemoveCount] = useState(100);
+
+  const academicYearOptions = [2024, 2025, 2026, 2027];
 
   // Single assignment state
   const [selectedLeadId, setSelectedLeadId] = useState('');
@@ -78,13 +88,14 @@ export default function AssignLeadsPage() {
     load();
   }, [currentUser]);
 
-  // Fetch assignment statistics
+  // Fetch assignment statistics (scoped by academic year when in bulk mode)
   const { data: statsData, refetch: refetchStats } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStats', mandal, state],
+    queryKey: ['assignmentStats', mandal, state, academicYear],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         mandal: mandal || undefined,
         state: state || undefined,
+        academicYear: academicYear !== '' ? academicYear : undefined,
       });
       return { data: response.data || response };
     },
@@ -92,6 +103,23 @@ export default function AssignLeadsPage() {
   });
 
   const stats = statsData?.data;
+
+  // Assigned count for selected user (for remove-assignment tab)
+  const { data: assignedCountData } = useQuery<{ data?: { count?: number } }>({
+    queryKey: ['assignedCountForUser', removeUserId, removeMandal, removeState, removeAcademicYear],
+    queryFn: async () => {
+      if (!removeUserId) return { data: { count: 0 } };
+      const response = await leadAPI.getAssignedCountForUser({
+        userId: removeUserId,
+        mandal: removeMandal || undefined,
+        state: removeState || undefined,
+        academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
+      });
+      return { data: response.data ?? response };
+    },
+    enabled: isReady && !!removeUserId,
+  });
+  const assignedToUserCount = assignedCountData?.data?.count ?? 0;
 
   // Search leads for single assignment
   useEffect(() => {
@@ -139,6 +167,7 @@ export default function AssignLeadsPage() {
       userId: string;
       mandal?: string;
       state?: string;
+      academicYear?: number | string;
       count?: number;
       leadIds?: string[];
     }) => leadAPI.assignLeads(payload),
@@ -155,6 +184,7 @@ export default function AssignLeadsPage() {
         setSelectedUserId('');
         setMandal('');
         setState('');
+        setAcademicYear(2025);
         setCount(1000);
       } else {
         setSelectedUserId('');
@@ -169,10 +199,41 @@ export default function AssignLeadsPage() {
     },
   });
 
+  const removeAssignmentsMutation = useMutation({
+    mutationFn: async (payload: {
+      userId: string;
+      mandal?: string;
+      state?: string;
+      academicYear?: number | string;
+      count: number;
+    }) => leadAPI.removeAssignments(payload),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['assignmentStats'] });
+      refetchStats();
+      const removed = response.data?.removed ?? response.removed ?? 0;
+      const userName = response.data?.userName ?? response.userName ?? 'user';
+      showToast.success(`Removed assignment for ${removed} lead${removed !== 1 ? 's' : ''} from ${userName}`);
+      setRemoveUserId('');
+      setRemoveMandal('');
+      setRemoveState('');
+      setRemoveAcademicYear('');
+      setRemoveCount(100);
+    },
+    onError: (error: any) => {
+      console.error('Remove assignments error:', error);
+      showToast.error(error.response?.data?.message || 'Failed to remove assignments');
+    },
+  });
+
   const handleBulkAssign = (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedUserId) {
       showToast.error('Please select a user to assign leads.');
+      return;
+    }
+    if (academicYear === '') {
+      showToast.error('Please select an academic year.');
       return;
     }
     if (count <= 0) {
@@ -184,6 +245,7 @@ export default function AssignLeadsPage() {
       userId: selectedUserId,
       mandal: mandal || undefined,
       state: state || undefined,
+      academicYear,
       count,
     });
   };
@@ -202,6 +264,29 @@ export default function AssignLeadsPage() {
     assignMutation.mutate({
       userId: selectedUserId,
       leadIds: [selectedLeadId],
+    });
+  };
+
+  const handleRemoveAssignments = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!removeUserId) {
+      showToast.error('Please select a user to remove assignments from.');
+      return;
+    }
+    if (removeCount <= 0) {
+      showToast.error('Count must be greater than zero.');
+      return;
+    }
+    if (removeCount > assignedToUserCount) {
+      showToast.error(`This user has only ${assignedToUserCount} assigned lead(s). Enter a count up to ${assignedToUserCount}.`);
+      return;
+    }
+    removeAssignmentsMutation.mutate({
+      userId: removeUserId,
+      mandal: removeMandal || undefined,
+      state: removeState || undefined,
+      academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
+      count: removeCount,
     });
   };
 
@@ -303,11 +388,189 @@ export default function AssignLeadsPage() {
             >
               Single Assignment
             </button>
+            <button
+              onClick={() => {
+                setMode('remove');
+                setSelectedUserId('');
+                setSelectedLeadId('');
+                setLeadSearch('');
+                setSearchResults([]);
+              }}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                mode === 'remove'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
+            >
+              Remove Assignment
+            </button>
           </nav>
         </div>
 
         <div className="p-6">
-          {mode === 'bulk' ? (
+          {mode === 'remove' ? (
+            <form onSubmit={handleRemoveAssignments} className="space-y-6">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Select User to Remove Assignments From *
+                </label>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                  value={removeUserId}
+                  onChange={(event) => setRemoveUserId(event.target.value)}
+                  required
+                >
+                  <option value="">Choose a user…</option>
+                  {usersByRole['Sub Super Admin'].length > 0 && (
+                    <optgroup label="Sub Super Admins">
+                      {usersByRole['Sub Super Admin'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email}) - Sub Admin
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole.User.length > 0 && (
+                    <optgroup label="Users">
+                      {usersByRole.User.map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['Student Counselor'].length > 0 && (
+                    <optgroup label="Student Counselors">
+                      {usersByRole['Student Counselor'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['Data Entry User'].length > 0 && (
+                    <optgroup label="Data Entry Users">
+                      {usersByRole['Data Entry User'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  Leads currently assigned to this user will become unassigned (pool).
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Academic Year (optional)
+                </label>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                  value={removeAcademicYear === '' ? '' : removeAcademicYear}
+                  onChange={(event) => setRemoveAcademicYear(event.target.value === '' ? '' : Number(event.target.value))}
+                >
+                  <option value="">All years</option>
+                  {academicYearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  Filter by academic year; leave as &quot;All years&quot; to remove from any year.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Mandal (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={removeMandal}
+                    onChange={(event) => setRemoveMandal(event.target.value)}
+                  >
+                    <option value="">All Mandals</option>
+                    {filters?.mandals?.map((mandalOption) => (
+                      <option key={mandalOption} value={mandalOption}>
+                        {mandalOption}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    State (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={removeState}
+                    onChange={(event) => setRemoveState(event.target.value)}
+                  >
+                    <option value="">All States</option>
+                    {filters?.states?.map((stateOption) => (
+                      <option key={stateOption} value={stateOption}>
+                        {stateOption}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Number of Leads to Unassign *
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={Math.max(assignedToUserCount, 10000)}
+                  value={removeCount}
+                  onChange={(event) => setRemoveCount(Number(event.target.value))}
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  Assigned to this user: {assignedToUserCount.toLocaleString()} leads
+                  {removeAcademicYear !== '' && ` for ${removeAcademicYear}`}
+                  {removeMandal && ` in ${removeMandal}`}
+                  {removeState && `, ${removeState}`}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  disabled={
+                    removeAssignmentsMutation.isPending ||
+                    !removeUserId ||
+                    removeCount <= 0 ||
+                    assignedToUserCount === 0
+                  }
+                  className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900/20"
+                >
+                  {removeAssignmentsMutation.isPending ? 'Removing…' : 'Remove Assignments'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setRemoveUserId('');
+                    setRemoveMandal('');
+                    setRemoveState('');
+                    setRemoveCount(100);
+                  }}
+                  disabled={removeAssignmentsMutation.isPending}
+                >
+                  Reset
+                </Button>
+              </div>
+            </form>
+          ) : mode === 'bulk' ? (
             <form onSubmit={handleBulkAssign} className="space-y-6">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -359,6 +622,28 @@ export default function AssignLeadsPage() {
                 </select>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                   Select a user or sub-admin to assign leads to.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Academic Year *
+                </label>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                  value={academicYear === '' ? '' : academicYear}
+                  onChange={(event) => setAcademicYear(event.target.value === '' ? '' : Number(event.target.value))}
+                  required
+                >
+                  <option value="">Select academic year…</option>
+                  {academicYearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  Only unassigned leads for this academic year will be assigned.
                 </p>
               </div>
 
@@ -419,13 +704,14 @@ export default function AssignLeadsPage() {
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                   Number of unassigned leads to assign. Available: {stats?.unassignedCount.toLocaleString() || 0} leads
+                  {academicYear !== '' && ` for ${academicYear}`}
                   {mandal && ` in ${mandal}`}
                   {state && `, ${state}`}
                 </p>
               </div>
 
               <div className="flex items-center gap-3">
-                <Button type="submit" disabled={assignMutation.isPending || !selectedUserId}>
+                <Button type="submit" disabled={assignMutation.isPending || !selectedUserId || academicYear === ''}>
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Leads'}
                 </Button>
                 <Button
@@ -435,6 +721,7 @@ export default function AssignLeadsPage() {
                     setSelectedUserId('');
                     setMandal('');
                     setState('');
+                    setAcademicYear(2025);
                     setCount(1000);
                   }}
                   disabled={assignMutation.isPending}
