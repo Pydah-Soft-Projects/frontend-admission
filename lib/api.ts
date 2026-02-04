@@ -353,6 +353,15 @@ export const leadAPI = {
     // Extract the nested data property for consistency
     return response.data?.data || response.data;
   },
+  /** Current user's own call/SMS/activity report (for counsellor dashboard) */
+  getMyCallAnalytics: async (params?: { startDate?: string; endDate?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    const query = queryParams.toString();
+    const response = await api.get(`/leads/analytics/me${query ? `?${query}` : ''}`);
+    return response.data?.data || response.data;
+  },
   // Public lead submission (no auth required)
   submitPublicLead: async (data: {
     hallTicketNumber?: string;
