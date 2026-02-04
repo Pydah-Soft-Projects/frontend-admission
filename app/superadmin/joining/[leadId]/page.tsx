@@ -173,7 +173,7 @@ function RelativeAddressRow({
 }: {
   relative: JoiningRelativeAddress;
   index: number;
-  updateRelative: (index: number, field: string, value: string) => void;
+  updateRelative: (index: number, field: keyof JoiningRelativeAddress, value: string) => void;
   removeRelative: (index: number) => void;
   stateNames: string[];
 }) {

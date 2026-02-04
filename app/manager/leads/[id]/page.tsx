@@ -620,7 +620,9 @@ export default function ManagerLeadDetailPage() {
 
   const scheduleCallMutation = useMutation({
     mutationFn: async (payload: { nextScheduledCall: string | null }) => {
-      return await leadAPI.update(leadId, payload);
+      return await leadAPI.update(leadId, {
+        nextScheduledCall: payload.nextScheduledCall ?? undefined,
+      });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
