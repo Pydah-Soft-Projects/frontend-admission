@@ -26,8 +26,7 @@ import {
 } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
-import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
-import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
+import { useLocations } from '@/lib/useLocations';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -164,6 +163,62 @@ const sanitizeTotalMarksInput = (nextValue: string, previousValue: string) => {
 
   return previousValue;
 };
+
+function RelativeAddressRow({
+  relative,
+  index,
+  updateRelative,
+  removeRelative,
+  stateNames,
+}: {
+  relative: JoiningRelativeAddress;
+  index: number;
+  updateRelative: (index: number, field: string, value: string) => void;
+  removeRelative: (index: number) => void;
+  stateNames: string[];
+}) {
+  const { districtNames, mandalNames } = useLocations({
+    stateName: relative.state || undefined,
+    districtName: relative.district || undefined,
+  });
+  return (
+    <div className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">Address #{index + 1}</h3>
+        <button className="text-sm text-red-500" onClick={() => removeRelative(index)}>Remove</button>
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <Input label="Name" value={relative.name || ''} onChange={(e) => updateRelative(index, 'name', e.target.value)} />
+        <Input label="Relationship" value={relative.relationship || ''} onChange={(e) => updateRelative(index, 'relationship', e.target.value)} />
+        <Input label="Door / Street" value={relative.doorOrStreet || ''} onChange={(e) => updateRelative(index, 'doorOrStreet', e.target.value.toUpperCase())} />
+        <Input label="Landmark" value={relative.landmark || ''} onChange={(e) => updateRelative(index, 'landmark', e.target.value.toUpperCase())} />
+        <Input label="Village / City" value={relative.villageOrCity || ''} onChange={(e) => updateRelative(index, 'villageOrCity', e.target.value.toUpperCase())} />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
+          <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={relative.state || ''} onChange={(e) => updateRelative(index, 'state', e.target.value)}>
+            <option value="">Select state</option>
+            {stateNames.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">District</label>
+          <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={relative.district || ''} onChange={(e) => updateRelative(index, 'district', e.target.value)}>
+            <option value="">Select district</option>
+            {districtNames.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mandal</label>
+          <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={relative.mandal || ''} onChange={(e) => updateRelative(index, 'mandal', e.target.value)}>
+            <option value="">Select mandal</option>
+            {mandalNames.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        <Input label="PIN Code" value={relative.pinCode || ''} onChange={(e) => updateRelative(index, 'pinCode', e.target.value)} maxLength={6} />
+      </div>
+    </div>
+  );
+}
 
 type JoiningFormState = {
   courseInfo: Joining['courseInfo'];
@@ -341,21 +396,12 @@ const JoiningDetailPage = () => {
 
   const isNewJoining = leadId === 'new';
 
-  // State/district/mandal dropdown options for communication address (same data as lead-form)
   const commState = formState.address.communication.state ?? '';
   const commDistrict = formState.address.communication.district ?? '';
-  const commDistricts = useMemo(() => {
-    if (!commState) return [];
-    if (commState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
-    return getDistrictsByState(commState);
-  }, [commState]);
-  const commMandals = useMemo(() => {
-    if (!commState || !commDistrict) return [];
-    const mandals = getMandalsByStateAndDistrict(commState, commDistrict);
-    if (mandals.length > 0) return mandals;
-    if (commState.toLowerCase() === 'andhra pradesh') return getAPMandals(commDistrict);
-    return [];
-  }, [commState, commDistrict]);
+  const { stateNames, districtNames: commDistricts, mandalNames: commMandals } = useLocations({
+    stateName: commState || undefined,
+    districtName: commDistrict || undefined,
+  });
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['joining', leadId],
@@ -1978,7 +2024,7 @@ const JoiningDetailPage = () => {
                     onChange={(e) => handleCommunicationAddressChange('state', e.target.value)}
                   >
                     <option value="">Select state</option>
-                    {getAllStates().map((s) => (
+                    {stateNames.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -2041,110 +2087,14 @@ const JoiningDetailPage = () => {
                   </p>
                 )}
                 {formState.address.relatives.map((relative, index) => (
-                  <div
+                  <RelativeAddressRow
                     key={`relative-${index}`}
-                    className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
-                        Address #{index + 1}
-                      </h3>
-                      <button
-                        className="text-sm text-red-500"
-                        onClick={() => removeRelative(index)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      <Input
-                        label="Name"
-                        value={relative.name || ''}
-                        onChange={(event) => updateRelative(index, 'name', event.target.value)}
-                      />
-                      <Input
-                        label="Relationship"
-                        value={relative.relationship || ''}
-                        onChange={(event) =>
-                          updateRelative(index, 'relationship', event.target.value)
-                        }
-                      />
-                      <Input
-                        label="Door / Street"
-                        value={relative.doorOrStreet || ''}
-                        onChange={(event) =>
-                          updateRelative(index, 'doorOrStreet', event.target.value.toUpperCase())
-                        }
-                      />
-                      <Input
-                        label="Landmark"
-                        value={relative.landmark || ''}
-                        onChange={(event) =>
-                          updateRelative(index, 'landmark', event.target.value.toUpperCase())
-                        }
-                      />
-                      <Input
-                        label="Village / City"
-                        value={relative.villageOrCity || ''}
-                        onChange={(event) =>
-                          updateRelative(index, 'villageOrCity', event.target.value.toUpperCase())
-                        }
-                      />
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
-                        <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                          value={relative.state || ''}
-                          onChange={(e) => updateRelative(index, 'state', e.target.value)}
-                        >
-                          <option value="">Select state</option>
-                          {getAllStates().map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">District</label>
-                        <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                          value={relative.district || ''}
-                          onChange={(e) => updateRelative(index, 'district', e.target.value)}
-                        >
-                          <option value="">Select district</option>
-                          {(relative.state?.toLowerCase() === 'andhra pradesh' ? getAPDistricts() : getDistrictsByState(relative.state || '')).map((d) => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mandal</label>
-                        <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                          value={relative.mandal || ''}
-                          onChange={(e) => updateRelative(index, 'mandal', e.target.value)}
-                        >
-                          <option value="">Select mandal</option>
-                          {(() => {
-                            const st = relative.state || '';
-                            const dist = relative.district || '';
-                            if (!st || !dist) return [];
-                            const m = getMandalsByStateAndDistrict(st, dist);
-                            if (m.length > 0) return m;
-                            if (st.toLowerCase() === 'andhra pradesh') return getAPMandals(dist);
-                            return [];
-                          })().map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <Input
-                        label="PIN Code"
-                        value={relative.pinCode || ''}
-                        onChange={(event) => updateRelative(index, 'pinCode', event.target.value)}
-                        maxLength={6}
-                      />
-                    </div>
-                  </div>
+                    relative={relative}
+                    index={index}
+                    updateRelative={updateRelative}
+                    removeRelative={removeRelative}
+                    stateNames={stateNames}
+                  />
                 ))}
               </div>
             </section>

@@ -11,8 +11,8 @@ import { Card } from '@/components/ui/Card';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { LeadUploadData } from '@/types';
-import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
-import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
+import { useLocations } from '@/lib/useLocations';
+import { useInstitutions } from '@/lib/useInstitutions';
 
 type LeadFormState = Required<
   Pick<
@@ -74,15 +74,6 @@ const IndividualLeadPage = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
-
-  // Get districts from AP data (manual form uses AP only)
-  const districts = useMemo(() => getAPDistricts(), []);
-
-  // Get mandals based on selected district
-  const mandals = useMemo(() => {
-    if (!formState.district) return [];
-    return getAPMandals(formState.district);
-  }, [formState.district]);
 
   // -------- Dynamic Form Builder integration --------
 
@@ -153,21 +144,29 @@ const IndividualLeadPage = () => {
     dynamicFormData.address_district ??
     '';
 
-  const availableDistricts = useMemo(() => {
-    if (!selectedState) return [] as string[];
-    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
-    return getDistrictsByState(selectedState);
-  }, [selectedState]);
+  const isDynamicMode = !!(selectedFormId && sortedFormFields.length > 0);
 
-  const availableMandals = useMemo(() => {
-    if (!selectedState || !selectedDistrict) return [] as string[];
-    const mandalsFromStates = getMandalsByStateAndDistrict(selectedState, selectedDistrict);
-    if (mandalsFromStates.length > 0) return mandalsFromStates;
-    if (selectedState.toLowerCase() === 'andhra pradesh') {
-      return getAPMandals(selectedDistrict);
-    }
-    return [];
-  }, [selectedState, selectedDistrict]);
+  const { stateNames, districtNames, mandalNames } = useLocations({
+    stateName: isDynamicMode ? selectedState || undefined : (formState.state || 'Andhra Pradesh'),
+    districtName: isDynamicMode ? selectedDistrict || undefined : formState.district || undefined,
+  });
+  const districts = districtNames;
+  const mandals = mandalNames;
+  const availableDistricts = districtNames;
+  const availableMandals = mandalNames;
+
+  const {
+    schools,
+    colleges,
+    isLoading: institutionsLoading,
+  } = useInstitutions();
+
+  const studentGroupValue = (dynamicFormData.student_group ?? dynamicFormData.studentGroup ?? '') as string;
+  const normalizedStudentGroup = studentGroupValue?.toLowerCase().trim();
+  const useSchoolsList = normalizedStudentGroup === '10th';
+  const hasSelectedGroup = Boolean(normalizedStudentGroup);
+  const activeInstitutions = useSchoolsList ? schools : colleges;
+  const filteredInstitutions = activeInstitutions;
 
   const handleDynamicFieldChange = (fieldName: string, value: any) => {
     setDynamicFormData((prev) => {
@@ -182,6 +181,8 @@ const IndividualLeadPage = () => {
       } else if (key === 'district' || key === 'address_district') {
         delete (next as any).mandal;
         delete (next as any).address_mandal;
+      } else if (key === 'student_group' || key === 'studentgroup') {
+        delete (next as any).school_or_college_name;
       }
       return next;
     });
@@ -202,8 +203,8 @@ const IndividualLeadPage = () => {
   };
   const isLocationDropdownField = (field: any) =>
     isStateField(field) || isDistrictField(field) || isMandalField(field);
-
-  const isDynamicMode = !!(selectedFormId && sortedFormFields.length > 0);
+  const isSchoolOrCollegeField = (field: any) =>
+    (field.fieldName || '').toLowerCase() === 'school_or_college_name';
 
   const headerContent = useMemo(
     () => (
@@ -464,7 +465,7 @@ const IndividualLeadPage = () => {
                       if (isLocationDropdownField(field)) {
                         let dropdownOptions: Array<{ value: string; label: string }> = [];
                         if (isStateField(field)) {
-                          dropdownOptions = getAllStates().map((state) => ({
+                          dropdownOptions = stateNames.map((state) => ({
                             value: state,
                             label: state,
                           }));
@@ -522,6 +523,50 @@ const IndividualLeadPage = () => {
                             {field.helpText && (
                               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                 {field.helpText}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (isSchoolOrCollegeField(field)) {
+                        const labelSuffix = useSchoolsList ? 'School' : 'College';
+                        const disabled = !hasSelectedGroup || institutionsLoading;
+                        const datalistId = `${field.fieldName}-institutions`;
+                        return (
+                          <div key={field._id}>
+                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                              {field.fieldLabel}{' '}
+                              {isFieldRequired && <span className="text-red-500">*</span>}
+                            </label>
+                            {!hasSelectedGroup && (
+                              <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                                Select a student group to choose an institution.
+                              </p>
+                            )}
+                            <Input
+                              value={fieldValue}
+                              onChange={(e) =>
+                                handleDynamicFieldChange(field.fieldName, e.target.value)
+                              }
+                              list={datalistId}
+                              placeholder={
+                                !hasSelectedGroup
+                                  ? 'Select student group first'
+                                  : institutionsLoading
+                                  ? `Loading ${labelSuffix.toLowerCase()}s...`
+                                  : `Start typing to search ${labelSuffix.toLowerCase()}`
+                              }
+                              disabled={disabled}
+                            />
+                            <datalist id={datalistId}>
+                              {filteredInstitutions.map((item) => (
+                                <option key={item.id} value={item.name} />
+                              ))}
+                            </datalist>
+                            {hasSelectedGroup && !institutionsLoading && filteredInstitutions.length === 0 && (
+                              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                No {labelSuffix.toLowerCase()} names available yet.
                               </p>
                             )}
                           </div>

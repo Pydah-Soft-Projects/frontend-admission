@@ -9,8 +9,7 @@ import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
-import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
+import { useLocations } from '@/lib/useLocations';
 
 type FormField = {
   id: string;
@@ -128,6 +127,8 @@ export default function FormBuilderPage() {
   const [showAddFieldForm, setShowAddFieldForm] = useState(false);
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
   const [dragOverFieldIndex, setDragOverFieldIndex] = useState<number | null>(null);
+
+  const { stateNames } = useLocations();
   const [draggedDraftFieldId, setDraggedDraftFieldId] = useState<string | null>(null);
   const [dragOverDraftIndex, setDragOverDraftIndex] = useState<number | null>(null);
 
@@ -300,7 +301,7 @@ export default function FormBuilderPage() {
       let nextOrder = maxOrder + 1;
 
       if (!hasState) {
-        const states = getAllStates();
+        const states = stateNames;
         setDraftFields(prev => [...prev, {
           id: `temp-state-${Date.now()}`,
           fieldName: 'state',

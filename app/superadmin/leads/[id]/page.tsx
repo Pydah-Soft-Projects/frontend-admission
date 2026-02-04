@@ -21,8 +21,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
-import { getAllStates, getDistrictsByState, getMandalsByStateAndDistrict } from '@/lib/indian-states-data';
-import { getAllDistricts as getAPDistricts, getMandalsByDistrict as getAPMandals } from '@/lib/andhra-pradesh-data';
+import { useLocations } from '@/lib/useLocations';
 
 // Timeline item type
 interface TimelineItem {
@@ -479,21 +478,15 @@ export default function LeadDetailPage() {
     return () => clearHeaderContent();
   }, [lead, user, isSuperAdmin, isManager, router, setHeaderContent, clearHeaderContent]);
 
-  // State/district/mandal dropdown options (same data as lead-form and individual)
+  // State/district/mandal dropdown options from database
   const selectedState = formData.state ?? lead?.state ?? '';
   const selectedDistrict = formData.district ?? lead?.district ?? '';
-  const availableDistricts = useMemo(() => {
-    if (!selectedState) return [];
-    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPDistricts();
-    return getDistrictsByState(selectedState);
-  }, [selectedState]);
-  const availableMandals = useMemo(() => {
-    if (!selectedState || !selectedDistrict) return [];
-    const mandals = getMandalsByStateAndDistrict(selectedState, selectedDistrict);
-    if (mandals.length > 0) return mandals;
-    if (selectedState.toLowerCase() === 'andhra pradesh') return getAPMandals(selectedDistrict);
-    return [];
-  }, [selectedState, selectedDistrict]);
+  const { stateNames, districtNames, mandalNames } = useLocations({
+    stateName: selectedState || undefined,
+    districtName: selectedDistrict || undefined,
+  });
+  const availableDistricts = districtNames;
+  const availableMandals = mandalNames;
 
   // Initialize form data
   useEffect(() => {
@@ -1048,7 +1041,7 @@ export default function LeadDetailPage() {
                         setFormData({ ...formData, state, district: undefined, mandal: undefined });
                       }}
                     >
-                      {getAllStates().map((s) => (
+                      {stateNames.map((s) => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>

@@ -982,6 +982,39 @@ export const formBuilderAPI = {
   },
 };
 
+// Locations API (public read-only for dropdowns - states, districts, mandals from DB)
+export const locationsAPI = {
+  listStates: async () => {
+    const response = await api.get('/locations/states');
+    return response.data;
+  },
+  listDistricts: async (params: { stateId?: string; stateName?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.stateId) p.append('stateId', params.stateId);
+    if (params?.stateName) p.append('stateName', params.stateName);
+    const q = p.toString() ? `?${p.toString()}` : '';
+    const response = await api.get(`/locations/districts${q}`);
+    return response.data;
+  },
+  listMandals: async (params: { districtId?: string; stateName?: string; districtName?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.districtId) p.append('districtId', params.districtId);
+    if (params?.stateName) p.append('stateName', params.stateName);
+    if (params?.districtName) p.append('districtName', params.districtName);
+    const q = p.toString() ? `?${p.toString()}` : '';
+    const response = await api.get(`/locations/mandals${q}`);
+    return response.data;
+  },
+  listSchools: async () => {
+    const response = await api.get('/locations/schools');
+    return response.data;
+  },
+  listColleges: async () => {
+    const response = await api.get('/locations/colleges');
+    return response.data;
+  },
+};
+
 // Master Data API (states, districts, mandals, schools, colleges)
 export const masterDataAPI = {
   // States
