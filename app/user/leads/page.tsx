@@ -596,9 +596,14 @@ export default function UserLeadsPage() {
                 </div>
 
                 <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center gap-2">
                     <span className="text-gray-500 dark:text-slate-400">Name</span>
-                    <span className="font-medium text-gray-900 dark:text-slate-100">{lead.name}</span>
+                    <span className="font-medium text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
+                      {lead.name}
+                      {lead.needsManualUpdate && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="Details need manual update">Needs update</span>
+                      )}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-slate-400">Phone</span>

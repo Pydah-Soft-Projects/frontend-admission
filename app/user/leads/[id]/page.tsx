@@ -1142,6 +1142,9 @@ export default function UserLeadDetailPage() {
                           {lead.gender.charAt(0).toUpperCase()}
                         </span>
                       )}
+                      {lead.needsManualUpdate && (
+                        <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded whitespace-nowrap" title="Details need manual update">Needs update</span>
+                      )}
                     </div>
                   </div>
                   <div>

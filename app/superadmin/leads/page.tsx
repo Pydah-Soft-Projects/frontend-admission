@@ -1352,11 +1352,16 @@ export default function LeadsPage() {
                                 {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '-'}
                               </td>
                               <td className="px-3 py-2 whitespace-nowrap text-xs font-medium text-gray-900 dark:text-slate-100" title={lead.name}>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span>{lead.name}</span>
                                   {lead.isNRI && (
                                     <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded">
                                       NRI
+                                    </span>
+                                  )}
+                                  {lead.needsManualUpdate && (
+                                    <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="District, mandal, or school/college may not match master data. Update manually.">
+                                      Needs update
                                     </span>
                                   )}
                                 </div>

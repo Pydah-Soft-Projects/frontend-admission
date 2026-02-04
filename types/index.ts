@@ -195,6 +195,7 @@ export interface Lead {
   nextScheduledCall?: string;
   academicYear?: number;
   studentGroup?: string;
+  needsManualUpdate?: boolean;
   notes?: string;
   uploadedBy?: User | string;
   uploadBatchId?: string;

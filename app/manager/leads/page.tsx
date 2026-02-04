@@ -338,7 +338,12 @@ export default function ManagerLeadsPage() {
                         {lead.enquiryNumber || '-'}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {lead.name}
+                        <span className="flex items-center gap-1.5">
+                          {lead.name}
+                          {lead.needsManualUpdate && (
+                            <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="Details need manual update">Needs update</span>
+                          )}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {lead.phone}

@@ -467,6 +467,11 @@ export default function LeadDetailPage() {
                     NRI
                   </span>
                 )}
+                {lead.needsManualUpdate && (
+                  <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="District, mandal, or school/college may not match master data. Please update manually.">
+                    Needs update
+                  </span>
+                )}
               </span>
               {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
             </p>
@@ -959,6 +964,11 @@ export default function LeadDetailPage() {
 
   return (
     <div className="mx-auto w-full max-w-[98vw] space-y-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      {lead?.needsManualUpdate && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-200" role="alert">
+          <strong>Details need manual update.</strong> This lead was bulk-uploaded and one or more of district, mandal, or school/college may not match master data. Please review and correct in the form below.
+        </div>
+      )}
       {/* MAIN CONTENT - 2 Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT COLUMN - Student Details & History */}
