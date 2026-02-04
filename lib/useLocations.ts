@@ -8,6 +8,8 @@ import { locationsAPI } from './api';
 type LocationItem = { id: string; name: string };
 
 function extractData<T>(res: any): T[] {
+  // API may return array directly (locationsAPI unwraps) or { data: array }
+  if (Array.isArray(res)) return res as T[];
   const d = res?.data;
   if (Array.isArray(d)) return d as T[];
   if (d?.data && Array.isArray(d.data)) return d.data as T[];
