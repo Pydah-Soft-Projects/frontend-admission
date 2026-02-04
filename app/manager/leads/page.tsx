@@ -114,6 +114,7 @@ export default function ManagerLeadsPage() {
 
   const leads = leadsData?.leads || [];
   const pagination = leadsData?.pagination || { page: 1, limit: 50, total: 0, pages: 1 };
+  const needsUpdateCount = leadsData?.needsUpdateCount ?? 0;
 
   useEffect(() => {
     setHeaderContent(
@@ -121,12 +122,17 @@ export default function ManagerLeadsPage() {
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">All Leads</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Manage leads assigned to you and your team ({pagination.total} total)
+          {needsUpdateCount > 0 && (
+            <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+              {needsUpdateCount} need{needsUpdateCount === 1 ? 's' : ''} update
+            </span>
+          )}
         </p>
       </div>
     );
 
     return () => clearHeaderContent();
-  }, [setHeaderContent, clearHeaderContent, pagination.total]);
+  }, [setHeaderContent, clearHeaderContent, pagination.total, needsUpdateCount]);
 
   // Clear filters
   const clearFilters = () => {
@@ -385,6 +391,11 @@ export default function ManagerLeadsPage() {
                 <div className="text-sm text-gray-700 dark:text-gray-300">
                   Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, pagination.total)} of{' '}
                   {pagination.total} leads
+                  {needsUpdateCount > 0 && (
+                    <span className="ml-3 inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200 ring-1 ring-inset ring-amber-600/20">
+                      {needsUpdateCount} need{needsUpdateCount === 1 ? 's' : ''} update
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button

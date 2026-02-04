@@ -264,6 +264,7 @@ export default function LeadsPage() {
 
   const leads = leadsData?.leads || [];
   const pagination = leadsData?.pagination || { page: 1, limit: 50, total: 0, pages: 1 };
+  const needsUpdateCount = leadsData?.needsUpdateCount ?? 0;
 
   const headerNode = useMemo(
     () => (
@@ -1021,6 +1022,11 @@ export default function LeadsPage() {
                   {pagination.total > 0 && (
                     <span className="ml-2">
                       (Page {pagination.page} of {pagination.pages})
+                    </span>
+                  )}
+                  {needsUpdateCount > 0 && (
+                    <span className="ml-3 inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200 ring-1 ring-inset ring-amber-600/20">
+                      {needsUpdateCount} need{needsUpdateCount === 1 ? 's' : ''} update
                     </span>
                   )}
                 </p>
