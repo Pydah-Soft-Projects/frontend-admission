@@ -157,6 +157,7 @@ export default function SuperAdminDashboard() {
   const {
     data: overviewData,
     isLoading: isLoadingOverview,
+    isFetching: isFetchingOverview,
   } = useQuery({
     queryKey: ['overview-analytics', dashboardAcademicYear, dashboardStudentGroup],
     queryFn: async () => {
@@ -168,6 +169,7 @@ export default function SuperAdminDashboard() {
       return response.data || response;
     },
     staleTime: 120_000,
+    placeholderData: (previousData) => previousData,
   });
 
   const overviewAnalytics = (overviewData?.data || overviewData) as OverviewAnalytics | null;
@@ -317,7 +319,8 @@ export default function SuperAdminDashboard() {
 
   const userAnalytics = userAnalyticsData?.users || [];
 
-  if (isTeamLoading || isLoadingOverview || isLoadingUserAnalytics) {
+  const isInitialLoad = !overviewData && isLoadingOverview;
+  if (isTeamLoading || isLoadingUserAnalytics || isInitialLoad) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <CardSkeleton />
@@ -372,23 +375,31 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 lg:grid-cols-6">
-        {summaryCards.map((card, index) => (
-          <Card
-            key={card.label}
-            className={`overflow-hidden border border-white/60 bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-6 shadow-lg shadow-blue-100/40 dark:border-slate-800/60 dark:shadow-none`}
-          >
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500/80 dark:text-slate-400/80">
-              {card.label}
-            </p>
-            <p className="mt-3 text-3xl font-semibold text-slate-900 dark:text-slate-100">
-              {formatNumber(card.value)}
-            </p>
-            <p className="mt-2 text-xs text-slate-500/90 dark:text-slate-400/90">
-              {card.helper}
-            </p>
-          </Card>
-        ))}
+      <div className="relative">
+        {isFetchingOverview && (
+          <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+            Updating…
+          </div>
+        )}
+        <div className={`grid gap-4 md:grid-cols-2 xl:grid-cols-3 lg:grid-cols-6 transition-opacity duration-200 ${isFetchingOverview ? 'opacity-75' : 'opacity-100'}`}>
+          {summaryCards.map((card, index) => (
+            <Card
+              key={card.label}
+              className={`overflow-hidden border border-white/60 bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-6 shadow-lg shadow-blue-100/40 dark:border-slate-800/60 dark:shadow-none`}
+            >
+              <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500/80 dark:text-slate-400/80">
+                {card.label}
+              </p>
+              <p className="mt-3 text-3xl font-semibold text-slate-900 dark:text-slate-100">
+                {formatNumber(card.value)}
+              </p>
+              <p className="mt-2 text-xs text-slate-500/90 dark:text-slate-400/90">
+                {card.helper}
+              </p>
+            </Card>
+          ))}
+        </div>
       </div>
 
       <Card className="space-y-4 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
