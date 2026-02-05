@@ -525,6 +525,7 @@ export default function ReportsPage() {
             >
               <option value="">All Groups</option>
               <option value="10th">10th</option>
+              <option value="Inter">Inter</option>
               <option value="Inter-MPC">Inter-MPC</option>
               <option value="Inter-BIPC">Inter-BIPC</option>
               <option value="Degree">Degree</option>
@@ -1385,6 +1386,7 @@ export default function ReportsPage() {
                 >
                   <option value="">All Groups</option>
                   <option value="10th">10th</option>
+                  <option value="Inter">Inter</option>
                   <option value="Inter-MPC">Inter-MPC</option>
                   <option value="Inter-BIPC">Inter-BIPC</option>
                   <option value="Degree">Degree</option>

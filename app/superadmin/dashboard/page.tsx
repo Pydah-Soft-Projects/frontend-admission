@@ -79,7 +79,7 @@ const summaryCardStyles = [
   'from-indigo-500/10 via-indigo-500/15 to-transparent text-indigo-700 dark:text-indigo-200',
 ];
 
-const STUDENT_GROUP_OPTIONS = ['10th', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
+const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
 
 export default function SuperAdminDashboard() {
   const router = useRouter();
