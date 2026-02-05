@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { leadAPI, userAPI } from '@/lib/api';
+import { leadAPI, userAPI, locationsAPI } from '@/lib/api';
 import { User, FilterOptions, Lead } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
-type AssignmentMode = 'bulk' | 'single' | 'remove';
+type AssignmentMode = 'bulk' | 'single' | 'remove' | 'stats';
 
 interface AssignmentStats {
   totalLeads: number;
@@ -34,18 +34,48 @@ export default function AssignLeadsPage() {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [mandal, setMandal] = useState('');
   const [state, setState] = useState('');
+  const [district, setDistrict] = useState('');
+  /** Academic year for the stats cards and bulk assignment. Default '' = All (matches dashboard). */
+  const [statsAcademicYear, setStatsAcademicYear] = useState<number | ''>('');
+  const [statsStudentGroup, setStatsStudentGroup] = useState<string>('');
+  /** Location filters for the Stats tab (Unassigned by Location) */
+  const [statsState, setStatsState] = useState('');
+  const [statsDistrict, setStatsDistrict] = useState('');
+  const [statsMandal, setStatsMandal] = useState('');
+  const [statsLocationDistricts, setStatsLocationDistricts] = useState<LocationOption[]>([]);
+  const [statsLocationMandals, setStatsLocationMandals] = useState<LocationOption[]>([]);
   const [academicYear, setAcademicYear] = useState<number | ''>(2025);
+  const [studentGroup, setStudentGroup] = useState<string>('');
   const [count, setCount] = useState(1000);
   const [isReady, setIsReady] = useState(false);
+
+  // Location dropdowns (cascade: State → District → Mandal) from locations API
+  type LocationOption = { id: string; name: string };
+  const [locationStates, setLocationStates] = useState<LocationOption[]>([]);
+  const [locationDistricts, setLocationDistricts] = useState<LocationOption[]>([]);
+  const [locationMandals, setLocationMandals] = useState<LocationOption[]>([]);
 
   // Remove assignment state
   const [removeUserId, setRemoveUserId] = useState('');
   const [removeMandal, setRemoveMandal] = useState('');
   const [removeState, setRemoveState] = useState('');
+  const [removeDistrict, setRemoveDistrict] = useState('');
+  const [removeLocationDistricts, setRemoveLocationDistricts] = useState<LocationOption[]>([]);
+  const [removeLocationMandals, setRemoveLocationMandals] = useState<LocationOption[]>([]);
   const [removeAcademicYear, setRemoveAcademicYear] = useState<number | ''>('');
+  const [removeStudentGroup, setRemoveStudentGroup] = useState<string>('');
   const [removeCount, setRemoveCount] = useState(100);
 
-  const academicYearOptions = [2024, 2025, 2026, 2027];
+  const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
+  const studentGroupOptions = filters?.studentGroups?.length ? filters.studentGroups : STUDENT_GROUP_OPTIONS;
+
+  const currentYear = new Date().getFullYear();
+  const academicYearOptions = [currentYear, currentYear + 1, currentYear - 1, currentYear - 2].filter(
+    (y, i, arr) => arr.indexOf(y) === i
+  ).sort((a, b) => b - a);
+  const filterAcademicYearOptions = filters?.academicYears?.length
+    ? filters.academicYears
+    : academicYearOptions;
 
   // Single assignment state
   const [selectedLeadId, setSelectedLeadId] = useState('');
@@ -78,7 +108,32 @@ export default function AssignLeadsPage() {
           leadAPI.getFilterOptions(),
         ]);
         setUsers(usersResponse.data || usersResponse);
-        setFilters(filtersResponse.data || filtersResponse);
+
+        // Normalize filter options: API returns { success, data: { mandals, states, ... }, message }
+        const raw = filtersResponse?.data ?? filtersResponse ?? {};
+        const options: FilterOptions = {
+          mandals: Array.isArray(raw.mandals) ? raw.mandals : [],
+          districts: Array.isArray(raw.districts) ? raw.districts : [],
+          states: Array.isArray(raw.states) ? raw.states : [],
+          quotas: Array.isArray(raw.quotas) ? raw.quotas : [],
+          leadStatuses: Array.isArray(raw.leadStatuses) ? raw.leadStatuses : [],
+          applicationStatuses: Array.isArray(raw.applicationStatuses) ? raw.applicationStatuses : [],
+          academicYears: Array.isArray(raw.academicYears) ? raw.academicYears : [],
+          studentGroups: Array.isArray(raw.studentGroups) ? raw.studentGroups : [],
+        };
+
+        // Fallback: if no states/mandals from leads (e.g. empty DB), use locations master data
+        if (options.states.length === 0 || options.mandals.length === 0) {
+          try {
+            const statesList = await locationsAPI.listStates();
+            const stateNames = Array.isArray(statesList) ? statesList.map((s: { id?: string; name: string }) => s.name) : [];
+            if (stateNames.length > 0 && options.states.length === 0) options.states = stateNames;
+          } catch {
+            // ignore
+          }
+        }
+
+        setFilters(options);
       } catch (error) {
         console.error('Failed to load assign-leads data:', error);
         showToast.error('Unable to load users or filters.');
@@ -88,16 +143,184 @@ export default function AssignLeadsPage() {
     load();
   }, [currentUser]);
 
-  // Fetch assignment statistics (scoped by academic year when in bulk mode)
+  // Load states from locations API (cascade source for State → District → Mandal)
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listStates();
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationStates(arr.map((s: { id?: string; name: string }) => ({ id: s.id || '', name: s.name || String(s) })));
+      } catch (e) {
+        if (!cancelled) console.error('Failed to load states for assign leads:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser]);
+
+  // When state (bulk) changes: fetch districts, clear district & mandal
+  useEffect(() => {
+    if (!state) {
+      setLocationDistricts([]);
+      setLocationMandals([]);
+      setDistrict('');
+      setMandal('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listDistricts({ stateName: state });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationDistricts(arr.map((d: { id?: string; name: string }) => ({ id: d.id || '', name: d.name || String(d) })));
+        setLocationMandals([]);
+        setDistrict('');
+        setMandal('');
+      } catch (e) {
+        if (!cancelled) setLocationDistricts([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [state]);
+
+  // When district (bulk) changes: fetch mandals
+  useEffect(() => {
+    if (!state || !district) {
+      setLocationMandals([]);
+      setMandal('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listMandals({ stateName: state, districtName: district });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationMandals(arr.map((m: { id?: string; name: string }) => ({ id: m.id || '', name: m.name || String(m) })));
+        setMandal('');
+      } catch (e) {
+        if (!cancelled) setLocationMandals([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [state, district]);
+
+  // When removeState changes: fetch remove districts, clear remove district & mandal
+  useEffect(() => {
+    if (!removeState) {
+      setRemoveLocationDistricts([]);
+      setRemoveLocationMandals([]);
+      setRemoveDistrict('');
+      setRemoveMandal('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listDistricts({ stateName: removeState });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setRemoveLocationDistricts(arr.map((d: { id?: string; name: string }) => ({ id: d.id || '', name: d.name || String(d) })));
+        setRemoveLocationMandals([]);
+        setRemoveDistrict('');
+        setRemoveMandal('');
+      } catch (e) {
+        if (!cancelled) setRemoveLocationDistricts([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [removeState]);
+
+  // When removeDistrict changes: fetch remove mandals
+  useEffect(() => {
+    if (!removeState || !removeDistrict) {
+      setRemoveLocationMandals([]);
+      setRemoveMandal('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listMandals({ stateName: removeState, districtName: removeDistrict });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setRemoveLocationMandals(arr.map((m: { id?: string; name: string }) => ({ id: m.id || '', name: m.name || String(m) })));
+        setRemoveMandal('');
+      } catch (e) {
+        if (!cancelled) setRemoveLocationMandals([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [removeState, removeDistrict]);
+
+  // Stats tab: when statsState changes, load districts and clear district/mandal
+  useEffect(() => {
+    if (!statsState) {
+      setStatsLocationDistricts([]);
+      setStatsLocationMandals([]);
+      setStatsDistrict('');
+      setStatsMandal('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listDistricts({ stateName: statsState });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setStatsLocationDistricts(arr.map((d: { id?: string; name: string }) => ({ id: d.id || '', name: d.name || String(d) })));
+        setStatsLocationMandals([]);
+        setStatsDistrict('');
+        setStatsMandal('');
+      } catch {
+        if (!cancelled) setStatsLocationDistricts([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [statsState]);
+
+  // Stats tab: when statsDistrict changes, load mandals
+  useEffect(() => {
+    if (!statsState || !statsDistrict) {
+      setStatsLocationMandals([]);
+      setStatsMandal('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listMandals({ stateName: statsState, districtName: statsDistrict });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setStatsLocationMandals(arr.map((m: { id?: string; name: string }) => ({ id: m.id || '', name: m.name || String(m) })));
+        setStatsMandal('');
+      } catch {
+        if (!cancelled) setStatsLocationMandals([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [statsState, statsDistrict]);
+
+  // Which location filters to use for stats: stats tab uses its own, others use bulk form's
+  const statsQueryState = mode === 'stats' ? statsState : state;
+  const statsQueryMandal = mode === 'stats' ? statsMandal : mandal;
+
+  // Fetch assignment statistics (scoped by academic year, student group, and location)
   const { data: statsData, refetch: refetchStats } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStats', mandal, state, academicYear],
+    queryKey: ['assignmentStats', statsQueryMandal, statsQueryState, statsAcademicYear, statsStudentGroup],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
-        mandal: mandal || undefined,
-        state: state || undefined,
-        academicYear: academicYear !== '' ? academicYear : undefined,
+        mandal: statsQueryMandal || undefined,
+        state: statsQueryState || undefined,
+        academicYear: statsAcademicYear !== '' ? statsAcademicYear : undefined,
+        studentGroup: statsStudentGroup || undefined,
       });
-      return { data: response.data || response };
+      // Backend returns { success, data: { totalLeads, assignedCount, ... }, message }
+      const payload = response?.data ?? response ?? {};
+      return { data: payload };
     },
     enabled: isReady && !!currentUser,
   });
@@ -106,7 +329,7 @@ export default function AssignLeadsPage() {
 
   // Assigned count for selected user (for remove-assignment tab)
   const { data: assignedCountData } = useQuery<{ data?: { count?: number } }>({
-    queryKey: ['assignedCountForUser', removeUserId, removeMandal, removeState, removeAcademicYear],
+    queryKey: ['assignedCountForUser', removeUserId, removeMandal, removeState, removeAcademicYear, removeStudentGroup],
     queryFn: async () => {
       if (!removeUserId) return { data: { count: 0 } };
       const response = await leadAPI.getAssignedCountForUser({
@@ -114,6 +337,7 @@ export default function AssignLeadsPage() {
         mandal: removeMandal || undefined,
         state: removeState || undefined,
         academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
+        studentGroup: removeStudentGroup || undefined,
       });
       return { data: response.data ?? response };
     },
@@ -168,6 +392,7 @@ export default function AssignLeadsPage() {
       mandal?: string;
       state?: string;
       academicYear?: number | string;
+      studentGroup?: string;
       count?: number;
       leadIds?: string[];
     }) => leadAPI.assignLeads(payload),
@@ -184,6 +409,8 @@ export default function AssignLeadsPage() {
         setSelectedUserId('');
         setMandal('');
         setState('');
+        setDistrict('');
+        setStudentGroup('');
         setAcademicYear(2025);
         setCount(1000);
       } else {
@@ -205,6 +432,7 @@ export default function AssignLeadsPage() {
       mandal?: string;
       state?: string;
       academicYear?: number | string;
+      studentGroup?: string;
       count: number;
     }) => leadAPI.removeAssignments(payload),
     onSuccess: (response) => {
@@ -217,7 +445,9 @@ export default function AssignLeadsPage() {
       setRemoveUserId('');
       setRemoveMandal('');
       setRemoveState('');
+      setRemoveDistrict('');
       setRemoveAcademicYear('');
+      setRemoveStudentGroup('');
       setRemoveCount(100);
     },
     onError: (error: any) => {
@@ -246,6 +476,7 @@ export default function AssignLeadsPage() {
       mandal: mandal || undefined,
       state: state || undefined,
       academicYear,
+      studentGroup: studentGroup || undefined,
       count,
     });
   };
@@ -286,6 +517,7 @@ export default function AssignLeadsPage() {
       mandal: removeMandal || undefined,
       state: removeState || undefined,
       academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
+      studentGroup: removeStudentGroup || undefined,
       count: removeCount,
     });
   };
@@ -336,6 +568,43 @@ export default function AssignLeadsPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
+      {/* Academic Year and Student Group filters at top – drive stats and bulk assignment context */}
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-200">
+          Academic year:
+        </label>
+        <select
+          value={statsAcademicYear === '' ? '' : statsAcademicYear}
+          onChange={(e) => setStatsAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        >
+          <option value="">All years</option>
+          {filterAcademicYearOptions.map((y: number) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-200">
+          Student group:
+        </label>
+        <select
+          value={statsStudentGroup}
+          onChange={(e) => setStatsStudentGroup(e.target.value)}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        >
+          <option value="">All</option>
+          {studentGroupOptions.map((g: string) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-gray-500 dark:text-slate-400">
+          Stats below use these filters.
+        </span>
+      </div>
+
       {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -378,6 +647,7 @@ export default function AssignLeadsPage() {
                 setMode('single');
                 setMandal('');
                 setState('');
+                setDistrict('');
                 setCount(1000);
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
@@ -404,11 +674,124 @@ export default function AssignLeadsPage() {
             >
               Remove Assignment
             </button>
+            <button
+              onClick={() => setMode('stats')}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                mode === 'stats'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
+            >
+              Unassigned by Location
+            </button>
           </nav>
         </div>
 
         <div className="p-6">
-          {mode === 'remove' ? (
+          {mode === 'stats' ? (
+            <div className="space-y-6">
+              <p className="text-sm text-gray-600 dark:text-slate-400">
+                Unassigned leads breakdown by <strong>State</strong> and <strong>Mandal</strong>. Use the filters below and the Academic year / Student group at the top to scope the counts.
+              </p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">State</label>
+                  <select
+                    value={statsState}
+                    onChange={(e) => setStatsState(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="">All States</option>
+                    {locationStates.map((s) => (
+                      <option key={s.id || s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">District</label>
+                  <select
+                    value={statsDistrict}
+                    onChange={(e) => setStatsDistrict(e.target.value)}
+                    disabled={!statsState}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:opacity-50"
+                  >
+                    <option value="">All Districts</option>
+                    {statsLocationDistricts.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Mandal</label>
+                  <select
+                    value={statsMandal}
+                    onChange={(e) => setStatsMandal(e.target.value)}
+                    disabled={!statsDistrict}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:opacity-50"
+                  >
+                    <option value="">All Mandals</option>
+                    {statsLocationMandals.map((m) => (
+                      <option key={m.id || m.name} value={m.name}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {stats ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {stats.stateBreakdown.length > 0 ? (
+                    <Card>
+                      <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                        Unassigned Leads by State
+                      </h3>
+                      <div className="max-h-80 space-y-2 overflow-y-auto">
+                        {stats.stateBreakdown.map((item) => (
+                          <div key={item.state} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-700 dark:text-slate-300">{item.state}</span>
+                            <span className="font-medium text-slate-900 dark:text-slate-100">{item.count.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  ) : (
+                    <Card className="p-6">
+                      <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">Unassigned by State</h3>
+                      <p className="text-sm text-gray-500 dark:text-slate-400">No unassigned leads for the current filters.</p>
+                    </Card>
+                  )}
+                  {stats.mandalBreakdown.length > 0 ? (
+                    <Card>
+                      <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                        Unassigned Leads by Mandal
+                      </h3>
+                      <div className="max-h-80 space-y-2 overflow-y-auto">
+                        {stats.mandalBreakdown.map((item) => (
+                          <div key={item.mandal} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-700 dark:text-slate-300">{item.mandal}</span>
+                            <span className="font-medium text-slate-900 dark:text-slate-100">{item.count.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  ) : (
+                    <Card className="p-6">
+                      <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">Unassigned by Mandal</h3>
+                      <p className="text-sm text-gray-500 dark:text-slate-400">No unassigned leads for the current filters.</p>
+                    </Card>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center rounded-lg border border-dashed border-gray-300 py-12 dark:border-slate-600">
+                  <p className="text-sm text-gray-500 dark:text-slate-400">Loading stats…</p>
+                </div>
+              )}
+              {stats && (
+                <p className="text-xs text-gray-500 dark:text-slate-400">
+                  Filters applied: Academic year {statsAcademicYear || 'All'}, Student group {statsStudentGroup || 'All'}
+                  {statsState ? `, State: ${statsState}` : ''}{statsDistrict ? `, District: ${statsDistrict}` : ''}{statsMandal ? `, Mandal: ${statsMandal}` : ''}.
+                </p>
+              )}
+            </div>
+          ) : mode === 'remove' ? (
             <form onSubmit={handleRemoveAssignments} className="space-y-6">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -463,45 +846,47 @@ export default function AssignLeadsPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  Academic Year (optional)
-                </label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
-                  value={removeAcademicYear === '' ? '' : removeAcademicYear}
-                  onChange={(event) => setRemoveAcademicYear(event.target.value === '' ? '' : Number(event.target.value))}
-                >
-                  <option value="">All years</option>
-                  {academicYearOptions.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Filter by academic year; leave as &quot;All years&quot; to remove from any year.
-                </p>
-              </div>
-
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Mandal (optional)
+                    Academic Year (optional)
                   </label>
                   <select
                     className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
-                    value={removeMandal}
-                    onChange={(event) => setRemoveMandal(event.target.value)}
+                    value={removeAcademicYear === '' ? '' : removeAcademicYear}
+                    onChange={(event) => setRemoveAcademicYear(event.target.value === '' ? '' : Number(event.target.value))}
                   >
-                    <option value="">All Mandals</option>
-                    {filters?.mandals?.map((mandalOption) => (
-                      <option key={mandalOption} value={mandalOption}>
-                        {mandalOption}
+                    <option value="">All years</option>
+                    {academicYearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    Filter by academic year; leave as &quot;All years&quot; to remove from any year.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Student group (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={removeStudentGroup}
+                    onChange={(e) => setRemoveStudentGroup(e.target.value)}
+                  >
+                    <option value="">All</option>
+                    {studentGroupOptions.map((g: string) => (
+                      <option key={g} value={g}>
+                        {g}
                       </option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                     State (optional)
@@ -509,12 +894,48 @@ export default function AssignLeadsPage() {
                   <select
                     className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
                     value={removeState}
-                    onChange={(event) => setRemoveState(event.target.value)}
+                    onChange={(e) => setRemoveState(e.target.value)}
                   >
                     <option value="">All States</option>
-                    {filters?.states?.map((stateOption) => (
-                      <option key={stateOption} value={stateOption}>
-                        {stateOption}
+                    {locationStates.map((s) => (
+                      <option key={s.id || s.name} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    District (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={removeDistrict}
+                    onChange={(e) => setRemoveDistrict(e.target.value)}
+                    disabled={!removeState}
+                  >
+                    <option value="">All Districts</option>
+                    {removeLocationDistricts.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Mandal (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={removeMandal}
+                    onChange={(e) => setRemoveMandal(e.target.value)}
+                    disabled={!removeDistrict}
+                  >
+                    <option value="">All Mandals</option>
+                    {removeLocationMandals.map((m) => (
+                      <option key={m.id || m.name} value={m.name}>
+                        {m.name}
                       </option>
                     ))}
                   </select>
@@ -536,6 +957,7 @@ export default function AssignLeadsPage() {
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                   Assigned to this user: {assignedToUserCount.toLocaleString()} leads
                   {removeAcademicYear !== '' && ` for ${removeAcademicYear}`}
+                  {removeStudentGroup && `, ${removeStudentGroup}`}
                   {removeMandal && ` in ${removeMandal}`}
                   {removeState && `, ${removeState}`}
                 </p>
@@ -562,6 +984,7 @@ export default function AssignLeadsPage() {
                     setRemoveUserId('');
                     setRemoveMandal('');
                     setRemoveState('');
+                    setRemoveDistrict('');
                     setRemoveCount(100);
                   }}
                   disabled={removeAssignmentsMutation.isPending}
@@ -625,49 +1048,51 @@ export default function AssignLeadsPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  Academic Year *
-                </label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
-                  value={academicYear === '' ? '' : academicYear}
-                  onChange={(event) => setAcademicYear(event.target.value === '' ? '' : Number(event.target.value))}
-                  required
-                >
-                  <option value="">Select academic year…</option>
-                  {academicYearOptions.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Only unassigned leads for this academic year will be assigned.
-                </p>
-              </div>
-
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Mandal (optional)
+                    Academic Year *
                   </label>
                   <select
                     className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
-                    value={mandal}
-                    onChange={(event) => setMandal(event.target.value)}
+                    value={academicYear === '' ? '' : academicYear}
+                    onChange={(event) => setAcademicYear(event.target.value === '' ? '' : Number(event.target.value))}
+                    required
                   >
-                    <option value="">All Mandals</option>
-                    {filters?.mandals?.map((mandalOption) => (
-                      <option key={mandalOption} value={mandalOption}>
-                        {mandalOption}
+                    <option value="">Select academic year…</option>
+                    {academicYearOptions.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
                       </option>
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Filter leads by mandal. Leave blank to assign from all mandals.
+                    Only unassigned leads for this academic year will be assigned.
                   </p>
                 </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Student group (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={studentGroup}
+                    onChange={(e) => setStudentGroup(e.target.value)}
+                  >
+                    <option value="">All</option>
+                    {studentGroupOptions.map((g: string) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    Restrict to a specific student group (e.g. 10th, Inter, Degree).
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                     State (optional)
@@ -675,17 +1100,56 @@ export default function AssignLeadsPage() {
                   <select
                     className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
                     value={state}
-                    onChange={(event) => setState(event.target.value)}
+                    onChange={(e) => setState(e.target.value)}
                   >
                     <option value="">All States</option>
-                    {filters?.states?.map((stateOption) => (
-                      <option key={stateOption} value={stateOption}>
-                        {stateOption}
+                    {locationStates.map((s) => (
+                      <option key={s.id || s.name} value={s.name}>
+                        {s.name}
                       </option>
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Filter leads by state. Leave blank to assign from all states.
+                    Select state first, then district and mandal.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    District (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={district}
+                    onChange={(e) => setDistrict(e.target.value)}
+                    disabled={!state}
+                  >
+                    <option value="">All Districts</option>
+                    {locationDistricts.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Mandal (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={mandal}
+                    onChange={(e) => setMandal(e.target.value)}
+                    disabled={!district}
+                  >
+                    <option value="">All Mandals</option>
+                    {locationMandals.map((m) => (
+                      <option key={m.id || m.name} value={m.name}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    Filter by state → district → mandal. Leave blank for all.
                   </p>
                 </div>
               </div>
@@ -705,6 +1169,7 @@ export default function AssignLeadsPage() {
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                   Number of unassigned leads to assign. Available: {stats?.unassignedCount.toLocaleString() || 0} leads
                   {academicYear !== '' && ` for ${academicYear}`}
+                  {studentGroup && `, ${studentGroup}`}
                   {mandal && ` in ${mandal}`}
                   {state && `, ${state}`}
                 </p>
@@ -721,6 +1186,8 @@ export default function AssignLeadsPage() {
                     setSelectedUserId('');
                     setMandal('');
                     setState('');
+                    setDistrict('');
+                    setStudentGroup('');
                     setAcademicYear(2025);
                     setCount(1000);
                   }}
@@ -864,42 +1331,6 @@ export default function AssignLeadsPage() {
           )}
         </div>
       </Card>
-
-      {/* Additional Statistics */}
-      {stats && (stats.mandalBreakdown.length > 0 || stats.stateBreakdown.length > 0) && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {stats.mandalBreakdown.length > 0 && (
-            <Card>
-              <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                Unassigned Leads by Mandal
-              </h3>
-              <div className="max-h-60 space-y-2 overflow-y-auto">
-                {stats.mandalBreakdown.slice(0, 10).map((item) => (
-                  <div key={item.mandal} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-700 dark:text-slate-300">{item.mandal}</span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-          {stats.stateBreakdown.length > 0 && (
-            <Card>
-              <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                Unassigned Leads by State
-              </h3>
-              <div className="max-h-60 space-y-2 overflow-y-auto">
-                {stats.stateBreakdown.map((item) => (
-                  <div key={item.state} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-700 dark:text-slate-300">{item.state}</span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -282,6 +282,7 @@ export const leadAPI = {
     mandal?: string;
     state?: string;
     academicYear?: number | string;
+    studentGroup?: string;
     count?: number;
     leadIds?: string[];
     assignNow?: boolean;
@@ -289,21 +290,23 @@ export const leadAPI = {
     const response = await api.post('/leads/assign', data);
     return response.data;
   },
-  getAssignmentStats: async (params?: { mandal?: string; state?: string; academicYear?: number | string }) => {
+  getAssignmentStats: async (params?: { mandal?: string; state?: string; academicYear?: number | string; studentGroup?: string }) => {
     const queryParams = new URLSearchParams();
     if (params?.mandal) queryParams.append('mandal', params.mandal);
     if (params?.state) queryParams.append('state', params.state);
     if (params?.academicYear != null && params.academicYear !== '') queryParams.append('academicYear', String(params.academicYear));
+    if (params?.studentGroup) queryParams.append('studentGroup', params.studentGroup);
     const query = queryParams.toString();
     const response = await api.get(`/leads/assign/stats${query ? `?${query}` : ''}`);
     return response.data;
   },
-  getAssignedCountForUser: async (params: { userId: string; mandal?: string; state?: string; academicYear?: number | string }) => {
+  getAssignedCountForUser: async (params: { userId: string; mandal?: string; state?: string; academicYear?: number | string; studentGroup?: string }) => {
     const queryParams = new URLSearchParams();
     queryParams.append('userId', params.userId);
     if (params.mandal) queryParams.append('mandal', params.mandal);
     if (params.state) queryParams.append('state', params.state);
     if (params.academicYear != null && params.academicYear !== '') queryParams.append('academicYear', String(params.academicYear));
+    if (params.studentGroup) queryParams.append('studentGroup', params.studentGroup);
     const response = await api.get(`/leads/assign/assigned-count?${queryParams.toString()}`);
     return response.data;
   },
@@ -312,6 +315,7 @@ export const leadAPI = {
     mandal?: string;
     state?: string;
     academicYear?: number | string;
+    studentGroup?: string;
     count: number;
   }) => {
     const response = await api.post('/leads/assign/remove', data);
