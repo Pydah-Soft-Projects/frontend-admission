@@ -36,7 +36,7 @@ const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(va
 
 export default function ManagerAnalyticsPage() {
   const router = useRouter();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [user, setUser] = useState<User | null>(null);
   const [datePreset, setDatePreset] = useState<DatePreset>('last30days');
   const [filters, setFilters] = useState({
@@ -146,6 +146,11 @@ export default function ManagerAnalyticsPage() {
 
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent]);
+
+  useEffect(() => {
+    setMobileTopBar({ title: 'Analytics', iconKey: 'analytics' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar]);
 
   const statusChartData = analytics?.statusBreakdown
     ? Object.entries(analytics.statusBreakdown).map(([name, value]) => ({

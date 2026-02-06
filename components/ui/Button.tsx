@@ -17,17 +17,17 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   // Flowbite base styles
-  const baseStyles = 'font-medium rounded-lg focus:ring-4 focus:outline-none transition-colors duration-200 inline-flex items-center justify-center';
+  const baseStyles = 'font-medium rounded-lg focus:ring-4 focus:outline-none transition-colors duration-200 inline-flex items-center justify-center min-h-[44px] md:min-h-0';
 
   const variants = {
     primary:
-      'text-white bg-blue-700 hover:bg-blue-800 focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800',
+      'text-white bg-orange-600 hover:bg-orange-700 focus:ring-orange-300 dark:bg-orange-600 dark:hover:bg-orange-700 dark:focus:ring-orange-800',
     secondary: // Treated as "Alternative" in Flowbite
-      'text-gray-900 bg-white border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-gray-100 dark:focus:ring-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:text-white dark:hover:bg-gray-700',
+      'text-gray-900 bg-white border border-gray-200 hover:bg-gray-100 hover:text-orange-700 focus:z-10 focus:ring-gray-100 dark:focus:ring-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:text-white dark:hover:bg-gray-700',
     danger:
       'text-white bg-red-700 hover:bg-red-800 focus:ring-red-300 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-900',
     outline: // Similar to "Alternative" but often transparent background initially
-      'text-blue-700 hover:text-white border border-blue-700 hover:bg-blue-800 focus:ring-blue-300 dark:border-blue-500 dark:text-blue-500 dark:hover:text-white dark:hover:bg-blue-500 dark:focus:ring-blue-800',
+      'text-orange-700 hover:text-white border border-orange-600 hover:bg-orange-600 focus:ring-orange-300 dark:border-orange-500 dark:text-orange-400 dark:hover:text-white dark:hover:bg-orange-500 dark:focus:ring-orange-800',
     light:
       'text-gray-900 bg-white border border-gray-300 hover:bg-gray-100 focus:ring-gray-100 dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:hover:bg-gray-700 dark:hover:border-gray-600 dark:focus:ring-gray-700',
   } as const;

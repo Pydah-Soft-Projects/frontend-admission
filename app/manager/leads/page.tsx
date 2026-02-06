@@ -34,7 +34,7 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export default function ManagerLeadsPage() {
   const router = useRouter();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [user, setUser] = useState<User | null>(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
@@ -133,6 +133,11 @@ export default function ManagerLeadsPage() {
 
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent, pagination.total, needsUpdateCount]);
+
+  useEffect(() => {
+    setMobileTopBar({ title: 'Team Leads', iconKey: 'team-leads' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar]);
 
   // Clear filters
   const clearFilters = () => {

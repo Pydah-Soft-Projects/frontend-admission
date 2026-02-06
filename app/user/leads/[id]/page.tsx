@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
 import { leadAPI, communicationAPI, userAPI } from '@/lib/api';
@@ -38,7 +37,7 @@ export default function UserLeadDetailPage() {
   const router = useRouter();
   const params = useParams();
   const queryClient = useQueryClient();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const leadId = params?.id as string;
   const [user, setUser] = useState<User | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -449,35 +448,23 @@ export default function UserLeadDetailPage() {
     }
 
     setHeaderContent(
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link href={getLeadsPageUrl()}>
-            <Button size="sm" variant="outline">
-              ← Back to Leads
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Lead Details
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              <span className="flex items-center gap-2">
-                <span>{lead.name}</span>
-                {lead.isNRI && (
-                  <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded">
-                    NRI
-                  </span>
-                )}
-              </span>
-              {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
-            </p>
-          </div>
-        </div>
+      <div>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Lead Details</h1>
       </div>
     );
 
     return () => clearHeaderContent();
   }, [lead, user, router, setHeaderContent, clearHeaderContent]);
+
+  useEffect(() => {
+    setMobileTopBar({
+      title: 'Lead Details',
+      showBack: true,
+      backHref: '/user/leads',
+      iconKey: 'lead-details',
+    });
+    return () => clearMobileTopBar();
+  }, [lead, setMobileTopBar, clearMobileTopBar]);
 
   // Initialize form data
   useEffect(() => {
@@ -955,16 +942,15 @@ export default function UserLeadDetailPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[98vw] space-y-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-7xl space-y-3 sm:space-y-6 px-0 sm:px-4 pb-20 sm:pb-6 pt-0 sm:pt-6 lg:px-8">
       {/* MAIN CONTENT - 2 Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
         {/* LEFT COLUMN - Student Details & History */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* SECTION 1: STUDENT DETAILS */}
-          <Card>
-            <h2 className="text-xl font-semibold mb-6">Student Details</h2>
+        <div className="lg:col-span-2 space-y-3 sm:space-y-6">
+          {/* SECTION 1: PROFILE CARD - lead details with avatar and SVGs */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm dark:bg-slate-900 dark:border-slate-700">
             {isEditing ? (
-              <form onSubmit={handleSave} className="space-y-6">
+              <form onSubmit={handleSave} className="space-y-6 p-3 sm:p-0">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -1063,296 +1049,251 @@ export default function UserLeadDetailPage() {
                 </div>
               </form>
             ) : (
-              <div className="space-y-6">
-                  {/* Badges at top - single line */}
-                  <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-                    {lead.enquiryNumber && (
-                      <span className="px-3 py-1.5 text-sm font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 whitespace-nowrap flex-shrink-0">
-                        #{lead.enquiryNumber}
-                      </span>
-                    )}
-                    <span className={`px-3 py-1.5 text-sm font-medium rounded-full border whitespace-nowrap flex-shrink-0 ${getStatusColor(lead.leadStatus)}`}>
-                      {lead.leadStatus || 'New'}
-                    </span>
-                    {lead.source && (
-                      <span className="px-3 py-1.5 text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full border border-green-200 dark:border-green-800 whitespace-nowrap flex-shrink-0">
-                        {lead.source}
-                      </span>
-                    )}
+              <>
+                <div className="flex items-start gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                    <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
                   </div>
-
-                {/* Main student details - larger font with gender */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-                  <div>
-                    <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Name</label>
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 break-words">{lead.name}</p>
-                      {lead.isNRI && (
-                        <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded whitespace-nowrap">
-                          NRI
-                        </span>
-                      )}
-                      {lead.gender && (
-                        <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded whitespace-nowrap">
-                          {lead.gender.charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                      {lead.needsManualUpdate && (
-                        <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded whitespace-nowrap" title="Details need manual update">Needs update</span>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Phone</label>
-                    <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 break-all">{lead.phone || '-'}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">{lead.name}</p>
+                    <p className="mt-1 flex items-center gap-2 text-base text-gray-600 dark:text-gray-400 break-all">
+                      <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      {lead.phone || '—'}
+                    </p>
                   </div>
                 </div>
 
-                {/* Address Information - without heading */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
-                  <div>
-                    <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Village</label>
-                    <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-words">{lead.village}</p>
-                  </div>
-                  <div>
-                    <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Mandal/Tehsil</label>
-                    <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-words">{lead.mandal}</p>
-                  </div>
-                  <div>
-                    <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">District</label>
-                    <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-words">{lead.district}</p>
-                  </div>
-                </div>
-
-                {/* Parent Information */}
-                <div>
-                  <h3 className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">Parent Information</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                    <div>
-                      <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Father Name</label>
-                      <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-words">{lead.fatherName}</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Father Phone</label>
-                      <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100 break-all">{lead.fatherPhone}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expandable Additional Details Section */}
-                <div className="relative border-t border-gray-200 dark:border-gray-700 pt-6">
-                  {/* Vignette effect at bottom when collapsed */}
-                  {!isDetailsExpanded && (
-                    <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white via-white/60 to-transparent dark:from-slate-900 dark:via-slate-900/60 dark:to-transparent pointer-events-none z-10 rounded-b-lg"></div>
-                  )}
-                  
-                  {/* Expandable content */}
+                {/* Expandable: details with SVGs */}
+                <div className="mt-4">
                   {isDetailsExpanded && (
-                    <div className="space-y-6 pb-6">
-                      {/* Student Additional Details */}
-                      {(lead.rank || lead.interCollege || lead.hallTicketNumber) && (
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Additional Student Details</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {lead.rank && (
-                              <div>
-                                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Rank</label>
-                                <p className="text-sm text-gray-900 dark:text-gray-100">{lead.rank}</p>
-                              </div>
-                            )}
-                            {lead.interCollege && (
-                              <div>
-                                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Inter College</label>
-                                <p className="text-sm text-gray-900 dark:text-gray-100">{lead.interCollege}</p>
-                              </div>
-                            )}
-                            {lead.hallTicketNumber && (
-                              <div>
-                                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Hall Ticket Number</label>
-                                <p className="text-sm text-gray-900 dark:text-gray-100">{lead.hallTicketNumber}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                    <div className="space-y-2.5 border-t border-slate-100 dark:border-slate-800 pt-4 text-sm text-gray-700 dark:text-gray-300">
+                      {lead.email && (
+                        <p className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          {lead.email}
+                        </p>
                       )}
-
-                      {/* Additional Address Information */}
-                      <div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          <div>
-                            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">State</label>
-                            <p className="text-sm text-gray-900 dark:text-gray-100">{lead.state || '-'}</p>
-                          </div>
-                          {lead.applicationStatus && (
-                            <div>
-                              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Application Status</label>
-                              <p className="text-sm text-gray-900 dark:text-gray-100">{lead.applicationStatus}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Additional Information */}
-                      {(lead.assignedTo || lead.utmSource || lead.utmMedium || lead.utmCampaign) && (
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Additional Information</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {lead.assignedTo && (
-                              <div>
-                                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Assigned To</label>
-                                <p className="text-sm text-gray-900 dark:text-gray-100">
-                                  {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : '-'}
-                                </p>
-                              </div>
-                            )}
-                            {lead.utmSource && (
-                              <div>
-                                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">UTM Source</label>
-                                <p className="text-sm text-gray-900 dark:text-gray-100">{lead.utmSource}</p>
-                              </div>
-                            )}
-                            {lead.utmMedium && (
-                              <div>
-                                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">UTM Medium</label>
-                                <p className="text-sm text-gray-900 dark:text-gray-100">{lead.utmMedium}</p>
-                              </div>
-                            )}
-                            {lead.utmCampaign && (
-                              <div>
-                                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">UTM Campaign</label>
-                                <p className="text-sm text-gray-900 dark:text-gray-100">{lead.utmCampaign}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                      {(lead.village || lead.mandal || lead.district || lead.state) && (
+                        <p className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          {[lead.village, lead.mandal, lead.district, lead.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                      {(lead.fatherName || lead.fatherPhone) && (
+                        <p className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                          </svg>
+                          {lead.fatherName}
+                          {lead.fatherPhone && ` · ${lead.fatherPhone}`}
+                        </p>
+                      )}
+                      {lead.enquiryNumber && (
+                        <p className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                          </svg>
+                          #{lead.enquiryNumber}
+                        </p>
+                      )}
+                      {lead.leadStatus && (
+                        <p className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {lead.leadStatus}
+                        </p>
+                      )}
+                      {lead.source && (
+                        <p className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                          {lead.source}
+                        </p>
+                      )}
+                      {lead.applicationStatus && <p>{lead.applicationStatus}</p>}
+                      {lead.hallTicketNumber && <p>Hall ticket: {lead.hallTicketNumber}</p>}
+                      {lead.rank != null && <p>Rank: {lead.rank}</p>}
+                      {lead.interCollege && <p>{lead.interCollege}</p>}
+                      {lead.gender && <p>{lead.gender}</p>}
+                      {lead.isNRI && <p>NRI</p>}
+                      {lead.assignedTo && (
+                        <p className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : ''}
+                        </p>
                       )}
                     </div>
                   )}
-
-                  {/* Expand/Collapse Button with Icon - Positioned at bottom center */}
-                  <div className="flex justify-center mt-4 sm:mt-6 relative z-20">
-                    <button
-                      onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-                      className="flex flex-col items-center gap-1 px-4 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-all rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800/50 group"
-                    >
-                      {isDetailsExpanded ? (
-                        <>
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                          </svg>
-                          <span className="text-[10px] sm:text-xs">Show Less</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:scale-110 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                          <span className="text-[10px] sm:text-xs">Show More Details</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
+                    className="mt-2 flex items-center gap-2 text-sm font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300"
+                  >
+                    {isDetailsExpanded ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        </svg>
+                        Show less
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        More details
+                      </>
+                    )}
+                  </button>
                 </div>
-              </div>
+              </>
             )}
-          </Card>
+          </div>
 
-          {/* COMMUNICATION SUMMARY */}
-          <Card>
-            <h2 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-6 pb-2 border-b border-gray-200 dark:border-gray-700">Communication Summary</h2>
+          {/* ACTIONS - hidden on mobile, visible from sm up */}
+          <div className="hidden sm:block">
+            <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">Actions</p>
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => lead && setShowCallNumberModal(true)}
+                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-green-50 hover:bg-green-100 border border-green-200 dark:bg-green-900/20 dark:border-green-800 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 text-xs sm:text-sm font-medium"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                Call
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (lead) {
+                    setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
+                    setShowSmsModal(true);
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 dark:bg-purple-900/20 dark:border-purple-800 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs sm:text-sm font-medium"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                SMS
+              </button>
+              <button
+                type="button"
+                onClick={() => { setNewStatus(lead?.leadStatus || ''); setStatusComment(''); setShowStatusModal(true); }}
+                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-orange-900/20 dark:border-orange-800 dark:hover:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs sm:text-sm font-medium"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Status
+              </button>
+            </div>
+          </div>
+
+          {/* STATUS - hidden on mobile, visible from sm up */}
+          {lead.leadStatus && (
+            <div className="hidden sm:block">
+              <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Status</p>
+              <span className={`inline-block px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(lead.leadStatus)}`}>
+                {lead.leadStatus}
+              </span>
+            </div>
+          )}
+
+          {/* COMMUNICATION SUMMARY - no heading, compact mobile */}
+          <div>
             {contactOptions.length === 0 ? (
-              <p className="text-sm text-gray-500">No phone numbers available for this lead.</p>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">No phone numbers</p>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-2 sm:space-y-3">
                 {contactOptions.map((option, index) => {
                   const stats = communicationStatsMap.get(option.number);
                   const callCount = stats?.callCount || 0;
                   const smsCount = stats?.smsCount || 0;
                   const templateUsage = stats?.templateUsage || [];
-                  
                   return (
                     <div
                       key={`${option.label}-${option.number}-${index}`}
-                      className="rounded-lg border border-gray-200 dark:border-slate-700 p-4"
+                      className="flex flex-wrap items-center justify-between gap-2 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0"
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 dark:text-slate-100">
-                            {option.label}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-                            {option.number}
-                          </div>
-                        </div>
-                        <div className="text-right text-sm">
-                          <div className="text-gray-600 dark:text-slate-400">
-                            Calls: <span className="font-medium text-gray-900 dark:text-slate-100">{callCount}</span>
-                          </div>
-                          <div className="text-gray-600 dark:text-slate-400">
-                            SMS: <span className="font-medium text-gray-900 dark:text-slate-100">{smsCount}</span>
-                          </div>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{option.label}</p>
+                        <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">{option.number}</p>
+                        <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 mt-0.5 flex items-center gap-3 flex-wrap">
+                          <span className="flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                            <span>Calls: <span className="font-medium text-gray-700 dark:text-slate-300">{callCount}</span></span>
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <span>SMS: <span className="font-medium text-gray-700 dark:text-slate-300">{smsCount}</span></span>
+                          </span>
+                          {templateUsage.length > 0 && (
+                            <span className="text-gray-400 dark:text-slate-500">
+                              · {templateUsage.length} template{templateUsage.length !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </p>
                       </div>
-                      
-                      {templateUsage.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
-                          <div className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">
-                            Template Usage:
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {templateUsage.map((usage) => (
-                              <span
-                                key={usage.templateId}
-                                className="px-2 py-1 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded text-xs"
-                              >
-                                {usage.templateName || usage.templateId}: {usage.count}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                        <Button
-                          variant="secondary"
-                          size="sm"
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          type="button"
                           onClick={() => {
                             setCallData({ contactNumber: option.number, remarks: '', outcome: '', durationSeconds: 0 });
                             setShowCallNumberModal(true);
                           }}
-                          className="w-full sm:w-auto text-xs sm:text-sm"
+                          className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+                          aria-label="Call"
                         >
-                          Call {option.label}
-                        </Button>
-                        <Button
-                          variant="primary"
-                          size="sm"
+                          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
-                            setSmsData({ 
-                              selectedNumbers: [option.number], 
-                              selectedTemplates: {}, 
-                              languageFilter: 'all' 
-                            });
+                            setSmsData({ selectedNumbers: [option.number], selectedTemplates: {}, languageFilter: 'all' });
                             setShowSmsModal(true);
                           }}
-                          className="w-full sm:w-auto text-xs sm:text-sm"
+                          className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                          aria-label="SMS"
                         >
-                          Send Message
-                        </Button>
+                          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-          </Card>
+          </div>
 
-          {/* SECTION 2: HISTORY & REMARKS */}
-          <Card>
-            <div className="mb-6">
-              <h2 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">History & Remarks</h2>
-              {/* Last Follow Up & Created On Info */}
-              <div className="flex flex-wrap gap-4 text-sm">
+          {/* HISTORY & REMARKS - no card, compact */}
+          <div>
+              <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">History & Remarks</p>
+              <div className="mb-2 sm:mb-4">
+              <div className="flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm">
                 {lead.lastFollowUp && (
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                     <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1381,10 +1322,11 @@ export default function UserLeadDetailPage() {
                   </div>
                 )}
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="text-xs px-2.5 py-1.5"
                   onClick={() => {
                     if (lead.nextScheduledCall) {
                       const d = new Date(lead.nextScheduledCall);
@@ -1398,13 +1340,13 @@ export default function UserLeadDetailPage() {
                     setShowScheduleCallModal(true);
                   }}
                 >
-                  {lead.nextScheduledCall ? 'Reschedule next call' : 'Schedule next call'}
+                  {lead.nextScheduledCall ? 'Reschedule' : 'Schedule call'}
                 </Button>
                 {lead.nextScheduledCall && (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-900/20"
+                    className="text-xs px-2.5 py-1.5 text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-900/20"
                     onClick={() => {
                       if (window.confirm('Clear scheduled call for this lead?')) {
                         scheduleCallMutation.mutate({ nextScheduledCall: null });
@@ -1419,14 +1361,13 @@ export default function UserLeadDetailPage() {
             </div>
             {isLoadingLogs ? (
               <div className="text-center py-8">
-                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
               </div>
             ) : timelineItems.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No history available</p>
+              <p className="text-gray-500 text-center py-4 text-xs sm:text-sm">No history</p>
             ) : (
               <div className="relative">
-                {/* Timeline */}
-                <div className="space-y-6">
+                <div className="space-y-3 sm:space-y-4">
                   {timelineItems.map((item, index) => {
                     const isCall = item.type === 'call';
                     const isSms = item.type === 'sms';
@@ -1434,13 +1375,11 @@ export default function UserLeadDetailPage() {
                     const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : 'border-blue-500';
                     
                     return (
-                      <div key={item.id} className="relative pl-6 sm:pl-8 pb-4 sm:pb-6 last:pb-0">
-                        {/* Timeline line */}
+                      <div key={item.id} className="relative pl-5 sm:pl-8 pb-3 sm:pb-4 last:pb-0">
                         {index !== timelineItems.length - 1 && (
-                          <div className="absolute left-2.5 sm:left-3 top-5 sm:top-6 bottom-0 w-0.5 bg-gray-300 dark:bg-slate-700"></div>
+                          <div className="absolute left-2 sm:left-3 top-4 sm:top-5 bottom-0 w-0.5 bg-gray-300 dark:bg-slate-700"></div>
                         )}
-                        {/* Timeline dot */}
-                        <div className={`absolute left-0 top-0.5 sm:top-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full ${dotColor} border-2 border-white shadow-md flex items-center justify-center`}>
+                        <div className={`absolute left-0 top-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full ${dotColor} border-2 border-white flex items-center justify-center`}>
                           {isCall ? (
                             <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -1453,20 +1392,19 @@ export default function UserLeadDetailPage() {
                             <div className="w-2 h-2 rounded-full bg-white"></div>
                           )}
                         </div>
-                        {/* Content */}
-                        <div className={`rounded-lg p-4 border-l-2 ${borderColor} bg-white dark:bg-slate-900/50`}>
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h3 className="text-sm font-medium text-gray-900 dark:text-slate-100">
+                        <div className={`rounded-lg p-2.5 sm:p-3 border-l-2 ${borderColor} bg-slate-50 dark:bg-slate-800/50`}>
+                          <div className="flex justify-between items-start gap-2 mb-1">
+                            <div className="min-w-0">
+                              <h3 className="text-xs sm:text-sm font-medium text-gray-900 dark:text-slate-100 truncate">
                                 {item.title}
                               </h3>
-                              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                              <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
                                 {formatDate(item.date)}
                               </p>
                             </div>
                             {item.performedBy && (
-                              <span className="text-xs text-gray-500 dark:text-slate-400">
-                                by {item.performedBy}
+                              <span className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 shrink-0">
+                                {item.performedBy}
                               </span>
                             )}
                           </div>
@@ -1521,7 +1459,7 @@ export default function UserLeadDetailPage() {
                           
                           {/* Other types */}
                           {!isCall && !isSms && (
-                            <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                            <p className="text-xs sm:text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
                               {item.description}
                             </p>
                           )}
@@ -1532,174 +1470,102 @@ export default function UserLeadDetailPage() {
                 </div>
               </div>
             )}
-          </Card>
+          </div>
         </div>
 
-        {/* RIGHT COLUMN - Action Bar, Metadata, Status Changes, Comments */}
-        <div className="space-y-6">
-          {/* ACTION BAR - Grid Layout with Icons */}
-          <Card>
-            <h2 className="text-xl font-semibold mb-4">Actions</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Assign - Not available for regular users */}
-
-              {/* Call */}
-              <button
-                onClick={() => {
-                  if (lead) {
-                    setShowCallNumberModal(true);
-                  }
-                }}
-                className="flex flex-col items-center justify-center p-4 bg-green-50 hover:bg-green-100 rounded-lg border-2 border-green-200 hover:border-green-300 transition-all group"
-              >
-                <svg className="w-6 h-6 text-green-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-                <span className="text-sm font-semibold text-green-700">Call</span>
-              </button>
-
-              {/* SMS */}
-              <button
-                onClick={() => {
-                  if (lead) {
-                    // Initialize with all available numbers selected
-                    const numbers = contactOptions.map(opt => opt.number);
-                    setSmsData({ 
-                      selectedNumbers: numbers, 
-                      selectedTemplates: {}, 
-                      languageFilter: 'all' 
-                    });
-                    setShowSmsModal(true);
-                  }
-                }}
-                className="flex flex-col items-center justify-center p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border-2 border-purple-200 hover:border-purple-300 transition-all group"
-              >
-                <svg className="w-6 h-6 text-purple-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <span className="text-sm font-semibold text-purple-700">SMS</span>
-              </button>
-
-              {/* Update Status */}
-              <button
-                onClick={() => {
-                  setNewStatus(lead.leadStatus || '');
-                  setStatusComment('');
-                  setShowStatusModal(true);
-                }}
-                className="flex flex-col items-center justify-center p-4 bg-orange-50 hover:bg-orange-100 rounded-lg border-2 border-orange-200 hover:border-orange-300 transition-all group"
-              >
-                <svg className="w-6 h-6 text-orange-600 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="text-sm font-semibold text-orange-700">Status</span>
-              </button>
-
-              {/* Edit and Delete - Not available for regular users */}
-            </div>
-            {lead.leadStatus && (
-              <div className="mt-4 text-center">
-                <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getStatusColor(lead.leadStatus)}`}>
-                  Current: {lead.leadStatus}
-                </span>
-              </div>
-            )}
-          </Card>
-
-          {/* Status Changes Timeline */}
-          <Card>
-            <h2 className="text-xl font-semibold mb-4">Status Changes</h2>
+        {/* RIGHT COLUMN - Status Changes, Comments, Call History */}
+        <div className="space-y-3 sm:space-y-6">
+          {/* Status Changes - no card, compact */}
+          <div>
+            <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">Status Changes</p>
             {isLoadingLogs ? (
-              <div className="text-center py-4">
-                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <div className="text-center py-3">
+                <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
               </div>
             ) : statusChanges.length === 0 ? (
-              <p className="text-gray-500 text-center py-4 text-sm">No status changes yet</p>
+              <p className="text-gray-500 text-center py-3 text-xs sm:text-sm">No status changes</p>
             ) : (
-              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+              <div className="space-y-0 max-h-[320px] sm:max-h-[400px] overflow-y-auto">
                 {statusChanges.map((log: ActivityLog, index: number) => (
-                  <div key={log._id} className="relative pl-8 pb-6 last:pb-0">
+                  <div key={log._id} className="relative pl-6 sm:pl-8 pb-3 sm:pb-4 last:pb-0">
                     {index !== statusChanges.length - 1 && (
-                      <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 to-blue-200"></div>
+                      <div className="absolute left-2.5 sm:left-3 top-4 sm:top-5 bottom-0 w-0.5 bg-blue-200 dark:bg-blue-800"></div>
                     )}
-                    <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-white shadow-md flex items-center justify-center">
-                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    <div className="absolute left-0 top-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
                     </div>
-                    <div className="bg-gradient-to-r from-blue-50/50 to-transparent rounded-lg p-3 border-l-2 border-blue-400">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <span className="text-sm font-semibold text-gray-900">
-                            {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
-                          </span>
-                          <span className="text-xs text-gray-500 ml-2">
-                            {formatDate(log.createdAt)}
-                          </span>
-                        </div>
+                    <div className="rounded-lg p-2.5 sm:p-3 border-l-2 border-blue-400 bg-blue-50/50 dark:bg-blue-900/20">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                          {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
+                        </span>
+                        <span className="text-[11px] text-gray-500 dark:text-slate-400">
+                          {formatDate(log.createdAt)}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.oldStatus || '')}`}>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${getStatusColor(log.oldStatus || '')}`}>
                           {log.oldStatus || 'N/A'}
                         </span>
                         <span className="text-gray-400">→</span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.newStatus || '')}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${getStatusColor(log.newStatus || '')}`}>
                           {log.newStatus || 'N/A'}
                         </span>
                       </div>
                       {log.comment && (
-                        <p className="text-xs text-gray-600 mt-2 italic">"{log.comment}"</p>
+                        <p className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 mt-1.5 italic line-clamp-2">"{log.comment}"</p>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </Card>
+          </div>
 
-          {/* Comments Timeline */}
-          <Card>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Comments</h2>
+          {/* Comments - no card, compact */}
+          <div>
+              <div className="flex justify-between items-center mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">
+              <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400">Comments</p>
               <Button
                 variant="outline"
                 size="sm"
+                className="text-xs px-2.5 py-1.5"
                 onClick={() => {
                   setCommentText('');
                   setShowCommentModal(true);
                 }}
               >
-                Add Comment
+                Add
               </Button>
             </div>
             {isLoadingLogs ? (
-              <div className="text-center py-4">
-                <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <div className="text-center py-3">
+                <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
               </div>
             ) : comments.length === 0 ? (
-              <p className="text-gray-500 text-center py-4 text-sm">No comments yet</p>
+              <p className="text-gray-500 text-center py-3 text-xs sm:text-sm">No comments</p>
             ) : (
-              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+              <div className="space-y-0 max-h-[320px] sm:max-h-[400px] overflow-y-auto">
                 {comments.map((log: ActivityLog, index: number) => (
-                  <div key={log._id} className="relative pl-8 pb-6 last:pb-0">
+                  <div key={log._id} className="relative pl-6 sm:pl-8 pb-3 sm:pb-4 last:pb-0">
                     {index !== comments.length - 1 && (
-                      <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b from-purple-400 to-purple-200"></div>
+                      <div className="absolute left-2.5 sm:left-3 top-4 sm:top-5 bottom-0 w-0.5 bg-purple-200 dark:bg-purple-800"></div>
                     )}
-                    <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 border-2 border-white shadow-md flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                    <div className="absolute left-0 top-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-purple-500 border-2 border-white flex items-center justify-center">
+                      <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z" clipRule="evenodd" />
                       </svg>
                     </div>
-                    <div className="bg-gradient-to-r from-purple-50/50 to-transparent rounded-lg p-3 border-l-2 border-purple-400">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <span className="text-sm font-semibold text-gray-900">
-                            {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
-                          </span>
-                          <span className="text-xs text-gray-500 ml-2">
-                            {formatDate(log.createdAt)}
-                          </span>
-                        </div>
+                    <div className="rounded-lg p-2.5 sm:p-3 border-l-2 border-purple-400 bg-purple-50/50 dark:bg-purple-900/20">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                          {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
+                        </span>
+                        <span className="text-[11px] text-gray-500 dark:text-slate-400">
+                          {formatDate(log.createdAt)}
+                        </span>
                       </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white/60 p-3 rounded-lg border border-purple-100">
+                      <p className="text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">
                         {log.comment}
                       </p>
                     </div>
@@ -1707,62 +1573,58 @@ export default function UserLeadDetailPage() {
                 ))}
               </div>
             )}
-          </Card>
+          </div>
 
-          {/* Call History Timeline */}
-          <Card>
-            <h2 className="text-xl font-semibold mb-4">Call History</h2>
+          {/* Call History - no card, compact */}
+          <div>
+            <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">Call History</p>
             {isLoadingCommunications ? (
-              <div className="text-center py-4">
-                <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <div className="text-center py-3">
+                <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
               </div>
             ) : callLogs.length === 0 ? (
-              <p className="text-gray-500 text-center py-4 text-sm">No call history yet</p>
+              <p className="text-gray-500 text-center py-3 text-xs sm:text-sm">No calls yet</p>
             ) : (
-              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+              <div className="space-y-0 max-h-[320px] sm:max-h-[400px] overflow-y-auto">
                 {callLogs.map((call, index) => {
                   const callWithSequence = call as CommunicationRecord & { sequenceNumber: number; ordinal: string };
                   const iconColors = getCallOutcomeIconColor(call.callOutcome);
                   return (
-                    <div key={call._id} className="relative pl-8 pb-6 last:pb-0">
+                    <div key={call._id} className="relative pl-6 sm:pl-8 pb-3 sm:pb-4 last:pb-0">
                       {index !== callLogs.length - 1 && (
-                        <div className={`absolute left-3 top-6 bottom-0 w-0.5 bg-gradient-to-b ${iconColors.line}`}></div>
+                        <div className={`absolute left-2.5 sm:left-3 top-4 sm:top-5 bottom-0 w-0.5 bg-gradient-to-b ${iconColors.line}`}></div>
                       )}
-                      <div className={`absolute left-0 top-1 w-6 h-6 rounded-full ${iconColors.iconBg} border-2 border-white shadow-md flex items-center justify-center`}>
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className={`absolute left-0 top-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full ${iconColors.iconBg} border-2 border-white flex items-center justify-center`}>
+                        <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                         </svg>
                       </div>
-                      <div className={`bg-gradient-to-r ${iconColors.cardBg} to-transparent rounded-lg p-3 border-l-2 ${iconColors.cardBorder}`}>
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <span className="text-sm font-semibold text-gray-900">
-                              {callWithSequence.ordinal} Call - {call.contactNumber}
-                            </span>
-                            <span className="text-xs text-gray-500 ml-2">
-                              {formatDate(call.sentAt)}
-                            </span>
-                          </div>
+                      <div className={`rounded-lg p-2.5 sm:p-3 border-l-2 ${iconColors.cardBorder} bg-gradient-to-r ${iconColors.cardBg} to-transparent`}>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                          <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-slate-100">
+                            {callWithSequence.ordinal} · {call.contactNumber}
+                          </span>
+                          <span className="text-[11px] text-gray-500 dark:text-slate-400">
+                            {formatDate(call.sentAt)}
+                          </span>
                           {typeof call.sentBy === 'object' && call.sentBy && (
-                            <span className="text-xs text-gray-500">
-                              by {call.sentBy.name}
-                            </span>
+                            <span className="text-[11px] text-gray-500 dark:text-slate-400">· {call.sentBy.name}</span>
                           )}
                         </div>
                         {call.remarks && (
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white/60 p-3 rounded-lg border border-green-100 mb-2">
+                          <p className="text-[11px] sm:text-xs text-gray-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-2 mb-1.5">
                             {call.remarks}
                           </p>
                         )}
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {call.callOutcome && (
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCallOutcomeColor(call.callOutcome)}`}>
-                              Outcome: {call.callOutcome}
+                            <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${getCallOutcomeColor(call.callOutcome)}`}>
+                              {call.callOutcome}
                             </span>
                           )}
                           {call.durationSeconds && (
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                              Duration: {call.durationSeconds}s
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                              {call.durationSeconds}s
                             </span>
                           )}
                         </div>
@@ -1772,13 +1634,13 @@ export default function UserLeadDetailPage() {
                 })}
               </div>
             )}
-          </Card>
+          </div>
         </div>
       </div>
 
       {/* Assign Modal */}
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <Card className="max-w-md w-full">
             <h2 className="text-xl font-semibold mb-4">Assign to Counsellor</h2>
             <div className="space-y-4">
@@ -1824,7 +1686,7 @@ export default function UserLeadDetailPage() {
 
       {/* Status Update Modal */}
       {showStatusModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <Card className="max-w-md w-full">
             <h2 className="text-xl font-semibold mb-4">Update Status</h2>
             <div className="space-y-4">
@@ -1885,7 +1747,7 @@ export default function UserLeadDetailPage() {
 
       {/* Delete Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <Card className="max-w-md w-full">
             <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Lead</h2>
             <div className="space-y-4">
@@ -1931,49 +1793,51 @@ export default function UserLeadDetailPage() {
 
       {/* Schedule next call Modal */}
       {showScheduleCallModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Schedule next call</h2>
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Set the date and time for the next follow-up call. This will appear on your dashboard for that day.
-              </p>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date & time</label>
-                <input
-                  type="datetime-local"
-                  value={scheduleCallDateTime}
-                  onChange={(e) => setScheduleCallDateTime(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  min={new Date().toISOString().slice(0, 16)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    if (!scheduleCallDateTime.trim()) {
-                      showToast.error('Please select date and time');
-                      return;
-                    }
-                    scheduleCallMutation.mutate({
-                      nextScheduledCall: new Date(scheduleCallDateTime).toISOString(),
-                    });
-                  }}
-                  disabled={scheduleCallMutation.isPending}
-                >
-                  {scheduleCallMutation.isPending ? 'Saving...' : 'Save'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowScheduleCallModal(false);
-                    setScheduleCallDateTime('');
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <Card className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">Schedule next call</h2>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-slate-400 mb-3">
+              Set date and time for the next follow-up call.
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">Date & time</label>
+              <input
+                type="datetime-local"
+                value={scheduleCallDateTime}
+                onChange={(e) => setScheduleCallDateTime(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                min={new Date().toISOString().slice(0, 16)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                className="text-xs sm:text-sm px-3 py-2"
+                onClick={() => {
+                  if (!scheduleCallDateTime.trim()) {
+                    showToast.error('Please select date and time');
+                    return;
+                  }
+                  scheduleCallMutation.mutate({
+                    nextScheduledCall: new Date(scheduleCallDateTime).toISOString(),
+                  });
+                }}
+                disabled={scheduleCallMutation.isPending}
+              >
+                {scheduleCallMutation.isPending ? 'Saving...' : 'Save'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs sm:text-sm px-3 py-2"
+                onClick={() => {
+                  setShowScheduleCallModal(false);
+                  setScheduleCallDateTime('');
+                }}
+              >
+                Cancel
+              </Button>
             </div>
           </Card>
         </div>
@@ -1981,7 +1845,7 @@ export default function UserLeadDetailPage() {
 
       {/* Comment Modal */}
       {showCommentModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <Card className="max-w-md w-full">
             <h2 className="text-xl font-semibold mb-4">Add Comment</h2>
             <div className="space-y-4">
@@ -2019,56 +1883,70 @@ export default function UserLeadDetailPage() {
         </div>
       )}
 
-      {/* Call Number Selection Modal */}
+      {/* Call Number Selection Modal - radio options, theme styling */}
       {showCallNumberModal && lead && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Select Number to Call</h2>
-            <div className="space-y-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <Card className="max-w-md w-full p-4 sm:p-5">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">Select Number to Call</h2>
+            <div className="space-y-2">
               {contactOptions.map((option, index) => {
                 const stats = communicationStatsMap.get(option.number);
                 const callCount = stats?.callCount || 0;
-                
+                const isSelected = selectedCallNumber === option.number;
                 return (
-                  <button
+                  <label
                     key={`${option.label}-${option.number}-${index}`}
-                    onClick={() => {
-                      setSelectedCallNumber(option.number);
-                      setShowCallNumberModal(false);
-                      // Open phone dialer
-                      window.location.href = `tel:${option.number}`;
-                      // After a delay, show remarks modal
-                      setTimeout(() => {
-                        setCallData({ 
-                          contactNumber: option.number, 
-                          remarks: '', 
-                          outcome: '', 
-                          durationSeconds: 0 
-                        });
-                        setShowCallRemarksModal(true);
-                      }, 1000);
-                    }}
-                    className="w-full p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border-2 border-blue-200 hover:border-blue-300 transition-all text-left"
+                    className={`flex items-center gap-3 w-full p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                      isSelected
+                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-500'
+                        : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
+                    }`}
                   >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-semibold text-blue-900">{option.label}</div>
-                        <div className="text-sm text-blue-700">{option.number}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-gray-500">Calls: {callCount}</div>
-                      </div>
+                    <input
+                      type="radio"
+                      name="callNumber"
+                      value={option.number}
+                      checked={isSelected}
+                      onChange={() => setSelectedCallNumber(option.number)}
+                      className="h-4 w-4 text-orange-600 border-slate-300 focus:ring-orange-500 focus:ring-2"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{option.label}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{option.number}</p>
                     </div>
-                  </button>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Calls: {callCount}</span>
+                  </label>
                 );
               })}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button
+                variant="primary"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  if (!selectedCallNumber) {
+                    showToast.error('Please select a number');
+                    return;
+                  }
+                  setShowCallNumberModal(false);
+                  window.location.href = `tel:${selectedCallNumber.replace(/\s/g, '')}`;
+                  setTimeout(() => {
+                    setCallData({ contactNumber: selectedCallNumber, remarks: '', outcome: '', durationSeconds: 0 });
+                    setShowCallRemarksModal(true);
+                  }, 1000);
+                }}
+                disabled={!selectedCallNumber}
+              >
+                Call
+              </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => {
                   setShowCallNumberModal(false);
                   setSelectedCallNumber('');
                 }}
-                className="w-full"
               >
                 Cancel
               </Button>
@@ -2077,35 +1955,30 @@ export default function UserLeadDetailPage() {
         </div>
       )}
 
-      {/* Call Remarks Modal - Shows after call */}
+      {/* Log Call Details Modal - compact, optimised */}
       {showCallRemarksModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Log Call Details</h2>
-            <div className="space-y-4">
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Contact Number</label>
-                    <p className="text-gray-900 font-medium">{callData.contactNumber}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-500">Call #</div>
-                    <div className="text-lg font-bold text-blue-600">
-                      {(communicationStatsMap.get(callData.contactNumber)?.callCount || 0) + 1}
-                    </div>
-                  </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50">
+          <Card className="max-w-md w-full p-4 sm:p-5">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">Log Call Details</h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                <div className="min-w-0">
+                  <p className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400">Contact</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{callData.contactNumber}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Call #</p>
+                  <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
+                    {(communicationStatsMap.get(callData.contactNumber)?.callCount || 0) + 1}
+                  </p>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Outcome *
-                </label>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Outcome *</label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   value={callData.outcome}
                   onChange={(e) => setCallData({ ...callData, outcome: e.target.value })}
-                  required
                 >
                   <option value="">Select outcome...</option>
                   <option value="answered">Answered</option>
@@ -2118,31 +1991,30 @@ export default function UserLeadDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration (seconds) - Optional
-                </label>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (sec) – optional</label>
                 <Input
                   type="number"
                   value={callData.durationSeconds || ''}
                   onChange={(e) => setCallData({ ...callData, durationSeconds: parseInt(e.target.value) || 0 })}
-                  placeholder="Call duration in seconds"
+                  placeholder="e.g. 120"
                   min="0"
+                  className="text-sm py-2"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Remarks - Optional
-                </label>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Remarks – optional</label>
                 <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                  className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   value={callData.remarks}
                   onChange={(e) => setCallData({ ...callData, remarks: e.target.value })}
                   placeholder="Add call remarks..."
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-1">
                 <Button
                   variant="primary"
+                  size="sm"
+                  className="flex-1"
                   onClick={() => callMutation.mutate(callData)}
                   disabled={!callData.outcome || callMutation.isPending}
                 >
@@ -2150,6 +2022,7 @@ export default function UserLeadDetailPage() {
                 </Button>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => {
                     setShowCallRemarksModal(false);
                     setCallData({ contactNumber: '', remarks: '', outcome: '', durationSeconds: 0 });
@@ -2166,13 +2039,16 @@ export default function UserLeadDetailPage() {
 
       {/* SMS Modal */}
       {showSmsModal && lead && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold mb-1">Send SMS</h2>
-                <p className="text-sm text-gray-500">
-                  Select recipients and DLT templates to send compliant messages.
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 overflow-y-auto">
+          <div className="flex min-h-full w-full items-start sm:items-center justify-center py-4 sm:py-8">
+            <Card noPadding className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div className="flex-none p-3 sm:p-6 space-y-3 sm:space-y-6 overflow-y-auto">
+            <div className="flex items-start justify-between gap-2 bg-white dark:bg-slate-900 z-10 pb-2 border-b border-slate-200 dark:border-slate-700">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-slate-100">Send SMS</h2>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">
+                  Select recipients and templates.
                 </p>
               </div>
               <button
@@ -2181,22 +2057,23 @@ export default function UserLeadDetailPage() {
                   setShowSmsModal(false);
                   setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-slate-100 dark:hover:bg-slate-800"
                 disabled={smsMutation.isPending}
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
               {/* Left: Recipients */}
-              <div className="lg:col-span-1 space-y-4">
+              <div className="lg:col-span-1 space-y-2 sm:space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold mb-2">Recipients</h3>
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200 mb-1.5">Recipients</h3>
                   {contactOptions.length === 0 ? (
-                    <p className="text-sm text-gray-500">No phone numbers available.</p>
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">No phone numbers.</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {contactOptions.map((option, index) => {
                         const stats = communicationStatsMap.get(option.number);
                         const smsCount = stats?.smsCount || 0;
@@ -2205,7 +2082,7 @@ export default function UserLeadDetailPage() {
                         return (
                           <label
                             key={`${option.label}-${option.number}-${index}`}
-                            className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                            className={`flex items-start gap-2 p-2 sm:p-2.5 border rounded-lg cursor-pointer transition-all ${
                               isSelected
                                 ? 'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-600'
                                 : 'bg-white border-gray-200 hover:bg-gray-50 dark:bg-slate-900/50 dark:border-slate-700 dark:hover:bg-slate-800/60'
@@ -2229,15 +2106,15 @@ export default function UserLeadDetailPage() {
                               }}
                               className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                             />
-                            <div className="flex-1">
-                              <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-slate-100 truncate">
                                 {option.label}
                               </div>
-                              <div className="text-xs text-gray-500 dark:text-slate-400">
+                              <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">
                                 {option.number}
                               </div>
-                              <div className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
-                                Sent: {smsCount} message(s)
+                              <div className="text-[10px] sm:text-[11px] text-gray-400 dark:text-slate-500 mt-0.5">
+                                Sent: {smsCount}
                               </div>
                             </div>
                           </label>
@@ -2245,16 +2122,16 @@ export default function UserLeadDetailPage() {
                       })}
                     </div>
                   )}
-                  <div className="text-sm text-gray-500 mt-2">
-                    Selected {smsData.selectedNumbers.length} recipient{smsData.selectedNumbers.length === 1 ? '' : 's'}.
-                  </div>
+                  <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 mt-1.5">
+                    {smsData.selectedNumbers.length} selected
+                  </p>
                   
-                  <div className="space-y-2 mt-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">
-                      Language Filter
+                  <div className="space-y-1.5 mt-2 sm:mt-3">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                      Language
                     </label>
                     <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                      className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
                       value={smsData.languageFilter}
                       onChange={(e) => setSmsData({ ...smsData, languageFilter: e.target.value })}
                     >
@@ -2270,24 +2147,24 @@ export default function UserLeadDetailPage() {
               </div>
 
               {/* Right: Templates */}
-              <div className="lg:col-span-2 space-y-4">
+              <div className="lg:col-span-2 space-y-2 sm:space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Templates</h3>
-                  <div className="text-sm text-gray-500">
-                    Selected: {Object.keys(smsData.selectedTemplates).length}
-                  </div>
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200">Templates</h3>
+                  <span className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
+                    {Object.keys(smsData.selectedTemplates).length} selected
+                  </span>
                 </div>
 
                 {isLoadingTemplates ? (
-                  <div className="text-center py-8">
-                    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <div className="text-center py-4 sm:py-6">
+                    <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
                   </div>
                 ) : filteredTemplates.length === 0 ? (
-                  <p className="text-sm text-gray-500">
-                    No active templates available. Add templates from the communications admin page.
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">
+                    No active templates.
                   </p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     {filteredTemplates.map((template) => {
                       const templateState = smsData.selectedTemplates[template._id];
                       const variableDescriptors: MessageTemplateVariable[] =
@@ -2301,9 +2178,9 @@ export default function UserLeadDetailPage() {
                       return (
                         <div
                           key={template._id}
-                          className="border border-gray-200 rounded-lg p-4 space-y-3 dark:border-slate-700"
+                          className="border border-gray-200 dark:border-slate-700 rounded-lg p-2.5 sm:p-3 space-y-2 sm:space-y-3"
                         >
-                          <label className="flex items-start gap-3 cursor-pointer">
+                          <label className="flex items-start gap-2 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={Boolean(templateState)}
@@ -2328,35 +2205,32 @@ export default function UserLeadDetailPage() {
                                   });
                                 }
                               }}
-                              className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              className="mt-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                             />
-                            <div className="flex-1">
-                              <div className="text-sm font-semibold text-gray-800 dark:text-slate-100">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-slate-100 truncate">
                                 {template.name}
                               </div>
-                              <div className="text-xs text-gray-500 dark:text-slate-400">
-                                DLT ID: {template.dltTemplateId} · Language: {template.language?.toUpperCase() || 'N/A'}
-                              </div>
-                              <div className="text-xs text-gray-400 dark:text-slate-500">
-                                Placeholders: {template.variableCount}
+                              <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
+                                {template.language?.toUpperCase() || 'N/A'} · {template.variableCount} var(s)
                               </div>
                             </div>
                           </label>
 
                           {templateState && (
-                            <div className="space-y-3 ml-7">
+                            <div className="space-y-2 sm:space-y-3 ml-5 sm:ml-7">
                               {variableDescriptors.length > 0 && (
-                                <div className="space-y-2">
+                                <div className="space-y-1.5">
                                   {variableDescriptors.map((variable, index) => {
                                     const key = variable.key || `var${index + 1}`;
                                     return (
                                       <div
                                         key={`${template._id}-${key}`}
-                                        className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                                        className="grid grid-cols-1 sm:grid-cols-2 gap-2"
                                       >
                                         <div>
-                                          <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
-                                            {variable.label || `Variable ${index + 1}`}
+                                          <label className="block text-[11px] sm:text-xs font-medium text-gray-600 dark:text-slate-400 mb-0.5">
+                                            {variable.label || `Var ${index + 1}`}
                                           </label>
                                           <Input
                                             value={templateState.variables[key] || ''}
@@ -2380,23 +2254,19 @@ export default function UserLeadDetailPage() {
                                                 ? lead.name
                                                 : variable.defaultValue || ''
                                             }
+                                            className="text-xs sm:text-sm py-1.5 sm:py-2"
                                           />
-                                        </div>
-                                        <div className="text-xs text-gray-400 dark:text-slate-500 flex items-end">
-                                          Placeholder: {`{#var#}`}
                                         </div>
                                       </div>
                                     );
                                   })}
                                 </div>
                               )}
-                              <div className="bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-lg p-3">
-                                <div className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">
-                                  Preview:
-                                </div>
-                                <div className="text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap">
+                              <div className="bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-lg p-2 sm:p-3">
+                                <p className="text-[10px] sm:text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Preview</p>
+                                <p className="text-[11px] sm:text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">
                                   {renderTemplatePreview(template, templateState.variables)}
-                                </div>
+                                </p>
                               </div>
                             </div>
                           )}
@@ -2408,19 +2278,19 @@ export default function UserLeadDetailPage() {
               </div>
             </div>
 
-            <div className="flex justify-between items-center gap-3 pt-2 flex-wrap border-t border-gray-200 dark:border-slate-700">
-              <div className="text-xs text-gray-500">
+            <div className="flex justify-between items-center gap-2 sm:gap-3 pt-2 sm:pt-3 flex-wrap border-t border-gray-200 dark:border-slate-700 sticky bottom-0 bg-white dark:bg-slate-900">
+              <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
                 {smsData.selectedNumbers.length === 0
-                  ? 'Select at least one contact number.'
+                  ? 'Select a contact.'
                   : Object.keys(smsData.selectedTemplates).length === 0
-                  ? 'Select at least one template to send.'
-                  : `Ready to send using ${Object.keys(smsData.selectedTemplates).length} template${
-                      Object.keys(smsData.selectedTemplates).length > 1 ? 's' : ''
-                    }.`}
+                  ? 'Select a template.'
+                  : `Send (${Object.keys(smsData.selectedTemplates).length} template${Object.keys(smsData.selectedTemplates).length > 1 ? 's' : ''})`}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5 sm:gap-2">
                 <Button
                   variant="outline"
+                  size="sm"
+                  className="text-xs px-2.5 py-1.5 sm:px-3 sm:py-2"
                   onClick={() => {
                     setShowSmsModal(false);
                     setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
@@ -2431,6 +2301,8 @@ export default function UserLeadDetailPage() {
                 </Button>
                 <Button
                   variant="primary"
+                  size="sm"
+                  className="text-xs px-2.5 py-1.5 sm:px-3 sm:py-2"
                   onClick={() => {
                     if (smsData.selectedNumbers.length === 0) {
                       showToast.error('Please select at least one contact number');
@@ -2478,7 +2350,10 @@ export default function UserLeadDetailPage() {
                 </Button>
               </div>
             </div>
-          </Card>
+                </div>
+              </div>
+            </Card>
+          </div>
         </div>
       )}
     </div>

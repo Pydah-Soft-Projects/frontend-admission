@@ -141,7 +141,7 @@ const LeadStatusModal = ({
 export default function TeamMemberDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const memberId = params?.id as string;
   const [user, setUser] = useState<User | null>(null);
   const [dateRange, setDateRange] = useState<'today' | 'yesterday' | 'last7Days' | 'last30Days' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom'>('today');
@@ -425,6 +425,16 @@ export default function TeamMemberDetailPage() {
 
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent, member]);
+
+  useEffect(() => {
+    setMobileTopBar({
+      title: member ? (member.name ?? 'Team Member') : 'Team Member',
+      showBack: true,
+      backHref: '/manager/team',
+      iconKey: 'team-member',
+    });
+    return () => clearMobileTopBar();
+  }, [member, setMobileTopBar, clearMobileTopBar]);
 
   if (isLoadingMember) {
     return (

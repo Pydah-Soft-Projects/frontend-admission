@@ -67,3 +67,36 @@ export const CardSkeleton: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   );
 };
 
+// Lead card skeleton (for My Leads card grid) — compact on mobile
+export const LeadCardSkeleton: React.FC<{ className?: string }> = ({ className }) => {
+  return (
+    <div className={cn("rounded-2xl border border-slate-200 bg-white p-3 sm:p-4 space-y-2 sm:space-y-3", className)}>
+      <div className="flex justify-between items-start gap-2">
+        <div className="space-y-1 sm:space-y-1.5 flex-1 min-w-0">
+          <Skeleton variant="rectangular" height="8px" className="w-14 sm:w-16 rounded" />
+          <Skeleton variant="rectangular" height="12px" className="w-20 sm:w-24 rounded" />
+        </div>
+        <Skeleton variant="rectangular" height="16px" className="w-12 sm:w-16 rounded-full shrink-0" />
+      </div>
+      <div className="space-y-1.5 sm:space-y-2 pt-1.5 sm:pt-2">
+        <div className="flex justify-between gap-2">
+          <Skeleton variant="text" className="w-10 sm:w-12 h-2.5 sm:h-3 rounded" />
+          <Skeleton variant="text" className="w-20 sm:w-24 h-2.5 sm:h-3 rounded flex-1 max-w-[60%]" />
+        </div>
+        <div className="flex justify-between gap-2">
+          <Skeleton variant="text" className="w-12 sm:w-14 h-2.5 sm:h-3 rounded" />
+          <Skeleton variant="text" className="w-16 sm:w-20 h-2.5 sm:h-3 rounded flex-1 max-w-[50%]" />
+        </div>
+        <div className="flex justify-between gap-2">
+          <Skeleton variant="text" className="w-10 sm:w-12 h-2.5 sm:h-3 rounded" />
+          <Skeleton variant="text" className="w-14 sm:w-16 h-2.5 sm:h-3 rounded flex-1 max-w-[40%]" />
+        </div>
+      </div>
+      <div className="flex gap-1.5 sm:gap-2 pt-1.5 sm:pt-2">
+        <Skeleton variant="rectangular" height="28px" className="w-14 sm:w-20 rounded-lg" />
+        <Skeleton variant="rectangular" height="28px" className="w-16 sm:w-24 rounded-lg" />
+      </div>
+    </div>
+  );
+};
+

@@ -15,7 +15,7 @@ import { UserIcon } from '@/components/layout/DashboardShell';
 
 export default function ManagerTeamPage() {
   const router = useRouter();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -69,6 +69,11 @@ export default function ManagerTeamPage() {
 
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent, teamMembers.length]);
+
+  useEffect(() => {
+    setMobileTopBar({ title: 'My Team', iconKey: 'team' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar]);
 
   // Create a map of analytics by userId for quick lookup
   const analyticsMap = new Map();

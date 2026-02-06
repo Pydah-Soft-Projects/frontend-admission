@@ -49,6 +49,7 @@ export default function ManagerLayout({ children }: { children: ReactNode }) {
       description="Manage your team and track performance."
       role="Manager"
       userName={currentUser?.name || 'Manager'}
+      useMobileBottomNav
     >
       {children}
     </DashboardShell>

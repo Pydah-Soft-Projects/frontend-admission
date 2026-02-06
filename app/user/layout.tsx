@@ -47,6 +47,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
       description="Stay on top of your leads, follow-ups, and conversions."
       role={currentUser?.designation || 'Counsellor'}
       userName={currentUser?.name || 'Team Member'}
+      useMobileBottomNav
     >
       {children}
     </DashboardShell>

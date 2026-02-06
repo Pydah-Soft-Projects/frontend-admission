@@ -147,9 +147,17 @@ function LoginPageContent() {
     } catch (err: any) {
       console.error('Login error:', err);
       console.error('Error response:', err.response);
-      const errorMessage = err.response?.data?.message ||
-        err.message ||
-        'Login failed. Please check your credentials and try again.';
+      const status = err.response?.status;
+      const serverMessage = err.response?.data?.message;
+      let errorMessage: string;
+      if (status === 404) {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        errorMessage = `Backend not reachable (404). Ensure the admissions API is running at ${baseUrl}. Start it with: cd backend-admission && npm run dev`;
+      } else if (serverMessage) {
+        errorMessage = serverMessage;
+      } else {
+        errorMessage = err.message || 'Login failed. Please check your credentials and try again.';
+      }
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -160,12 +168,12 @@ function LoginPageContent() {
   if (isVerifying) {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 dark:bg-gradient-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
+        <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950"></div>
         <div className="absolute top-6 right-6 z-20">
           <ThemeToggle />
         </div>
         <div className="text-center relative z-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-slate-300">Verifying authentication...</p>
         </div>
       </div>
@@ -176,18 +184,18 @@ function LoginPageContent() {
   if (error && !showLoginForm) {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 dark:bg-gradient-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
+        <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950"></div>
         <div className="absolute top-6 right-6 z-20">
           <ThemeToggle />
         </div>
         <div className="text-center relative z-10">
           <div className="max-w-md w-full">
-            <Card className="backdrop-blur-xl bg-white/90 dark:bg-slate-900/70 border-gray-300/50 dark:border-slate-700/70 shadow-2xl">
+            <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
               <div className="p-6">
                 <p className="text-red-600 dark:text-red-400 mb-4 font-medium">{error}</p>
                 <a 
                   href={CRM_FRONTEND_URL}
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                  className="text-orange-600 dark:text-orange-400 hover:underline"
                 >
                   Return to CRM Portal
                 </a>
@@ -202,17 +210,15 @@ function LoginPageContent() {
   // Show normal login form
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background gradient effects */}
-      <div className="absolute inset-0 bg-linear-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 dark:bg-linear-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-200/20 dark:bg-blue-900/20 rounded-full blur-3xl"></div>
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-200/20 dark:bg-purple-900/20 rounded-full blur-3xl"></div>
+      {/* Background - light */}
+      <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950" />
 
       <div className="absolute top-6 right-6 z-20">
         <ThemeToggle />
       </div>
 
       <div className="max-w-md w-full relative z-10">
-        <Card className="backdrop-blur-xl bg-white/90 dark:bg-slate-900/70 border-gray-300/50 dark:border-slate-700/70 shadow-2xl">
+        <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
           <div className="text-center mb-6">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100">Lead Tracker</h2>
             <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">Sign in to your account</p>
@@ -263,12 +269,12 @@ export default function LoginPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 dark:bg-gradient-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
+        <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950"></div>
         <div className="absolute top-6 right-6 z-20">
           <ThemeToggle />
         </div>
         <div className="text-center relative z-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-slate-300">Loading...</p>
         </div>
       </div>

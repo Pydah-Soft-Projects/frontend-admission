@@ -342,10 +342,9 @@ export default function UserLeadsViewPage() {
 
   return (
     <div className="min-h-screen relative">
-      {/* Background gradient effects */}
-      <div className="fixed inset-0 bg-gradient-to-br from-blue-50/30 via-purple-50/20 to-pink-50/30 pointer-events-none"></div>
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
-      
+      {/* Background - solid warm light theme */}
+      <div className="fixed inset-0 bg-gradient-to-br from-orange-50/40 via-amber-50/20 to-orange-50/30 pointer-events-none" />
+
       <div className="relative z-10">
         {/* Header */}
         <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/50 sticky top-0 z-20">

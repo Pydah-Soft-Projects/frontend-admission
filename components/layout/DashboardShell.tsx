@@ -17,6 +17,8 @@ import { Button } from '../ui/Button';
 import { auth } from '@/lib/auth';
 import type { ModulePermission } from '@/types';
 import { NotificationBell } from '../NotificationBell';
+import { MobileBottomNav, flattenNavItemsForMobile } from './MobileBottomNav';
+import { MobileMenuSheet } from './MobileMenuSheet';
 
 type IconProps = React.SVGProps<SVGSVGElement>;
 type IconComponent = React.FC<IconProps>;
@@ -63,9 +65,42 @@ export const BellIcon = createIcon(
   'M10 2a6 6 0 0 0-6 6v3.586l-.707.707A1 1 0 0 0 4 14h12a1 1 0 0 0 .707-1.707L16 11.586V8a6 6 0 0 0-6-6zM10 18a3 3 0 0 1-3-3h6a3 3 0 0 1-3 3z'
 );
 
+export const DashboardGridIcon = createIcon(
+  'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 8.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 018.25 20.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z'
+);
+export const UsersIcon = createIcon(
+  'M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.116-2.029 3.75 3.75 0 00-6.767-3.848 12.067 12.067 0 01-1.996-2.124 7.125 7.125 0 0114.25 0z'
+);
+export const UserCircleIcon = createIcon(
+  'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z'
+);
+export const ChartBarIcon = createIcon(
+  'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z'
+);
+
+const MOBILE_TOP_BAR_ICONS: Record<string, IconComponent> = {
+  dashboard: DashboardGridIcon,
+  leads: UsersIcon,
+  'lead-details': UserCircleIcon,
+  team: UsersIcon,
+  'team-member': UserCircleIcon,
+  analytics: ChartBarIcon,
+  'team-leads': ListIcon,
+};
+
+export type MobileTopBarOptions = {
+  title: string;
+  showBack?: boolean;
+  backHref?: string;
+  /** Icon key for mobile top bar: dashboard | leads | lead-details | team | team-member | analytics | team-leads */
+  iconKey?: keyof typeof MOBILE_TOP_BAR_ICONS;
+};
+
 type DashboardHeaderContextValue = {
   setHeaderContent: (content: ReactNode) => void;
   clearHeaderContent: () => void;
+  setMobileTopBar: (options: MobileTopBarOptions | null) => void;
+  clearMobileTopBar: () => void;
 };
 
 const DashboardHeaderContext = createContext<DashboardHeaderContextValue | null>(null);
@@ -120,6 +155,8 @@ interface DashboardShellProps {
   role?: string;
   userName?: string;
   permissions?: Record<string, ModulePermission>;
+  /** When true, on mobile (< lg) hide top header and show bottom nav instead. Use for user/manager dashboards. */
+  useMobileBottomNav?: boolean;
 }
 
 export const DashboardShell: React.FC<DashboardShellProps> = ({
@@ -130,12 +167,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   role,
   userName,
   permissions = {},
+  useMobileBottomNav = false,
 }) => {
   const pathname = usePathname() || '';
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [headerContent, setHeaderContent] = useState<ReactNode>(null);
+  const [mobileTopBar, setMobileTopBarState] = useState<MobileTopBarOptions | null>(null);
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('sidebar-collapsed') : null;
@@ -162,12 +201,21 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     setHeaderContent(null);
   }, []);
 
+  const setMobileTopBar = useCallback((options: MobileTopBarOptions | null) => {
+    setMobileTopBarState(options);
+  }, []);
+  const clearMobileTopBar = useCallback(() => {
+    setMobileTopBarState(null);
+  }, []);
+
   const headerContextValue = useMemo(
     () => ({
       setHeaderContent: setHeader,
       clearHeaderContent: clearHeader,
+      setMobileTopBar,
+      clearMobileTopBar,
     }),
-    [setHeader, clearHeader]
+    [setHeader, clearHeader, setMobileTopBar, clearMobileTopBar]
   );
 
   const normalizedPermissions = useMemo(() => permissions || {}, [permissions]);
@@ -330,7 +378,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   'flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 outline-none select-none',
                   isCollapsed && 'justify-center',
                   isActive
-                    ? 'bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/20 dark:text-blue-400'
+                    ? 'bg-orange-50 text-orange-700 font-semibold dark:bg-orange-900/20 dark:text-orange-400'
                     : 'text-slate-600 hover:bg-slate-100/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/40 dark:hover:text-slate-200'
                 )}
                 title={isCollapsed ? item.label : undefined}
@@ -339,7 +387,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   <Icon
                     className={cn(
                       'h-5 w-5 flex-shrink-0 transition-colors duration-200',
-                      isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
+                      isActive ? 'text-orange-600 dark:text-orange-400' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
                     )}
                   />
                 )}
@@ -356,7 +404,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       className={cn(
                         'ml-auto inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full',
                         isActive
-                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
                           : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                       )}
                     >
@@ -377,7 +425,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   className={cn(
                     "absolute right-1 p-1.5 rounded-md transition-colors",
                     isActive
-                      ? "text-blue-600 hover:bg-blue-100/50 dark:text-blue-400"
+                      ? "text-orange-600 hover:bg-orange-100/50 dark:text-orange-400"
                       : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800"
                   )}
                 >
@@ -401,7 +449,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const renderSidebar = (variant: 'desktop' | 'mobile' = 'desktop') => (
     <aside
       className={cn(
-        'relative flex flex-col overflow-hidden border border-slate-100 bg-white/50 backdrop-blur-xl shadow-2xl shadow-blue-900/5 transition-[width] duration-300',
+        'relative flex flex-col overflow-hidden border border-slate-200 bg-white shadow-sm transition-[width] duration-300 dark:border-slate-800 dark:bg-slate-900',
         'dark:border-slate-800 dark:bg-slate-950/50 dark:shadow-none',
         isCollapsed ? 'w-24' : 'w-72',
         variant === 'desktop'
@@ -412,7 +460,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       <div className="flex items-center gap-4 px-6 py-6 border-b border-transparent">
         {!isCollapsed && (
           <div className="space-y-0.5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-500/80">Admission</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-500/80">Admission</p>
             <p className="text-xl font-bold bg-clip-text text-transparent bg-linear-to-r from-slate-900 via-slate-700 to-slate-900 dark:from-white dark:via-slate-200 dark:to-slate-400">
               Command Center
             </p>
@@ -431,7 +479,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
       <button
         type="button"
-        className="absolute top-8 -right-4 hidden h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-400 shadow-[0_8px_16px_-4px_rgba(0,0,0,0.1)] transition-all hover:scale-110 hover:border-blue-100 hover:text-blue-600 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500 lg:flex z-10"
+        className="absolute top-8 -right-4 hidden h-10 w-10 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-400 shadow-[0_8px_16px_-4px_rgba(0,0,0,0.1)] transition-all hover:scale-110 hover:border-orange-100 hover:text-orange-600 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500 lg:flex z-10"
         onClick={() => setIsCollapsed((prev) => !prev)}
         aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
@@ -452,44 +500,59 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   return (
     <DashboardHeaderContext.Provider value={headerContextValue}>
       <PermissionContext.Provider value={permissionContextValue}>
-        <div className="relative min-h-screen bg-slate-50/50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 selection:bg-blue-100 selection:text-blue-700">
-          {/* Refined Background Pattern */}
-          <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,#e2e8f080_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f080_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] dark:bg-[linear-gradient(to_right,rgba(148,163,184,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.05)_1px,transparent_1px)]" />
-
-          {/* Ambient Glows */}
-          <div className="pointer-events-none fixed top-0 left-0 right-0 h-[500px] bg-linear-to-br from-blue-100/40 via-purple-100/20 to-transparent blur-3xl dark:from-blue-900/20 dark:via-purple-900/10" />
+        <div className="relative min-h-screen bg-gray-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 selection:bg-orange-100 selection:text-orange-800">
 
           <div className="relative flex min-h-screen">
             <div className="hidden lg:flex">{renderSidebar('desktop')}</div>
 
-            <div
-              className={cn(
-                'fixed inset-0 z-40 flex lg:hidden',
-                isMobileOpen ? 'pointer-events-auto' : 'pointer-events-none'
-              )}
-            >
-              <div
-                className={cn('fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300', isMobileOpen ? 'opacity-100' : 'opacity-0')}
-                onClick={() => setIsMobileOpen(false)}
-              />
+            {/* Mobile: sidebar overlay (superadmin etc) */}
+            {!useMobileBottomNav && (
               <div
                 className={cn(
-                  'relative z-50 w-72 max-w-full px-4 py-4 transition-transform duration-300',
-                  isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+                  'fixed inset-0 z-40 flex lg:hidden',
+                  isMobileOpen ? 'pointer-events-auto' : 'pointer-events-none'
                 )}
               >
-                {renderSidebar('mobile')}
+                <div
+                  className={cn('fixed inset-0 bg-slate-900/50 transition-opacity duration-300', isMobileOpen ? 'opacity-100' : 'opacity-0')}
+                  onClick={() => setIsMobileOpen(false)}
+                />
+                <div
+                  className={cn(
+                    'relative z-50 w-72 max-w-[85vw] px-4 py-4 transition-transform duration-300',
+                    isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+                  )}
+                >
+                  {renderSidebar('mobile')}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Mobile: bottom sheet menu (user / manager) */}
+            {useMobileBottomNav && (
+              <MobileMenuSheet
+                isOpen={isMobileOpen}
+                onClose={() => setIsMobileOpen(false)}
+                navItems={filteredNavItems}
+                userName={userName}
+                role={role}
+                onLogout={handleLogout}
+              />
+            )}
 
             <div className="flex flex-1 flex-col min-w-0">
-              <header className="px-4 pt-6 sm:px-6 lg:px-8 pb-4 sticky top-0 z-20">
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/60 bg-white/80 px-4 py-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl ring-1 ring-black/5 dark:border-slate-800/60 dark:bg-slate-900/80 dark:shadow-none dark:ring-white/10 sm:px-5 lg:px-6 transition-all duration-300">
+              <header
+                className={cn(
+                  'px-4 pt-6 sm:px-6 lg:px-8 pb-4 sticky top-0 z-20',
+                  useMobileBottomNav && 'hidden lg:block'
+                )}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-6 transition-all duration-300">
                   {/* Left Section: Mobile Menu, Back Icon, Header Content */}
                   <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
                     <button
                       type="button"
-                      className="inline-flex rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition hover:border-blue-200 hover:text-blue-600 hover:shadow-md focus:outline-none lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
+                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-600 hover:shadow-md focus:outline-none lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
                       onClick={() => setIsMobileOpen(true)}
                       aria-label="Toggle navigation menu"
                     >
@@ -500,7 +563,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                     <button
                       type="button"
                       onClick={handleBack}
-                      className="group relative inline-flex items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:border-blue-200 hover:text-blue-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 flex-shrink-0"
+                      className="group relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:border-orange-200 hover:text-orange-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 flex-shrink-0"
                       aria-label="Go back"
                       title="Back"
                     >
@@ -528,14 +591,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
                     {/* Workspace Logo */}
                     <Link href="/" className="flex items-center gap-3 group">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-transform group-hover:scale-105 ring-2 ring-white dark:ring-slate-800">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-xs font-bold text-white shadow-lg shadow-orange-500/20 transition-transform group-hover:scale-105 ring-2 ring-white dark:ring-slate-800">
                         {(userName || 'SA').slice(0, 2)}
                       </span>
                     </Link>
 
                     {/* Workspace Title */}
                     <div className="hidden sm:block">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-500/90 dark:text-blue-400">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-500/90 dark:text-orange-400">
                         {role ? `${role} Space` : 'Workspace'}
                       </p>
                     </div>
@@ -551,7 +614,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="group relative inline-flex items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:border-red-900/30 dark:hover:text-red-400"
+                      className="group relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:border-red-900/30 dark:hover:text-red-400"
                       aria-label="Logout"
                       title="Logout"
                     >
@@ -561,11 +624,66 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 </div>
               </header>
 
-              <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+              <main
+                className={cn(
+                  'relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-8',
+                  useMobileBottomNav && 'pb-20 pt-14 lg:pt-6 lg:pb-8'
+                )}
+              >
                 <div className="mx-auto max-w-[1600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
                   {children}
                 </div>
               </main>
+
+{/* Mobile top bar (user / manager): orange theme, page title + back */}
+            {useMobileBottomNav && (
+                <div
+                  className={cn(
+                    'lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center gap-2',
+                    'h-11 min-h-11 px-3 safe-area-inset-top',
+                    'bg-orange-500 shadow-md',
+                    'dark:bg-orange-600'
+                  )}
+                >
+                  {(mobileTopBar?.showBack ?? false) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (mobileTopBar?.backHref) {
+                          router.push(mobileTopBar.backHref);
+                        } else {
+                          handleBack();
+                        }
+                      }}
+                      className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-lg text-white hover:bg-orange-600 dark:hover:bg-orange-700"
+                      aria-label="Back"
+                    >
+                      <BackIcon className="h-5 w-5" />
+                    </button>
+                  ) : (
+                    <div className="w-8 flex-shrink-0" aria-hidden />
+                  )}
+                  <h1 className="flex flex-1 items-center justify-center gap-2 min-w-0 pr-8 text-center">
+                    {mobileTopBar?.iconKey && (() => {
+                      const Icon = MOBILE_TOP_BAR_ICONS[mobileTopBar.iconKey];
+                      return Icon ? <Icon className="h-5 w-5 shrink-0 text-white" aria-hidden /> : null;
+                    })()}
+                    <span className="truncate text-sm font-semibold text-white">
+                      {mobileTopBar?.title ?? title}
+                    </span>
+                  </h1>
+                </div>
+              )}
+
+              {/* Mobile bottom nav (user / manager only) */}
+              {useMobileBottomNav && (
+                <div className="lg:hidden">
+                  <MobileBottomNav
+                    items={flattenNavItemsForMobile(filteredNavItems)}
+                    onMenuPress={() => setIsMobileOpen(true)}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

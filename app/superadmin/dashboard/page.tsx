@@ -71,7 +71,7 @@ const getTodayDateString = () => {
 };
 
 const summaryCardStyles = [
-  'from-blue-500/10 via-blue-500/15 to-transparent text-blue-700 dark:text-blue-200',
+  'from-orange-500/10 via-orange-500/15 to-transparent text-orange-700 dark:text-orange-200',
   'from-emerald-500/10 via-emerald-500/15 to-transparent text-emerald-700 dark:text-emerald-200',
   'from-rose-500/10 via-rose-500/15 to-transparent text-rose-700 dark:text-rose-200',
   'from-violet-500/10 via-violet-500/15 to-transparent text-violet-700 dark:text-violet-200',
@@ -345,7 +345,7 @@ export default function SuperAdminDashboard() {
             <select
               value={dashboardAcademicYear === '' ? '' : dashboardAcademicYear}
               onChange={(e) => setDashboardAcademicYear(e.target.value ? Number(e.target.value) : '')}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">All</option>
               {academicYearOptions.map((y: number) => (
@@ -358,7 +358,7 @@ export default function SuperAdminDashboard() {
             <select
               value={dashboardStudentGroup}
               onChange={(e) => setDashboardStudentGroup(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="">All</option>
               {STUDENT_GROUP_OPTIONS.map((g) => (
@@ -378,7 +378,7 @@ export default function SuperAdminDashboard() {
       <div className="relative">
         {isFetchingOverview && (
           <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-orange-500" />
             Updating…
           </div>
         )}
@@ -386,7 +386,7 @@ export default function SuperAdminDashboard() {
           {summaryCards.map((card, index) => (
             <Card
               key={card.label}
-              className={`overflow-hidden border border-white/60 bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-6 shadow-lg shadow-blue-100/40 dark:border-slate-800/60 dark:shadow-none`}
+              className={`overflow-hidden border border-white/60 bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-6 shadow-lg shadow-orange-100/40 dark:border-slate-800/60 dark:shadow-none`}
             >
               <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500/80 dark:text-slate-400/80">
                 {card.label}
@@ -402,7 +402,7 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      <Card className="space-y-4 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+      <Card className="space-y-4 p-6 shadow-lg shadow-orange-100/30 dark:shadow-none">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
@@ -444,7 +444,7 @@ export default function SuperAdminDashboard() {
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <Card className="xl:col-span-2 space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+        <Card className="xl:col-span-2 space-y-6 p-6 shadow-lg shadow-orange-100/30 dark:shadow-none">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Leads vs Admissions</h2>
@@ -491,7 +491,7 @@ export default function SuperAdminDashboard() {
           </div>
         </Card>
 
-        <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+        <Card className="space-y-6 p-6 shadow-lg shadow-orange-100/30 dark:shadow-none">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Joining Funnel Snapshot</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -524,7 +524,7 @@ export default function SuperAdminDashboard() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+        <Card className="space-y-6 p-6 shadow-lg shadow-orange-100/30 dark:shadow-none">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Status Change Velocity</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -582,7 +582,7 @@ export default function SuperAdminDashboard() {
           </div>
         </Card>
 
-        <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+        <Card className="space-y-6 p-6 shadow-lg shadow-orange-100/30 dark:shadow-none">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Lead Pool Composition</h2>
@@ -641,7 +641,7 @@ export default function SuperAdminDashboard() {
         </Card>
       </div>
 
-      <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+      <Card className="space-y-6 p-6 shadow-lg shadow-orange-100/30 dark:shadow-none">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">User Performance Analytics</h2>
@@ -662,7 +662,7 @@ export default function SuperAdminDashboard() {
               return (
                 <div
                   key={user.userId}
-                  className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-sm shadow-blue-100/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/60 dark:shadow-none"
+                  className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-sm shadow-orange-100/30 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/60 dark:shadow-none"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div>

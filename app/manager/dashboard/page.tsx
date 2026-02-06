@@ -28,7 +28,7 @@ import {
 import Link from 'next/link';
 import { UserIcon } from '@/components/layout/DashboardShell';
 
-const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+const COLORS = ['#ea580c', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
 
@@ -39,7 +39,7 @@ const getTodayDateString = () => {
 
 export default function ManagerDashboard() {
   const router = useRouter();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [user, setUser] = useState<User | null>(null);
   const [isAuthorising, setIsAuthorising] = useState(true);
 
@@ -77,6 +77,11 @@ export default function ManagerDashboard() {
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent]);
 
+  useEffect(() => {
+    setMobileTopBar({ title: 'Dashboard', iconKey: 'dashboard' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar]);
+
   const { data: analytics, isLoading } = useQuery({
     queryKey: ['manager-analytics'],
     queryFn: async () => {
@@ -110,7 +115,7 @@ export default function ManagerDashboard() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
         </div>
       </div>
@@ -134,71 +139,67 @@ export default function ManagerDashboard() {
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8 px-0 sm:px-2">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Leads</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Total Leads</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(analytics?.totalLeads || 0)}
               </p>
             </div>
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <UserIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 sm:p-3 bg-orange-100 rounded-lg shrink-0">
+              <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Confirmed Leads</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+        <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Confirmed</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(analytics?.confirmedLeads || 0)}
               </p>
             </div>
-            <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-              <div className="w-6 h-6 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                ✓
-              </div>
+            <div className="p-2 sm:p-3 bg-emerald-100 rounded-lg shrink-0">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 flex items-center justify-center text-sm font-bold">✓</div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Team Members</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+        <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Team</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(teamData?.length || 0)}
               </p>
             </div>
-            <div className="p-3 bg-violet-100 dark:bg-violet-900/30 rounded-lg">
-              <UserIcon className="w-6 h-6 text-violet-600 dark:text-violet-400" />
+            <div className="p-2 sm:p-3 bg-violet-100 rounded-lg shrink-0">
+              <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-violet-600" />
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Unfollowed Leads</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+        <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Unfollowed</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(analytics?.unfollowedCount || 0)}
               </p>
             </div>
-            <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-              <div className="w-6 h-6 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                !
-              </div>
+            <div className="p-2 sm:p-3 bg-amber-100 rounded-lg shrink-0">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 flex items-center justify-center font-bold">!</div>
             </div>
           </div>
         </Card>
       </div>
 
-      <Card className="space-y-4 p-6">
+      <Card className="space-y-4 p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
@@ -239,8 +240,8 @@ export default function ManagerDashboard() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status Breakdown */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        <Card className="p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-800 mb-4">
             Lead Status Breakdown
           </h3>
           {isLoading ? (
@@ -276,8 +277,8 @@ export default function ManagerDashboard() {
         </Card>
 
         {/* Team Performance */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        <Card className="p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-800 mb-4">
             Team Performance
           </h3>
           {isLoading ? (
@@ -290,7 +291,7 @@ export default function ManagerDashboard() {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="leads" fill="#3b82f6" name="Total Leads" />
+                <Bar dataKey="leads" fill="#ea580c" name="Total Leads" />
                 <Bar dataKey="confirmed" fill="#10b981" name="Confirmed" />
                 <Bar dataKey="calls" fill="#8b5cf6" name="Today's Calls" />
               </BarChart>
@@ -304,9 +305,9 @@ export default function ManagerDashboard() {
       </div>
 
       {/* Team Analytics Table */}
-      <Card className="p-6">
+      <Card className="p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="text-lg font-semibold text-slate-800">
             Team Member Analytics
           </h3>
           <Link href="/manager/team">
@@ -378,7 +379,7 @@ export default function ManagerDashboard() {
 
       {/* Unfollowed Leads */}
       {analytics?.unfollowedLeads && analytics.unfollowedLeads.length > 0 && (
-        <Card className="p-6">
+        <Card className="p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Unfollowed Leads ({analytics.unfollowedCount})

@@ -35,10 +35,10 @@ interface Analytics {
 }
 
 const summaryCardStyles = [
-  'from-blue-500/10 via-blue-500/15 to-transparent text-blue-700 dark:text-blue-200',
-  'from-emerald-500/10 via-emerald-500/15 to-transparent text-emerald-700 dark:text-emerald-200',
-  'from-violet-500/10 via-violet-500/15 to-transparent text-violet-700 dark:text-violet-200',
-  'from-amber-500/10 via-amber-500/15 to-transparent text-amber-700 dark:text-amber-200',
+  'from-sky-500/15 via-sky-500/10 to-transparent text-sky-700 dark:text-sky-200 border-sky-200/50 dark:border-sky-500/30',
+  'from-teal-500/15 via-teal-500/10 to-transparent text-teal-700 dark:text-teal-200 border-teal-200/50 dark:border-teal-500/30',
+  'from-indigo-500/15 via-indigo-500/10 to-transparent text-indigo-700 dark:text-indigo-200 border-indigo-200/50 dark:border-indigo-500/30',
+  'from-rose-500/15 via-rose-500/10 to-transparent text-rose-700 dark:text-rose-200 border-rose-200/50 dark:border-rose-500/30',
 ];
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
@@ -51,7 +51,7 @@ const getTodayDateString = () => {
 export default function UserDashboard() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [user, setUser] = useState<User | null>(null);
   const [isAuthorising, setIsAuthorising] = useState(true);
 
@@ -93,6 +93,11 @@ export default function UserDashboard() {
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent, handleGoToLeads, user?.name]);
 
+  useEffect(() => {
+    setMobileTopBar({ title: 'Dashboard', iconKey: 'dashboard' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar]);
+
   const {
     data: analyticsData,
     isLoading: isLoadingAnalytics,
@@ -117,7 +122,14 @@ export default function UserDashboard() {
     enabled: !!user?._id,
     staleTime: 60_000,
   });
-  const scheduledLeads = Array.isArray(scheduledLeadsData) ? scheduledLeadsData : [];
+  const scheduledLeads = useMemo(() => {
+    const list = Array.isArray(scheduledLeadsData) ? scheduledLeadsData : [];
+    return [...list].sort((a, b) => {
+      const tA = a.nextScheduledCall ? new Date(a.nextScheduledCall).getTime() : 0;
+      const tB = b.nextScheduledCall ? new Date(b.nextScheduledCall).getTime() : 0;
+      return tA - tB;
+    });
+  }, [scheduledLeadsData]);
 
   const analytics = (analyticsData?.data || analyticsData) as Analytics | null;
 
@@ -236,60 +248,108 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-10">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-2">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card, index) => (
           <Card
             key={card.label}
-            className={`overflow-hidden border border-white/60 bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-6 shadow-lg shadow-blue-100/40 dark:border-slate-800/60 dark:shadow-none`}
+            className={`overflow-hidden border bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-3 shadow-sm sm:p-5 lg:p-6`}
           >
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500/80 dark:text-slate-400/80">
+            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-slate-500/90 dark:text-slate-400">
               {card.label}
             </p>
-            <p className="mt-3 text-3xl font-semibold text-slate-900 dark:text-slate-100">
+            <p className="mt-1 sm:mt-2 text-xl font-semibold text-inherit sm:text-2xl lg:text-3xl">
               {formatNumber(card.value)}
             </p>
-            <p className="mt-2 text-xs text-slate-500/90 dark:text-slate-400/90">{card.helper}</p>
+            <p className="mt-0.5 sm:mt-2 text-[10px] sm:text-xs text-slate-500/90 dark:text-slate-400">{card.helper}</p>
           </Card>
         ))}
       </div>
 
-      <Card className="space-y-4 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Your follow-up calls for today. Set from lead details after a call.
-            </p>
+      <Card className="overflow-hidden border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-4">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 sm:h-10 sm:w-10">
+              <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h2 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">Today&apos;s scheduled calls</h2>
+                <button
+                  type="button"
+                  onClick={handleGoToLeads}
+                  className="flex shrink-0 items-center justify-center rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  aria-label="View my leads"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+                Follow-ups for today · Set from lead details after a call
+              </p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" onClick={handleGoToLeads}>View my leads</Button>
         </div>
         {scheduledLeads.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400 py-4">No calls scheduled for today.</p>
+          <div className="flex flex-col items-center justify-center gap-2 border-t border-slate-100 px-3 py-8 text-center dark:border-slate-800">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+              <svg className="h-5 w-5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">No calls scheduled for today</p>
+            <Button variant="outline" size="sm" onClick={handleGoToLeads}>
+              Go to My Leads
+            </Button>
+          </div>
         ) : (
-          <ul className="divide-y divide-slate-200 dark:divide-slate-700 max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
-            {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; nextScheduledCall?: string }) => (
-              <li key={lead._id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{lead.name ?? '—'}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {lead.enquiryNumber && <span>{lead.enquiryNumber}</span>}
-                    {lead.nextScheduledCall && (
-                      <span className="ml-2">
-                        {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => router.push(`/user/leads/${lead._id}`)}>Open</Button>
-              </li>
-            ))}
+          <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+            {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; nextScheduledCall?: string }) => {
+              const timeStr = lead.nextScheduledCall
+                ? new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                : null;
+              return (
+                <li key={lead._id}>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/user/leads/${lead._id}`)}
+                    className="grid w-full grid-cols-[auto_1fr_auto_auto] items-center gap-2 px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50 sm:gap-3 sm:px-4"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 sm:h-9 sm:w-9">
+                      <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 overflow-hidden">
+                      <p className="break-words font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{lead.name ?? '—'}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                        {lead.enquiryNumber && <span>{lead.enquiryNumber}</span>}
+                        {lead.enquiryNumber && timeStr && <span className="mx-1">·</span>}
+                        {timeStr && <span>{timeStr}</span>}
+                      </p>
+                    </div>
+                    <span className="min-w-[3.5rem] shrink-0 text-right text-xs font-medium text-orange-700 dark:text-orange-300">
+                      {timeStr ?? '—'}
+                    </span>
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center self-center rounded-full text-slate-400 dark:text-slate-500 sm:h-8 sm:w-8">
+                      <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
 
       {statusChartData.length > 0 && (
-        <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+        <Card className="space-y-6 p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Lead Status Mix</h2>
@@ -333,7 +393,7 @@ export default function UserDashboard() {
               {statusChartData.map((item) => (
                 <div
                   key={item.name}
-                  className="flex items-center justify-between rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 dark:border-slate-800/70 dark:bg-slate-900/60"
+                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
                 >
                   <div>
                     <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{item.name}</p>
@@ -349,7 +409,7 @@ export default function UserDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {mandalChartData.length > 0 && (
-          <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+          <Card className="space-y-6 p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Top Mandals</h2>
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="h-72">
@@ -388,7 +448,7 @@ export default function UserDashboard() {
                 {mandalChartData.map((item, idx) => (
                   <div
                     key={item.name}
-                    className="flex items-center justify-between rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 dark:border-slate-800/70 dark:bg-slate-900/60"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
                   >
                     <div className="flex items-center gap-3">
                       <span
@@ -397,7 +457,7 @@ export default function UserDashboard() {
                       />
                       <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{item.name}</span>
                     </div>
-                    <span className="text-base font-semibold text-blue-600 dark:text-blue-300">{formatNumber(item.value)}</span>
+                    <span className="text-base font-semibold text-orange-600 dark:text-orange-300">{formatNumber(item.value)}</span>
                   </div>
                 ))}
               </div>
@@ -406,7 +466,7 @@ export default function UserDashboard() {
         )}
 
         {stateChartData.length > 0 && (
-          <Card className="space-y-6 p-6 shadow-lg shadow-blue-100/30 dark:shadow-none">
+          <Card className="space-y-6 p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Leads by State</h2>
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="h-72">
@@ -435,7 +495,7 @@ export default function UserDashboard() {
                 {stateChartData.map((item, idx) => (
                   <div
                     key={item.name}
-                    className="flex items-center justify-between rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 dark:border-slate-800/70 dark:bg-slate-900/60"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
                   >
                     <div className="flex items-center gap-3">
                       <span
@@ -444,7 +504,7 @@ export default function UserDashboard() {
                       />
                       <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{item.name}</span>
                     </div>
-                    <span className="text-base font-semibold text-blue-600 dark:text-blue-300">{formatNumber(item.value)}</span>
+                    <span className="text-base font-semibold text-orange-600 dark:text-orange-300">{formatNumber(item.value)}</span>
                   </div>
                 ))}
               </div>

@@ -95,16 +95,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
             toastOptions={{
               duration: 4000,
               style: {
-                background: theme === 'dark' ? '#111827' : '#fff',
-                color: theme === 'dark' ? '#e5e7eb' : '#333',
+                background: theme === 'dark' ? '#111827' : '#fffbf7',
+                color: theme === 'dark' ? '#e5e7eb' : '#1c1917',
                 borderRadius: '12px',
                 padding: '16px',
-                boxShadow:
-                  '0 4px 12px rgba(0, 0, 0, 0.15)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
               },
               success: {
                 iconTheme: {
-                  primary: '#10b981',
+                  primary: '#ea580c',
                   secondary: '#fff',
                 },
               },

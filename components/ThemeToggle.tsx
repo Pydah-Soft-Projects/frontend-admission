@@ -39,7 +39,7 @@ export const ThemeToggle: React.FC = () => {
             />
           </svg>
           <svg
-            className="absolute top-1/2 right-1 w-4 h-4 -translate-y-1/2 transition-opacity duration-300 text-blue-200 opacity-0"
+            className="absolute top-1/2 right-1 w-4 h-4 -translate-y-1/2 transition-opacity duration-300 text-orange-200 opacity-0"
             fill="currentColor"
             viewBox="0 0 20 20"
             xmlns="http://www.w3.org/2000/svg"
@@ -67,7 +67,7 @@ export const ThemeToggle: React.FC = () => {
       />
       <div
         className={`relative w-14 h-7 rounded-full transition-colors duration-300 ${
-          isDark ? 'bg-blue-600' : 'bg-gray-200'
+          isDark ? 'bg-orange-600' : 'bg-gray-200'
         }`}
       >
         {/* Toggle Button */}
@@ -93,7 +93,7 @@ export const ThemeToggle: React.FC = () => {
         </svg>
         {/* Moon Icon */}
         <svg
-          className={`absolute top-1/2 right-1 w-4 h-4 -translate-y-1/2 transition-opacity duration-300 text-blue-200 ${
+          className={`absolute top-1/2 right-1 w-4 h-4 -translate-y-1/2 transition-opacity duration-300 text-orange-200 ${
             isDark ? 'opacity-100' : 'opacity-0'
           }`}
           fill="currentColor"

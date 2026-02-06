@@ -39,18 +39,16 @@ export default function Home() {
   // Show loading state while checking auth
   if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-purple-50 dark:bg-slate-950">
-        <p className="text-purple-900 dark:text-slate-100">Redirecting...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950">
+        <p className="text-slate-700 dark:text-slate-100">Redirecting...</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden">
-      {/* Background gradient effects */}
-      <div className="absolute inset-0 bg-linear-to-br from-purple-50/50 via-blue-50/40 to-pink-50/50 dark:bg-linear-to-br dark:from-slate-950/80 dark:via-slate-900/70 dark:to-slate-900/80"></div>
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-200/30 dark:bg-purple-900/30 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-200/30 dark:bg-blue-900/30 rounded-full blur-3xl animate-pulse delay-1000"></div>
+      {/* Background */}
+      <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950" />
 
       <div className="absolute top-6 right-6 z-20">
         <ThemeToggle />
@@ -66,7 +64,7 @@ export default function Home() {
             viewBox="0 0 72 72"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
-            className="text-purple-600 dark:text-purple-300 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
+            className="text-orange-600 dark:text-orange-300 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
           >
             {/* Chart bars */}
             <rect x="12" y="40" width="8" height="20" rx="2" fill="currentColor" opacity="0.8" />
@@ -123,7 +121,7 @@ export default function Home() {
 
         <p className="text-sm text-gray-500 dark:text-slate-400">
           Already onboarded?{' '}
-          <Link href="/auth/login" className="text-purple-600 dark:text-purple-300 font-semibold hover:underline">
+          <Link href="/auth/login" className="text-orange-600 dark:text-orange-300 font-semibold hover:underline">
             Sign in here
           </Link>
         </p>

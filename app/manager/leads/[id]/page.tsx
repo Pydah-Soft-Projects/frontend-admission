@@ -38,7 +38,7 @@ export default function ManagerLeadDetailPage() {
   const router = useRouter();
   const params = useParams();
   const queryClient = useQueryClient();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const leadId = params?.id as string;
   const [user, setUser] = useState<User | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -481,6 +481,16 @@ export default function ManagerLeadDetailPage() {
 
     return () => clearHeaderContent();
   }, [lead, user, isManager, router, setHeaderContent, clearHeaderContent]);
+
+  useEffect(() => {
+    setMobileTopBar({
+      title: lead ? `${lead.name ?? 'Lead'}${lead.enquiryNumber ? ` · #${lead.enquiryNumber}` : ''}` : 'Lead Details',
+      showBack: true,
+      backHref: '/manager/leads',
+      iconKey: 'lead-details',
+    });
+    return () => clearMobileTopBar();
+  }, [lead, setMobileTopBar, clearMobileTopBar]);
 
   // Initialize form data
   useEffect(() => {
