@@ -360,8 +360,8 @@ export default function UserDashboard() {
                   onClick={() => router.push(`/user/leads/${lead._id}`)}
                   className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-left transition hover:border-orange-200 hover:bg-orange-50/50 active:scale-[0.99] dark:border-slate-700 dark:bg-slate-800/50 dark:hover:border-orange-700/50 dark:hover:bg-orange-900/10"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
-                    <span className="text-center text-[11px] font-bold leading-tight">{timeStr ?? '—'}</span>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-semibold text-sm uppercase">
+                    {(lead.name || '?').charAt(0)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-slate-900 dark:text-slate-100">{lead.name ?? '—'}</p>

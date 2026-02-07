@@ -1175,12 +1175,10 @@ export default function UserLeadDetailPage() {
                 </div>
               ) : (
                 <>
-                  {/* Profile header: avatar + name + phone - compact on mobile */}
+                  {/* Profile header: avatar (initial) + name + phone - compact on mobile */}
                   <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="flex h-10 w-10 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full bg-white/95 text-orange-600 shadow-md ring-2 ring-white/50">
-                      <svg className="h-5 w-5 sm:h-7 sm:w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
+                    <div className="flex h-10 w-10 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full bg-white/95 text-orange-600 shadow-md ring-2 ring-white/50 font-bold text-lg sm:text-xl uppercase">
+                      {(lead.name || '?').charAt(0)}
                     </div>
                     <div className="min-w-0 flex-1">
                       <h2 className="text-base sm:text-lg font-bold text-white drop-shadow-sm wrap-break-word">{lead.name}</h2>

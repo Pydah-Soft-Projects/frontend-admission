@@ -30,6 +30,14 @@ type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisWeek
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
+// Call reports tab: gradient styles for stats cards (Total Users, Assigned Leads, Total Calls, Total SMS)
+const CALL_REPORT_CARD_STYLES = [
+  'from-blue-500 to-indigo-600 shadow-blue-500/25',
+  'from-emerald-500 to-teal-600 shadow-emerald-500/25',
+  'from-orange-500 to-amber-600 shadow-orange-500/25',
+  'from-violet-500 to-purple-600 shadow-violet-500/25',
+];
+
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('calls');
   const [datePreset, setDatePreset] = useState<DatePreset>('last30days');
@@ -45,7 +53,7 @@ export default function ReportsPage() {
     district: '',
     mandal: '',
     state: '',
-    academicYear: 2025,
+    academicYear: new Date().getFullYear(),
     studentGroup: '',
     abstractStateId: '',
     abstractDistrictId: '',
@@ -334,7 +342,7 @@ export default function ReportsPage() {
         </nav>
       </div>
 
-      {/* Date Presets */}
+      {/* Date Presets + Academic Year (when Call Reports) */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Quick Filters:</span>
         {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek', 'thisMonth', 'lastMonth', 'custom'] as DatePreset[]).map((preset) => (
@@ -357,155 +365,172 @@ export default function ReportsPage() {
             {preset === 'custom' && 'Custom'}
           </button>
         ))}
-      </div>
-
-      {/* Filters */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
-            <input
-              type="date"
-              value={filters.startDate}
-              onChange={(e) => {
-                setFilters({ ...filters, startDate: e.target.value });
-                setDatePreset('custom');
-              }}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">End Date</label>
-            <input
-              type="date"
-              value={filters.endDate}
-              onChange={(e) => {
-                setFilters({ ...filters, endDate: e.target.value });
-                setDatePreset('custom');
-              }}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User/Counsellor</label>
-            <select
-              value={filters.userId}
-              onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            >
-              <option value="">All Users</option>
-              {users.map((user: any) => (
-                <option key={user._id} value={user._id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Source</label>
-            <select
-              value={filters.source}
-              onChange={(e) => setFilters({ ...filters, source: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            >
-              <option value="">All Sources</option>
-              {filterOptions?.sources?.map((source: string) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Course</label>
-            <select
-              value={filters.course}
-              onChange={(e) => setFilters({ ...filters, course: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            >
-              <option value="">All Courses</option>
-              {filterOptions?.courses?.map((course: string) => (
-                <option key={course} value={course}>
-                  {course}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            >
-              <option value="">All Statuses</option>
-              {filterOptions?.leadStatuses?.map((status: string) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">District</label>
-            <select
-              value={filters.district}
-              onChange={(e) => setFilters({ ...filters, district: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            >
-              <option value="">All Districts</option>
-              {filterOptions?.districts?.map((district: string) => (
-                <option key={district} value={district}>
-                  {district}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mandal</label>
-            <select
-              value={filters.mandal}
-              onChange={(e) => setFilters({ ...filters, mandal: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            >
-              <option value="">All Mandals</option>
-              {filterOptions?.mandals?.map((mandal: string) => (
-                <option key={mandal} value={mandal}>
-                  {mandal}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Academic Year</label>
+        {activeTab === 'calls' && (
+          <>
+            <span className="mx-1 text-slate-400 dark:text-slate-500">|</span>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Academic Year</span>
             <select
               value={filters.academicYear}
-              onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? 2025 : Number(e.target.value) })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? new Date().getFullYear() : Number(e.target.value) })}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
             >
               {[2023, 2024, 2025, 2026, 2027].map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
+          </>
+        )}
+      </div>
+
+      {/* Filters – hidden on Call Reports tab (that tab uses only date presets above) */}
+      {activeTab !== 'calls' && (
+        <Card className="p-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => {
+                  setFilters({ ...filters, startDate: e.target.value });
+                  setDatePreset('custom');
+                }}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">End Date</label>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => {
+                  setFilters({ ...filters, endDate: e.target.value });
+                  setDatePreset('custom');
+                }}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User/Counsellor</label>
+              <select
+                value={filters.userId}
+                onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Users</option>
+                {users.map((user: any) => (
+                  <option key={user._id} value={user._id}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Source</label>
+              <select
+                value={filters.source}
+                onChange={(e) => setFilters({ ...filters, source: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Sources</option>
+                {filterOptions?.sources?.map((source: string) => (
+                  <option key={source} value={source}>
+                    {source}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Course</label>
+              <select
+                value={filters.course}
+                onChange={(e) => setFilters({ ...filters, course: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Courses</option>
+                {filterOptions?.courses?.map((course: string) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Statuses</option>
+                {filterOptions?.leadStatuses?.map((status: string) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">District</label>
+              <select
+                value={filters.district}
+                onChange={(e) => setFilters({ ...filters, district: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Districts</option>
+                {filterOptions?.districts?.map((district: string) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mandal</label>
+              <select
+                value={filters.mandal}
+                onChange={(e) => setFilters({ ...filters, mandal: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Mandals</option>
+                {filterOptions?.mandals?.map((mandal: string) => (
+                  <option key={mandal} value={mandal}>
+                    {mandal}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Academic Year</label>
+              <select
+                value={filters.academicYear}
+                onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? 2025 : Number(e.target.value) })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                {[2023, 2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Student Group</label>
+              <select
+                value={filters.studentGroup}
+                onChange={(e) => setFilters({ ...filters, studentGroup: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Groups</option>
+                <option value="10th">10th</option>
+                <option value="Inter">Inter</option>
+                <option value="Inter-MPC">Inter-MPC</option>
+                <option value="Inter-BIPC">Inter-BIPC</option>
+                <option value="Degree">Degree</option>
+                <option value="Diploma">Diploma</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Student Group</label>
-            <select
-              value={filters.studentGroup}
-              onChange={(e) => setFilters({ ...filters, studentGroup: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-            >
-              <option value="">All Groups</option>
-              <option value="10th">10th</option>
-              <option value="Inter">Inter</option>
-              <option value="Inter-MPC">Inter-MPC</option>
-              <option value="Inter-BIPC">Inter-BIPC</option>
-              <option value="Degree">Degree</option>
-              <option value="Diploma">Diploma</option>
-            </select>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* Call Reports Tab */}
       {activeTab === 'calls' && (
@@ -524,47 +549,57 @@ export default function ReportsPage() {
               {userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 && (
                 <>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <Card className="p-4">
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Users</p>
-                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{userAnalytics.users.length}</p>
-                    </Card>
-                    <Card className="p-4">
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Assigned Leads</p>
-                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                        {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.totalAssigned || 0), 0)}
-                      </p>
-                    </Card>
-                    <Card className="p-4">
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Calls</p>
-                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                        {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.calls?.total ?? 0), 0)}
-                      </p>
-                    </Card>
-                    <Card className="p-4">
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total SMS</p>
-                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                        {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.sms?.total ?? 0), 0)}
-                      </p>
-                    </Card>
+                    {[
+                      { label: 'Total Users', value: userAnalytics.users.length, style: CALL_REPORT_CARD_STYLES[0] },
+                      { label: 'Total Assigned Leads', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.totalAssigned || 0), 0), style: CALL_REPORT_CARD_STYLES[1] },
+                      { label: 'Total Calls', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[2] },
+                      { label: 'Total SMS', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.sms?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[3] },
+                    ].map((item, i) => (
+                      <div key={i} className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${item.style} p-4 shadow-lg`}>
+                        <p className="text-sm font-semibold uppercase tracking-wider text-white/90">{item.label}</p>
+                        <p className="mt-2 text-2xl font-bold text-white drop-shadow-sm">{item.value}</p>
+                      </div>
+                    ))}
                   </div>
-                  <Card className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">User Performance Summary</h3>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                        <thead className="bg-slate-50 dark:bg-slate-900">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">User</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Leads</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Calls</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">SMS</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status Changes</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirmed</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Conversion Rate</th>
+                  {/* User Performance Summary – no outer card; export buttons on same row */}
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">User Performance Summary</h3>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleExport('excel', userAnalytics.users || [], `user-performance-${filters.startDate}-${filters.endDate}`)}
+                          disabled={!userAnalytics?.users?.length}
+                        >
+                          Export Excel
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleExport('csv', userAnalytics.users || [], `user-performance-${filters.startDate}-${filters.endDate}`)}
+                          disabled={!userAnalytics?.users?.length}
+                        >
+                          Export CSV
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
+                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+                        <thead>
+                          <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Leads</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">SMS</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Status Changes</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Confirmed</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Conversion Rate</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
-                          {userAnalytics.users.map((user: any) => (
-                            <tr key={user.userId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
+                          {userAnalytics.users.map((user: any, rowIdx: number) => (
+                            <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800/50' : 'bg-slate-50/80 dark:bg-slate-700/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
                               <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{user.name || user.userName}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
@@ -598,67 +633,53 @@ export default function ReportsPage() {
                         </tbody>
                       </table>
                     </div>
-                  </Card>
+                  </div>
                 </>
               )}
 
-              {/* Per-user summary cards from daily call report */}
-              {callReports?.summary && callReports.summary.length > 0 && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  {callReports.summary.map((summary: any) => (
-                    <Card key={summary.userId} className="p-4">
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{summary.userName}</p>
-                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{summary.totalCalls}</p>
-                      <p className="mt-1 text-xs text-slate-500">Avg: {summary.averageCallsPerDay} calls/day</p>
-                      <p className="text-xs text-slate-500">
-                        Avg Duration: {Math.floor(summary.averageDuration / 60)}m {summary.averageDuration % 60}s
-                      </p>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {/* Export and Table */}
-              <div className="flex justify-end gap-2 mb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('excel', callReports?.reports || [], `call-reports-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!callReports?.reports?.length}
-                >
-                  Export Excel
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('csv', callReports?.reports || [], `call-reports-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!callReports?.reports?.length}
-                >
-                  Export CSV
-                </Button>
-              </div>
-
-              {/* Table */}
+              {/* Daily call reports table */}
               {callReports?.reports && callReports.reports.length > 0 ? (
-                <Card className="overflow-hidden">
+                <>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExport('excel', callReports.reports || [], `call-reports-daily-${filters.startDate}-${filters.endDate}`)}
+                      disabled={!callReports?.reports?.length}
+                    >
+                      Export daily report (Excel)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExport('csv', callReports.reports || [], `call-reports-daily-${filters.startDate}-${filters.endDate}`)}
+                      disabled={!callReports?.reports?.length}
+                    >
+                      Export daily report (CSV)
+                    </Button>
+                  </div>
+                  <Card className="overflow-hidden border-slate-200 dark:border-slate-700">
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                      <thead className="bg-slate-50 dark:bg-slate-900">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Date</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">User</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Calls</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Duration</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Avg Duration</th>
+                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Duration</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Avg Duration</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
                         {callReports.reports.map((report: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                          <tr
+                            key={idx}
+                            className={idx % 2 === 0 ? 'bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-slate-50/80 dark:bg-slate-700/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}
+                          >
                             <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
                               {format(new Date(report.date), 'MMM dd, yyyy')}
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.userName}</td>
+                            <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{report.userName}</td>
                             <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.callCount}</td>
                             <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
                               {Math.floor(report.totalDuration / 60)}m {report.totalDuration % 60}s
@@ -672,6 +693,7 @@ export default function ReportsPage() {
                     </table>
                   </div>
                 </Card>
+                </>
               ) : (
                 <Card className="p-8 text-center">
                   <p className="text-slate-500 dark:text-slate-400">No call reports found for the selected period.</p>
