@@ -17,7 +17,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   // Flowbite base styles
-  const baseStyles = 'font-medium rounded-lg focus:ring-4 focus:outline-none transition-colors duration-200 inline-flex items-center justify-center min-h-[44px] md:min-h-0';
+  const baseStyles = 'font-medium rounded-lg focus:ring-4 focus:outline-none transition-colors duration-200 inline-flex items-center justify-center min-h-[44px] md:min-h-0 cursor-pointer';
 
   const variants = {
     primary:

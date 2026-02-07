@@ -10,7 +10,7 @@ import { auth } from '@/lib/auth';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { LoginLottie } from '@/components/LoginLottie';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -167,14 +167,10 @@ function LoginPageContent() {
   // Show loading state while verifying SSO token
   if (isVerifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950"></div>
-        <div className="absolute top-6 right-6 z-20">
-          <ThemeToggle />
-        </div>
+      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
         <div className="text-center relative z-10">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-slate-300">Verifying authentication...</p>
+          <p className="mt-4 text-gray-600">Verifying authentication...</p>
         </div>
       </div>
     );
@@ -183,19 +179,15 @@ function LoginPageContent() {
   // Show error state if SSO verification failed and no login form should be shown
   if (error && !showLoginForm) {
     return (
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950"></div>
-        <div className="absolute top-6 right-6 z-20">
-          <ThemeToggle />
-        </div>
+      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
         <div className="text-center relative z-10">
           <div className="max-w-md w-full">
-            <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
+            <Card className="bg-white border border-gray-200 shadow-xl">
               <div className="p-6">
-                <p className="text-red-600 dark:text-red-400 mb-4 font-medium">{error}</p>
+                <p className="text-red-600 mb-4 font-medium">{error}</p>
                 <a 
                   href={CRM_FRONTEND_URL}
-                  className="text-orange-600 dark:text-orange-400 hover:underline"
+                  className="text-orange-600 hover:underline"
                 >
                   Return to CRM Portal
                 </a>
@@ -207,60 +199,69 @@ function LoginPageContent() {
     );
   }
 
-  // Show normal login form
+  // Show normal login form: two-column layout (Lottie | Form) on large screens
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background - light */}
-      <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950" />
-
-      <div className="absolute top-6 right-6 z-20">
-        <ThemeToggle />
+    <div className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden bg-gray-50 gap-4 lg:gap-6">
+      {/* Left: Lottie — larger size, less padding */}
+      <div className="relative flex flex-col items-center justify-center px-4 py-6 lg:py-8 border-b lg:border-b-0 lg:border-r border-gray-200">
+        <div className="w-full max-w-lg h-72 sm:h-80 lg:h-[26rem] flex items-center justify-center">
+          <LoginLottie className="h-full w-full" />
+        </div>
+        <p className="mt-3 text-center text-sm text-gray-600 max-w-xs">
+          Manage leads and track admissions in one place
+        </p>
       </div>
 
-      <div className="max-w-md w-full relative z-10">
-        <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
-          <div className="text-center mb-6">
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-slate-100">Lead Tracker</h2>
-            <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">Sign in to your account</p>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-4 bg-linear-to-r from-red-50 to-red-100/50 dark:from-rose-900/30 dark:to-rose-900/20 border-2 border-red-200 dark:border-rose-700/50 rounded-xl shadow-sm animate-pulse">
-              <p className="text-sm text-red-700 dark:text-rose-200 font-medium">{error}</p>
+      {/* Right: Login form — less padding to reduce space */}
+      <div className="relative flex flex-col items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md">
+            <Card className="bg-white border border-gray-200 shadow-xl">
+            <div className="text-center mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">Lead Tracker</h2>
+              <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
             </div>
-          )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <Input
-              label="Email"
-              type="email"
-              placeholder="Enter your email"
-              error={errors.email?.message}
-              {...register('email')}
-            />
+            {error && (
+              <div className="mb-4 p-4 bg-linear-to-r from-red-50 to-red-100/50 border-2 border-red-200 rounded-xl shadow-sm animate-pulse">
+                <p className="text-sm text-red-700 font-medium">{error}</p>
+              </div>
+            )}
 
-            <Input
-              label="Password"
-              type="password"
-              placeholder="Enter your password"
-              error={errors.password?.message}
-              {...register('password')}
-            />
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <Input
+                label="Email"
+                type="email"
+                placeholder="Enter your email"
+                error={errors.email?.message}
+                {...register('email')}
+              />
 
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              isLoading={isLoading}
-              className="w-full group"
-            >
-              <span className="group-hover:scale-105 transition-transform inline-block">
-                {isLoading ? 'Signing In...' : 'Sign In'}
-              </span>
-            </Button>
-          </form>
-        </Card>
+              <Input
+                label="Password"
+                type="password"
+                placeholder="Enter your password"
+                error={errors.password?.message}
+                {...register('password')}
+              />
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                isLoading={isLoading}
+                className="w-full group"
+              >
+                <span className="group-hover:scale-105 transition-transform inline-block">
+                  {isLoading ? 'Signing In...' : 'Sign In'}
+                </span>
+              </Button>
+            </form>
+          </Card>
+        </div>
       </div>
+
+      {/* Bottom accent line */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-60" />
     </div>
   );
 }
@@ -268,14 +269,10 @@ function LoginPageContent() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950"></div>
-        <div className="absolute top-6 right-6 z-20">
-          <ThemeToggle />
-        </div>
+      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
         <div className="text-center relative z-10">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-slate-300">Loading...</p>
+          <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>
     }>

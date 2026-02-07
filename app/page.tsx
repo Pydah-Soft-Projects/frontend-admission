@@ -5,18 +5,15 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function Home() {
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Use a small delay to avoid synchronous setState
     const checkAuth = () => {
       const user = auth.getUser();
       if (user) {
-        // Prevent logged-in users from accessing home - redirect to dashboard
         if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
           router.replace('/superadmin/dashboard');
         } else if (user.roleName === 'Data Entry User') {
@@ -30,102 +27,89 @@ export default function Home() {
         setIsChecking(false);
       }
     };
-
-    // Use setTimeout to avoid synchronous setState in effect
     const timer = setTimeout(checkAuth, 0);
     return () => clearTimeout(timer);
   }, [router]);
 
-  // Show loading state while checking auth
   if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950">
-        <p className="text-slate-700 dark:text-slate-100">Redirecting...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 rounded-full border-2 border-orange-500 border-t-transparent animate-spin" />
+          <p className="text-gray-600 text-sm font-medium">Redirecting...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gray-50 dark:bg-slate-950" />
-
-      <div className="absolute top-6 right-6 z-20">
-        <ThemeToggle />
-      </div>
-
-      <div className="flex flex-col items-center gap-6 text-center relative z-10">
-        {/* Icon and Title */}
-        <div className="flex items-center gap-4 group">
-          {/* Lead Tracker Icon - Chart/Graph Icon */}
-          <svg
-            width="72"
-            height="72"
-            viewBox="0 0 72 72"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="text-orange-600 dark:text-orange-300 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
-          >
-            {/* Chart bars */}
-            <rect x="12" y="40" width="8" height="20" rx="2" fill="currentColor" opacity="0.8" />
-            <rect x="24" y="32" width="8" height="28" rx="2" fill="currentColor" opacity="0.9" />
-            <rect x="36" y="24" width="8" height="36" rx="2" fill="currentColor" />
-            <rect x="48" y="28" width="8" height="32" rx="2" fill="currentColor" opacity="0.85" />
-
-            {/* Target/Arrow pointing up */}
-            <path
-              d="M36 12L40 18H32L36 12Z"
-              fill="currentColor"
-            />
-            <circle cx="36" cy="20" r="3" fill="currentColor" />
-
-            {/* Connection lines */}
-            <path
-              d="M16 40L20 32L28 24L36 20L44 28L52 28"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-              opacity="0.6"
-            />
-          </svg>
-
-          <div className="text-left">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-gray-900 dark:text-slate-100">
-              Lead Management Tracker
-            </h1>
-            <p className="text-base sm:text-lg text-gray-600 dark:text-slate-300 max-w-2xl mt-3">
-              Streamline enquiries, assign leads effortlessly, and gain real-time insights across your teams with our modern analytics dashboard.
-            </p>
-          </div>
+    <div className="min-h-screen flex flex-col relative overflow-hidden bg-gray-50">
+      <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-5">
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white text-sm font-bold shadow-lg shadow-orange-500/25">
+            LT
+          </span>
+          <span className="text-lg font-semibold text-gray-800">Lead Tracker</span>
         </div>
+        <Link href="/auth/login" className="text-sm font-medium text-gray-600 hover:text-orange-600 transition-colors">
+          Sign in
+        </Link>
+      </header>
 
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <Button
-            size="xl"
-            variant="primary"
-            onClick={() => router.push('/auth/login')}
-          >
-            Get Started
-          </Button>
-          <Link href="/lead-form">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-24 sm:py-32">
+        <div className="mx-auto max-w-4xl text-center">
+          {/* Badge */}
+          <p className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-orange-700 mb-8">
+            <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
+            Admissions &amp; Enquiry Management
+          </p>
+
+          {/* Headline */}
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl md:text-6xl lg:text-7xl">
+            <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent">
+              Lead Management
+            </span>
+            <br />
+            <span className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 bg-clip-text text-transparent">
+              Tracker
+            </span>
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 sm:text-xl leading-relaxed">
+            Streamline enquiries, assign leads effortlessly, and gain real-time insights across your teams with a modern analytics dashboard.
+          </p>
+
+          {/* CTAs */}
+          <div className="mt-10 flex flex-col sm:flex-row gap-4 items-center justify-center">
             <Button
               size="xl"
-              variant="outline"
+              variant="primary"
+              onClick={() => router.push('/auth/login')}
+              className="min-w-[200px] shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 transition-shadow"
             >
-              Submit Lead Form
+              Get Started
             </Button>
-          </Link>
-        </div>
+            <Link href="/lead-form">
+              <Button
+                size="xl"
+                variant="outline"
+                className="min-w-[200px] border-2 border-gray-300 hover:border-orange-400 hover:bg-orange-50"
+              >
+                Submit Lead Form
+              </Button>
+            </Link>
+          </div>
 
-        <p className="text-sm text-gray-500 dark:text-slate-400">
-          Already onboarded?{' '}
-          <Link href="/auth/login" className="text-orange-600 dark:text-orange-300 font-semibold hover:underline">
-            Sign in here
-          </Link>
-        </p>
-      </div>
+          <p className="mt-8 text-sm text-gray-500">
+            Already have an account?{' '}
+            <Link href="/auth/login" className="font-semibold text-orange-600 hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </main>
+
+      {/* Bottom accent line */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-60" />
     </div>
   );
 }

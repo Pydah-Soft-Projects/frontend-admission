@@ -50,7 +50,7 @@ export function MobileBottomNav({ items, onMenuPress }: MobileBottomNavProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex min-h-11 w-full flex-col items-center justify-center gap-0.5 py-1.5 transition-colors',
+                'flex min-h-11 w-full cursor-pointer flex-col items-center justify-center gap-0.5 py-1.5 transition-colors',
                 active ? 'text-orange-600' : 'text-slate-500 hover:text-slate-800'
               )}
               aria-current={active ? 'page' : undefined}
@@ -64,7 +64,7 @@ export function MobileBottomNav({ items, onMenuPress }: MobileBottomNavProps) {
         <button
           type="button"
           onClick={onMenuPress}
-          className="flex min-h-11 w-full flex-col items-center justify-center gap-0.5 py-1.5 text-slate-500 transition-colors hover:text-slate-800"
+          className="flex min-h-11 w-full cursor-pointer flex-col items-center justify-center gap-0.5 py-1.5 text-slate-500 transition-colors hover:text-slate-800"
           aria-label="Open menu"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-6 w-6 shrink-0">

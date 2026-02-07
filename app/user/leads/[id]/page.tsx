@@ -942,15 +942,75 @@ export default function UserLeadDetailPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-3 sm:space-y-6 px-0 sm:px-4 pb-20 sm:pb-6 pt-0 sm:pt-6 lg:px-8">
+    <div className="mx-auto w-full max-w-7xl space-y-3 sm:space-y-6 px-0 sm:px-4 pb-36 sm:pb-6 pt-3 sm:pt-6 lg:px-8 lg:pb-6">
+      {/* Mobile-only sticky action bar: icons only (above bottom nav) */}
+      <div
+        className="lg:hidden fixed left-0 right-0 z-20 flex items-center justify-center gap-3 px-4 py-3 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-700 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+        style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+        aria-label="Quick actions"
+      >
+        <div className="flex items-center justify-center gap-3 w-full max-w-sm mx-auto">
+          <button
+            type="button"
+            onClick={() => lead && setShowCallNumberModal(true)}
+            className="flex items-center justify-center size-12 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
+            aria-label="Call"
+          >
+            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (lead) {
+                setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
+                setShowSmsModal(true);
+              }
+            }}
+            className="flex items-center justify-center size-12 rounded-xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white shadow-sm"
+            aria-label="SMS"
+          >
+            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setNewStatus(lead?.leadStatus || ''); setStatusComment(''); setShowStatusModal(true); }}
+            className="flex items-center justify-center size-12 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white shadow-sm"
+            aria-label="Update status"
+          >
+            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setCommentText(''); setShowCommentModal(true); }}
+            className="flex items-center justify-center size-12 rounded-xl bg-slate-600 hover:bg-slate-700 active:scale-95 text-white shadow-sm"
+            aria-label="Add comment"
+          >
+            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       {/* MAIN CONTENT - 2 Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
         {/* LEFT COLUMN - Student Details & History */}
         <div className="lg:col-span-2 space-y-3 sm:space-y-6">
-          {/* SECTION 1: PROFILE CARD - lead details with avatar and SVGs */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm dark:bg-slate-900 dark:border-slate-700">
+          {/* SECTION 1: PROFILE CARD - identity / pass style, rich orange gradient */}
+          <div className="relative overflow-hidden rounded-2xl border-2 border-orange-400/50 shadow-xl shadow-orange-900/20 dark:shadow-orange-950/30">
+            {/* Lighter orange gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-t from-orange-400 to-orange-600 dark:from-orange-500 dark:via-orange-600 dark:to-amber-700" aria-hidden />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-white/15 dark:from-black/20 dark:to-white/10" aria-hidden />
+            <div className="relative px-4 py-4 sm:px-6 sm:py-6">
             {isEditing ? (
-              <form onSubmit={handleSave} className="space-y-6 p-3 sm:p-0">
+              <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 p-4 sm:p-6 shadow-inner">
+              <form onSubmit={handleSave} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -1048,18 +1108,27 @@ export default function UserLeadDetailPage() {
                   </Button>
                 </div>
               </form>
+              </div>
             ) : (
               <>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                {/* Profile header: avatar + name + phone - high contrast on card */}
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/95 dark:bg-white/90 text-orange-600 dark:text-orange-600 shadow-md ring-2 ring-white/50">
                     <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">{lead.name}</p>
-                    <p className="mt-1 flex items-center gap-2 text-base text-gray-600 dark:text-gray-400 break-all">
-                      <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex flex-col gap-1.5">
+                      <h2 className="text-lg font-bold text-white drop-shadow-sm wrap-break-word">{lead.name}</h2>
+                      {lead.leadStatus && (
+                        <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-xs font-semibold bg-white/25 text-white backdrop-blur sm:hidden">
+                          {lead.leadStatus}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-white/95 break-all flex items-center gap-1.5">
+                      <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                       </svg>
                       {lead.phone || '—'}
@@ -1067,13 +1136,13 @@ export default function UserLeadDetailPage() {
                   </div>
                 </div>
 
-                {/* Expandable: details with SVGs */}
-                <div className="mt-4">
+                {/* Expandable: extra details - on card use light panel */}
+                <div className="mt-3">
                   {isDetailsExpanded && (
-                    <div className="space-y-2.5 border-t border-slate-100 dark:border-slate-800 pt-4 text-sm text-gray-700 dark:text-gray-300">
+                    <div className="space-y-2 rounded-xl border border-white/20 bg-white/15 backdrop-blur pt-3 px-3 pb-3 text-sm text-white/95 dark:bg-white/10 dark:border-white/10">
                       {lead.email && (
                         <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
                           {lead.email}
@@ -1081,7 +1150,7 @@ export default function UserLeadDetailPage() {
                       )}
                       {(lead.village || lead.mandal || lead.district || lead.state) && (
                         <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
@@ -1090,7 +1159,7 @@ export default function UserLeadDetailPage() {
                       )}
                       {(lead.fatherName || lead.fatherPhone) && (
                         <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                           </svg>
                           {lead.fatherName}
@@ -1099,7 +1168,7 @@ export default function UserLeadDetailPage() {
                       )}
                       {lead.enquiryNumber && (
                         <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
                           </svg>
                           #{lead.enquiryNumber}
@@ -1107,7 +1176,7 @@ export default function UserLeadDetailPage() {
                       )}
                       {lead.leadStatus && (
                         <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           {lead.leadStatus}
@@ -1115,7 +1184,7 @@ export default function UserLeadDetailPage() {
                       )}
                       {lead.source && (
                         <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                           </svg>
                           {lead.source}
@@ -1129,7 +1198,7 @@ export default function UserLeadDetailPage() {
                       {lead.isNRI && <p>NRI</p>}
                       {lead.assignedTo && (
                         <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
                           {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : ''}
@@ -1140,27 +1209,18 @@ export default function UserLeadDetailPage() {
                   <button
                     type="button"
                     onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-                    className="mt-2 flex items-center gap-2 text-sm font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300"
+                    className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white"
                   >
                     {isDetailsExpanded ? (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                        </svg>
-                        Show less
-                      </>
+                      <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg> Show less</>
                     ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        More details
-                      </>
+                      <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg> More details</>
                     )}
                   </button>
                 </div>
               </>
             )}
+            </div>
           </div>
 
           {/* ACTIONS - hidden on mobile, visible from sm up */}
@@ -1205,7 +1265,7 @@ export default function UserLeadDetailPage() {
             </div>
           </div>
 
-          {/* STATUS - hidden on mobile, visible from sm up */}
+          {/* STATUS - on desktop; on mobile shown in profile card */}
           {lead.leadStatus && (
             <div className="hidden sm:block">
               <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Status</p>
@@ -1215,12 +1275,12 @@ export default function UserLeadDetailPage() {
             </div>
           )}
 
-          {/* COMMUNICATION SUMMARY - no heading, compact mobile */}
+          {/* COMMUNICATION SUMMARY: Primary & Father phone in same row; Calls / SMS on separate rows each */}
           <div>
             {contactOptions.length === 0 ? (
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">No phone numbers</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">No phone numbers</p>
             ) : (
-              <div className="space-y-2 sm:space-y-3">
+              <div className={`grid gap-3 sm:gap-4 ${contactOptions.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                 {contactOptions.map((option, index) => {
                   const stats = communicationStatsMap.get(option.number);
                   const callCount = stats?.callCount || 0;
@@ -1229,42 +1289,39 @@ export default function UserLeadDetailPage() {
                   return (
                     <div
                       key={`${option.label}-${option.number}-${index}`}
-                      className="flex flex-wrap items-center justify-between gap-2 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0"
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-3 sm:p-3.5"
                     >
-                      <div className="min-w-0">
-                        <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{option.label}</p>
-                        <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">{option.number}</p>
-                        <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 mt-0.5 flex items-center gap-3 flex-wrap">
-                          <span className="flex items-center gap-1">
-                            <svg className="w-3.5 h-3.5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                            </svg>
-                            <span>Calls: <span className="font-medium text-gray-700 dark:text-slate-300">{callCount}</span></span>
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <svg className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                            <span>SMS: <span className="font-medium text-gray-700 dark:text-slate-300">{smsCount}</span></span>
-                          </span>
-                          {templateUsage.length > 0 && (
-                            <span className="text-gray-400 dark:text-slate-500">
-                              · {templateUsage.length} template{templateUsage.length !== 1 ? 's' : ''}
-                            </span>
-                          )}
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{option.label}</p>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate mt-0.5">{option.number}</p>
+                      <div className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-400">
+                        <p className="flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          <span>Calls: <span className="font-medium text-slate-800 dark:text-slate-200">{callCount}</span></span>
                         </p>
+                        <p className="flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          <span>SMS: <span className="font-medium text-slate-800 dark:text-slate-200">{smsCount}</span></span>
+                        </p>
+                        {templateUsage.length > 0 && (
+                          <p className="text-slate-400 dark:text-slate-500 pt-0.5">{templateUsage.length} template{templateUsage.length !== 1 ? 's' : ''}</p>
+                        )}
                       </div>
-                      <div className="flex gap-2 shrink-0">
+                      {/* Call/SMS buttons - hidden on mobile (sticky action bar used there) */}
+                      <div className="hidden sm:flex gap-2 mt-3">
                         <button
                           type="button"
                           onClick={() => {
                             setCallData({ contactNumber: option.number, remarks: '', outcome: '', durationSeconds: 0 });
                             setShowCallNumberModal(true);
                           }}
-                          className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+                          className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500 text-slate-700 dark:text-slate-200"
                           aria-label="Call"
                         >
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                           </svg>
                         </button>
@@ -1274,10 +1331,10 @@ export default function UserLeadDetailPage() {
                             setSmsData({ selectedNumbers: [option.number], selectedTemplates: {}, languageFilter: 'all' });
                             setShowSmsModal(true);
                           }}
-                          className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
+                          className="flex items-center justify-center w-9 h-9 rounded-lg bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300"
                           aria-label="SMS"
                         >
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                           </svg>
                         </button>
@@ -1289,44 +1346,46 @@ export default function UserLeadDetailPage() {
             )}
           </div>
 
-          {/* HISTORY & REMARKS - no card, compact */}
-          <div>
-              <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">History & Remarks</p>
-              <div className="mb-2 sm:mb-4">
-              <div className="flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm">
+          {/* HISTORY & REMARKS */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+            <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-slate-200 dark:border-slate-700">
+              <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">History & Remarks</p>
+            </div>
+            <div className="px-3 py-3 sm:px-4 sm:py-4 space-y-3">
+              {/* Date row */}
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm">
                 {lead.lastFollowUp && (
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                    <svg className="w-4 h-4 shrink-0 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Last Follow Up:</span>
-                    <span className="text-gray-900 dark:text-gray-100">{formatDate(lead.lastFollowUp)}</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">Last follow up</span>
+                    <span className="text-slate-900 dark:text-slate-100">{formatDate(lead.lastFollowUp)}</span>
                   </div>
                 )}
                 {lead.createdAt && (
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                    <svg className="w-4 h-4 shrink-0 text-emerald-500 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Created On:</span>
-                    <span className="text-gray-900 dark:text-gray-100">{formatDate(lead.createdAt)}</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">Created</span>
+                    <span className="text-slate-900 dark:text-slate-100">{formatDate(lead.createdAt)}</span>
                   </div>
                 )}
                 {lead.nextScheduledCall && (
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                    <svg className="w-4 h-4 shrink-0 text-amber-500 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Next scheduled call:</span>
-                    <span className="text-gray-900 dark:text-gray-100">{formatDate(lead.nextScheduledCall)}</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">Next call</span>
+                    <span className="text-slate-900 dark:text-slate-100">{formatDate(lead.nextScheduledCall)}</span>
                   </div>
                 )}
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs px-2.5 py-1.5"
+              {/* Schedule actions: Reschedule / Clear schedule - same row, smaller */}
+              <div className="flex flex-nowrap items-center gap-2 pt-1">
+                <button
+                  type="button"
                   onClick={() => {
                     if (lead.nextScheduledCall) {
                       const d = new Date(lead.nextScheduledCall);
@@ -1339,34 +1398,41 @@ export default function UserLeadDetailPage() {
                     }
                     setShowScheduleCallModal(true);
                   }}
+                  className="inline-flex items-center justify-center gap-1.5 min-h-8 px-3 rounded-md text-xs font-medium bg-orange-500 hover:bg-orange-600 text-white shadow-sm active:scale-[0.98] shrink-0"
                 >
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
                   {lead.nextScheduledCall ? 'Reschedule' : 'Schedule call'}
-                </Button>
+                </button>
                 {lead.nextScheduledCall && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs px-2.5 py-1.5 text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-900/20"
+                  <button
+                    type="button"
                     onClick={() => {
                       if (window.confirm('Clear scheduled call for this lead?')) {
                         scheduleCallMutation.mutate({ nextScheduledCall: null });
                       }
                     }}
                     disabled={scheduleCallMutation.isPending}
+                    className="inline-flex items-center justify-center gap-1.5 min-h-8 px-3 rounded-md text-xs font-medium border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98] disabled:opacity-50 shrink-0"
                   >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                     Clear schedule
-                  </Button>
+                  </button>
                 )}
               </div>
             </div>
-            {isLoadingLogs ? (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              </div>
-            ) : timelineItems.length === 0 ? (
-              <p className="text-gray-500 text-center py-4 text-xs sm:text-sm">No history</p>
-            ) : (
-              <div className="relative">
+            <div className="border-t border-slate-200 dark:border-slate-700 px-3 py-3 sm:px-4 sm:py-4">
+              {isLoadingLogs ? (
+                <div className="text-center py-8">
+                  <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                </div>
+              ) : timelineItems.length === 0 ? (
+                <p className="text-slate-500 dark:text-slate-400 text-center py-4 text-xs sm:text-sm">No history yet</p>
+              ) : (
+                <div className="relative">
                 <div className="space-y-3 sm:space-y-4">
                   {timelineItems.map((item, index) => {
                     const isCall = item.type === 'call';
@@ -1469,7 +1535,8 @@ export default function UserLeadDetailPage() {
                   })}
                 </div>
               </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -1908,7 +1975,7 @@ export default function UserLeadDetailPage() {
                       value={option.number}
                       checked={isSelected}
                       onChange={() => setSelectedCallNumber(option.number)}
-                      className="h-4 w-4 text-orange-600 border-slate-300 focus:ring-orange-500 focus:ring-2"
+                      className="h-4 w-4 accent-orange-500 border-slate-300 focus:ring-orange-500 focus:ring-2"
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{option.label}</p>

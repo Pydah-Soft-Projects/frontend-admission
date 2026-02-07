@@ -327,7 +327,7 @@ export default function UserLeadsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-0 sm:px-0 pb-2">
       <Card className="p-3 sm:p-4">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
@@ -341,7 +341,7 @@ export default function UserLeadsPage() {
               <button
                 type="button"
                 onClick={() => setShowFilters(!showFilters)}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:px-3 sm:py-2 sm:text-sm"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white min-h-[44px] px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:min-h-0 sm:px-3 sm:py-2 sm:text-sm"
               >
                 <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -349,7 +349,7 @@ export default function UserLeadsPage() {
                 {showFilters ? 'Hide filters' : 'Filters'}
               </button>
               {(Object.keys(filters).length > 0 || search) && (
-                <Button variant="outline" size="sm" onClick={clearFilters} className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm">
+                <Button variant="outline" size="sm" onClick={clearFilters} className="min-h-[44px] px-3 text-xs sm:min-h-0 sm:h-9 sm:px-3 sm:text-sm">
                   Clear
                 </Button>
               )}
@@ -363,7 +363,7 @@ export default function UserLeadsPage() {
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowSearchSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
-              className="h-9 w-full text-sm sm:h-10"
+              className="min-h-[44px] w-full text-base sm:min-h-0 sm:h-10 sm:text-sm"
             />
             {showSearchSuggestions && searchSuggestions.length > 0 && (
               <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -533,52 +533,62 @@ export default function UserLeadsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {leads.map((lead: Lead) => (
-              <Card
+              <article
                 key={`lead-${lead._id}`}
-                className="group relative cursor-pointer overflow-hidden rounded-2xl border-0 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-all duration-300 hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 dark:bg-slate-900/95 dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] dark:hover:shadow-[0_8px_30px_rgba(0,0,0,0.25)] w-full min-w-0 ring-1 ring-slate-200/60 hover:ring-orange-300/50 dark:ring-slate-700/60 dark:hover:ring-orange-500/30"
                 onClick={() => router.push(`/user/leads/${lead._id}`)}
+                className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:shadow-md hover:border-orange-200/80 dark:border-slate-700/80 dark:bg-slate-900/80 dark:hover:border-orange-500/40 dark:hover:shadow-lg cursor-pointer"
               >
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none" aria-hidden />
-                <div className="relative flex min-w-0 flex-col gap-2 p-2.5 sm:p-3">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600/80">
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                {/* Top accent by status (optional subtle bar) */}
+                <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 group-hover:bg-orange-100 dark:group-hover:bg-orange-900/30 transition-colors" aria-hidden />
+                <div className="relative flex flex-1 flex-col p-4 sm:p-5">
+                  {/* Header: avatar + name + status */}
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 ring-1 ring-slate-200/60 dark:ring-slate-700/60">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                      <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
                         {lead.name}
+                      </h3>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusColor(lead.leadStatus || '')}`}>
+                          {lead.leadStatus || 'New'}
+                        </span>
                         {lead.needsManualUpdate && (
-                          <span className="ml-1 inline-block shrink-0 align-middle rounded-md px-1.5 py-0.5 text-[8px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200 sm:text-[9px]" title="Details need manual update">Update</span>
+                          <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/50 dark:text-amber-200" title="Details need manual update">
+                            Update
+                          </span>
                         )}
-                      </p>
-                      <span className={`mt-1 hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline-block ${getStatusColor(lead.leadStatus || '')}`}>
-                        {lead.leadStatus || 'New'}
-                      </span>
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                    <span className="text-slate-500 dark:text-slate-400">Phone</span>
-                    <span className="min-w-0 truncate text-right font-medium text-slate-900 dark:text-slate-100">{lead.phone}</span>
-                    {lead.email && (
-                      <>
-                        <span className="text-slate-500 dark:text-slate-400">Email</span>
-                        <span className="min-w-0 truncate text-right text-slate-700 dark:text-slate-300">{lead.email}</span>
-                      </>
+                  {/* Meta: phone, location */}
+                  <div className="mt-4 space-y-2 border-t border-slate-100 dark:border-slate-800/80 pt-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <svg className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      <span className="truncate font-medium text-slate-800 dark:text-slate-200">{lead.phone}</span>
+                    </div>
+                    {(lead.mandal || lead.village) && (
+                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                        <svg className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        </svg>
+                        <span className="truncate">{[lead.village, lead.mandal].filter(Boolean).join(', ') || '—'}</span>
+                      </div>
                     )}
-                    <span className="text-slate-500 dark:text-slate-400">Mandal</span>
-                    <span className="min-w-0 truncate text-right text-slate-700 dark:text-slate-300">{lead.mandal}</span>
-                    <span className="text-slate-500 dark:text-slate-400">Village</span>
-                    <span className="min-w-0 truncate text-right text-slate-700 dark:text-slate-300">{lead.village}</span>
                   </div>
-                  <div className="flex w-full gap-2 border-t border-slate-100 pt-2 dark:border-slate-800/80">
+                  {/* Actions */}
+                  <div className="mt-4 flex gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-3">
                     <Button
                       size="sm"
                       variant="primary"
-                      className="h-7 min-w-0 flex-1 rounded-lg text-xs font-medium"
+                      className="min-h-10 sm:min-h-9 flex-1 rounded-xl text-sm font-medium"
                       onClick={(e) => {
                         e.stopPropagation();
                         router.push(`/user/leads/${lead._id}`);
@@ -589,7 +599,7 @@ export default function UserLeadsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 min-w-0 flex-1 rounded-lg border-slate-200 text-xs font-medium dark:border-slate-600"
+                      className="min-h-10 sm:min-h-9 flex-1 rounded-xl border-slate-200 text-sm font-medium dark:border-slate-600"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleOpenCommentModal(lead, e);
@@ -599,21 +609,21 @@ export default function UserLeadsPage() {
                     </Button>
                   </div>
                 </div>
-              </Card>
+              </article>
             ))}
           </div>
         </>
       )}
 
       {pagination.pages > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-slate-700">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 border-t border-gray-200 pt-4 pb-2 dark:border-slate-700">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <Button
               variant="outline"
               onClick={() => setPage(1)}
               disabled={page === 1 || isLoading}
               size="sm"
-              className="p-2"
+              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
               title="First Page"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -625,7 +635,7 @@ export default function UserLeadsPage() {
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1 || isLoading}
               size="sm"
-              className="p-2"
+              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
               title="Previous Page"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -651,7 +661,7 @@ export default function UserLeadsPage() {
                     onClick={() => setPage(pageNum)}
                     disabled={isLoading}
                     size="sm"
-                    className="min-w-[40px]"
+                    className="min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-[40px]"
                   >
                     {pageNum}
                   </Button>
@@ -663,7 +673,7 @@ export default function UserLeadsPage() {
               onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
               disabled={page === pagination.pages || isLoading}
               size="sm"
-              className="p-2"
+              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
               title="Next Page"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -675,7 +685,7 @@ export default function UserLeadsPage() {
               onClick={() => setPage(pagination.pages)}
               disabled={page === pagination.pages || isLoading}
               size="sm"
-              className="p-2"
+              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
               title="Last Page"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -683,106 +693,112 @@ export default function UserLeadsPage() {
               </svg>
             </Button>
           </div>
-          <div className="text-sm text-gray-600 dark:text-slate-300">
+          <div className="text-sm text-gray-600 dark:text-slate-300 w-full sm:w-auto text-center sm:text-left">
             Page {pagination.page} of {pagination.pages}
           </div>
         </div>
       )}
 
       {showCommentModal && selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <Card className="w-full max-w-md">
-            <h2 className="mb-4 text-xl font-semibold">Add Comment / Update Status</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                Current Status: <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span>
-                </label>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Update Status</label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                  value={newStatus}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                >
-                  <option value="">Keep Current Status</option>
-                  <option value="New">New</option>
-                  <option value="Interested">Interested</option>
-                  <option value="Not Interested">Not Interested</option>
-                  <option value="Partial">Partial</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Lost">Lost</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Comment</label>
-                <textarea
-                  className="min-h-[100px] w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Add a comment..."
-                />
-              </div>
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="primary"
-                  onClick={handleSaveActivity}
-                  disabled={
-                    addActivityMutation.isPending ||
-                    (!comment.trim() && newStatus === selectedLead.leadStatus)
-                  }
-                >
-                  {addActivityMutation.isPending ? 'Saving...' : 'Save'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowCommentModal(false);
-                    setShowConfirmModal(false);
-                    setComment('');
-                    setNewStatus('');
-                    setSelectedLead(null);
-                  }}
-                  disabled={addActivityMutation.isPending}
-                >
-                  Cancel
-                </Button>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 sm:bg-black/50">
+          <div className="w-full max-h-[90vh] overflow-y-auto sm:max-h-none sm:overflow-visible rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 shadow-xl sm:max-w-md pt-4 pb-[env(safe-area-inset-bottom)] sm:pb-4">
+            <div className="px-4 sm:px-6 pb-4">
+              <div className="mx-auto w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden mb-4" aria-hidden />
+              <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">Add Comment / Update Status</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Current Status: <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span>
+                  </label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Update Status</label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 min-h-[44px]"
+                    value={newStatus}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                  >
+                    <option value="">Keep Current Status</option>
+                    <option value="New">New</option>
+                    <option value="Interested">Interested</option>
+                    <option value="Not Interested">Not Interested</option>
+                    <option value="Partial">Partial</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Lost">Lost</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Comment</label>
+                  <textarea
+                    className="min-h-[120px] w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Add a comment..."
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveActivity}
+                    disabled={
+                      addActivityMutation.isPending ||
+                      (!comment.trim() && newStatus === selectedLead.leadStatus)
+                    }
+                    className="min-h-[44px] flex-1 sm:flex-initial"
+                  >
+                    {addActivityMutation.isPending ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowCommentModal(false);
+                      setShowConfirmModal(false);
+                      setComment('');
+                      setNewStatus('');
+                      setSelectedLead(null);
+                    }}
+                    disabled={addActivityMutation.isPending}
+                    className="min-h-[44px] flex-1 sm:flex-initial"
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 
       {showConfirmModal && selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <Card className="w-full max-w-md">
-            <h2 className="mb-4 text-xl font-semibold">Confirm Status Change</h2>
-            <div className="space-y-4">
-              <p className="text-gray-700 dark:text-slate-200">
-                Are you sure you want to change the status from{' '}
-                <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span> to{' '}
-                <span className="font-semibold">{newStatus}</span>?
-              </p>
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="primary"
-                  onClick={handleConfirmStatusChange}
-                  disabled={addActivityMutation.isPending}
-                >
-                  {addActivityMutation.isPending ? 'Saving...' : 'Confirm'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setNewStatus(selectedLead.leadStatus || '');
-                  }}
-                  disabled={addActivityMutation.isPending}
-                >
-                  Cancel
-                </Button>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50">
+          <div className="w-full max-h-[90vh] overflow-y-auto sm:max-h-none rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 shadow-xl sm:max-w-md pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6 px-4 sm:px-6">
+            <div className="mx-auto w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden mb-4" aria-hidden />
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">Confirm Status Change</h2>
+            <p className="text-gray-700 dark:text-slate-200 text-base mb-6">
+              Are you sure you want to change the status from{' '}
+              <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span> to{' '}
+              <span className="font-semibold">{newStatus}</span>?
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="primary"
+                onClick={handleConfirmStatusChange}
+                disabled={addActivityMutation.isPending}
+                className="min-h-[44px] flex-1"
+              >
+                {addActivityMutation.isPending ? 'Saving...' : 'Confirm'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setNewStatus(selectedLead.leadStatus || '');
+                }}
+                disabled={addActivityMutation.isPending}
+                className="min-h-[44px] flex-1"
+              >
+                Cancel
+              </Button>
             </div>
-          </Card>
+          </div>
         </div>
       )}
     </div>

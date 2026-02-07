@@ -35,10 +35,10 @@ interface Analytics {
 }
 
 const summaryCardStyles = [
-  'from-sky-500/15 via-sky-500/10 to-transparent text-sky-700 dark:text-sky-200 border-sky-200/50 dark:border-sky-500/30',
-  'from-teal-500/15 via-teal-500/10 to-transparent text-teal-700 dark:text-teal-200 border-teal-200/50 dark:border-teal-500/30',
-  'from-indigo-500/15 via-indigo-500/10 to-transparent text-indigo-700 dark:text-indigo-200 border-indigo-200/50 dark:border-indigo-500/30',
-  'from-rose-500/15 via-rose-500/10 to-transparent text-rose-700 dark:text-rose-200 border-rose-200/50 dark:border-rose-500/30',
+  'bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0 shadow-lg shadow-orange-500/30',
+  'bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg shadow-amber-500/30',
+  'bg-gradient-to-br from-violet-600 to-purple-700 text-white border-0 shadow-lg shadow-violet-500/30',
+  'bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-0 shadow-lg shadow-emerald-500/30',
 ];
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
@@ -181,7 +181,7 @@ export default function UserDashboard() {
   );
 
   const chartColors = useMemo(
-    () => ['#3b82f6', '#22c55e', '#f97316', '#a855f7', '#ef4444', '#14b8a6'],
+    () => ['#ea580c', '#d97706', '#ca8a04', '#65a30d', '#0d9488', '#7c3aed'],
     []
   );
 
@@ -248,140 +248,121 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-2">
+    <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-2 pt-1 pb-2 sm:pt-0 sm:pb-0">
       <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card, index) => (
           <Card
             key={card.label}
-            className={`overflow-hidden border bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-3 shadow-sm sm:p-5 lg:p-6`}
+            className={`overflow-hidden border bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-3 shadow-sm sm:p-5 lg:p-6 min-h-[88px] sm:min-h-0 flex flex-col justify-center`}
           >
-            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-slate-500/90 dark:text-slate-400">
+            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-white/80">
               {card.label}
             </p>
-            <p className="mt-1 sm:mt-2 text-xl font-semibold text-inherit sm:text-2xl lg:text-3xl">
+            <p className="mt-1 sm:mt-2 text-xl font-bold text-white sm:text-2xl lg:text-3xl drop-shadow-sm">
               {formatNumber(card.value)}
             </p>
-            <p className="mt-0.5 sm:mt-2 text-[10px] sm:text-xs text-slate-500/90 dark:text-slate-400">{card.helper}</p>
+            <p className="mt-0.5 sm:mt-2 text-[10px] sm:text-xs text-white/75">{card.helper}</p>
           </Card>
         ))}
       </div>
 
-      <Card className="overflow-hidden border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 sm:h-10 sm:w-10">
-              <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* Today's scheduled calls - full width, responsive grid */}
+      <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 dark:border-slate-800">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 text-orange-600 dark:from-orange-900/40 dark:to-amber-900/30 dark:text-orange-400">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <h2 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">Today&apos;s scheduled calls</h2>
-                <button
-                  type="button"
-                  onClick={handleGoToLeads}
-                  className="flex shrink-0 items-center justify-center rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                  aria-label="View my leads"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </button>
-              </div>
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">Today&apos;s scheduled calls</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
                 Follow-ups for today · Set from lead details after a call
               </p>
             </div>
           </div>
+          <Button variant="outline" size="sm" onClick={handleGoToLeads} className="w-full shrink-0 sm:w-auto">
+            View My Leads
+          </Button>
         </div>
         {scheduledLeads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 border-t border-slate-100 px-3 py-8 text-center dark:border-slate-800">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-              <svg className="h-5 w-5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 sm:py-12 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
+              <svg className="h-6 w-6 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
               </svg>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">No calls scheduled for today</p>
-            <Button variant="outline" size="sm" onClick={handleGoToLeads}>
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No calls scheduled for today</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">Schedule a follow-up from any lead&apos;s detail page after logging a call.</p>
+            <Button variant="primary" size="sm" onClick={handleGoToLeads}>
               Go to My Leads
             </Button>
           </div>
         ) : (
-          <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 p-3 sm:p-4 max-h-[320px] sm:max-h-[280px] overflow-y-auto">
             {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; nextScheduledCall?: string }) => {
               const timeStr = lead.nextScheduledCall
                 ? new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
                 : null;
               return (
-                <li key={lead._id}>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/user/leads/${lead._id}`)}
-                    className="grid w-full grid-cols-[auto_1fr_auto_auto] items-center gap-2 px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50 sm:gap-3 sm:px-4"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 sm:h-9 sm:w-9">
-                      <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0 overflow-hidden">
-                      <p className="break-words font-medium text-slate-900 dark:text-slate-100 line-clamp-2">{lead.name ?? '—'}</p>
-                      <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                        {lead.enquiryNumber && <span>{lead.enquiryNumber}</span>}
-                        {lead.enquiryNumber && timeStr && <span className="mx-1">·</span>}
-                        {timeStr && <span>{timeStr}</span>}
-                      </p>
-                    </div>
-                    <span className="min-w-[3.5rem] shrink-0 text-right text-xs font-medium text-orange-700 dark:text-orange-300">
-                      {timeStr ?? '—'}
-                    </span>
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center self-center rounded-full text-slate-400 dark:text-slate-500 sm:h-8 sm:w-8">
-                      <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </span>
-                  </button>
-                </li>
+                <button
+                  key={lead._id}
+                  type="button"
+                  onClick={() => router.push(`/user/leads/${lead._id}`)}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-left transition hover:border-orange-200 hover:bg-orange-50/50 active:scale-[0.99] dark:border-slate-700 dark:bg-slate-800/50 dark:hover:border-orange-700/50 dark:hover:bg-orange-900/10"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                    <span className="text-center text-[11px] font-bold leading-tight">{timeStr ?? '—'}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-slate-900 dark:text-slate-100">{lead.name ?? '—'}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{lead.enquiryNumber ?? '—'}</p>
+                  </div>
+                  <svg className="h-5 w-5 shrink-0 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               );
             })}
-          </ul>
+          </div>
         )}
-      </Card>
+      </div>
 
       {statusChartData.length > 0 && (
-        <Card className="space-y-6 p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <Card className="space-y-4 sm:space-y-6 p-4 sm:p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Lead Status Mix</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Distribution of your assigned leads by status
+              <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">Lead Status Mix</h2>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                Distribution by status
               </p>
             </div>
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="h-72">
-              <ResponsiveContainer>
-                <BarChart data={statusChartData}>
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+            <div className="h-[200px] sm:h-64 lg:h-72 w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statusChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                   <CartesianGrid stroke={chartGridColor} strokeDasharray="6 4" />
                   <XAxis
                     dataKey="name"
                     stroke={chartTextColor}
                     tickLine={false}
                     axisLine={{ stroke: chartGridColor }}
-                    tick={{ fill: chartTextColor, fontSize: 12 }}
+                    tick={{ fill: chartTextColor, fontSize: 10 }}
                   />
                   <YAxis
                     stroke={chartTextColor}
                     allowDecimals={false}
                     tickLine={false}
                     axisLine={{ stroke: chartGridColor }}
-                    tick={{ fill: chartTextColor, fontSize: 12 }}
+                    tick={{ fill: chartTextColor, fontSize: 10 }}
                   />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    cursor={{ fill: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(59, 130, 246, 0.08)' }}
+                    cursor={{ fill: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(249, 115, 22, 0.08)' }}
                   />
-                  <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                     {statusChartData.map((entry, idx) => (
                       <Cell key={`status-${entry.name}`} fill={chartColors[idx % chartColors.length]} />
                     ))}
@@ -389,11 +370,11 @@ export default function UserDashboard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              {statusChartData.map((item) => (
+            <div className="space-y-2 sm:space-y-3">
+              {statusChartData.map((item, idx) => (
                 <div
                   key={item.name}
-                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
+                  className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 px-3 py-2.5 sm:px-4 sm:py-3"
                 >
                   <div>
                     <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{item.name}</p>
@@ -409,19 +390,19 @@ export default function UserDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {mandalChartData.length > 0 && (
-          <Card className="space-y-6 p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Top Mandals</h2>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="h-72">
-                <ResponsiveContainer>
-                  <BarChart data={mandalChartData} layout="vertical" margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+          <Card className="space-y-4 sm:space-y-6 p-4 sm:p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">Top Mandals</h2>
+            <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+              <div className="h-[200px] sm:h-64 lg:h-72 w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={mandalChartData} layout="vertical" margin={{ top: 5, right: 10, bottom: 5, left: 5 }}>
                     <CartesianGrid stroke={chartGridColor} strokeDasharray="6 4" />
                     <XAxis
                       type="number"
                       stroke={chartTextColor}
                       tickLine={false}
                       axisLine={{ stroke: chartGridColor }}
-                      tick={{ fill: chartTextColor, fontSize: 12 }}
+                      tick={{ fill: chartTextColor, fontSize: 10 }}
                     />
                     <YAxis
                       type="category"
@@ -429,14 +410,14 @@ export default function UserDashboard() {
                       stroke={chartTextColor}
                       tickLine={false}
                       axisLine={{ stroke: chartGridColor }}
-                      tick={{ fill: chartTextColor, fontSize: 12 }}
-                      width={110}
+                      tick={{ fill: chartTextColor, fontSize: 10 }}
+                      width={80}
                     />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      cursor={{ fill: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(59, 130, 246, 0.08)' }}
+                      cursor={{ fill: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(249, 115, 22, 0.08)' }}
                     />
-                    <Bar dataKey="value" radius={[0, 12, 12, 0]}>
+                    <Bar dataKey="value" radius={[0, 8, 8, 0]}>
                       {mandalChartData.map((entry, idx) => (
                         <Cell key={`mandal-${entry.name}`} fill={chartColors[idx % chartColors.length]} />
                       ))}
@@ -444,11 +425,11 @@ export default function UserDashboard() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {mandalChartData.map((item, idx) => (
                   <div
                     key={item.name}
-                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 px-3 py-2.5 sm:px-4 sm:py-3"
                   >
                     <div className="flex items-center gap-3">
                       <span
@@ -466,22 +447,22 @@ export default function UserDashboard() {
         )}
 
         {stateChartData.length > 0 && (
-          <Card className="space-y-6 p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Leads by State</h2>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="h-72">
-                <ResponsiveContainer>
+          <Card className="space-y-4 sm:space-y-6 p-4 sm:p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">Leads by State</h2>
+            <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+              <div className="h-[200px] sm:h-64 lg:h-72 w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      cursor={{ fill: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(59, 130, 246, 0.08)' }}
+                      cursor={{ fill: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(249, 115, 22, 0.08)' }}
                     />
                     <Pie
                       data={stateChartData}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={60}
-                      outerRadius={95}
+                      innerRadius="50%"
+                      outerRadius="75%"
                       paddingAngle={4}
                     >
                       {stateChartData.map((entry, idx) => (
@@ -491,11 +472,11 @@ export default function UserDashboard() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {stateChartData.map((item, idx) => (
                   <div
                     key={item.name}
-                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
+                    className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 px-3 py-2.5 sm:px-4 sm:py-3"
                   >
                     <div className="flex items-center gap-3">
                       <span
