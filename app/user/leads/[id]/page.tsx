@@ -41,14 +41,14 @@ export default function UserLeadDetailPage() {
   const leadId = params?.id as string;
   const [user, setUser] = useState<User | null>(null);
   const [isMounted, setIsMounted] = useState(false);
-  
+
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<LeadUpdatePayload>({});
-  
+
   // Expandable details section
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
-  
+
   // Action bar modals
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -56,13 +56,13 @@ export default function UserLeadDetailPage() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [statusComment, setStatusComment] = useState('');
-  
+
   // Comment modal state
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [showScheduleCallModal, setShowScheduleCallModal] = useState(false);
   const [scheduleCallDateTime, setScheduleCallDateTime] = useState('');
-  
+
   // Communication modals
   const [showCallNumberModal, setShowCallNumberModal] = useState(false);
   const [selectedCallNumber, setSelectedCallNumber] = useState('');
@@ -79,7 +79,7 @@ export default function UserLeadDetailPage() {
     selectedTemplates: {} as Record<string, { template: MessageTemplate; variables: Record<string, string> }>,
     languageFilter: 'all' as string,
   });
-  
+
   // Status options
   const statusOptions = [
     'New',
@@ -91,7 +91,7 @@ export default function UserLeadDetailPage() {
     'Admitted',
     'Admission Cancelled',
   ];
-  
+
   // Get the appropriate leads page URL for regular users
   const getLeadsPageUrl = () => {
     return '/user/dashboard'; // Regular users redirect to dashboard
@@ -166,9 +166,9 @@ export default function UserLeadDetailPage() {
     enabled: !!leadId && !!user,
   });
 
-  const communications: CommunicationRecord[] = 
-    communicationHistoryResponse?.data?.items || 
-    communicationHistoryResponse?.items || 
+  const communications: CommunicationRecord[] =
+    communicationHistoryResponse?.data?.items ||
+    communicationHistoryResponse?.items ||
     [];
 
   // Fetch communication stats
@@ -182,7 +182,7 @@ export default function UserLeadDetailPage() {
     staleTime: 30000,
   });
 
-  const communicationStats: CommunicationStatsEntry[] = 
+  const communicationStats: CommunicationStatsEntry[] =
     communicationStatsResponse?.stats || communicationStatsResponse || [];
 
   // Fetch users for assignment
@@ -194,6 +194,51 @@ export default function UserLeadDetailPage() {
     },
     enabled: false, // Regular users cannot assign leads
   });
+
+  // Fetch all lead IDs for navigation
+  const { data: allLeadIds } = useQuery({
+    queryKey: ['leadIds', 'user-leads'],
+    queryFn: async () => {
+      // calling getAllIds() without filters should respect backend "assignedTo = currentUserId" logic
+      const response = await leadAPI.getAllIds();
+
+      // Handle potential response structure variations
+      // API might return { success: true, data: { ids: [...] } } or { ids: [...] }
+      const ids = response.data?.ids || response.ids || response.data?.data?.ids || [];
+
+      // Ensure all IDs are strings to match params.id type
+      return ids.map((id: string | number) => String(id));
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const nextLeadId = useMemo(() => {
+    if (!allLeadIds || allLeadIds.length === 0 || !leadId) return null;
+
+    // Loose comparison just in case
+    const currentIdStr = String(leadId);
+    const index = allLeadIds.findIndex((id: string) => String(id) === currentIdStr);
+
+    if (index === -1) {
+      // Debug info: Lead ID not found in list
+      console.warn(`Current lead ${currentIdStr} not found in user's lead list (${allLeadIds.length} items)`);
+      return null;
+    }
+
+    if (index === allLeadIds.length - 1) return null;
+    return allLeadIds[index + 1];
+  }, [allLeadIds, leadId]);
+
+  const handleNextLead = useCallback(() => {
+    if (nextLeadId) {
+      router.push(`/user/leads/${nextLeadId}`);
+    } else {
+      // Diagnostic message for the user
+      const count = allLeadIds?.length || 0;
+      showToast.info(`No more leads. (List: ${count}, Current: ${leadId})`);
+    }
+  }, [nextLeadId, router, allLeadIds, leadId]);
 
   const users: User[] = (usersData?.data || usersData || []).filter(
     (u: User) => u.isActive && u.roleName !== 'Super Admin' && u.roleName !== 'Sub Super Admin'
@@ -207,7 +252,7 @@ export default function UserLeadDetailPage() {
 
     // Group calls by contact number and sort chronologically
     const callsByNumber = new Map<string, CommunicationRecord[]>();
-    
+
     communications
       .filter((comm) => comm.type === 'call')
       .forEach((comm) => {
@@ -220,19 +265,19 @@ export default function UserLeadDetailPage() {
 
     // Sort each group chronologically and assign sequence numbers
     const allCalls: Array<CommunicationRecord & { sequenceNumber: number; ordinal: string }> = [];
-    
+
     callsByNumber.forEach((calls, contactNumber) => {
-      const sortedCalls = [...calls].sort((a, b) => 
+      const sortedCalls = [...calls].sort((a, b) =>
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
 
       sortedCalls.forEach((call, index) => {
         const sequenceNumber = index + 1;
-        const ordinal = sequenceNumber === 1 ? '1st' : 
-                       sequenceNumber === 2 ? '2nd' : 
-                       sequenceNumber === 3 ? '3rd' : 
-                       `${sequenceNumber}th`;
-        
+        const ordinal = sequenceNumber === 1 ? '1st' :
+          sequenceNumber === 2 ? '2nd' :
+            sequenceNumber === 3 ? '3rd' :
+              `${sequenceNumber}th`;
+
         allCalls.push({
           ...call,
           sequenceNumber,
@@ -242,7 +287,7 @@ export default function UserLeadDetailPage() {
     });
 
     // Sort all calls by date (newest first for display)
-    return allCalls.sort((a, b) => 
+    return allCalls.sort((a, b) =>
       new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()
     );
   }, [communications]);
@@ -274,14 +319,14 @@ export default function UserLeadDetailPage() {
     }
 
     // 2. Assignment - check activity logs first, then fallback to lead.assignedAt
-    const assignmentLog = activityLogs.find((log) => 
-      log.type === 'status_change' && 
+    const assignmentLog = activityLogs.find((log) =>
+      log.type === 'status_change' &&
       log.metadata?.assignment
     );
-    
+
     if (assignmentLog) {
-      const assignedUserName = assignmentLog.metadata?.assignment?.assignedTo 
-        ? 'Counsellor' 
+      const assignedUserName = assignmentLog.metadata?.assignment?.assignedTo
+        ? 'Counsellor'
         : 'Unknown';
       items.push({
         id: `assigned-${assignmentLog._id}`,
@@ -293,8 +338,8 @@ export default function UserLeadDetailPage() {
         metadata: assignmentLog.metadata,
       });
     } else if (lead?.assignedAt && lead?.assignedTo) {
-      const assignedUserName = typeof lead.assignedTo === 'object' 
-        ? lead.assignedTo.name 
+      const assignedUserName = typeof lead.assignedTo === 'object'
+        ? lead.assignedTo.name
         : 'Unknown';
       items.push({
         id: `assigned-${lead._id}`,
@@ -309,7 +354,7 @@ export default function UserLeadDetailPage() {
     // 3. Calls and SMS from communication records with sequence numbers
     // Group communications by contact number and type, then sort chronologically
     const communicationsByNumber = new Map<string, { calls: typeof communications; sms: typeof communications }>();
-    
+
     communications.forEach((comm) => {
       const number = comm.contactNumber || 'Unknown';
       if (!communicationsByNumber.has(number)) {
@@ -326,23 +371,23 @@ export default function UserLeadDetailPage() {
     // Sort each group chronologically and assign sequence numbers
     communicationsByNumber.forEach((group, contactNumber) => {
       // Sort calls by date (oldest first for sequence numbering)
-      const sortedCalls = [...group.calls].sort((a, b) => 
+      const sortedCalls = [...group.calls].sort((a, b) =>
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
-      
+
       // Sort SMS by date (oldest first for sequence numbering)
-      const sortedSms = [...group.sms].sort((a, b) => 
+      const sortedSms = [...group.sms].sort((a, b) =>
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
 
       // Add calls with sequence numbers
       sortedCalls.forEach((comm, index) => {
         const sequenceNumber = index + 1;
-        const ordinal = sequenceNumber === 1 ? '1st' : 
-                       sequenceNumber === 2 ? '2nd' : 
-                       sequenceNumber === 3 ? '3rd' : 
-                       `${sequenceNumber}th`;
-        
+        const ordinal = sequenceNumber === 1 ? '1st' :
+          sequenceNumber === 2 ? '2nd' :
+            sequenceNumber === 3 ? '3rd' :
+              `${sequenceNumber}th`;
+
         items.push({
           id: `call-${comm._id}`,
           type: 'call',
@@ -362,16 +407,16 @@ export default function UserLeadDetailPage() {
       // Add SMS with sequence numbers
       sortedSms.forEach((comm, index) => {
         const sequenceNumber = index + 1;
-        const ordinal = sequenceNumber === 1 ? '1st' : 
-                       sequenceNumber === 2 ? '2nd' : 
-                       sequenceNumber === 3 ? '3rd' : 
-                       `${sequenceNumber}th`;
-        
-        const messageText = comm.template?.renderedContent || 
-                           comm.template?.originalContent || 
-                           'Message sent';
+        const ordinal = sequenceNumber === 1 ? '1st' :
+          sequenceNumber === 2 ? '2nd' :
+            sequenceNumber === 3 ? '3rd' :
+              `${sequenceNumber}th`;
+
+        const messageText = comm.template?.renderedContent ||
+          comm.template?.originalContent ||
+          'Message sent';
         const templateName = comm.template?.name || 'Unknown Template';
-        
+
         items.push({
           id: `sms-${comm._id}`,
           type: 'sms',
@@ -398,7 +443,7 @@ export default function UserLeadDetailPage() {
       if (log.type === 'status_change' && log.metadata?.assignment) {
         return; // Already added as assignment above
       }
-      
+
       if (log.type === 'status_change') {
         items.push({
           id: `status-${log._id}`,
@@ -436,7 +481,7 @@ export default function UserLeadDetailPage() {
     });
 
     // Sort by date (newest first)
-    return items.sort((a, b) => 
+    return items.sort((a, b) =>
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   }, [lead, activityLogs, communications]);
@@ -578,12 +623,16 @@ export default function UserLeadDetailPage() {
     },
   });
 
+
+
   // Call mutation
   const callMutation = useMutation({
-    mutationFn: async (data: typeof callData) => {
-      return await communicationAPI.logCall(leadId, data);
+    mutationFn: async (data: typeof callData & { next?: boolean }) => {
+      // We don't send 'next' to the API
+      const { next, ...apiData } = data;
+      return await communicationAPI.logCall(leadId, apiData);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communications'] });
       queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communicationStats'] });
       queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'activityLogs'] });
@@ -591,6 +640,10 @@ export default function UserLeadDetailPage() {
       setCallData({ contactNumber: '', remarks: '', outcome: '', durationSeconds: 0 });
       setSelectedCallNumber('');
       showToast.success('Call logged successfully!');
+
+      if (variables.next) {
+        handleNextLead();
+      }
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to log call');
@@ -683,7 +736,7 @@ export default function UserLeadDetailPage() {
     const keys = template.variables && template.variables.length > 0
       ? template.variables.map((v, i) => v.key || `var${i + 1}`)
       : Array.from({ length: template.variableCount }).map((_, i) => `var${i + 1}`);
-    
+
     let pointer = 0;
     return template.content.replace(/\{#var#\}/gi, () => {
       const key = keys[pointer] || `var${pointer + 1}`;
@@ -703,9 +756,9 @@ export default function UserLeadDetailPage() {
 
   // SMS mutation - send templates to multiple numbers
   const smsMutation = useMutation({
-    mutationFn: async (data: { 
-      contactNumbers: string[]; 
-      templates: Array<{ templateId: string; variables: Array<{ key: string; value: string }> }> 
+    mutationFn: async (data: {
+      contactNumbers: string[];
+      templates: Array<{ templateId: string; variables: Array<{ key: string; value: string }> }>
     }) => {
       return await communicationAPI.sendSms(leadId, data);
     },
@@ -789,39 +842,39 @@ export default function UserLeadDetailPage() {
 
   const getCallOutcomeColor = (outcome?: string) => {
     if (!outcome) return 'bg-gray-100 text-gray-700';
-    
+
     const outcomeLower = outcome.toLowerCase().trim();
-    
+
     // Positive outcomes - Green
-    if (outcomeLower.includes('answered') || 
-        outcomeLower.includes('interested') ||
-        outcomeLower.includes('yes') ||
-        outcomeLower.includes('confirmed') ||
-        outcomeLower.includes('agreed') ||
-        outcomeLower.includes('accepted')) {
+    if (outcomeLower.includes('answered') ||
+      outcomeLower.includes('interested') ||
+      outcomeLower.includes('yes') ||
+      outcomeLower.includes('confirmed') ||
+      outcomeLower.includes('agreed') ||
+      outcomeLower.includes('accepted')) {
       return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
     }
-    
+
     // Negative outcomes - Red
     if (outcomeLower.includes('not interested') ||
-        outcomeLower.includes('rejected') ||
-        outcomeLower.includes('declined') ||
-        outcomeLower.includes('wrong number') ||
-        outcomeLower.includes('wrong data') ||
-        outcomeLower.includes('no') && !outcomeLower.includes('answer')) {
+      outcomeLower.includes('rejected') ||
+      outcomeLower.includes('declined') ||
+      outcomeLower.includes('wrong number') ||
+      outcomeLower.includes('wrong data') ||
+      outcomeLower.includes('no') && !outcomeLower.includes('answer')) {
       return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
     }
-    
+
     // Neutral/Warning outcomes - Yellow/Orange
     if (outcomeLower.includes('busy') ||
-        outcomeLower.includes('not answered') ||
-        outcomeLower.includes('no answer') ||
-        outcomeLower.includes('missed') ||
-        outcomeLower.includes('call back') ||
-        outcomeLower.includes('follow up')) {
+      outcomeLower.includes('not answered') ||
+      outcomeLower.includes('no answer') ||
+      outcomeLower.includes('missed') ||
+      outcomeLower.includes('call back') ||
+      outcomeLower.includes('follow up')) {
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
     }
-    
+
     // Default - Gray
     return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
   };
@@ -836,16 +889,16 @@ export default function UserLeadDetailPage() {
         cardBorder: 'border-gray-400',
       };
     }
-    
+
     const outcomeLower = outcome.toLowerCase().trim();
-    
+
     // Positive outcomes - Green
-    if (outcomeLower.includes('answered') || 
-        outcomeLower.includes('interested') ||
-        outcomeLower.includes('yes') ||
-        outcomeLower.includes('confirmed') ||
-        outcomeLower.includes('agreed') ||
-        outcomeLower.includes('accepted')) {
+    if (outcomeLower.includes('answered') ||
+      outcomeLower.includes('interested') ||
+      outcomeLower.includes('yes') ||
+      outcomeLower.includes('confirmed') ||
+      outcomeLower.includes('agreed') ||
+      outcomeLower.includes('accepted')) {
       return {
         iconBg: 'bg-gradient-to-br from-green-500 to-green-600',
         border: 'border-green-400',
@@ -854,14 +907,14 @@ export default function UserLeadDetailPage() {
         cardBorder: 'border-green-400',
       };
     }
-    
+
     // Negative outcomes - Red
     if (outcomeLower.includes('not interested') ||
-        outcomeLower.includes('rejected') ||
-        outcomeLower.includes('declined') ||
-        outcomeLower.includes('wrong number') ||
-        outcomeLower.includes('wrong data') ||
-        (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
+      outcomeLower.includes('rejected') ||
+      outcomeLower.includes('declined') ||
+      outcomeLower.includes('wrong number') ||
+      outcomeLower.includes('wrong data') ||
+      (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
       return {
         iconBg: 'bg-gradient-to-br from-red-500 to-red-600',
         border: 'border-red-400',
@@ -870,14 +923,14 @@ export default function UserLeadDetailPage() {
         cardBorder: 'border-red-400',
       };
     }
-    
+
     // Neutral/Warning outcomes - Yellow/Orange
     if (outcomeLower.includes('busy') ||
-        outcomeLower.includes('not answered') ||
-        outcomeLower.includes('no answer') ||
-        outcomeLower.includes('missed') ||
-        outcomeLower.includes('call back') ||
-        outcomeLower.includes('follow up')) {
+      outcomeLower.includes('not answered') ||
+      outcomeLower.includes('no answer') ||
+      outcomeLower.includes('missed') ||
+      outcomeLower.includes('call back') ||
+      outcomeLower.includes('follow up')) {
       return {
         iconBg: 'bg-gradient-to-br from-yellow-500 to-yellow-600',
         border: 'border-yellow-400',
@@ -886,7 +939,7 @@ export default function UserLeadDetailPage() {
         cardBorder: 'border-yellow-400',
       };
     }
-    
+
     // Default - Gray
     return {
       iconBg: 'bg-gradient-to-br from-gray-500 to-gray-600',
@@ -995,6 +1048,18 @@ export default function UserLeadDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </button>
+
+          {/* Next Lead Button - Mobile Only */}
+          <button
+            type="button"
+            onClick={handleNextLead}
+            className="flex items-center justify-center size-12 rounded-xl text-white shadow-sm transition-all bg-blue-600 hover:bg-blue-700 active:scale-95"
+            aria-label="Next Lead"
+          >
+            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -1008,218 +1073,218 @@ export default function UserLeadDetailPage() {
             <div className="absolute inset-0 bg-gradient-to-t from-orange-400 to-orange-600 dark:from-orange-500 dark:via-orange-600 dark:to-amber-700" aria-hidden />
             <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-white/15 dark:from-black/20 dark:to-white/10" aria-hidden />
             <div className="relative px-4 py-4 sm:px-6 sm:py-6">
-            {isEditing ? (
-              <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 p-4 sm:p-6 shadow-inner">
-              <form onSubmit={handleSave} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                    <Input
-                      value={formData.name || ''}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                    <Input
-                      value={formData.phone || ''}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Father Name *</label>
-                    <Input
-                      value={formData.fatherName || ''}
-                      onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Father Phone *</label>
-                    <Input
-                      value={formData.fatherPhone || ''}
-                      onChange={(e) => setFormData({ ...formData, fatherPhone: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Village *</label>
-                    <Input
-                      value={formData.village || ''}
-                      onChange={(e) => setFormData({ ...formData, village: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      value={formData.state || 'Andhra Pradesh'}
-                      onChange={(e) => {
-                        const state = e.target.value;
-                        setFormData({ ...formData, state, district: undefined, mandal: undefined });
-                      }}
-                    >
-                      {stateNames.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">District *</label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      value={formData.district || ''}
-                      onChange={(e) => {
-                        const district = e.target.value;
-                        setFormData({ ...formData, district, mandal: undefined });
-                      }}
-                      required
-                    >
-                      <option value="">Select district</option>
-                      {availableDistricts.map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mandal *</label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      value={formData.mandal || ''}
-                      onChange={(e) => setFormData({ ...formData, mandal: e.target.value })}
-                      required
-                    >
-                      <option value="">Select mandal</option>
-                      {availableMandals.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="submit" variant="primary" disabled={updateMutation.isPending}>
-                    {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-              </div>
-            ) : (
-              <>
-                {/* Profile header: avatar + name + phone - high contrast on card */}
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/95 dark:bg-white/90 text-orange-600 dark:text-orange-600 shadow-md ring-2 ring-white/50">
-                    <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-col gap-1.5">
-                      <h2 className="text-lg font-bold text-white drop-shadow-sm wrap-break-word">{lead.name}</h2>
-                      {lead.leadStatus && (
-                        <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-xs font-semibold bg-white/25 text-white backdrop-blur sm:hidden">
-                          {lead.leadStatus}
-                        </span>
-                      )}
+              {isEditing ? (
+                <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 p-4 sm:p-6 shadow-inner">
+                  <form onSubmit={handleSave} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                        <Input
+                          value={formData.name || ''}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                        <Input
+                          value={formData.phone || ''}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Father Name *</label>
+                        <Input
+                          value={formData.fatherName || ''}
+                          onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Father Phone *</label>
+                        <Input
+                          value={formData.fatherPhone || ''}
+                          onChange={(e) => setFormData({ ...formData, fatherPhone: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Village *</label>
+                        <Input
+                          value={formData.village || ''}
+                          onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          value={formData.state || 'Andhra Pradesh'}
+                          onChange={(e) => {
+                            const state = e.target.value;
+                            setFormData({ ...formData, state, district: undefined, mandal: undefined });
+                          }}
+                        >
+                          {stateNames.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">District *</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          value={formData.district || ''}
+                          onChange={(e) => {
+                            const district = e.target.value;
+                            setFormData({ ...formData, district, mandal: undefined });
+                          }}
+                          required
+                        >
+                          <option value="">Select district</option>
+                          {availableDistricts.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Mandal *</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          value={formData.mandal || ''}
+                          onChange={(e) => setFormData({ ...formData, mandal: e.target.value })}
+                          required
+                        >
+                          <option value="">Select mandal</option>
+                          {availableMandals.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <p className="mt-1 text-sm font-medium text-white/95 break-all flex items-center gap-1.5">
-                      <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    <div className="flex gap-2">
+                      <Button type="submit" variant="primary" disabled={updateMutation.isPending}>
+                        {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              ) : (
+                <>
+                  {/* Profile header: avatar + name + phone - high contrast on card */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/95 dark:bg-white/90 text-orange-600 dark:text-orange-600 shadow-md ring-2 ring-white/50">
+                      <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      {lead.phone || '—'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Expandable: extra details - on card use light panel */}
-                <div className="mt-3">
-                  {isDetailsExpanded && (
-                    <div className="space-y-2 rounded-xl border border-white/20 bg-white/15 backdrop-blur pt-3 px-3 pb-3 text-sm text-white/95 dark:bg-white/10 dark:border-white/10">
-                      {lead.email && (
-                        <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                          {lead.email}
-                        </p>
-                      )}
-                      {(lead.village || lead.mandal || lead.district || lead.state) && (
-                        <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          {[lead.village, lead.mandal, lead.district, lead.state].filter(Boolean).join(', ')}
-                        </p>
-                      )}
-                      {(lead.fatherName || lead.fatherPhone) && (
-                        <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                          </svg>
-                          {lead.fatherName}
-                          {lead.fatherPhone && ` · ${lead.fatherPhone}`}
-                        </p>
-                      )}
-                      {lead.enquiryNumber && (
-                        <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                          </svg>
-                          #{lead.enquiryNumber}
-                        </p>
-                      )}
-                      {lead.leadStatus && (
-                        <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          {lead.leadStatus}
-                        </p>
-                      )}
-                      {lead.source && (
-                        <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                          </svg>
-                          {lead.source}
-                        </p>
-                      )}
-                      {lead.applicationStatus && <p>{lead.applicationStatus}</p>}
-                      {lead.hallTicketNumber && <p>Hall ticket: {lead.hallTicketNumber}</p>}
-                      {lead.rank != null && <p>Rank: {lead.rank}</p>}
-                      {lead.interCollege && <p>{lead.interCollege}</p>}
-                      {lead.gender && <p>{lead.gender}</p>}
-                      {lead.isNRI && <p>NRI</p>}
-                      {lead.assignedTo && (
-                        <p className="flex items-center gap-2">
-                          <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : ''}
-                        </p>
-                      )}
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-                    className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white"
-                  >
-                    {isDetailsExpanded ? (
-                      <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg> Show less</>
-                    ) : (
-                      <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg> More details</>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-1.5">
+                        <h2 className="text-lg font-bold text-white drop-shadow-sm wrap-break-word">{lead.name}</h2>
+                        {lead.leadStatus && (
+                          <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-xs font-semibold bg-white/25 text-white backdrop-blur sm:hidden">
+                            {lead.leadStatus}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm font-medium text-white/95 break-all flex items-center gap-1.5">
+                        <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        {lead.phone || '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Expandable: extra details - on card use light panel */}
+                  <div className="mt-3">
+                    {isDetailsExpanded && (
+                      <div className="space-y-2 rounded-xl border border-white/20 bg-white/15 backdrop-blur pt-3 px-3 pb-3 text-sm text-white/95 dark:bg-white/10 dark:border-white/10">
+                        {lead.email && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            {lead.email}
+                          </p>
+                        )}
+                        {(lead.village || lead.mandal || lead.district || lead.state) && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {[lead.village, lead.mandal, lead.district, lead.state].filter(Boolean).join(', ')}
+                          </p>
+                        )}
+                        {(lead.fatherName || lead.fatherPhone) && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            {lead.fatherName}
+                            {lead.fatherPhone && ` · ${lead.fatherPhone}`}
+                          </p>
+                        )}
+                        {lead.enquiryNumber && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                            </svg>
+                            #{lead.enquiryNumber}
+                          </p>
+                        )}
+                        {lead.leadStatus && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {lead.leadStatus}
+                          </p>
+                        )}
+                        {lead.source && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            {lead.source}
+                          </p>
+                        )}
+                        {lead.applicationStatus && <p>{lead.applicationStatus}</p>}
+                        {lead.hallTicketNumber && <p>Hall ticket: {lead.hallTicketNumber}</p>}
+                        {lead.rank != null && <p>Rank: {lead.rank}</p>}
+                        {lead.interCollege && <p>{lead.interCollege}</p>}
+                        {lead.gender && <p>{lead.gender}</p>}
+                        {lead.isNRI && <p>NRI</p>}
+                        {lead.assignedTo && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : ''}
+                          </p>
+                        )}
+                      </div>
                     )}
-                  </button>
-                </div>
-              </>
-            )}
+                    <button
+                      type="button"
+                      onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
+                      className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white"
+                    >
+                      {isDetailsExpanded ? (
+                        <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg> Show less</>
+                      ) : (
+                        <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg> More details</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -1433,108 +1498,107 @@ export default function UserLeadDetailPage() {
                 <p className="text-slate-500 dark:text-slate-400 text-center py-4 text-xs sm:text-sm">No history yet</p>
               ) : (
                 <div className="relative">
-                <div className="space-y-3 sm:space-y-4">
-                  {timelineItems.map((item, index) => {
-                    const isCall = item.type === 'call';
-                    const isSms = item.type === 'sms';
-                    const dotColor = isCall ? 'bg-green-500' : isSms ? 'bg-purple-500' : 'bg-blue-500';
-                    const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : 'border-blue-500';
-                    
-                    return (
-                      <div key={item.id} className="relative pl-5 sm:pl-8 pb-3 sm:pb-4 last:pb-0">
-                        {index !== timelineItems.length - 1 && (
-                          <div className="absolute left-2 sm:left-3 top-4 sm:top-5 bottom-0 w-0.5 bg-gray-300 dark:bg-slate-700"></div>
-                        )}
-                        <div className={`absolute left-0 top-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full ${dotColor} border-2 border-white flex items-center justify-center`}>
-                          {isCall ? (
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                            </svg>
-                          ) : isSms ? (
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                  <div className="space-y-3 sm:space-y-4">
+                    {timelineItems.map((item, index) => {
+                      const isCall = item.type === 'call';
+                      const isSms = item.type === 'sms';
+                      const dotColor = isCall ? 'bg-green-500' : isSms ? 'bg-purple-500' : 'bg-blue-500';
+                      const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : 'border-blue-500';
+
+                      return (
+                        <div key={item.id} className="relative pl-5 sm:pl-8 pb-3 sm:pb-4 last:pb-0">
+                          {index !== timelineItems.length - 1 && (
+                            <div className="absolute left-2 sm:left-3 top-4 sm:top-5 bottom-0 w-0.5 bg-gray-300 dark:bg-slate-700"></div>
                           )}
-                        </div>
-                        <div className={`rounded-lg p-2.5 sm:p-3 border-l-2 ${borderColor} bg-slate-50 dark:bg-slate-800/50`}>
-                          <div className="flex justify-between items-start gap-2 mb-1">
-                            <div className="min-w-0">
-                              <h3 className="text-xs sm:text-sm font-medium text-gray-900 dark:text-slate-100 truncate">
-                                {item.title}
-                              </h3>
-                              <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
-                                {formatDate(item.date)}
-                              </p>
-                            </div>
-                            {item.performedBy && (
-                              <span className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 shrink-0">
-                                {item.performedBy}
-                              </span>
+                          <div className={`absolute left-0 top-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full ${dotColor} border-2 border-white flex items-center justify-center`}>
+                            {isCall ? (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                            ) : isSms ? (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                            ) : (
+                              <div className="w-2 h-2 rounded-full bg-white"></div>
                             )}
                           </div>
-                          
-                          {/* Call details */}
-                          {isCall && (
-                            <>
-                              <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
-                                {item.description}
-                              </p>
-                              {item.metadata?.outcome && (
-                                <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">
-                                  Outcome: {item.metadata.outcome}
+                          <div className={`rounded-lg p-2.5 sm:p-3 border-l-2 ${borderColor} bg-slate-50 dark:bg-slate-800/50`}>
+                            <div className="flex justify-between items-start gap-2 mb-1">
+                              <div className="min-w-0">
+                                <h3 className="text-xs sm:text-sm font-medium text-gray-900 dark:text-slate-100 truncate">
+                                  {item.title}
+                                </h3>
+                                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
+                                  {formatDate(item.date)}
                                 </p>
-                              )}
-                              {item.metadata?.duration && (
-                                <p className="text-xs text-gray-500 dark:text-slate-400">
-                                  Duration: {item.metadata.duration}s
-                                </p>
-                              )}
-                            </>
-                          )}
-                          
-                          {/* SMS details */}
-                          {isSms && (
-                            <div className="space-y-2">
-                              {item.metadata?.templateName && (
-                                <div>
-                                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Template: </span>
-                                  <span className="text-xs text-gray-700 dark:text-slate-200">{item.metadata.templateName}</span>
-                                  {item.metadata?.status && (
-                                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
-                                      item.metadata.status === 'success' 
-                                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
-                                        : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                                    }`}>
-                                      {item.metadata.status === 'success' ? 'Sent' : 'Failed'}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {item.metadata?.messageText && (
-                                <div className="bg-white dark:bg-slate-700 rounded p-3 border border-gray-200 dark:border-slate-600">
-                                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Message:</p>
-                                  <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
-                                    {item.metadata.messageText}
-                                  </p>
-                                </div>
+                              </div>
+                              {item.performedBy && (
+                                <span className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 shrink-0">
+                                  {item.performedBy}
+                                </span>
                               )}
                             </div>
-                          )}
-                          
-                          {/* Other types */}
-                          {!isCall && !isSms && (
-                            <p className="text-xs sm:text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
-                              {item.description}
-                            </p>
-                          )}
+
+                            {/* Call details */}
+                            {isCall && (
+                              <>
+                                <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                                  {item.description}
+                                </p>
+                                {item.metadata?.outcome && (
+                                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">
+                                    Outcome: {item.metadata.outcome}
+                                  </p>
+                                )}
+                                {item.metadata?.duration && (
+                                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                                    Duration: {item.metadata.duration}s
+                                  </p>
+                                )}
+                              </>
+                            )}
+
+                            {/* SMS details */}
+                            {isSms && (
+                              <div className="space-y-2">
+                                {item.metadata?.templateName && (
+                                  <div>
+                                    <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Template: </span>
+                                    <span className="text-xs text-gray-700 dark:text-slate-200">{item.metadata.templateName}</span>
+                                    {item.metadata?.status && (
+                                      <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${item.metadata.status === 'success'
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                        : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                        }`}>
+                                        {item.metadata.status === 'success' ? 'Sent' : 'Failed'}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {item.metadata?.messageText && (
+                                  <div className="bg-white dark:bg-slate-700 rounded p-3 border border-gray-200 dark:border-slate-600">
+                                    <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Message:</p>
+                                    <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                                      {item.metadata.messageText}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Other types */}
+                            {!isCall && !isSms && (
+                              <p className="text-xs sm:text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
               )}
             </div>
           </div>
@@ -1591,7 +1655,7 @@ export default function UserLeadDetailPage() {
 
           {/* Comments - no card, compact */}
           <div>
-              <div className="flex justify-between items-center mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">
+            <div className="flex justify-between items-center mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">
               <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400">Comments</p>
               <Button
                 variant="outline"
@@ -1963,11 +2027,10 @@ export default function UserLeadDetailPage() {
                 return (
                   <label
                     key={`${option.label}-${option.number}-${index}`}
-                    className={`flex items-center gap-3 w-full p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected
-                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-500'
-                        : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
-                    }`}
+                    className={`flex items-center gap-3 w-full p-3 rounded-lg border-2 cursor-pointer transition-all ${isSelected
+                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-500'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
+                      }`}
                   >
                     <input
                       type="radio"
@@ -2099,6 +2162,19 @@ export default function UserLeadDetailPage() {
                   Skip
                 </Button>
               </div>
+
+              {/* Separate 'Log & Next' row for better mobile ergonomics */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800"
+                  onClick={() => callMutation.mutate({ ...callData, next: true })}
+                  disabled={!callData.outcome || callMutation.isPending || !nextLeadId}
+                >
+                  {callMutation.isPending ? 'Saving...' : 'Log & Next Lead →'}
+                </Button>
+              </div>
             </div>
           </Card>
         </div>
@@ -2111,312 +2187,311 @@ export default function UserLeadDetailPage() {
             <Card noPadding className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl">
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <div className="flex-none p-3 sm:p-6 space-y-3 sm:space-y-6 overflow-y-auto">
-            <div className="flex items-start justify-between gap-2 bg-white dark:bg-slate-900 z-10 pb-2 border-b border-slate-200 dark:border-slate-700">
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-slate-100">Send SMS</h2>
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">
-                  Select recipients and templates.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSmsModal(false);
-                  setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
-                }}
-                className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-slate-100 dark:hover:bg-slate-800"
-                disabled={smsMutation.isPending}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
-              {/* Left: Recipients */}
-              <div className="lg:col-span-1 space-y-2 sm:space-y-4">
-                <div>
-                  <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200 mb-1.5">Recipients</h3>
-                  {contactOptions.length === 0 ? (
-                    <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">No phone numbers.</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {contactOptions.map((option, index) => {
-                        const stats = communicationStatsMap.get(option.number);
-                        const smsCount = stats?.smsCount || 0;
-                        const isSelected = smsData.selectedNumbers.includes(option.number);
-                        
-                        return (
-                          <label
-                            key={`${option.label}-${option.number}-${index}`}
-                            className={`flex items-start gap-2 p-2 sm:p-2.5 border rounded-lg cursor-pointer transition-all ${
-                              isSelected
-                                ? 'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-600'
-                                : 'bg-white border-gray-200 hover:bg-gray-50 dark:bg-slate-900/50 dark:border-slate-700 dark:hover:bg-slate-800/60'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSmsData({
-                                    ...smsData,
-                                    selectedNumbers: [...smsData.selectedNumbers, option.number],
-                                  });
-                                } else {
-                                  setSmsData({
-                                    ...smsData,
-                                    selectedNumbers: smsData.selectedNumbers.filter((n) => n !== option.number),
-                                  });
-                                }
-                              }}
-                              className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-slate-100 truncate">
-                                {option.label}
-                              </div>
-                              <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">
-                                {option.number}
-                              </div>
-                              <div className="text-[10px] sm:text-[11px] text-gray-400 dark:text-slate-500 mt-0.5">
-                                Sent: {smsCount}
-                              </div>
-                            </div>
-                          </label>
-                        );
-                      })}
+                  <div className="flex items-start justify-between gap-2 bg-white dark:bg-slate-900 z-10 pb-2 border-b border-slate-200 dark:border-slate-700">
+                    <div className="min-w-0">
+                      <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-slate-100">Send SMS</h2>
+                      <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">
+                        Select recipients and templates.
+                      </p>
                     </div>
-                  )}
-                  <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 mt-1.5">
-                    {smsData.selectedNumbers.length} selected
-                  </p>
-                  
-                  <div className="space-y-1.5 mt-2 sm:mt-3">
-                    <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
-                      Language
-                    </label>
-                    <select
-                      className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                      value={smsData.languageFilter}
-                      onChange={(e) => setSmsData({ ...smsData, languageFilter: e.target.value })}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSmsModal(false);
+                        setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
+                      }}
+                      className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      disabled={smsMutation.isPending}
+                      aria-label="Close"
                     >
-                      <option value="all">All Languages</option>
-                      {availableLanguages.map((lang) => (
-                        <option key={lang} value={lang}>
-                          {lang.toUpperCase()}
-                        </option>
-                      ))}
-                    </select>
+                      ✕
+                    </button>
                   </div>
-                </div>
-              </div>
 
-              {/* Right: Templates */}
-              <div className="lg:col-span-2 space-y-2 sm:space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200">Templates</h3>
-                  <span className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
-                    {Object.keys(smsData.selectedTemplates).length} selected
-                  </span>
-                </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
+                    {/* Left: Recipients */}
+                    <div className="lg:col-span-1 space-y-2 sm:space-y-4">
+                      <div>
+                        <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200 mb-1.5">Recipients</h3>
+                        {contactOptions.length === 0 ? (
+                          <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">No phone numbers.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {contactOptions.map((option, index) => {
+                              const stats = communicationStatsMap.get(option.number);
+                              const smsCount = stats?.smsCount || 0;
+                              const isSelected = smsData.selectedNumbers.includes(option.number);
 
-                {isLoadingTemplates ? (
-                  <div className="text-center py-4 sm:py-6">
-                    <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  </div>
-                ) : filteredTemplates.length === 0 ? (
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">
-                    No active templates.
-                  </p>
-                ) : (
-                  <div className="space-y-2 sm:space-y-3">
-                    {filteredTemplates.map((template) => {
-                      const templateState = smsData.selectedTemplates[template._id];
-                      const variableDescriptors: MessageTemplateVariable[] =
-                        template.variables && template.variables.length > 0
-                          ? template.variables
-                          : Array.from({ length: template.variableCount }).map((_, index) => ({
-                              key: `var${index + 1}`,
-                              label: `Variable ${index + 1}`,
-                            })) as MessageTemplateVariable[];
+                              return (
+                                <label
+                                  key={`${option.label}-${option.number}-${index}`}
+                                  className={`flex items-start gap-2 p-2 sm:p-2.5 border rounded-lg cursor-pointer transition-all ${isSelected
+                                    ? 'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-600'
+                                    : 'bg-white border-gray-200 hover:bg-gray-50 dark:bg-slate-900/50 dark:border-slate-700 dark:hover:bg-slate-800/60'
+                                    }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSmsData({
+                                          ...smsData,
+                                          selectedNumbers: [...smsData.selectedNumbers, option.number],
+                                        });
+                                      } else {
+                                        setSmsData({
+                                          ...smsData,
+                                          selectedNumbers: smsData.selectedNumbers.filter((n) => n !== option.number),
+                                        });
+                                      }
+                                    }}
+                                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-slate-100 truncate">
+                                      {option.label}
+                                    </div>
+                                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">
+                                      {option.number}
+                                    </div>
+                                    <div className="text-[10px] sm:text-[11px] text-gray-400 dark:text-slate-500 mt-0.5">
+                                      Sent: {smsCount}
+                                    </div>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 mt-1.5">
+                          {smsData.selectedNumbers.length} selected
+                        </p>
 
-                      return (
-                        <div
-                          key={template._id}
-                          className="border border-gray-200 dark:border-slate-700 rounded-lg p-2.5 sm:p-3 space-y-2 sm:space-y-3"
-                        >
-                          <label className="flex items-start gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(templateState)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSmsData({
-                                    ...smsData,
-                                    selectedTemplates: {
-                                      ...smsData.selectedTemplates,
-                                      [template._id]: {
-                                        template,
-                                        variables: buildDefaultTemplateValues(template),
-                                      },
-                                    },
-                                  });
-                                } else {
-                                  const newTemplates = { ...smsData.selectedTemplates };
-                                  delete newTemplates[template._id];
-                                  setSmsData({
-                                    ...smsData,
-                                    selectedTemplates: newTemplates,
-                                  });
-                                }
-                              }}
-                              className="mt-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-slate-100 truncate">
-                                {template.name}
-                              </div>
-                              <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
-                                {template.language?.toUpperCase() || 'N/A'} · {template.variableCount} var(s)
-                              </div>
-                            </div>
+                        <div className="space-y-1.5 mt-2 sm:mt-3">
+                          <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                            Language
                           </label>
-
-                          {templateState && (
-                            <div className="space-y-2 sm:space-y-3 ml-5 sm:ml-7">
-                              {variableDescriptors.length > 0 && (
-                                <div className="space-y-1.5">
-                                  {variableDescriptors.map((variable, index) => {
-                                    const key = variable.key || `var${index + 1}`;
-                                    return (
-                                      <div
-                                        key={`${template._id}-${key}`}
-                                        className="grid grid-cols-1 sm:grid-cols-2 gap-2"
-                                      >
-                                        <div>
-                                          <label className="block text-[11px] sm:text-xs font-medium text-gray-600 dark:text-slate-400 mb-0.5">
-                                            {variable.label || `Var ${index + 1}`}
-                                          </label>
-                                          <Input
-                                            value={templateState.variables[key] || ''}
-                                            onChange={(e) => {
-                                              setSmsData({
-                                                ...smsData,
-                                                selectedTemplates: {
-                                                  ...smsData.selectedTemplates,
-                                                  [template._id]: {
-                                                    ...templateState,
-                                                    variables: {
-                                                      ...templateState.variables,
-                                                      [key]: e.target.value,
-                                                    },
-                                                  },
-                                                },
-                                              });
-                                            }}
-                                            placeholder={
-                                              index === 0 && lead?.name
-                                                ? lead.name
-                                                : variable.defaultValue || ''
-                                            }
-                                            className="text-xs sm:text-sm py-1.5 sm:py-2"
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                              <div className="bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-lg p-2 sm:p-3">
-                                <p className="text-[10px] sm:text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Preview</p>
-                                <p className="text-[11px] sm:text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">
-                                  {renderTemplatePreview(template, templateState.variables)}
-                                </p>
-                              </div>
-                            </div>
-                          )}
+                          <select
+                            className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                            value={smsData.languageFilter}
+                            onChange={(e) => setSmsData({ ...smsData, languageFilter: e.target.value })}
+                          >
+                            <option value="all">All Languages</option>
+                            {availableLanguages.map((lang) => (
+                              <option key={lang} value={lang}>
+                                {lang.toUpperCase()}
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
+
+                    {/* Right: Templates */}
+                    <div className="lg:col-span-2 space-y-2 sm:space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200">Templates</h3>
+                        <span className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
+                          {Object.keys(smsData.selectedTemplates).length} selected
+                        </span>
+                      </div>
+
+                      {isLoadingTemplates ? (
+                        <div className="text-center py-4 sm:py-6">
+                          <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                        </div>
+                      ) : filteredTemplates.length === 0 ? (
+                        <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">
+                          No active templates.
+                        </p>
+                      ) : (
+                        <div className="space-y-2 sm:space-y-3">
+                          {filteredTemplates.map((template) => {
+                            const templateState = smsData.selectedTemplates[template._id];
+                            const variableDescriptors: MessageTemplateVariable[] =
+                              template.variables && template.variables.length > 0
+                                ? template.variables
+                                : Array.from({ length: template.variableCount }).map((_, index) => ({
+                                  key: `var${index + 1}`,
+                                  label: `Variable ${index + 1}`,
+                                })) as MessageTemplateVariable[];
+
+                            return (
+                              <div
+                                key={template._id}
+                                className="border border-gray-200 dark:border-slate-700 rounded-lg p-2.5 sm:p-3 space-y-2 sm:space-y-3"
+                              >
+                                <label className="flex items-start gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(templateState)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSmsData({
+                                          ...smsData,
+                                          selectedTemplates: {
+                                            ...smsData.selectedTemplates,
+                                            [template._id]: {
+                                              template,
+                                              variables: buildDefaultTemplateValues(template),
+                                            },
+                                          },
+                                        });
+                                      } else {
+                                        const newTemplates = { ...smsData.selectedTemplates };
+                                        delete newTemplates[template._id];
+                                        setSmsData({
+                                          ...smsData,
+                                          selectedTemplates: newTemplates,
+                                        });
+                                      }
+                                    }}
+                                    className="mt-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-slate-100 truncate">
+                                      {template.name}
+                                    </div>
+                                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
+                                      {template.language?.toUpperCase() || 'N/A'} · {template.variableCount} var(s)
+                                    </div>
+                                  </div>
+                                </label>
+
+                                {templateState && (
+                                  <div className="space-y-2 sm:space-y-3 ml-5 sm:ml-7">
+                                    {variableDescriptors.length > 0 && (
+                                      <div className="space-y-1.5">
+                                        {variableDescriptors.map((variable, index) => {
+                                          const key = variable.key || `var${index + 1}`;
+                                          return (
+                                            <div
+                                              key={`${template._id}-${key}`}
+                                              className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                                            >
+                                              <div>
+                                                <label className="block text-[11px] sm:text-xs font-medium text-gray-600 dark:text-slate-400 mb-0.5">
+                                                  {variable.label || `Var ${index + 1}`}
+                                                </label>
+                                                <Input
+                                                  value={templateState.variables[key] || ''}
+                                                  onChange={(e) => {
+                                                    setSmsData({
+                                                      ...smsData,
+                                                      selectedTemplates: {
+                                                        ...smsData.selectedTemplates,
+                                                        [template._id]: {
+                                                          ...templateState,
+                                                          variables: {
+                                                            ...templateState.variables,
+                                                            [key]: e.target.value,
+                                                          },
+                                                        },
+                                                      },
+                                                    });
+                                                  }}
+                                                  placeholder={
+                                                    index === 0 && lead?.name
+                                                      ? lead.name
+                                                      : variable.defaultValue || ''
+                                                  }
+                                                  className="text-xs sm:text-sm py-1.5 sm:py-2"
+                                                />
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                    <div className="bg-gray-50 dark:bg-slate-900/50 border border-gray-200 dark:border-slate-700 rounded-lg p-2 sm:p-3">
+                                      <p className="text-[10px] sm:text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Preview</p>
+                                      <p className="text-[11px] sm:text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">
+                                        {renderTemplatePreview(template, templateState.variables)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
 
-            <div className="flex justify-between items-center gap-2 sm:gap-3 pt-2 sm:pt-3 flex-wrap border-t border-gray-200 dark:border-slate-700 sticky bottom-0 bg-white dark:bg-slate-900">
-              <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
-                {smsData.selectedNumbers.length === 0
-                  ? 'Select a contact.'
-                  : Object.keys(smsData.selectedTemplates).length === 0
-                  ? 'Select a template.'
-                  : `Send (${Object.keys(smsData.selectedTemplates).length} template${Object.keys(smsData.selectedTemplates).length > 1 ? 's' : ''})`}
-              </div>
-              <div className="flex gap-1.5 sm:gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs px-2.5 py-1.5 sm:px-3 sm:py-2"
-                  onClick={() => {
-                    setShowSmsModal(false);
-                    setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
-                  }}
-                  disabled={smsMutation.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="text-xs px-2.5 py-1.5 sm:px-3 sm:py-2"
-                  onClick={() => {
-                    if (smsData.selectedNumbers.length === 0) {
-                      showToast.error('Please select at least one contact number');
-                      return;
-                    }
-                    if (Object.keys(smsData.selectedTemplates).length === 0) {
-                      showToast.error('Please select at least one template');
-                      return;
-                    }
+                  <div className="flex justify-between items-center gap-2 sm:gap-3 pt-2 sm:pt-3 flex-wrap border-t border-gray-200 dark:border-slate-700 sticky bottom-0 bg-white dark:bg-slate-900">
+                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400">
+                      {smsData.selectedNumbers.length === 0
+                        ? 'Select a contact.'
+                        : Object.keys(smsData.selectedTemplates).length === 0
+                          ? 'Select a template.'
+                          : `Send (${Object.keys(smsData.selectedTemplates).length} template${Object.keys(smsData.selectedTemplates).length > 1 ? 's' : ''})`}
+                    </div>
+                    <div className="flex gap-1.5 sm:gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs px-2.5 py-1.5 sm:px-3 sm:py-2"
+                        onClick={() => {
+                          setShowSmsModal(false);
+                          setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
+                        }}
+                        disabled={smsMutation.isPending}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="text-xs px-2.5 py-1.5 sm:px-3 sm:py-2"
+                        onClick={() => {
+                          if (smsData.selectedNumbers.length === 0) {
+                            showToast.error('Please select at least one contact number');
+                            return;
+                          }
+                          if (Object.keys(smsData.selectedTemplates).length === 0) {
+                            showToast.error('Please select at least one template');
+                            return;
+                          }
 
-                    // Build templates payload
-                    const templatesPayload = Object.values(smsData.selectedTemplates).map(({ template, variables }) => {
-                      const variablesArray =
-                        template.variables && template.variables.length > 0
-                          ? template.variables.map((variable, index) => ({
-                              key: variable.key || `var${index + 1}`,
-                              value: variables[variable.key || `var${index + 1}`] || '',
-                            }))
-                          : Array.from({ length: template.variableCount }).map((_, index) => {
-                              const key = `var${index + 1}`;
-                              return {
-                                key,
-                                value: variables[key] || '',
-                              };
-                            });
+                          // Build templates payload
+                          const templatesPayload = Object.values(smsData.selectedTemplates).map(({ template, variables }) => {
+                            const variablesArray =
+                              template.variables && template.variables.length > 0
+                                ? template.variables.map((variable, index) => ({
+                                  key: variable.key || `var${index + 1}`,
+                                  value: variables[variable.key || `var${index + 1}`] || '',
+                                }))
+                                : Array.from({ length: template.variableCount }).map((_, index) => {
+                                  const key = `var${index + 1}`;
+                                  return {
+                                    key,
+                                    value: variables[key] || '',
+                                  };
+                                });
 
-                      return {
-                        templateId: template._id,
-                        variables: variablesArray,
-                      };
-                    });
+                            return {
+                              templateId: template._id,
+                              variables: variablesArray,
+                            };
+                          });
 
-                    smsMutation.mutate({
-                      contactNumbers: smsData.selectedNumbers,
-                      templates: templatesPayload,
-                    });
-                  }}
-                  disabled={
-                    smsMutation.isPending ||
-                    smsData.selectedNumbers.length === 0 ||
-                    Object.keys(smsData.selectedTemplates).length === 0
-                  }
-                >
-                  {smsMutation.isPending ? 'Sending...' : 'Send Message'}
-                </Button>
-              </div>
-            </div>
+                          smsMutation.mutate({
+                            contactNumbers: smsData.selectedNumbers,
+                            templates: templatesPayload,
+                          });
+                        }}
+                        disabled={
+                          smsMutation.isPending ||
+                          smsData.selectedNumbers.length === 0 ||
+                          Object.keys(smsData.selectedTemplates).length === 0
+                        }
+                      >
+                        {smsMutation.isPending ? 'Sending...' : 'Send Message'}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Card>
