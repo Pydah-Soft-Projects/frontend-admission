@@ -194,35 +194,30 @@ export default function UserLeadDetailPage() {
     enabled: false, // Regular users cannot assign leads
   });
 
-  // Fetch all lead IDs for navigation
+  // Fetch lead IDs for "next lead" navigation: ordered by name, excluding leads touched today (call/SMS/activity)
   const { data: allLeadIds } = useQuery({
-    queryKey: ['leadIds', 'user-leads'],
+    queryKey: ['leadIds', 'user-leads', 'excludeTouchedToday'],
     queryFn: async () => {
-      // calling getAllIds() without filters should respect backend "assignedTo = currentUserId" logic
-      const response = await leadAPI.getAllIds();
+      const response = await leadAPI.getAllIds({ excludeTouchedToday: true });
 
       // Handle potential response structure variations
-      // API might return { success: true, data: { ids: [...] } } or { ids: [...] }
       const ids = response.data?.ids || response.ids || response.data?.data?.ids || [];
 
-      // Ensure all IDs are strings to match params.id type
       return ids.map((id: string | number) => String(id));
     },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
   });
 
   const nextLeadId = useMemo(() => {
     if (!allLeadIds || allLeadIds.length === 0 || !leadId) return null;
 
-    // Loose comparison just in case
     const currentIdStr = String(leadId);
     const index = allLeadIds.findIndex((id: string) => String(id) === currentIdStr);
 
     if (index === -1) {
-      // Debug info: Lead ID not found in list
-      console.warn(`Current lead ${currentIdStr} not found in user's lead list (${allLeadIds.length} items)`);
-      return null;
+      // Current lead not in list (e.g. touched today and excluded) → "Next" = first untouched lead
+      return allLeadIds[0];
     }
 
     if (index === allLeadIds.length - 1) return null;

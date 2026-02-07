@@ -238,10 +238,16 @@ export const leadAPI = {
     assignedTo?: string;
     search?: string;
     enquiryNumber?: string;
+    /** Exclude leads that were touched today (call, SMS, or activity) by the current user. Used for "next lead" sequence. */
+    excludeTouchedToday?: boolean;
   }) => {
     const params = new URLSearchParams();
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
+        if (key === 'excludeTouchedToday') {
+          if (value === true) params.append(key, 'true');
+          return;
+        }
         if (value !== undefined && value !== null && value !== '') {
           params.append(key, String(value));
         }
