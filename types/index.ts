@@ -731,7 +731,7 @@ export interface OverviewAnalytics {
 export interface ActivityLog {
   _id: string;
   leadId: string;
-  type: 'status_change' | 'comment' | 'follow_up' | 'quota_change' | 'joining_update';
+  type: 'status_change' | 'comment' | 'follow_up' | 'quota_change' | 'joining_update' | 'field_update';
   oldStatus?: string;
   newStatus?: string;
   comment?: string;

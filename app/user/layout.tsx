@@ -2,13 +2,14 @@
 
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardShell, DashboardNavItem, HomeIcon, ListIcon } from '@/components/layout/DashboardShell';
+import { DashboardShell, DashboardNavItem, HomeIcon, ListIcon, ChartBarIcon } from '@/components/layout/DashboardShell';
 import { auth } from '@/lib/auth';
 import type { User } from '@/types';
 
 const navItems: DashboardNavItem[] = [
   { href: '/user/dashboard', label: 'Dashboard', icon: HomeIcon },
   { href: '/user/leads', label: 'My Leads', icon: ListIcon },
+  { href: '/user/call-activity', label: 'Call activity', icon: ChartBarIcon },
 ];
 
 export default function UserLayout({ children }: { children: ReactNode }) {
