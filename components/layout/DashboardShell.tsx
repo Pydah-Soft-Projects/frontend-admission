@@ -568,7 +568,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
               <header
                 className={cn(
-                  'flex-shrink-0 px-4 pt-6 sm:px-6 lg:px-8 pb-4 z-20',
+                  'flex-shrink-0 px-4 pt-6 sm:px-6 lg:px-8 pb-4 z-10',
                   useMobileBottomNav && 'hidden lg:block'
                 )}
               >
@@ -653,7 +653,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             {useMobileBottomNav && (
                 <div
                   className={cn(
-                    'lg:hidden fixed top-0 left-0 right-0 z-30',
+                    'lg:hidden fixed top-0 left-0 right-0 z-10',
                     'pt-[env(safe-area-inset-top)]',
                     'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 shadow-md',
                     'dark:from-orange-600 dark:via-orange-700 dark:to-amber-700'
