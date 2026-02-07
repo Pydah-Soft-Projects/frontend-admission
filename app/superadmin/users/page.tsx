@@ -14,6 +14,38 @@ import Link from 'next/link';
 import { PERMISSION_MODULES, PermissionModuleKey } from '@/constants/permissions';
 import { auth } from '@/lib/auth';
 
+// Action icons for table (Heroicons-style outline)
+const IconPencil = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+  </svg>
+);
+const IconTrash = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+);
+const IconUserGroup = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+  </svg>
+);
+const IconBadge = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+  </svg>
+);
+const IconCheck = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+const IconX = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
 const UserManagementPage = () => {
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
@@ -329,68 +361,71 @@ const UserManagementPage = () => {
 
   const isSubSuperAdmin = formState.roleName === 'Sub Super Admin';
 
-  return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
-      <Card className="p-6 shadow-lg shadow-blue-100/40 dark:shadow-none">
-        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <Input
-              placeholder="Search users by name, email, or role…"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              className="md:w-96"
-            />
-          </div>
-          <Button
-            variant="primary"
-            onClick={() => setShowCreateUser(true)}
-            disabled={!canManageUsers}
-          >
-            Create User
-          </Button>
-        </div>
+  const actionBtnClass = 'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition disabled:opacity-50 disabled:pointer-events-none shrink-0';
+  const actionBtnBase = `${actionBtnClass} border-slate-300 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100`;
 
-        <div className="overflow-hidden rounded-3xl border border-white/70 shadow-inner shadow-blue-100/40 dark:border-slate-800/70 dark:shadow-none">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
-              <thead className="bg-slate-50/70 backdrop-blur-sm dark:bg-slate-900/70">
+  return (
+    <div className="w-full space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <Input
+            placeholder="Search users by name, email, or role…"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="w-full"
+          />
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setShowCreateUser(true)}
+          disabled={!canManageUsers}
+          className="h-9 shrink-0 px-4 font-medium"
+        >
+          Create User
+        </Button>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+              <thead className="bg-slate-50 dark:bg-slate-800/80">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                     Name
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                     Email
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                     Role
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                     Manager
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 min-w-[200px]">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/50">
+              <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900/40">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                       Loading users…
                     </td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                       No users match the current search.
                     </td>
                   </tr>
                 ) : (
                   filteredUsers.map((user) => {
-                    // Safely get manager - handle null, object, or string
                     let manager: User | undefined = undefined;
                     if (user.managedBy) {
                       if (typeof user.managedBy === 'object') {
@@ -399,89 +434,97 @@ const UserManagementPage = () => {
                         manager = users.find((u) => u._id === user.managedBy);
                       }
                     }
+                    const canShowManagerActions = user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User';
                     return (
                       <tr
                         key={user._id}
-                        className="cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60"
+                        className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
                         onClick={() => router.push(`/superadmin/users/${user._id}/leads`)}
                       >
-                        <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                        <td className="px-3 py-2.5 align-middle text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {user.name}
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                          {user.email}
+                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300">
+                          <span className="truncate max-w-[180px] inline-block" title={user.email}>{user.email}</span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                           {displayRole(user)}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 py-2.5 align-middle whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
                               user.isActive
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
-                                : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
+                                : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
                             }`}
                           >
                             {user.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                           {manager ? (
-                            <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200">
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
                               {manager.name}
                             </span>
                           ) : (
-                            <span className="text-slate-400">No Manager</span>
+                            <span className="text-slate-400 dark:text-slate-500">—</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') && (
-                              <Button
-                                variant="outline"
-                                size="sm"
+                        <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {canShowManagerActions && (
+                              <button
+                                type="button"
+                                title={manager ? 'Change Manager' : 'Assign Manager'}
                                 onClick={(event) => handleOpenTeamAssignment(user, event)}
                                 disabled={!canManageUsers}
+                                className={actionBtnBase}
                               >
-                                {manager ? 'Change Manager' : 'Assign Manager'}
-                              </Button>
+                                <IconUserGroup className="w-3.5 h-3.5 shrink-0" />
+                                <span>{manager ? 'Manager' : 'Assign'}</span>
+                              </button>
                             )}
-                            {/* Manager Role Toggle - Show for User and Sub Super Admin (not Super Admin) */}
-                            {(user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') && (
-                              <Button
-                                variant={user.isManager ? 'primary' : 'outline'}
-                                size="sm"
+                            {canShowManagerActions && (
+                              <button
+                                type="button"
+                                title={user.isManager ? 'Revoke Manager' : 'Make Manager'}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   if (user.isManager) {
-                                    if (window.confirm(`Are you sure you want to revoke Manager privileges from ${user.name}? This will remove them as manager of their team.`)) {
+                                    if (window.confirm(`Revoke Manager privileges from ${user.name}? This will remove them as manager of their team.`)) {
                                       toggleManagerRoleMutation.mutate(user);
                                     }
                                   } else {
-                                    if (window.confirm(`Are you sure you want to grant Manager privileges to ${user.name}?`)) {
+                                    if (window.confirm(`Grant Manager privileges to ${user.name}?`)) {
                                       toggleManagerRoleMutation.mutate(user);
                                     }
                                   }
                                 }}
                                 disabled={toggleManagerRoleMutation.isPending || !canManageUsers}
+                                className={user.isManager
+                                  ? `${actionBtnClass} border-blue-400 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:border-blue-600 dark:bg-blue-900/50 dark:text-blue-200 dark:hover:bg-blue-900/70`
+                                  : actionBtnBase}
                               >
-                                {user.isManager ? 'Revoke Manager' : 'Make Manager'}
-                              </Button>
+                                <IconBadge className="w-3.5 h-3.5 shrink-0" />
+                                <span>{user.isManager ? 'Revoke' : 'Manager'}</span>
+                              </button>
                             )}
-                            <Button
-                              variant="outline"
-                              size="sm"
+                            <button
+                              type="button"
+                              title={user.isActive ? 'Deactivate' : 'Activate'}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 toggleActiveMutation.mutate(user);
                               }}
                               disabled={toggleActiveMutation.isPending || !canManageUsers}
+                              className={actionBtnBase}
                             >
-                              {user.isActive ? 'Deactivate' : 'Activate'}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
+                              {user.isActive ? <IconX className="w-3.5 h-3.5 shrink-0" /> : <IconCheck className="w-3.5 h-3.5 shrink-0" />}
+                              <span>{user.isActive ? 'Deactivate' : 'Activate'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              title="Edit user"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (!canManageUsers) return;
@@ -492,13 +535,10 @@ const UserManagementPage = () => {
                                   roleName: user.roleName,
                                   designation: user.designation || '',
                                 });
-                                // Seed edit permissions for sub super admins
                                 if (user.roleName === 'Sub Super Admin') {
                                   const base = createEmptyPermissions();
                                   const userPerms = user.permissions || {};
-                                  const seeded: Record<PermissionModuleKey, ModulePermission> = {
-                                    ...base,
-                                  };
+                                  const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
                                   PERMISSION_MODULES.forEach((module) => {
                                     const entry = userPerms[module.key];
                                     if (entry?.access) {
@@ -515,28 +555,28 @@ const UserManagementPage = () => {
                                 setShowEditUser(true);
                               }}
                               disabled={!canManageUsers}
+                              className={actionBtnBase}
                             >
-                              Edit
-                            </Button>
+                              <IconPencil className="w-3.5 h-3.5 shrink-0" />
+                              <span>Edit</span>
+                            </button>
                             {canDeleteUsers && (
-                              <Button
-                                variant="outline"
-                                size="sm"
+                              <button
+                                type="button"
+                                title="Delete user"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   if (!canManageUsers) return;
-                                  if (
-                                    window.confirm(
-                                      `Are you sure you want to delete ${user.name}? This action cannot be undone.`
-                                    )
-                                  ) {
+                                  if (window.confirm(`Delete ${user.name}? This cannot be undone.`)) {
                                     deleteUserMutation.mutate(user._id);
                                   }
                                 }}
                                 disabled={deleteUserMutation.isPending || !canManageUsers}
+                                className={`${actionBtnClass} border-slate-300 text-rose-600 hover:bg-rose-50 hover:border-rose-300 dark:border-slate-600 dark:text-rose-400 dark:hover:bg-rose-900/30`}
                               >
-                                Delete
-                              </Button>
+                                <IconTrash className="w-3.5 h-3.5 shrink-0" />
+                                <span>Delete</span>
+                              </button>
                             )}
                           </div>
                         </td>
@@ -548,7 +588,6 @@ const UserManagementPage = () => {
             </table>
           </div>
         </div>
-      </Card>
 
       {showCreateUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">

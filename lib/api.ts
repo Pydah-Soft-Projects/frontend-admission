@@ -292,16 +292,26 @@ export const leadAPI = {
     count?: number;
     leadIds?: string[];
     assignNow?: boolean;
+    institutionName?: string;
   }) => {
     const response = await api.post('/leads/assign', data);
     return response.data;
   },
-  getAssignmentStats: async (params?: { mandal?: string; state?: string; academicYear?: number | string; studentGroup?: string }) => {
+  getAssignmentStats: async (params?: {
+    mandal?: string;
+    state?: string;
+    academicYear?: number | string;
+    studentGroup?: string;
+    institutionName?: string;
+    forBreakdown?: 'school' | 'college';
+  }) => {
     const queryParams = new URLSearchParams();
     if (params?.mandal) queryParams.append('mandal', params.mandal);
     if (params?.state) queryParams.append('state', params.state);
     if (params?.academicYear != null && params.academicYear !== '') queryParams.append('academicYear', String(params.academicYear));
     if (params?.studentGroup) queryParams.append('studentGroup', params.studentGroup);
+    if (params?.institutionName) queryParams.append('institutionName', params.institutionName);
+    if (params?.forBreakdown) queryParams.append('forBreakdown', params.forBreakdown);
     const query = queryParams.toString();
     const response = await api.get(`/leads/assign/stats${query ? `?${query}` : ''}`);
     return response.data;

@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
-type AssignmentMode = 'bulk' | 'single' | 'remove' | 'stats';
+type AssignmentMode = 'bulk' | 'single' | 'remove' | 'stats' | 'institution';
 
 interface AssignmentStats {
   totalLeads: number;
@@ -20,6 +20,7 @@ interface AssignmentStats {
   unassignedCount: number;
   mandalBreakdown: Array<{ mandal: string; count: number }>;
   stateBreakdown: Array<{ state: string; count: number }>;
+  institutionBreakdown?: Array<{ id: string; name: string; count: number }>;
 }
 
 export default function AssignLeadsPage() {
@@ -83,6 +84,15 @@ export default function AssignLeadsPage() {
   const [searchResults, setSearchResults] = useState<Lead[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Institution-wise (school/college) allocation state
+  const [institutionStudentGroup, setInstitutionStudentGroup] = useState<string>('');
+  const [institutionName, setInstitutionName] = useState<string>('');
+  const [institutionAcademicYear, setInstitutionAcademicYear] = useState<number | ''>(2025);
+  const [institutionUserId, setInstitutionUserId] = useState<string>('');
+  const [institutionCount, setInstitutionCount] = useState(1000);
+  const [schoolsList, setSchoolsList] = useState<{ id: string; name: string }[]>([]);
+  const [collegesList, setCollegesList] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     const user = auth.getUser();
@@ -327,6 +337,46 @@ export default function AssignLeadsPage() {
 
   const stats = statsData?.data;
 
+  // Institution-wise: use schools for 10th, colleges for Inter/Degree etc.
+  const institutionUseSchools = institutionStudentGroup === '10th';
+  const institutionForBreakdown = institutionUseSchools ? 'school' : 'college';
+
+  // Fetch institution breakdown (school or college wise unassigned counts) when in institution mode
+  const { data: institutionStatsData, refetch: refetchInstitutionStats } = useQuery<{ data: AssignmentStats }>({
+    queryKey: ['assignmentStatsInstitution', institutionAcademicYear, institutionStudentGroup, institutionForBreakdown],
+    queryFn: async () => {
+      const response = await leadAPI.getAssignmentStats({
+        academicYear: institutionAcademicYear !== '' ? institutionAcademicYear : undefined,
+        studentGroup: institutionStudentGroup || undefined,
+        forBreakdown: institutionForBreakdown,
+      });
+      const payload = response?.data ?? response ?? {};
+      return { data: payload };
+    },
+    enabled: isReady && !!currentUser && mode === 'institution' && !!institutionStudentGroup,
+  });
+  const institutionStats = institutionStatsData?.data;
+
+  // Load schools and colleges for institution dropdowns (when assign page is ready)
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [schools, colleges] = await Promise.all([
+          locationsAPI.listSchools(),
+          locationsAPI.listColleges(),
+        ]);
+        if (cancelled) return;
+        setSchoolsList(Array.isArray(schools) ? schools.map((s: { id?: string; name: string }) => ({ id: s.id || '', name: s.name || String(s) })) : []);
+        setCollegesList(Array.isArray(colleges) ? colleges.map((c: { id?: string; name: string }) => ({ id: c.id || '', name: c.name || String(c) })) : []);
+      } catch (e) {
+        if (!cancelled) console.error('Failed to load schools/colleges', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser]);
+
   // Assigned count for selected user (for remove-assignment tab)
   const { data: assignedCountData } = useQuery<{ data?: { count?: number } }>({
     queryKey: ['assignedCountForUser', removeUserId, removeMandal, removeState, removeAcademicYear, removeStudentGroup],
@@ -395,11 +445,14 @@ export default function AssignLeadsPage() {
       studentGroup?: string;
       count?: number;
       leadIds?: string[];
+      institutionName?: string;
     }) => leadAPI.assignLeads(payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['assignmentStats'] });
+      queryClient.invalidateQueries({ queryKey: ['assignmentStatsInstitution'] });
       refetchStats();
+      refetchInstitutionStats();
       const assignedCount = response.data?.assigned || response.assigned || 0;
       const userName = response.data?.userName || 'user';
       showToast.success(`Successfully assigned ${assignedCount} lead${assignedCount !== 1 ? 's' : ''} to ${userName}`);
@@ -413,6 +466,10 @@ export default function AssignLeadsPage() {
         setStudentGroup('');
         setAcademicYear(2025);
         setCount(1000);
+      } else if (mode === 'institution') {
+        setInstitutionUserId('');
+        setInstitutionName('');
+        setInstitutionCount(1000);
       } else {
         setSelectedUserId('');
         setSelectedLeadId('');
@@ -495,6 +552,38 @@ export default function AssignLeadsPage() {
     assignMutation.mutate({
       userId: selectedUserId,
       leadIds: [selectedLeadId],
+    });
+  };
+
+  const handleInstitutionAssign = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!institutionUserId) {
+      showToast.error('Please select a user to assign leads to.');
+      return;
+    }
+    if (!institutionStudentGroup) {
+      showToast.error('Please select a student group (School or College).');
+      return;
+    }
+    if (!institutionName) {
+      showToast.error(`Please select a ${institutionUseSchools ? 'school' : 'college'}.`);
+      return;
+    }
+    if (institutionAcademicYear === '') {
+      showToast.error('Please select an academic year.');
+      return;
+    }
+    if (institutionCount <= 0) {
+      showToast.error('Count must be greater than zero.');
+      return;
+    }
+
+    assignMutation.mutate({
+      userId: institutionUserId,
+      academicYear: institutionAcademicYear,
+      studentGroup: institutionStudentGroup,
+      institutionName: institutionName.trim(),
+      count: institutionCount,
     });
   };
 
@@ -675,6 +764,19 @@ export default function AssignLeadsPage() {
               Remove Assignment
             </button>
             <button
+              onClick={() => {
+                setMode('institution');
+                setInstitutionName('');
+              }}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                mode === 'institution'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
+            >
+              School/College wise
+            </button>
+            <button
               onClick={() => setMode('stats')}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                 mode === 'stats'
@@ -791,6 +893,132 @@ export default function AssignLeadsPage() {
                 </p>
               )}
             </div>
+          ) : mode === 'institution' ? (
+            <form onSubmit={handleInstitutionAssign} className="space-y-6">
+              <p className="text-sm text-gray-600 dark:text-slate-400">
+                Assign unassigned leads by <strong>school</strong> (10th) or <strong>college</strong> (Inter, Degree, etc.). Select student group first to show the correct list.
+              </p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Student group *
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={institutionStudentGroup}
+                    onChange={(e) => {
+                      setInstitutionStudentGroup(e.target.value);
+                      setInstitutionName('');
+                    }}
+                    required
+                  >
+                    <option value="">Select group…</option>
+                    {studentGroupOptions.map((g: string) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    {institutionStudentGroup === '10th' ? 'Shows schools.' : institutionStudentGroup ? 'Shows colleges.' : '10th = schools, others = colleges.'}
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    {institutionUseSchools ? 'School' : 'College'} *
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={institutionName}
+                    onChange={(e) => setInstitutionName(e.target.value)}
+                    disabled={!institutionStudentGroup}
+                    required
+                  >
+                    <option value="">
+                      {!institutionStudentGroup ? `Select student group first` : `Select ${institutionUseSchools ? 'school' : 'college'}…`}
+                    </option>
+                    {(institutionUseSchools ? schoolsList : collegesList).map((item) => (
+                      <option key={item.id || item.name} value={item.name}>
+                        {item.name}
+                        {institutionStats?.institutionBreakdown?.find((b) => b.name === item.name)
+                          ? ` (${institutionStats.institutionBreakdown.find((b) => b.name === item.name)?.count ?? 0} unassigned)`
+                          : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Academic year *</label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={institutionAcademicYear === '' ? '' : institutionAcademicYear}
+                    onChange={(e) => setInstitutionAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
+                    required
+                  >
+                    <option value="">Select year…</option>
+                    {academicYearOptions.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Assign to user *</label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={institutionUserId}
+                    onChange={(e) => setInstitutionUserId(e.target.value)}
+                    required
+                  >
+                    <option value="">Choose user…</option>
+                    {assignableUsers.map((user) => (
+                      <option key={user._id} value={user._id}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Number of leads *</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={institutionCount}
+                  onChange={(e) => setInstitutionCount(Number(e.target.value))}
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  Unassigned for this {institutionUseSchools ? 'school' : 'college'}: {(institutionName && institutionStats?.institutionBreakdown?.find((b) => b.name === institutionName)?.count) ?? 0}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit"
+                  disabled={
+                    assignMutation.isPending ||
+                    !institutionUserId ||
+                    !institutionStudentGroup ||
+                    !institutionName ||
+                    institutionAcademicYear === ''
+                  }
+                >
+                  {assignMutation.isPending ? 'Assigning…' : 'Assign by ' + (institutionUseSchools ? 'school' : 'college')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setInstitutionUserId('');
+                    setInstitutionName('');
+                    setInstitutionCount(1000);
+                  }}
+                  disabled={assignMutation.isPending}
+                >
+                  Reset
+                </Button>
+              </div>
+            </form>
           ) : mode === 'remove' ? (
             <form onSubmit={handleRemoveAssignments} className="space-y-6">
               <div>

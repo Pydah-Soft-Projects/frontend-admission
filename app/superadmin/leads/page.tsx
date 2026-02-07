@@ -719,7 +719,7 @@ export default function LeadsPage() {
   if (!isMounted || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-full max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
           <CardSkeleton />
         </div>
       </div>
@@ -727,7 +727,7 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[95%] space-y-6">
+    <div className="w-full space-y-4">
       <div className="mb-2">
           {/* Search, Filters, and Action Bar - All in One Row */}
           <div className="flex flex-wrap gap-3">
@@ -1222,10 +1222,10 @@ export default function LeadsPage() {
                   })}
                 </div>
 
-                <Card className="hidden md:block overflow-hidden">
+                <div className="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="overflow-x-auto w-full">
-                    <table className="w-full divide-y divide-gray-200 dark:divide-slate-700">
-                      <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-slate-900/60 dark:to-slate-900/40">
+                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                      <thead className="bg-slate-50 dark:bg-slate-800/80">
                         <tr>
                           <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider w-10 dark:text-slate-200">
                             <input
@@ -1332,15 +1332,18 @@ export default function LeadsPage() {
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white/50 dark:bg-slate-900/30 divide-y divide-gray-200 dark:divide-slate-700">
-                        {displayedLeads.map((lead: Lead) => {
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {displayedLeads.map((lead: Lead, rowIndex: number) => {
                           const assignedUserName = typeof lead.assignedTo === 'object' && lead.assignedTo !== null 
                             ? lead.assignedTo.name 
                             : '—';
+                          const isEven = rowIndex % 2 === 0;
                           return (
                             <tr
                               key={lead._id}
-                              className="hover:bg-blue-50/50 dark:hover:bg-slate-800/60 transition-colors duration-200 cursor-pointer"
+                              className={`cursor-pointer transition-colors duration-200 ${
+                                isEven ? 'bg-white dark:bg-slate-900/40' : 'bg-slate-50 dark:bg-slate-800/50'
+                              } hover:bg-slate-100 dark:hover:bg-slate-800/70`}
                               onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
                             >
                               <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -1407,7 +1410,7 @@ export default function LeadsPage() {
                       </tbody>
                     </table>
                   </div>
-                </Card>
+                </div>
               </>
             )}
 
