@@ -80,16 +80,15 @@ export default function UserLeadDetailPage() {
     languageFilter: 'all' as string,
   });
 
-  // Status options
+  // Status options (lead pipeline stage – only these allowed for status update)
   const statusOptions = [
-    'New',
-    'Assigned',
     'Interested',
+    'Not interested',
     'Confirmed',
-    'Not Interest',
-    'Wrong Data',
-    'Admitted',
-    'Admission Cancelled',
+    'Polycet applied',
+    'Eamcet applied',
+    'Other cet applied',
+    'Admitted only',
   ];
 
   // Get the appropriate leads page URL for regular users
@@ -820,24 +819,12 @@ export default function UserLeadDetailPage() {
   };
 
   const getStatusColor = (status?: string) => {
-    switch ((status || '').toLowerCase()) {
-      case 'interested':
-        return 'bg-green-100 text-green-800';
-      case 'assigned':
-        return 'bg-blue-100 text-blue-800';
-      case 'admitted':
-        return 'bg-emerald-100 text-emerald-800';
-      case 'not interest':
-        return 'bg-red-100 text-red-800';
-      case 'wrong data':
-        return 'bg-orange-100 text-orange-800';
-      case 'admission cancelled':
-        return 'bg-red-100 text-red-800';
-      case 'new':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+    const s = (status || '').toLowerCase();
+    if (s === 'interested' || s === 'confirmed') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+    if (s === 'not interested' || s === 'not interest') return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+    if (s === 'admitted only' || s === 'admitted') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
+    if (s === 'polycet applied' || s === 'eamcet applied' || s === 'other cet applied') return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
   };
 
   const getCallOutcomeColor = (outcome?: string) => {
@@ -861,16 +848,18 @@ export default function UserLeadDetailPage() {
       outcomeLower.includes('declined') ||
       outcomeLower.includes('wrong number') ||
       outcomeLower.includes('wrong data') ||
-      outcomeLower.includes('no') && !outcomeLower.includes('answer')) {
+      outcomeLower.includes('switch off') ||
+      (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
       return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
     }
 
-    // Neutral/Warning outcomes - Yellow/Orange
+    // Neutral/Warning outcomes - Yellow/Orange (callback_requested / "call back" etc.)
     if (outcomeLower.includes('busy') ||
       outcomeLower.includes('not answered') ||
       outcomeLower.includes('no answer') ||
       outcomeLower.includes('missed') ||
       outcomeLower.includes('call back') ||
+      outcomeLower.includes('callback') ||
       outcomeLower.includes('follow up')) {
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
     }
@@ -914,6 +903,7 @@ export default function UserLeadDetailPage() {
       outcomeLower.includes('declined') ||
       outcomeLower.includes('wrong number') ||
       outcomeLower.includes('wrong data') ||
+      outcomeLower.includes('switch off') ||
       (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
       return {
         iconBg: 'bg-gradient-to-br from-red-500 to-red-600',
@@ -924,12 +914,13 @@ export default function UserLeadDetailPage() {
       };
     }
 
-    // Neutral/Warning outcomes - Yellow/Orange
+    // Neutral/Warning outcomes - Yellow/Orange (callback_requested / "call back" etc.)
     if (outcomeLower.includes('busy') ||
       outcomeLower.includes('not answered') ||
       outcomeLower.includes('no answer') ||
       outcomeLower.includes('missed') ||
       outcomeLower.includes('call back') ||
+      outcomeLower.includes('callback') ||
       outcomeLower.includes('follow up')) {
       return {
         iconBg: 'bg-gradient-to-br from-yellow-500 to-yellow-600',
@@ -2130,13 +2121,14 @@ export default function UserLeadDetailPage() {
                   onChange={(e) => setCallData({ ...callData, outcome: e.target.value })}
                 >
                   <option value="">Select outcome...</option>
+                  <option value="callback_requested">Call back</option>
+                  <option value="switch_off">Switch off</option>
                   <option value="answered">Answered</option>
                   <option value="no_answer">No Answer</option>
                   <option value="busy">Busy</option>
                   <option value="voicemail">Voicemail</option>
                   <option value="interested">Interested</option>
                   <option value="not_interested">Not Interested</option>
-                  <option value="callback_requested">Callback Requested</option>
                 </select>
               </div>
               <div>
@@ -2167,7 +2159,7 @@ export default function UserLeadDetailPage() {
                   onClick={() => callMutation.mutate(callData)}
                   disabled={!callData.outcome || callMutation.isPending}
                 >
-                  {callMutation.isPending ? 'Logging...' : 'Log Call'}
+                  {callMutation.isPending ? 'Saving...' : 'Save Call'}
                 </Button>
                 <Button
                   variant="outline"

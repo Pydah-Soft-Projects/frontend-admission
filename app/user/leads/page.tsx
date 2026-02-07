@@ -35,7 +35,7 @@ export default function UserLeadsPage() {
   const router = useRouter();
   const [user, setUser] = useState(auth.getUser());
   const [page, setPage] = useState(1);
-  const [limit] = useState(50);
+  const [limit] = useState(100);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<LeadFilters>({});
   const [showFilters, setShowFilters] = useState(false);
@@ -180,7 +180,7 @@ export default function UserLeadsPage() {
   });
 
   const leads = leadsData?.leads || [];
-  const pagination = leadsData?.pagination || { page: 1, limit: 50, total: 0, pages: 1 };
+  const pagination = leadsData?.pagination || { page: 1, limit: 100, total: 0, pages: 1 };
   const needsUpdateCount = leadsData?.needsUpdateCount ?? 0;
 
   // Handle filter changes
@@ -446,24 +446,110 @@ export default function UserLeadsPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-600 dark:text-slate-300">
-          Showing {leads.length} of {pagination.total} leads
-          {pagination.total > 0 && (
-            <span className="ml-2">
-              (Page {pagination.page} of {pagination.pages})
-            </span>
+      {/* Pagination and count at top */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-gray-600 dark:text-slate-300">
+            Showing {leads.length} of {pagination.total} leads
+            {pagination.total > 0 && (
+              <span className="ml-2">
+                (Page {pagination.page} of {pagination.pages})
+              </span>
+            )}
+            {needsUpdateCount > 0 && (
+              <span className="ml-3 inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200 ring-1 ring-inset ring-amber-600/20">
+                {needsUpdateCount} need{needsUpdateCount === 1 ? 's' : ''} update
+              </span>
+            )}
+          </p>
+          {isLoading && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-slate-300">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-500 border-t-transparent"></div>
+              Loading...
+            </div>
           )}
-          {needsUpdateCount > 0 && (
-            <span className="ml-3 inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200 ring-1 ring-inset ring-amber-600/20">
-              {needsUpdateCount} need{needsUpdateCount === 1 ? 's' : ''} update
-            </span>
-          )}
-        </p>
-        {isLoading && (
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-slate-300">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-500 border-t-transparent"></div>
-            Loading...
+        </div>
+        {pagination.pages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 border-b border-gray-200 pb-3 dark:border-slate-700">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => setPage(1)}
+                disabled={page === 1 || isLoading}
+                size="sm"
+                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                title="First Page"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1 || isLoading}
+                size="sm"
+                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                title="Previous Page"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </Button>
+              <div className="flex gap-1">
+                {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
+                  let pageNum;
+                  if (pagination.pages <= 5) {
+                    pageNum = i + 1;
+                  } else if (page <= 3) {
+                    pageNum = i + 1;
+                  } else if (page >= pagination.pages - 2) {
+                    pageNum = pagination.pages - 4 + i;
+                  } else {
+                    pageNum = page - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={page === pageNum ? 'primary' : 'outline'}
+                      onClick={() => setPage(pageNum)}
+                      disabled={isLoading}
+                      size="sm"
+                      className="min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-[40px]"
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+                disabled={page === pagination.pages || isLoading}
+                size="sm"
+                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                title="Next Page"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setPage(pagination.pages)}
+                disabled={page === pagination.pages || isLoading}
+                size="sm"
+                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                title="Last Page"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+              </Button>
+            </div>
+            <div className="text-sm text-gray-600 dark:text-slate-300 w-full sm:w-auto text-center sm:text-left">
+              Page {pagination.page} of {pagination.pages}
+            </div>
           </div>
         )}
       </div>
@@ -573,90 +659,6 @@ export default function UserLeadsPage() {
             ))}
           </div>
         </>
-      )}
-
-      {pagination.pages > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 border-t border-gray-200 pt-4 pb-2 dark:border-slate-700">
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              onClick={() => setPage(1)}
-              disabled={page === 1 || isLoading}
-              size="sm"
-              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
-              title="First Page"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-              </svg>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1 || isLoading}
-              size="sm"
-              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
-              title="Previous Page"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Button>
-            <div className="flex gap-1">
-              {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                let pageNum;
-                if (pagination.pages <= 5) {
-                  pageNum = i + 1;
-                } else if (page <= 3) {
-                  pageNum = i + 1;
-                } else if (page >= pagination.pages - 2) {
-                  pageNum = pagination.pages - 4 + i;
-                } else {
-                  pageNum = page - 2 + i;
-                }
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={page === pageNum ? 'primary' : 'outline'}
-                    onClick={() => setPage(pageNum)}
-                    disabled={isLoading}
-                    size="sm"
-                    className="min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-[40px]"
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
-              disabled={page === pagination.pages || isLoading}
-              size="sm"
-              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
-              title="Next Page"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setPage(pagination.pages)}
-              disabled={page === pagination.pages || isLoading}
-              size="sm"
-              className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
-              title="Last Page"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-              </svg>
-            </Button>
-          </div>
-          <div className="text-sm text-gray-600 dark:text-slate-300 w-full sm:w-auto text-center sm:text-left">
-            Page {pagination.page} of {pagination.pages}
-          </div>
-        </div>
       )}
 
       {showCommentModal && selectedLead && (

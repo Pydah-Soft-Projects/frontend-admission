@@ -152,6 +152,13 @@ export default function UserCallActivityPage() {
         <span className="text-[10px] sm:text-xs font-medium text-slate-500 shrink-0">Quick:</span>
         <button
           type="button"
+          onClick={() => { const today = format(new Date(), 'yyyy-MM-dd'); setStartDate(today); setEndDate(today); }}
+          className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+        >
+          Today
+        </button>
+        <button
+          type="button"
           onClick={() => { const [s, e] = setQuickRange(7); setStartDate(s); setEndDate(e); }}
           className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
         >
@@ -197,15 +204,17 @@ export default function UserCallActivityPage() {
             </div>
           </div>
 
-          {/* Day-wise call activity - no card background, date formatted as "Feb 23, 2026" */}
+          {/* Day-wise call activity - latest date first, date formatted as "Feb 23, 2026" */}
           {report.calls?.dailyCallActivity && report.calls.dailyCallActivity.length > 0 && (
             <div>
               <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3 sm:mb-4">Day-wise call activity</h2>
               <div className="space-y-3 sm:space-y-4">
-                {report.calls.dailyCallActivity.map((day: { date: string; callCount: number; leads?: { leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }, idx: number) => {
+                {[...report.calls.dailyCallActivity]
+                  .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+                  .map((day: { date: string; callCount: number; leads?: { leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }) => {
                   const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
                   return (
-                    <div key={idx} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
+                    <div key={day.date || dateLabel} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                       <div className="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 border-b border-slate-200 dark:border-slate-600">
                         <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">{dateLabel}</span>
                         <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">

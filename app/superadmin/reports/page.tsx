@@ -12,8 +12,6 @@ import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
   BarChart,
   Bar,
   PieChart,
@@ -184,7 +182,7 @@ export default function ReportsPage() {
     retry: 2,
   });
 
-  // User Analytics (with academic year and day-wise call activity)
+  // User Analytics (used for Call reports tab stats + User Analytics tab detail; same date range)
   const { data: userAnalytics, isLoading: isLoadingUserAnalytics } = useQuery({
     queryKey: ['userAnalytics', filters.startDate, filters.endDate, filters.academicYear],
     queryFn: () => leadAPI.getUserAnalytics({
@@ -192,7 +190,7 @@ export default function ReportsPage() {
       endDate: filters.endDate,
       academicYear: filters.academicYear != null ? filters.academicYear : undefined,
     }),
-    enabled: activeTab === 'users',
+    enabled: activeTab === 'calls' || activeTab === 'users',
     retry: 2,
   });
 
@@ -273,22 +271,6 @@ export default function ReportsPage() {
   };
 
   // Prepare chart data
-  const callChartData = useMemo(() => {
-    if (!callReports?.reports) return [];
-    const dailyData: Record<string, { date: string; calls: number; duration: number }> = {};
-    
-    callReports.reports.forEach((report: any) => {
-      const date = report.date;
-      if (!dailyData[date]) {
-        dailyData[date] = { date, calls: 0, duration: 0 };
-      }
-      dailyData[date].calls += report.callCount || 0;
-      dailyData[date].duration += report.totalDuration || 0;
-    });
-
-    return Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date));
-  }, [callReports]);
-
   const conversionChartData = useMemo(() => {
     if (!conversionReports?.reports) return [];
     return conversionReports.reports.map((report: any) => ({
@@ -328,16 +310,6 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Comprehensive Reports & Analytics</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Complete analytics dashboard with user, lead, and source-based insights
-          </p>
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
@@ -538,7 +510,7 @@ export default function ReportsPage() {
       {/* Call Reports Tab */}
       {activeTab === 'calls' && (
         <div className="space-y-6">
-          {isLoadingCalls ? (
+          {isLoadingCalls && !userAnalytics ? (
             <Skeleton className="h-64" />
           ) : callReportsError ? (
             <Card className="p-8 text-center">
@@ -548,7 +520,89 @@ export default function ReportsPage() {
             </Card>
           ) : (
             <>
-              {/* Summary Cards */}
+              {/* User Performance Stats (Total Users, Assigned Leads, Total Calls, Total SMS + table) */}
+              {userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 && (
+                <>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Users</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{userAnalytics.users.length}</p>
+                    </Card>
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Assigned Leads</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.totalAssigned || 0), 0)}
+                      </p>
+                    </Card>
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Calls</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.calls?.total ?? 0), 0)}
+                      </p>
+                    </Card>
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total SMS</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.sms?.total ?? 0), 0)}
+                      </p>
+                    </Card>
+                  </div>
+                  <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">User Performance Summary</h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                        <thead className="bg-slate-50 dark:bg-slate-900">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">User</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Leads</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Calls</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">SMS</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status Changes</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirmed</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Conversion Rate</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
+                          {userAnalytics.users.map((user: any) => (
+                            <tr key={user.userId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                              <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{user.name || user.userName}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
+                                <div className="flex flex-col">
+                                  <span>{user.calls?.total ?? 0}</span>
+                                  {user.calls?.averageDuration > 0 && (
+                                    <span className="text-xs text-slate-500">
+                                      Avg: {Math.floor(user.calls.averageDuration / 60)}m {user.calls.averageDuration % 60}s
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.sms?.total ?? 0}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.statusConversions?.total ?? 0}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.convertedLeads ?? 0}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                    (user.conversionRate ?? 0) >= 50
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                      : (user.conversionRate ?? 0) >= 30
+                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                  }`}
+                                >
+                                  {user.conversionRate ?? 0}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                </>
+              )}
+
+              {/* Per-user summary cards from daily call report */}
               {callReports?.summary && callReports.summary.length > 0 && (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   {callReports.summary.map((summary: any) => (
@@ -562,23 +616,6 @@ export default function ReportsPage() {
                     </Card>
                   ))}
                 </div>
-              )}
-
-              {/* Charts */}
-              {callChartData.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Daily Call Trends</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={callChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="calls" stroke="#3b82f6" name="Calls" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </Card>
               )}
 
               {/* Export and Table */}
@@ -941,7 +978,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* User Analytics Tab */}
+      {/* User Analytics Tab – per-user call activity (calls, SMS, status changes) like the counsellor Call activity page */}
       {activeTab === 'users' && (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-4 rounded-lg bg-slate-100 dark:bg-slate-800 p-3">
@@ -953,37 +990,14 @@ export default function ReportsPage() {
                 Academic Year: <strong>{filters.academicYear}</strong> (assigned leads filter)
               </span>
             )}
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Full call activity (day-wise calls, SMS, status changes) per user below.
+            </span>
           </div>
           {isLoadingUserAnalytics ? (
             <Skeleton className="h-64" />
           ) : userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 ? (
             <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <Card className="p-4">
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Users</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{userAnalytics.users.length}</p>
-                </Card>
-                <Card className="p-4">
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Assigned Leads</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.totalAssigned || 0), 0)}
-                  </p>
-                </Card>
-                <Card className="p-4">
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Calls</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.calls?.total || 0), 0)}
-                  </p>
-                </Card>
-                <Card className="p-4">
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total SMS</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {userAnalytics.users.reduce((sum: number, user: any) => sum + (user.sms?.total || 0), 0)}
-                  </p>
-                </Card>
-              </div>
-
               {/* Export */}
               <div className="flex justify-end gap-2 mb-4">
                 <Button
@@ -1004,87 +1018,8 @@ export default function ReportsPage() {
                 </Button>
               </div>
 
-              {/* User Performance Chart */}
-              {userAnalytics.users.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">User Performance Comparison</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={userAnalytics.users.map((u: any) => ({ 
-                      name: u.name, 
-                      leads: u.totalAssigned || 0, 
-                      converted: u.convertedLeads || 0,
-                      calls: u.calls?.total || 0,
-                      sms: u.sms?.total || 0,
-                    }))}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="leads" fill="#3b82f6" name="Total Assigned" />
-                      <Bar dataKey="converted" fill="#10b981" name="Converted" />
-                      <Bar dataKey="calls" fill="#f59e0b" name="Calls" />
-                      <Bar dataKey="sms" fill="#8b5cf6" name="SMS" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Card>
-              )}
-
-              {/* User Performance Table */}
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">User Performance Summary</h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                    <thead className="bg-slate-50 dark:bg-slate-900">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">User</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Leads</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Calls</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">SMS</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status Changes</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirmed</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Conversion Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
-                      {userAnalytics.users.map((user: any) => (
-                        <tr key={user.userId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{user.name || user.userName}</td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
-                            <div className="flex flex-col">
-                              <span>{user.calls?.total || 0}</span>
-                              {user.calls?.averageDuration > 0 && (
-                                <span className="text-xs text-slate-500">
-                                  Avg: {Math.floor(user.calls.averageDuration / 60)}m {user.calls.averageDuration % 60}s
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.sms?.total || 0}</td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.statusConversions?.total || 0}</td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.convertedLeads || 0}</td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                                (user.conversionRate || 0) >= 50
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                  : (user.conversionRate || 0) >= 30
-                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                              }`}
-                            >
-                              {user.conversionRate || 0}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-              {/* Detailed User Analytics - Expandable Sections */}
+              {/* Per-user call activity (same structure as user/call-activity page) */}
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200 mt-2 mb-2">Call activity by user</h3>
               {userAnalytics.users.map((user: any) => (
                 <Card key={user.userId} className="p-6">
                   <div className="mb-4 flex items-center justify-between">
@@ -1101,49 +1036,52 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="space-y-6">
-                    {/* Day-wise call activity */}
-                    {user.dailyCallActivity && user.dailyCallActivity.length > 0 && (
+                    {/* Day-wise call activity (data from user.calls.dailyCallActivity) */}
+                    {user.calls?.dailyCallActivity && user.calls.dailyCallActivity.length > 0 && (
                       <div>
                         <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                          Day-wise Call Activity
+                          Day-wise call activity
                         </h4>
                         <div className="space-y-3">
-                          {user.dailyCallActivity.map((day: { date: string; callCount: number; leads?: { leadId: string; leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }, dayIdx: number) => (
-                            <div key={dayIdx} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
-                              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 px-3 py-2">
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                  {day.date}
-                                </span>
-                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                  {day.callCount} call{day.callCount !== 1 ? 's' : ''}
-                                </span>
-                              </div>
-                              {day.leads && day.leads.length > 0 && (
-                                <div className="overflow-x-auto">
-                                  <table className="min-w-full text-sm">
-                                    <thead className="bg-slate-100 dark:bg-slate-700/50">
-                                      <tr>
-                                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
-                                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
-                                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Enquiry #</th>
-                                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Calls</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                      {day.leads.map((lead: any, lidx: number) => (
-                                        <tr key={lidx}>
-                                          <td className="px-3 py-1.5 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
-                                          <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.leadPhone || '—'}</td>
-                                          <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.enquiryNumber || '—'}</td>
-                                          <td className="px-3 py-1.5 text-slate-900 dark:text-slate-100">{lead.callCount}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                          {user.calls.dailyCallActivity.map((day: { date: string; callCount: number; leads?: { leadId: string; leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }, dayIdx: number) => {
+                            const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
+                            return (
+                              <div key={dayIdx} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
+                                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-600">
+                                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    {dateLabel}
+                                  </span>
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                    {day.callCount} call{day.callCount !== 1 ? 's' : ''}
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-                          ))}
+                                {day.leads && day.leads.length > 0 && (
+                                  <div className="overflow-x-auto">
+                                    <table className="min-w-full text-sm">
+                                      <thead className="border-b border-slate-200 dark:border-slate-600">
+                                        <tr>
+                                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
+                                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
+                                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Enquiry #</th>
+                                          <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-600 dark:text-slate-400">Calls</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                        {day.leads.map((lead: any, lidx: number) => (
+                                          <tr key={lidx}>
+                                            <td className="px-3 py-1.5 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
+                                            <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.leadPhone || '—'}</td>
+                                            <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.enquiryNumber || '—'}</td>
+                                            <td className="px-3 py-1.5 text-right text-slate-900 dark:text-slate-100">{lead.callCount}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
