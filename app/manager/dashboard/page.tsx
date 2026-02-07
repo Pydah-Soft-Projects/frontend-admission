@@ -65,10 +65,10 @@ export default function ManagerDashboard() {
   useEffect(() => {
     setHeaderContent(
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
           Manager Dashboard
         </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Overview of your team's performance and leads
         </p>
       </div>
@@ -139,19 +139,19 @@ export default function ManagerDashboard() {
     : [];
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8 px-0 sm:px-2">
+    <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-2 pt-1 pb-2 sm:pt-0 sm:pb-0">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Total Leads</p>
-              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
+              <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">Total Leads</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 dark:text-slate-100 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(analytics?.totalLeads || 0)}
               </p>
             </div>
-            <div className="p-2 sm:p-3 bg-orange-100 rounded-lg shrink-0">
-              <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
+            <div className="p-2 sm:p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg shrink-0">
+              <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600 dark:text-orange-400" />
             </div>
           </div>
         </Card>
@@ -159,13 +159,13 @@ export default function ManagerDashboard() {
         <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Confirmed</p>
-              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
+              <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">Confirmed</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 dark:text-slate-100 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(analytics?.confirmedLeads || 0)}
               </p>
             </div>
-            <div className="p-2 sm:p-3 bg-emerald-100 rounded-lg shrink-0">
-              <div className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 flex items-center justify-center text-sm font-bold">✓</div>
+            <div className="p-2 sm:p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg shrink-0">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold">✓</div>
             </div>
           </div>
         </Card>
@@ -173,13 +173,13 @@ export default function ManagerDashboard() {
         <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Team</p>
-              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
+              <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">Team</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 dark:text-slate-100 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(teamData?.length || 0)}
               </p>
             </div>
-            <div className="p-2 sm:p-3 bg-violet-100 rounded-lg shrink-0">
-              <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-violet-600" />
+            <div className="p-2 sm:p-3 bg-violet-100 dark:bg-violet-900/30 rounded-lg shrink-0">
+              <UserIcon className="w-5 h-5 sm:w-6 sm:h-6 text-violet-600 dark:text-violet-400" />
             </div>
           </div>
         </Card>
@@ -187,13 +187,13 @@ export default function ManagerDashboard() {
         <Card className="p-3 sm:p-5 lg:p-6 border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-700">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[10px] sm:text-sm font-medium text-slate-600">Unfollowed</p>
-              <p className="text-lg sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1 truncate">
+              <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">Unfollowed</p>
+              <p className="text-lg sm:text-2xl font-bold text-slate-800 dark:text-slate-100 mt-0.5 sm:mt-1 truncate">
                 {isLoading ? '...' : formatNumber(analytics?.unfollowedCount || 0)}
               </p>
             </div>
-            <div className="p-2 sm:p-3 bg-amber-100 rounded-lg shrink-0">
-              <div className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 flex items-center justify-center font-bold">!</div>
+            <div className="p-2 sm:p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg shrink-0">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">!</div>
             </div>
           </div>
         </Card>

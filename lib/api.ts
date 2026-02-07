@@ -321,8 +321,19 @@ export const leadAPI = {
     const response = await api.post('/leads/assign/remove', data);
     return response.data;
   },
-  getAnalytics: async (userId: string) => {
-    const response = await api.get(`/leads/analytics/${userId}`);
+  getAnalytics: async (userId: string, params?: { academicYear?: number | string; studentGroup?: string; mandal?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.academicYear != null && params.academicYear !== '') {
+      query.append('academicYear', String(params.academicYear));
+    }
+    if (params?.studentGroup) {
+      query.append('studentGroup', params.studentGroup);
+    }
+    if (params?.mandal) {
+      query.append('mandal', params.mandal);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const response = await api.get(`/leads/analytics/${userId}${suffix}`);
     return response.data;
   },
   getOverviewAnalytics: async (params?: { days?: number; tz?: string; academicYear?: number | string; studentGroup?: string }) => {

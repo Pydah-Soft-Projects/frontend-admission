@@ -641,7 +641,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               <main
                 className={cn(
                   'relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-8',
-                  useMobileBottomNav && 'pb-20 pt-14 lg:pt-6 lg:pb-8'
+                  useMobileBottomNav && 'pb-20 pt-[calc(2.75rem+env(safe-area-inset-top))] lg:pt-6 lg:pb-8'
                 )}
               >
                 <div className="mx-auto max-w-[1600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -649,43 +649,49 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 </div>
               </main>
 
-{/* Mobile top bar (user / manager): linear gradient orange theme */}
+{/* Mobile top bar (user / manager): three-column layout for centered title + safe area */}
             {useMobileBottomNav && (
                 <div
                   className={cn(
-                    'lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center gap-2',
-                    'h-11 min-h-11 px-3 safe-area-inset-top',
+                    'lg:hidden fixed top-0 left-0 right-0 z-30',
+                    'pt-[env(safe-area-inset-top)]',
                     'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 shadow-md',
                     'dark:from-orange-600 dark:via-orange-700 dark:to-amber-700'
                   )}
                 >
-                  {(mobileTopBar?.showBack ?? false) ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (mobileTopBar?.backHref) {
-                          router.push(mobileTopBar.backHref);
-                        } else {
-                          handleBack();
-                        }
-                      }}
-                      className="flex-shrink-0 flex cursor-pointer items-center justify-center w-8 h-8 rounded-lg text-white hover:bg-orange-600 dark:hover:bg-orange-700"
-                      aria-label="Back"
-                    >
-                      <BackIcon className="h-5 w-5" />
-                    </button>
-                  ) : (
-                    <div className="w-8 flex-shrink-0" aria-hidden />
-                  )}
-                  <h1 className="flex flex-1 items-center justify-center gap-2 min-w-0 pr-8 text-center">
-                    {mobileTopBar?.iconKey && (() => {
-                      const Icon = MOBILE_TOP_BAR_ICONS[mobileTopBar.iconKey];
-                      return Icon ? <Icon className="h-5 w-5 shrink-0 text-white" aria-hidden /> : null;
-                    })()}
-                    <span className="truncate text-sm font-semibold text-white">
-                      {mobileTopBar?.title ?? title}
-                    </span>
-                  </h1>
+                  <div className="flex h-11 min-h-11 items-center px-3">
+                    {/* Left: back or spacer (fixed width for symmetry) */}
+                    <div className="flex w-10 flex-shrink-0 items-center justify-start">
+                      {(mobileTopBar?.showBack ?? false) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (mobileTopBar?.backHref) {
+                              router.push(mobileTopBar.backHref);
+                            } else {
+                              handleBack();
+                            }
+                          }}
+                          className="flex cursor-pointer items-center justify-center w-9 h-9 rounded-lg text-white hover:bg-orange-600/80 dark:hover:bg-orange-700/80"
+                          aria-label="Back"
+                        >
+                          <BackIcon className="h-5 w-5" />
+                        </button>
+                      ) : null}
+                    </div>
+                    {/* Center: title (visually centered) */}
+                    <h1 className="flex flex-1 items-center justify-center gap-2 min-w-0 text-center">
+                      {mobileTopBar?.iconKey && (() => {
+                        const Icon = MOBILE_TOP_BAR_ICONS[mobileTopBar.iconKey];
+                        return Icon ? <Icon className="h-5 w-5 shrink-0 text-white" aria-hidden /> : null;
+                      })()}
+                      <span className="truncate text-sm font-semibold text-white">
+                        {mobileTopBar?.title ?? title}
+                      </span>
+                    </h1>
+                    {/* Right: spacer (same width as left) */}
+                    <div className="w-10 flex-shrink-0" aria-hidden />
+                  </div>
                 </div>
               )}
 

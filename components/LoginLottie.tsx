@@ -17,7 +17,7 @@ export function LoginLottie({ className }: { className?: string }) {
         src={LOTTIE_URL}
         loop
         autoplay
-        className="h-full w-full min-h-60"
+        className="h-full w-full"
       />
     </div>
   );

@@ -38,7 +38,7 @@ function LoginPageContent() {
   // Check for SSO token in URL on mount
   useEffect(() => {
     const token = searchParams.get('token');
-    
+
     if (token) {
       // SSO token found - handle SSO login
       handleSSOLogin(token);
@@ -185,7 +185,7 @@ function LoginPageContent() {
             <Card className="bg-white border border-gray-200 shadow-xl">
               <div className="p-6">
                 <p className="text-red-600 mb-4 font-medium">{error}</p>
-                <a 
+                <a
                   href={CRM_FRONTEND_URL}
                   className="text-orange-600 hover:underline"
                 >
@@ -202,23 +202,23 @@ function LoginPageContent() {
   // Show normal login form: two-column layout (Lottie | Form) on large screens
   return (
     <div className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden bg-gray-50 gap-4 lg:gap-6">
-      {/* Left: Lottie — larger size, less padding */}
-      <div className="relative flex flex-col items-center justify-center px-4 py-6 lg:py-8 border-b lg:border-b-0 lg:border-r border-gray-200">
-        <div className="w-full max-w-lg h-72 sm:h-80 lg:h-[26rem] flex items-center justify-center">
+      {/* Left: Lottie — larger size, reduced padding */}
+      <div className="relative flex flex-col items-center justify-center px-4 py-4 lg:py-12 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white/50 lg:bg-transparent">
+        <div className="w-full max-w-sm lg:max-w-lg h-56 sm:h-64 lg:h-[32rem] flex items-center justify-center">
           <LoginLottie className="h-full w-full" />
         </div>
-        <p className="mt-3 text-center text-sm text-gray-600 max-w-xs">
+        <p className="hidden lg:block mt-4 text-center text-sm font-medium text-gray-600 max-w-xs">
           Manage leads and track admissions in one place
         </p>
       </div>
 
-      {/* Right: Login form — less padding to reduce space */}
-      <div className="relative flex flex-col items-center justify-center py-6 px-4 sm:px-6 lg:px-8">
+      {/* Right: Login form — compact padding */}
+      <div className="relative flex flex-col items-center justify-center py-4 px-4 sm:px-6 lg:px-12 bg-white lg:bg-transparent">
         <div className="w-full max-w-md">
-            <Card className="bg-white border border-gray-200 shadow-xl">
-            <div className="text-center mb-6">
-              <h2 className="text-3xl font-bold text-gray-900">Lead Tracker</h2>
-              <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
+          <Card className="bg-white border-0 lg:border border-gray-200 shadow-none lg:shadow-xl p-0 lg:p-6">
+            <div className="text-center mb-4 lg:mb-8">
+              <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">Lead Tracker</h2>
+              <p className="mt-1 lg:mt-2 text-sm text-gray-600">Sign in to your account</p>
             </div>
 
             {error && (
@@ -227,13 +227,14 @@ function LoginPageContent() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 lg:space-y-5">
               <Input
                 label="Email"
                 type="email"
                 placeholder="Enter your email"
                 error={errors.email?.message}
                 {...register('email')}
+                className="py-2 lg:py-2.5"
               />
 
               <Input
@@ -242,6 +243,7 @@ function LoginPageContent() {
                 placeholder="Enter your password"
                 error={errors.password?.message}
                 {...register('password')}
+                className="py-2 lg:py-2.5"
               />
 
               <Button
@@ -249,7 +251,7 @@ function LoginPageContent() {
                 variant="primary"
                 size="lg"
                 isLoading={isLoading}
-                className="w-full group"
+                className="w-full group mt-2 py-3 lg:py-4 text-sm lg:text-base"
               >
                 <span className="group-hover:scale-105 transition-transform inline-block">
                   {isLoading ? 'Signing In...' : 'Sign In'}

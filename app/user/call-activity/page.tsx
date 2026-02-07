@@ -19,7 +19,12 @@ export default function UserCallActivityPage() {
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
 
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
+
+  useEffect(() => {
+    setMobileTopBar({ title: 'My call activity', iconKey: 'analytics' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar]);
 
   useEffect(() => {
     const user = auth.getUser();
@@ -89,7 +94,7 @@ export default function UserCallActivityPage() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
           </div>
           <div>
@@ -98,7 +103,7 @@ export default function UserCallActivityPage() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
           </div>
         </div>
@@ -257,7 +262,7 @@ export default function UserCallActivityPage() {
               {report.statusConversions.breakdown && Object.keys(report.statusConversions.breakdown).length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {Object.entries(report.statusConversions.breakdown).map(([conversion, count]: [string, unknown]) => (
-                    <span key={conversion} className="inline-flex rounded-full px-3 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                    <span key={conversion} className="inline-flex rounded-full px-3 py-1 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
                       {conversion}: {String(count)}
                     </span>
                   ))}

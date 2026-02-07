@@ -21,6 +21,8 @@ import {
   Tooltip,
   CartesianGrid,
   Cell,
+  Legend,
+  LabelList,
 } from 'recharts';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
@@ -34,11 +36,11 @@ interface Analytics {
   };
 }
 
-const summaryCardStyles = [
-  'bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0 shadow-lg shadow-orange-500/30',
-  'bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg shadow-amber-500/30',
-  'bg-gradient-to-br from-violet-600 to-purple-700 text-white border-0 shadow-lg shadow-violet-500/30',
-  'bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-0 shadow-lg shadow-emerald-500/30',
+const STATS_CARD_STYLES = [
+  'from-orange-500 to-orange-600 shadow-orange-500/25',
+  'from-amber-500 to-amber-600 shadow-amber-500/25',
+  'from-emerald-500 to-teal-600 shadow-emerald-500/25',
+  'from-slate-500 to-slate-600 shadow-slate-500/25',
 ];
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
@@ -48,12 +50,18 @@ const getTodayDateString = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+const currentYear = new Date().getFullYear();
+const DEFAULT_ACADEMIC_YEARS = [currentYear, currentYear - 1, currentYear - 2];
+const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
+
 export default function UserDashboard() {
   const router = useRouter();
   const { theme } = useTheme();
   const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [user, setUser] = useState<User | null>(null);
   const [isAuthorising, setIsAuthorising] = useState(true);
+  const [dashboardAcademicYear, setDashboardAcademicYear] = useState<number | ''>(currentYear);
+  const [dashboardStudentGroup, setDashboardStudentGroup] = useState<string>('');
 
   useEffect(() => {
     const currentUser = auth.getUser();
@@ -98,14 +106,30 @@ export default function UserDashboard() {
     return () => clearMobileTopBar();
   }, [setMobileTopBar, clearMobileTopBar]);
 
+  const { data: filterOptionsData } = useQuery({
+    queryKey: ['filterOptions'],
+    queryFn: () => leadAPI.getFilterOptions(),
+    staleTime: 120_000,
+  });
+  const filterOptions = filterOptionsData?.data || filterOptionsData;
+  const academicYearOptions = filterOptions?.academicYears?.length
+    ? filterOptions.academicYears
+    : DEFAULT_ACADEMIC_YEARS;
+  const studentGroupOptions = filterOptions?.studentGroups?.length
+    ? filterOptions.studentGroups
+    : STUDENT_GROUP_OPTIONS;
+
   const {
     data: analyticsData,
     isLoading: isLoadingAnalytics,
   } = useQuery({
-    queryKey: ['user-analytics-summary', user?._id],
+    queryKey: ['user-analytics-summary', user?._id, dashboardAcademicYear, dashboardStudentGroup],
     queryFn: async () => {
       if (!user?._id) return null;
-      const response = await leadAPI.getAnalytics(user._id);
+      const response = await leadAPI.getAnalytics(user._id, {
+        ...(dashboardAcademicYear !== '' && { academicYear: dashboardAcademicYear }),
+        ...(dashboardStudentGroup && { studentGroup: dashboardStudentGroup }),
+      });
       return response.data || response;
     },
     enabled: !!user?._id,
@@ -162,19 +186,19 @@ export default function UserDashboard() {
         helper: 'Allotted to you',
       },
       {
-        label: 'Touched (7 days)',
-        value: analytics?.recentActivity?.leadsUpdatedLast7Days ?? 0,
-        helper: 'Updated recently',
-      },
-      {
-        label: 'New Leads',
-        value: analytics?.statusBreakdown?.New ?? 0,
-        helper: 'Need first contact',
-      },
-      {
         label: 'Interested',
         value: analytics?.statusBreakdown?.Interested ?? analytics?.statusBreakdown?.interested ?? 0,
-        helper: 'High intent prospects',
+        helper: 'High intent',
+      },
+      {
+        label: 'Admitted',
+        value: analytics?.statusBreakdown?.Admitted ?? analytics?.statusBreakdown?.admitted ?? 0,
+        helper: 'Joined',
+      },
+      {
+        label: 'Not Interested',
+        value: analytics?.statusBreakdown?.['Not Interested'] ?? analytics?.statusBreakdown?.['Not interested'] ?? 0,
+        helper: 'Declined',
       },
     ],
     [analytics]
@@ -213,6 +237,11 @@ export default function UserDashboard() {
       .slice(0, 8);
   }, [analytics]);
 
+  const totalForDonut = useMemo(
+    () => statusChartData.reduce((sum, d) => sum + d.value, 0),
+    [statusChartData]
+  );
+
   if (isAuthorising || !user) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -248,21 +277,52 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-2 pt-1 pb-2 sm:pt-0 sm:pb-0">
-      <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {summaryCards.map((card, index) => (
-          <Card
-            key={card.label}
-            className={`overflow-hidden border bg-gradient-to-br ${summaryCardStyles[index % summaryCardStyles.length]} p-3 shadow-sm sm:p-5 lg:p-6 min-h-[88px] sm:min-h-0 flex flex-col justify-center`}
+    <div className="mx-auto w-full max-w-7xl space-y-4 sm:space-y-6 px-0 sm:px-2 pt-1 pb-2 sm:pt-0 sm:pb-0">
+      {/* Filters: full width, single row, compact, no background */}
+      <div className="w-full flex flex-nowrap items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
+          <label className="text-[10px] sm:text-xs font-medium text-slate-500 whitespace-nowrap shrink-0">Year</label>
+          <select
+            value={dashboardAcademicYear === '' ? '' : dashboardAcademicYear}
+            onChange={(e) => setDashboardAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
+            className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] sm:text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 flex-1 min-w-0 sm:w-24 max-w-full"
           >
-            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-white/80">
+            <option value="">All</option>
+            {academicYearOptions.map((y: number) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
+          <label className="text-[10px] sm:text-xs font-medium text-slate-500 whitespace-nowrap shrink-0">Group</label>
+          <select
+            value={dashboardStudentGroup}
+            onChange={(e) => setDashboardStudentGroup(e.target.value)}
+            className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] sm:text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 flex-1 min-w-0 sm:w-28 max-w-full"
+          >
+            <option value="">All</option>
+            {studentGroupOptions.map((g: string) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Compact stats: Assigned, Interested, Admitted, Not Interested */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        {summaryCards.map((card, index) => (
+          <div
+            key={card.label}
+            className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[index % STATS_CARD_STYLES.length]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}
+          >
+            <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">
               {card.label}
             </p>
-            <p className="mt-1 sm:mt-2 text-xl font-bold text-white sm:text-2xl lg:text-3xl drop-shadow-sm">
+            <p className="mt-0.5 sm:mt-1 text-lg sm:text-xl font-bold text-white drop-shadow-sm">
               {formatNumber(card.value)}
             </p>
-            <p className="mt-0.5 sm:mt-2 text-[10px] sm:text-xs text-white/75">{card.helper}</p>
-          </Card>
+            <p className="mt-0.5 text-[10px] sm:text-xs text-white/75">{card.helper}</p>
+          </div>
         ))}
       </div>
 
@@ -277,27 +337,15 @@ export default function UserDashboard() {
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">Today&apos;s scheduled calls</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-                Follow-ups for today · Set from lead details after a call
-              </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={handleGoToLeads} className="w-full shrink-0 sm:w-auto">
+          <Button variant="primary" size="sm" onClick={handleGoToLeads} className="w-full shrink-0 sm:w-auto !text-xs !py-1.5 !px-2.5 !min-h-8 sm:!min-h-0 sm:!text-sm sm:!py-2 sm:!px-3">
             View My Leads
           </Button>
         </div>
         {scheduledLeads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 sm:py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
-              <svg className="h-6 w-6 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No calls scheduled for today</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">Schedule a follow-up from any lead&apos;s detail page after logging a call.</p>
-            <Button variant="primary" size="sm" onClick={handleGoToLeads}>
-              Go to My Leads
-            </Button>
+          <div className="px-4 py-6 sm:py-8 text-center">
+            <p className="text-sm font-medium text-slate-600">No calls scheduled for today.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 p-3 sm:p-4 max-h-[320px] sm:max-h-[280px] overflow-y-auto">
@@ -329,60 +377,57 @@ export default function UserDashboard() {
         )}
       </div>
 
+      {/* Status distribution: donut chart with filters (same row, no filter background) */}
       {statusChartData.length > 0 && (
-        <Card className="space-y-4 sm:space-y-6 p-4 sm:p-6 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">Lead Status Mix</h2>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                Distribution by status
-              </p>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-            <div className="h-[200px] sm:h-64 lg:h-72 w-full min-w-0">
+        <Card className="p-4 sm:p-5 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
+          <div className="relative flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="h-52 sm:h-64 w-full max-w-60 mx-auto shrink-0">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <CartesianGrid stroke={chartGridColor} strokeDasharray="6 4" />
-                  <XAxis
-                    dataKey="name"
-                    stroke={chartTextColor}
-                    tickLine={false}
-                    axisLine={{ stroke: chartGridColor }}
-                    tick={{ fill: chartTextColor, fontSize: 10 }}
-                  />
-                  <YAxis
-                    stroke={chartTextColor}
-                    allowDecimals={false}
-                    tickLine={false}
-                    axisLine={{ stroke: chartGridColor }}
-                    tick={{ fill: chartTextColor, fontSize: 10 }}
-                  />
+                <PieChart>
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    cursor={{ fill: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(249, 115, 22, 0.08)' }}
+                    formatter={(value: number) => [formatNumber(value), 'Leads']}
                   />
-                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  <Pie
+                    data={statusChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="52%"
+                    outerRadius="82%"
+                    paddingAngle={2}
+                    labelLine={{ stroke: theme === 'dark' ? '#94a3b8' : '#64748b', strokeWidth: 1 }}
+                  >
                     {statusChartData.map((entry, idx) => (
                       <Cell key={`status-${entry.name}`} fill={chartColors[idx % chartColors.length]} />
                     ))}
-                  </Bar>
-                </BarChart>
+                    <LabelList
+                      position="outside"
+                      formatter={
+                        ((value: number, _name: string, props: { payload?: { name?: string } }) => {
+                          const name = props?.payload?.name ?? _name ?? '';
+                          const total = totalForDonut || 1;
+                          const pct = Math.round((value / total) * 100);
+                          return `${name} ${pct}% ${formatNumber(value)}`;
+                        }) as (label: React.ReactNode) => React.ReactNode
+                      }
+                      className="text-xs fill-slate-600 dark:fill-slate-400"
+                    />
+                  </Pie>
+                </PieChart>
               </ResponsiveContainer>
-            </div>
-            <div className="space-y-2 sm:space-y-3">
-              {statusChartData.map((item, idx) => (
-                <div
-                  key={item.name}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 px-3 py-2.5 sm:px-4 sm:py-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{item.name}</p>
-                    <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{formatNumber(item.value)}</p>
-                  </div>
-                  <span className="text-xs uppercase tracking-[0.25em] text-slate-400 dark:text-slate-500">Leads</span>
+              {/* Center total */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="text-center">
+                  <span className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
+                    {formatNumber(totalForDonut)}
+                  </span>
+                  <span className="block text-[10px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Total
+                  </span>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         </Card>

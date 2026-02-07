@@ -43,46 +43,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
-  // Always start with 'light' to prevent hydration mismatch
-  const [theme, setTheme] = useState<Theme>('light');
-  const [mounted, setMounted] = useState(false);
-
-  // Read theme from localStorage only on client side after mount
+  // Light theme only - no system preference or dark mode
   useEffect(() => {
-    setMounted(true);
-    const stored = localStorage.getItem('lead-tracker-theme') as Theme | null;
-    if (stored === 'light' || stored === 'dark') {
-      setTheme(stored);
-      document.documentElement.classList.toggle('dark', stored === 'dark');
-    } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const initialTheme: Theme = prefersDark ? 'dark' : 'light';
-      setTheme(initialTheme);
-      document.documentElement.classList.toggle('dark', initialTheme === 'dark');
-      localStorage.setItem('lead-tracker-theme', initialTheme);
-    }
+    document.documentElement.classList.remove('dark');
   }, []);
 
-  // Update DOM and localStorage when theme changes
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.classList.toggle('dark', theme === 'dark');
-      localStorage.setItem('lead-tracker-theme', theme);
-    }
-  }, [theme, mounted]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
+  const toggleTheme = () => {};
+  const setTheme = (_theme: Theme) => { void _theme; };
 
   const themeValue = useMemo(
     () => ({
-      theme,
+      theme: 'light' as Theme,
       toggleTheme,
       setTheme,
     }),
-    [theme]
+    []
   );
 
   return (
@@ -95,8 +70,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
             toastOptions={{
               duration: 4000,
               style: {
-                background: theme === 'dark' ? '#111827' : '#fffbf7',
-                color: theme === 'dark' ? '#e5e7eb' : '#1c1917',
+                background: '#fffbf7',
+                color: '#1c1917',
                 borderRadius: '12px',
                 padding: '16px',
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',

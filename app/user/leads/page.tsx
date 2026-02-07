@@ -283,7 +283,7 @@ export default function UserLeadsPage() {
   // Handle save comment/status
   const handleSaveActivity = () => {
     if (!selectedLead) return;
-    
+
     const hasComment = comment.trim().length > 0;
     const hasStatusChange = newStatus && newStatus !== selectedLead.leadStatus;
 
@@ -327,35 +327,11 @@ export default function UserLeadsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-0 sm:px-0 pb-2">
-      <Card className="p-3 sm:p-4">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 sm:text-sm">
-              <svg className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              Search
-            </label>
-            <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
-              <button
-                type="button"
-                onClick={() => setShowFilters(!showFilters)}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white min-h-[44px] px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:min-h-0 sm:px-3 sm:py-2 sm:text-sm"
-              >
-                <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                {showFilters ? 'Hide filters' : 'Filters'}
-              </button>
-              {(Object.keys(filters).length > 0 || search) && (
-                <Button variant="outline" size="sm" onClick={clearFilters} className="min-h-[44px] px-3 text-xs sm:min-h-0 sm:h-9 sm:px-3 sm:text-sm">
-                  Clear
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="relative">
+    <div className="mx-auto w-full max-w-7xl space-y-4 px-0 sm:px-0 pb-2">
+      {/* Search + filters: no card background, compact */}
+      <div className="space-y-2">
+        <div className="flex flex-nowrap items-center gap-2">
+          <div className="relative min-w-0 flex-1">
             <Input
               type="text"
               placeholder="Name, phone, email or enquiry number..."
@@ -363,15 +339,15 @@ export default function UserLeadsPage() {
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowSearchSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
-              className="min-h-[44px] w-full text-base sm:min-h-0 sm:h-10 sm:text-sm"
+              className="h-9 w-full rounded border border-slate-200 bg-white py-1.5 px-2.5 text-sm focus:ring-1 focus:ring-orange-500"
             />
             {showSearchSuggestions && searchSuggestions.length > 0 && (
-              <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+              <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
                 {searchSuggestions.map((suggestion) => (
                   <button
                     key={`user-search-suggestion-${suggestion._id}`}
                     type="button"
-                    className="flex w-full flex-col gap-1 px-4 py-2 text-left text-sm text-gray-700 transition hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                    className="flex w-full flex-col gap-1 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                     onMouseDown={(e) => {
                       e.preventDefault();
                       const value = suggestion.enquiryNumber || suggestion.name || suggestion.phone || suggestion.email || '';
@@ -393,94 +369,82 @@ export default function UserLeadsPage() {
               </div>
             )}
           </div>
-
-          {showFilters && (
-            <div className="grid grid-cols-2 gap-3 border-t border-gray-200 pt-3 dark:border-slate-700 md:grid-cols-5">
-              <div>
-                <label className="mb-0.5 flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 sm:text-sm">
-                  <svg className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Mandal
-                </label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 sm:px-3 sm:py-2 sm:text-sm"
-                  value={filters.mandal || ''}
-                  onChange={(e) => handleFilterChange('mandal', e.target.value)}
-                >
-                  <option value="">All Mandals</option>
-                  {filterOptions?.mandals?.map((mandal) => (
-                    <option key={mandal} value={mandal}>
-                      {mandal}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-0.5 flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 sm:text-sm">
-                  <svg className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0h.5a2.5 2.5 0 002.5-2.5V8.935M12 12.075V14m0 0v2m0-2a2 2 0 00-2-2h-2a2 2 0 00-2 2v2m4 0h-4" />
-                  </svg>
-                  State
-                </label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 sm:px-3 sm:py-2 sm:text-sm"
-                  value={filters.state || ''}
-                  onChange={(e) => handleFilterChange('state', e.target.value)}
-                >
-                  <option value="">All States</option>
-                  {filterOptions?.states?.map((state) => (
-                    <option key={state} value={state}>
-                      {state}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-0.5 flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 sm:text-sm">
-                  <svg className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                  </svg>
-                  Quota
-                </label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 sm:px-3 sm:py-2 sm:text-sm"
-                  value={filters.quota || ''}
-                  onChange={(e) => handleFilterChange('quota', e.target.value)}
-                >
-                  <option value="">All Quotas</option>
-                  {filterOptions?.quotas?.map((quota) => (
-                    <option key={quota} value={quota}>
-                      {quota}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-0.5 flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-slate-200 sm:text-sm">
-                  <svg className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Status
-                </label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 sm:px-3 sm:py-2 sm:text-sm"
-                  value={filters.status || ''}
-                  onChange={(e) => handleFilterChange('status', e.target.value)}
-                >
-                  <option value="">All Statuses</option>
-                  {filterOptions?.statuses?.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center gap-1 rounded border border-slate-200 bg-transparent px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              {showFilters ? 'Hide' : 'Filters'}
+            </button>
+            {(Object.keys(filters).length > 0 || search) && (
+              <Button variant="outline" size="sm" onClick={clearFilters} className="!py-1.5 !px-2 !text-xs !min-h-0 h-8">
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
-      </Card>
+
+        {showFilters && (
+          <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:grid-cols-4">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <label className="text-[10px] font-medium text-slate-500 shrink-0">Mandal</label>
+              <select
+                className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                value={filters.mandal || ''}
+                onChange={(e) => handleFilterChange('mandal', e.target.value)}
+              >
+                <option value="">All</option>
+                {filterOptions?.mandals?.map((mandal) => (
+                  <option key={mandal} value={mandal}>{mandal}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <label className="text-[10px] font-medium text-slate-500 shrink-0">State</label>
+              <select
+                className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                value={filters.state || ''}
+                onChange={(e) => handleFilterChange('state', e.target.value)}
+              >
+                <option value="">All</option>
+                {filterOptions?.states?.map((state) => (
+                  <option key={state} value={state}>{state}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <label className="text-[10px] font-medium text-slate-500 shrink-0">Quota</label>
+              <select
+                className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                value={filters.quota || ''}
+                onChange={(e) => handleFilterChange('quota', e.target.value)}
+              >
+                <option value="">All</option>
+                {filterOptions?.quotas?.map((quota) => (
+                  <option key={quota} value={quota}>{quota}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <label className="text-[10px] font-medium text-slate-500 shrink-0">Status</label>
+              <select
+                className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                value={filters.status || ''}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+              >
+                <option value="">All</option>
+                {filterOptions?.statuses?.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-600 dark:text-slate-300">
@@ -533,62 +497,58 @@ export default function UserLeadsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {leads.map((lead: Lead) => (
               <article
                 key={`lead-${lead._id}`}
                 onClick={() => router.push(`/user/leads/${lead._id}`)}
-                className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:shadow-md hover:border-orange-200/80 dark:border-slate-700/80 dark:bg-slate-900/80 dark:hover:border-orange-500/40 dark:hover:shadow-lg cursor-pointer"
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:shadow-md hover:border-orange-200/80 cursor-pointer"
               >
-                {/* Top accent by status (optional subtle bar) */}
-                <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 group-hover:bg-orange-100 dark:group-hover:bg-orange-900/30 transition-colors" aria-hidden />
-                <div className="relative flex flex-1 flex-col p-4 sm:p-5">
-                  {/* Header: avatar + name + status */}
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 ring-1 ring-slate-200/60 dark:ring-slate-700/60">
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <div className="h-0.5 w-full bg-slate-100 group-hover:bg-orange-100 transition-colors" aria-hidden />
+                <div className="relative flex flex-1 flex-col p-3 sm:p-4">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-slate-200/60">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+                      <h3 className="truncate text-sm font-semibold text-slate-900">
                         {lead.name}
                       </h3>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusColor(lead.leadStatus || '')}`}>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusColor(lead.leadStatus || '')}`}>
                           {lead.leadStatus || 'New'}
                         </span>
                         {lead.needsManualUpdate && (
-                          <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/50 dark:text-amber-200" title="Details need manual update">
+                          <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700" title="Details need manual update">
                             Update
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  {/* Meta: phone, location */}
-                  <div className="mt-4 space-y-2 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <svg className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-2">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <svg className="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                       </svg>
-                      <span className="truncate font-medium text-slate-800 dark:text-slate-200">{lead.phone}</span>
+                      <span className="truncate font-medium text-slate-800">{lead.phone}</span>
                     </div>
                     {(lead.mandal || lead.village) && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                        <svg className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                        <svg className="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         </svg>
                         <span className="truncate">{[lead.village, lead.mandal].filter(Boolean).join(', ') || '—'}</span>
                       </div>
                     )}
                   </div>
-                  {/* Actions */}
-                  <div className="mt-4 flex gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-3">
+                  <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-2">
                     <Button
                       size="sm"
                       variant="primary"
-                      className="min-h-10 sm:min-h-9 flex-1 rounded-xl text-sm font-medium"
+                      className="!min-h-0 h-8 flex-1 !rounded-lg !text-xs font-medium"
                       onClick={(e) => {
                         e.stopPropagation();
                         router.push(`/user/leads/${lead._id}`);
@@ -599,7 +559,7 @@ export default function UserLeadsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="min-h-10 sm:min-h-9 flex-1 rounded-xl border-slate-200 text-sm font-medium dark:border-slate-600"
+                      className="hidden sm:flex !min-h-0 h-8 flex-1 !rounded-lg border-slate-200 !text-xs font-medium"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleOpenCommentModal(lead, e);
@@ -712,7 +672,7 @@ export default function UserLeadsPage() {
                   </label>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Update Status</label>
                   <select
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 min-h-[44px]"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 min-h-[44px]"
                     value={newStatus}
                     onChange={(e) => handleStatusChange(e.target.value)}
                   >
@@ -728,7 +688,7 @@ export default function UserLeadsPage() {
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Comment</label>
                   <textarea
-                    className="min-h-[120px] w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    className="min-h-[120px] w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     placeholder="Add a comment..."
