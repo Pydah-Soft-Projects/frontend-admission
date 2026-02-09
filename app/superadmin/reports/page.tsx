@@ -231,6 +231,17 @@ export default function ReportsPage() {
     queryFn: () => locationsAPI.listStates(),
     enabled: activeTab === 'abstract',
   });
+
+  // Default state to Andhra Pradesh when states load and none selected
+  useEffect(() => {
+    if (activeTab !== 'abstract' || filters.abstractStateId || !abstractStates) return;
+    const arr = Array.isArray(abstractStates) ? abstractStates : [];
+    const ap = arr.find((s: { name?: string }) => String(s?.name || '').toLowerCase().includes('andhra pradesh'));
+    if (ap?.id) {
+      setFilters((prev) => ({ ...prev, abstractStateId: ap.id }));
+    }
+  }, [activeTab, abstractStates, filters.abstractStateId]);
+
   const { data: abstractDistricts } = useQuery({
     queryKey: ['locations', 'districts', filters.abstractStateId],
     queryFn: () => locationsAPI.listDistricts({ stateId: filters.abstractStateId }),
@@ -247,6 +258,7 @@ export default function ReportsPage() {
       districtId: filters.abstractDistrictId || undefined,
     }),
     enabled: activeTab === 'abstract',
+    staleTime: 60000, // Cache 1 min - abstract data is heavy, avoid refetch on tab switch
     retry: 2,
   });
 
@@ -408,8 +420,8 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* Filters – hidden on Call Reports tab (that tab uses only date presets above) */}
-      {activeTab !== 'calls' && (
+      {/* Filters – hidden on Call Reports and Leads Abstract (abstract has its own compact filters) */}
+      {activeTab !== 'calls' && activeTab !== 'abstract' && (
         <Card className="p-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -1448,15 +1460,14 @@ export default function ReportsPage() {
           {isLoadingAbstract ? (
             <Skeleton className="h-96" />
           ) : leadsAbstract ? (
-            /* 4-column Kanban: Districts | Mandals | Schools | Colleges */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Column 1: Districts */}
+            <div className="space-y-6">
+              {/* Districts table – always shown first */}
               <Card className="flex flex-col overflow-hidden shrink-0">
                 <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
                   <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Lead count by district</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Lead count by district · Select a district to see mandal-wise stats</p>
                 </div>
-                <div className="flex-1 min-h-[320px] max-h-[70vh] overflow-y-auto">
+                <div className="flex-1 min-h-[200px] max-h-[50vh] overflow-y-auto">
                   {(leadsAbstract.districtBreakdown || []).length === 0 ? (
                     <p className="p-4 text-sm text-slate-500">No districts</p>
                   ) : (
@@ -1482,81 +1493,39 @@ export default function ReportsPage() {
                 </div>
               </Card>
 
-              {/* Column 2: Mandals */}
-              <Card className="flex flex-col overflow-hidden shrink-0">
-                <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Lead count by mandal</p>
-                </div>
-                <div className="flex-1 min-h-[320px] max-h-[70vh] overflow-y-auto">
-                  {(leadsAbstract.mandalBreakdown || []).length === 0 ? (
-                    <p className="p-4 text-sm text-slate-500">No mandals</p>
-                  ) : (
-                    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {(leadsAbstract.mandalBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
-                        <li
-                          key={row.id ?? `mandal-${idx}`}
-                          className={`flex items-center justify-between px-4 py-3 text-sm ${
-                            row.name === leadsAbstract.maxMandal ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                          }`}
-                        >
-                          <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
-                            {row.name}
-                            {row.name === leadsAbstract.maxMandal && (
-                              <span className="ml-1 text-amber-600 dark:text-amber-400">(Highest)</span>
-                            )}
-                          </span>
-                          <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </Card>
-
-              {/* Column 3: Schools */}
-              <Card className="flex flex-col overflow-hidden shrink-0">
-                <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Schools</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Lead count by school</p>
-                </div>
-                <div className="flex-1 min-h-[320px] max-h-[70vh] overflow-y-auto">
-                  {(leadsAbstract.schoolBreakdown || []).length === 0 ? (
-                    <p className="p-4 text-sm text-slate-500">No schools</p>
-                  ) : (
-                    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {(leadsAbstract.schoolBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
-                        <li key={row.id ?? `school-${idx}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                          <span className="text-slate-900 dark:text-slate-100 truncate pr-2">{row.name}</span>
-                          <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </Card>
-
-              {/* Column 4: Colleges */}
-              <Card className="flex flex-col overflow-hidden shrink-0">
-                <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Colleges</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Lead count by college</p>
-                </div>
-                <div className="flex-1 min-h-[320px] max-h-[70vh] overflow-y-auto">
-                  {(leadsAbstract.collegeBreakdown || []).length === 0 ? (
-                    <p className="p-4 text-sm text-slate-500">No colleges</p>
-                  ) : (
-                    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {(leadsAbstract.collegeBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
-                        <li key={row.id ?? `college-${idx}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                          <span className="text-slate-900 dark:text-slate-100 truncate pr-2">{row.name}</span>
-                          <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </Card>
+              {/* Mandals table – only when a district is selected */}
+              {filters.abstractDistrictId && (
+                <Card className="flex flex-col overflow-hidden shrink-0">
+                  <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Lead count by mandal for selected district</p>
+                  </div>
+                  <div className="flex-1 min-h-[200px] max-h-[50vh] overflow-y-auto">
+                    {(leadsAbstract.mandalBreakdown || []).length === 0 ? (
+                      <p className="p-4 text-sm text-slate-500">No mandals</p>
+                    ) : (
+                      <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {(leadsAbstract.mandalBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
+                          <li
+                            key={row.id ?? `mandal-${idx}`}
+                            className={`flex items-center justify-between px-4 py-3 text-sm ${
+                              row.name === leadsAbstract.maxMandal ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                            }`}
+                          >
+                            <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
+                              {row.name}
+                              {row.name === leadsAbstract.maxMandal && (
+                                <span className="ml-1 text-amber-600 dark:text-amber-400">(Highest)</span>
+                              )}
+                            </span>
+                            <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </Card>
+              )}
             </div>
           ) : (
             <Card className="p-8 text-center">
