@@ -466,7 +466,7 @@ export default function LeadDetailPage() {
                   </span>
                 )}
                 {lead.needsManualUpdate && (
-                  <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="District, mandal, or school/college may not match master data. Please update manually.">
+                  <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="District or mandal may not match master data. Please update manually.">
                     Needs update
                   </span>
                 )}
@@ -481,19 +481,40 @@ export default function LeadDetailPage() {
     return () => clearHeaderContent();
   }, [lead, user, isSuperAdmin, isManager, router, setHeaderContent, clearHeaderContent]);
 
-  // State/district/mandal dropdown options from database
+  // Normalize state/district for API lookup (e.g. "AP" -> "Andhra Pradesh", "Guntur District" -> "Guntur")
+  const normalizeStateForLookup = (s: string) => {
+    const t = (s || '').trim();
+    if (/^ap$/i.test(t)) return 'Andhra Pradesh';
+    return t || undefined;
+  };
+  const stripDistrictSuffix = (s: string) =>
+    (s || '').replace(/\s+(dist(rict)?|dt\.?)\s*$/i, '').trim() || s;
+
   const selectedState = formData.state ?? lead?.state ?? '';
   const selectedDistrict = formData.district ?? lead?.district ?? '';
+  const selectedDistrictForFetch = stripDistrictSuffix(selectedDistrict) || selectedDistrict;
   const { stateNames, districtNames, mandalNames } = useLocations({
-    stateName: selectedState || undefined,
-    districtName: selectedDistrict || undefined,
+    stateName: normalizeStateForLookup(selectedState) || undefined,
+    districtName: selectedDistrictForFetch || undefined,
   });
-  const availableDistricts = districtNames;
-  const availableMandals = mandalNames;
 
-  // Initialize form data
+  // Include lead's district/mandal in options when not in master list (ensures prefilling works for variations)
+  const currentDistrict = formData.district ?? lead?.district ?? '';
+  const currentMandal = formData.mandal ?? lead?.mandal ?? '';
+  const availableDistricts =
+    currentDistrict && !districtNames.includes(currentDistrict)
+      ? [currentDistrict, ...districtNames]
+      : districtNames;
+  const availableMandals =
+    currentMandal && !mandalNames.includes(currentMandal)
+      ? [currentMandal, ...mandalNames]
+      : mandalNames;
+
+  // Initialize form data (normalize state "AP" -> "Andhra Pradesh" for dropdown match)
   useEffect(() => {
     if (lead && !isEditing) {
+      const rawState = lead.state || 'Andhra Pradesh';
+      const stateForForm = /^ap$/i.test((rawState || '').trim()) ? 'Andhra Pradesh' : rawState;
       setFormData({
         name: lead.name,
         phone: lead.phone,
@@ -502,7 +523,7 @@ export default function LeadDetailPage() {
         village: lead.village,
         mandal: lead.mandal,
         district: lead.district,
-        state: lead.state || 'Andhra Pradesh',
+        state: stateForForm,
         applicationStatus: lead.applicationStatus,
         academicYear: lead.academicYear,
         studentGroup: lead.studentGroup,
@@ -954,7 +975,7 @@ export default function LeadDetailPage() {
     <div className="mx-auto w-full max-w-[98vw] space-y-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
       {lead?.needsManualUpdate && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-200" role="alert">
-          <strong>Details need manual update.</strong> This lead was bulk-uploaded and one or more of district, mandal, or school/college may not match master data. Please review and correct in the form below.
+          <strong>Details need manual update.</strong> This lead was bulk-uploaded and district or mandal may not match master data. Please review and correct in the form below.
         </div>
       )}
       {/* MAIN CONTENT - 2 Column Layout */}
@@ -1074,7 +1095,7 @@ export default function LeadDetailPage() {
                       onChange={(e) => setFormData({ ...formData, studentGroup: e.target.value })}
                     >
                       <option value="">—</option>
-                      {['10th', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'].map((g) => (
+                      {['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'].map((g) => (
                         <option key={g} value={g}>{g}</option>
                       ))}
                     </select>

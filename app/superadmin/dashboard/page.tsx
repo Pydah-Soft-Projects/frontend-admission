@@ -9,7 +9,7 @@ import { userAPI, leadAPI } from '@/lib/api';
 import { User, OverviewAnalytics } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { CardSkeleton } from '@/components/ui/Skeleton';
+import { SuperAdminDashboardSkeleton } from '@/components/ui/Skeleton';
 import { showToast } from '@/lib/toast';
 import { useTheme } from '@/app/providers';
 import {
@@ -321,11 +321,7 @@ export default function SuperAdminDashboard() {
 
   const isInitialLoad = !overviewData && isLoadingOverview;
   if (isTeamLoading || isLoadingUserAnalytics || isInitialLoad) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <CardSkeleton />
-      </div>
-    );
+    return <SuperAdminDashboardSkeleton />;
   }
 
   return (

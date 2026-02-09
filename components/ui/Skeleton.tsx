@@ -103,6 +103,162 @@ export const LeadCardSkeleton: React.FC<{ className?: string }> = ({ className }
   );
 };
 
+// Super Admin Dashboard skeleton — matches dashboard layout (header, 6 cards, scheduled, charts, user perf)
+export const SuperAdminDashboardSkeleton: React.FC<{ className?: string }> = ({ className }) => {
+  return (
+    <div className={cn('space-y-8', className)}>
+      {/* Page header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <Skeleton className="h-8 sm:h-9 w-56 sm:w-72 rounded" />
+          <Skeleton className="h-4 w-full max-w-md rounded" />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-20 rounded" />
+            <Skeleton className="h-9 w-20 rounded-lg" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-24 rounded" />
+            <Skeleton className="h-9 w-28 rounded-lg" />
+          </div>
+          <Skeleton className="h-9 w-28 rounded-lg" />
+          <Skeleton className="h-9 w-32 rounded-lg" />
+        </div>
+      </div>
+
+      {/* 6 summary cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div
+            key={i}
+            className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700/80 dark:bg-slate-900"
+          >
+            <div className="h-1 w-full bg-slate-200 dark:bg-slate-700" aria-hidden />
+            <div className="p-4 sm:p-5 space-y-2">
+              <Skeleton className="h-3 w-20 rounded" />
+              <Skeleton className="h-8 sm:h-9 w-16 rounded" />
+              <Skeleton className="h-3 w-24 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Today's scheduled calls card */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50 px-5 py-4 dark:border-slate-800 dark:bg-slate-800/30 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <Skeleton className="h-4 w-48 rounded" />
+            <Skeleton className="h-3 w-72 max-w-full rounded" />
+          </div>
+          <Skeleton className="h-9 w-28 rounded-lg shrink-0" />
+        </div>
+        <div className="p-4 sm:p-5">
+          <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center justify-between gap-3 px-2 py-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <Skeleton className="h-4 w-32 rounded" />
+                  <Skeleton className="h-3 w-48 rounded" />
+                </div>
+                <Skeleton className="h-8 w-14 rounded-lg shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Charts row 1: Leads vs Admissions (2 cols) + Joining Funnel (1 col) */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 lg:col-span-2">
+          <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800 space-y-1">
+            <Skeleton className="h-4 w-40 rounded" />
+            <Skeleton className="h-3 w-52 rounded" />
+          </div>
+          <div className="h-72 px-4 pb-4 flex items-center justify-center">
+            <Skeleton className="h-56 w-full rounded-lg" />
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800 space-y-1">
+            <Skeleton className="h-4 w-44 rounded" />
+            <Skeleton className="h-3 w-40 rounded" />
+          </div>
+          <div className="h-72 px-4 py-4 flex items-center justify-center">
+            <Skeleton className="h-48 w-48 rounded-full mx-auto" />
+          </div>
+          <div className="mx-4 mb-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+            <Skeleton className="h-3 w-full rounded" />
+          </div>
+        </div>
+      </div>
+
+      {/* Charts row 2: Status Change + Lead Pool */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800 space-y-1">
+            <Skeleton className="h-4 w-44 rounded" />
+            <Skeleton className="h-3 w-40 rounded" />
+          </div>
+          <div className="h-72 px-4 py-4">
+            <Skeleton className="h-full w-full rounded-lg" />
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
+            <div className="space-y-1">
+              <Skeleton className="h-4 w-40 rounded" />
+              <Skeleton className="h-3 w-36 rounded" />
+            </div>
+            <Skeleton className="h-6 w-20 rounded-full shrink-0" />
+          </div>
+          <div className="h-72 px-4 py-4 flex items-center justify-center">
+            <Skeleton className="h-52 w-52 rounded-full" />
+          </div>
+        </div>
+      </div>
+
+      {/* User Performance card */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50 px-5 py-4 dark:border-slate-800 dark:bg-slate-800/30 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <Skeleton className="h-4 w-52 rounded" />
+            <Skeleton className="h-3 w-64 rounded" />
+          </div>
+          <Skeleton className="h-9 w-32 rounded-lg shrink-0" />
+        </div>
+        <div className="p-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="space-y-1">
+                    <Skeleton className="h-4 w-28 rounded" />
+                    <Skeleton className="h-3 w-40 rounded" />
+                  </div>
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-3 w-24 rounded" />
+                    <Skeleton className="h-5 w-12 rounded" />
+                  </div>
+                  <Skeleton className="h-3 w-full rounded" />
+                  <Skeleton className="h-3 w-4/5 rounded" />
+                  <Skeleton className="h-3 w-3/4 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Lead detail page skeleton — matches profile card + content layout
 export const LeadDetailSkeleton: React.FC<{ className?: string }> = ({ className }) => {
   return (

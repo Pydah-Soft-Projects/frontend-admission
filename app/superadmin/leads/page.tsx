@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
 import { leadAPI, userAPI } from '@/lib/api';
+import { useLocations } from '@/lib/useLocations';
 import { User, Lead, LeadFilters, FilterOptions, DeleteJobStatusResponse } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -147,7 +148,13 @@ export default function LeadsPage() {
     };
   }, []);
 
-  // Load filter options
+  // State, district, mandal from locations master data (cascading)
+  const { stateNames, districtNames, mandalNames } = useLocations({
+    stateName: filters.state || undefined,
+    districtName: filters.district || undefined,
+  });
+
+  // Load filter options (quota, leadStatus, academicYear, etc. - location filters use useLocations)
   useEffect(() => {
     const loadFilterOptions = async () => {
       try {
@@ -324,10 +331,16 @@ export default function LeadsPage() {
       const newFilters: LeadFilters = { ...prev };
       if (value !== undefined && value !== null && value !== '') {
         newFilters[key] = value as LeadFilters[K];
+        if (key === 'state') {
+          delete newFilters.district;
+          delete newFilters.mandal;
+        } else if (key === 'district') {
+          delete newFilters.mandal;
+        }
       } else {
         delete newFilters[key];
       }
-      setPage(1); // Reset to first page on filter change
+      setPage(1);
       return newFilters;
     });
   };
@@ -874,17 +887,17 @@ export default function LeadsPage() {
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-4 pt-2 border-t border-gray-200 mt-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                      Mandal
+                      State
                     </label>
                     <select
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                      value={filters.mandal || ''}
-                      onChange={(e) => handleFilterChange('mandal', e.target.value)}
+                      value={filters.state || ''}
+                      onChange={(e) => handleFilterChange('state', e.target.value)}
                     >
-                      <option value="">All Mandals</option>
-                      {filterOptions?.mandals?.map((mandal) => (
-                        <option key={mandal} value={mandal}>
-                          {mandal}
+                      <option value="">All States</option>
+                      {stateNames.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
                         </option>
                       ))}
                     </select>
@@ -897,9 +910,10 @@ export default function LeadsPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
                       value={filters.district || ''}
                       onChange={(e) => handleFilterChange('district', e.target.value)}
+                      disabled={!filters.state}
                     >
-                      <option value="">All Districts</option>
-                      {filterOptions?.districts?.map((district) => (
+                      <option value="">{filters.state ? 'All Districts' : 'Select state first'}</option>
+                      {districtNames.map((district) => (
                         <option key={district} value={district}>
                           {district}
                         </option>
@@ -908,17 +922,18 @@ export default function LeadsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                      State
+                      Mandal
                     </label>
                     <select
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                      value={filters.state || ''}
-                      onChange={(e) => handleFilterChange('state', e.target.value)}
+                      value={filters.mandal || ''}
+                      onChange={(e) => handleFilterChange('mandal', e.target.value)}
+                      disabled={!filters.district}
                     >
-                      <option value="">All States</option>
-                      {filterOptions?.states?.map((state) => (
-                        <option key={state} value={state}>
-                          {state}
+                      <option value="">{filters.district ? 'All Mandals' : 'Select district first'}</option>
+                      {mandalNames.map((mandal) => (
+                        <option key={mandal} value={mandal}>
+                          {mandal}
                         </option>
                       ))}
                     </select>
@@ -1369,7 +1384,7 @@ export default function LeadsPage() {
                                     </span>
                                   )}
                                   {lead.needsManualUpdate && (
-                                    <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="District, mandal, or school/college may not match master data. Update manually.">
+                                    <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded" title="District or mandal may not match master data. Update manually.">
                                       Needs update
                                     </span>
                                   )}
