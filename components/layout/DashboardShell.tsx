@@ -320,8 +320,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
   const handleLogout = () => {
     if (typeof window !== 'undefined' && window.confirm('Are you sure you want to logout?')) {
-      auth.logout();
-      router.push('/auth/login');
+      auth.logout(); // async - calls backend for logout tracking, then redirects
     }
   };
 

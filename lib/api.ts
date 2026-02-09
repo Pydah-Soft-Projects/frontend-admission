@@ -104,6 +104,26 @@ export const userAPI = {
     const response = await api.get('/users');
     return response.data;
   },
+  /** Super Admin only: Get all users' time tracking ON/OFF logs */
+  getAllUserLoginLogs: async (params?: {
+    page?: number;
+    limit?: number;
+    userId?: string;
+    eventType?: 'tracking_enabled' | 'tracking_disabled';
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const p = new URLSearchParams();
+    if (params?.page) p.append('page', String(params.page));
+    if (params?.limit) p.append('limit', String(params.limit));
+    if (params?.userId) p.append('userId', params.userId);
+    if (params?.eventType) p.append('eventType', params.eventType);
+    if (params?.startDate) p.append('startDate', params.startDate);
+    if (params?.endDate) p.append('endDate', params.endDate);
+    const query = p.toString() ? `?${p.toString()}` : '';
+    const response = await api.get(`/users/all/login-logs${query}`);
+    return response.data?.data ?? response.data;
+  },
   getById: async (id: string) => {
     const response = await api.get(`/users/${id}`);
     return response.data;
@@ -119,6 +139,26 @@ export const userAPI = {
   delete: async (id: string) => {
     const response = await api.delete(`/users/${id}`);
     return response.data;
+  },
+};
+
+// User Settings API (current user only)
+export const userSettingsAPI = {
+  getMySettings: async () => {
+    const response = await api.get('/users/me/settings');
+    return response.data?.data ?? response.data;
+  },
+  updateMySettings: async (data: { timeTrackingEnabled: boolean }) => {
+    const response = await api.put('/users/me/settings', data);
+    return response.data?.data ?? response.data;
+  },
+  getMyLoginLogs: async (params?: { page?: number; limit?: number }) => {
+    const p = new URLSearchParams();
+    if (params?.page) p.append('page', String(params.page));
+    if (params?.limit) p.append('limit', String(params.limit));
+    const query = p.toString() ? `?${p.toString()}` : '';
+    const response = await api.get(`/users/me/login-logs${query}`);
+    return response.data?.data ?? response.data;
   },
 };
 

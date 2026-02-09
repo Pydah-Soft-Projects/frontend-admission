@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
-import { LeadCardSkeleton } from '@/components/ui/Skeleton';
+import { LeadCardSkeleton, Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
@@ -127,7 +127,6 @@ export default function UserLeadsPage() {
         const response = await leadAPI.getAll({
           ...filters,
           search: debouncedSearch,
-          enquiryNumber: debouncedSearch,
           page: 1,
           limit: 8,
         });
@@ -148,6 +147,8 @@ export default function UserLeadsPage() {
   }, [debouncedSearch, filters]);
 
   // Build query filters (single search for name, phone, email, enquiry number)
+  // Use only 'search' - backend search covers all fields. Sending both search + enquiryNumber
+  // causes AND logic and breaks name/phone/email searches (enquiry_number rarely matches).
   const queryFilters = useMemo(() => {
     const query: LeadFilters = {
       page,
@@ -156,7 +157,6 @@ export default function UserLeadsPage() {
     };
     if (debouncedSearch) {
       query.search = debouncedSearch;
-      query.enquiryNumber = debouncedSearch;
     }
     return query;
   }, [page, limit, filters, debouncedSearch]);
@@ -317,10 +317,17 @@ export default function UserLeadsPage() {
   // Prevent hydration mismatch
   if (!isMounted || !user) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-          <p className="text-gray-600 dark:text-slate-300">Loading...</p>
+      <div className="mx-auto w-full max-w-7xl space-y-4 px-0 pb-2">
+        <div className="space-y-2">
+          <div className="flex flex-nowrap items-center gap-2">
+            <Skeleton className="flex-1 h-9 min-w-0 rounded border-0" />
+            <Skeleton className="h-9 w-20 shrink-0 rounded-lg" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <LeadCardSkeleton key={i} />
+          ))}
         </div>
       </div>
     );

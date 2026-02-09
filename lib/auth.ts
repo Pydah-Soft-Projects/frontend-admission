@@ -1,4 +1,5 @@
 import Cookies from 'js-cookie';
+import { authAPI } from './api';
 import { User } from '@/types';
 
 const TOKEN_KEY = 'token';
@@ -40,18 +41,38 @@ export const auth = {
     return user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin';
   },
 
+  // Update stored user (e.g. after settings change)
+  updateUser: (updates: Partial<User>) => {
+    const user = auth.getUser();
+    if (!user) return;
+    const updated = { ...user, ...updates };
+    Cookies.set(USER_KEY, JSON.stringify(updated), { expires: 7 });
+  },
+
   // Clear authentication
   clearAuth: () => {
     Cookies.remove(TOKEN_KEY);
     Cookies.remove(USER_KEY);
   },
 
-  // Logout
-  logout: () => {
+  // Logout - calls backend to record logout, then clears auth and redirects
+  logout: async () => {
+    try {
+      await authAPI.logout();
+    } catch (_) {
+      /* ignore - proceed with local logout */
+    }
     auth.clearAuth();
     if (typeof window !== 'undefined') {
       window.location.href = '/auth/login';
     }
+  },
+
+  // Check if time tracking is enabled (default true when undefined)
+  isTimeTrackingEnabled: (): boolean => {
+    const user = auth.getUser();
+    if (!user) return true;
+    return user.timeTrackingEnabled !== false;
   },
 };
 

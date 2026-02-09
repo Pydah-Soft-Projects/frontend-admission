@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { reportAPI, userAPI, leadAPI, locationsAPI } from '@/lib/api';
@@ -25,7 +26,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 
-type TabType = 'calls' | 'conversions' | 'leads' | 'sources' | 'users' | 'abstract';
+type TabType = 'calls' | 'conversions' | 'users' | 'abstract' | 'activityLogs';
 
 type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom';
 
@@ -40,14 +41,24 @@ const CALL_REPORT_CARD_STYLES = [
 ];
 
 export default function ReportsPage() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('calls');
-  const [datePreset, setDatePreset] = useState<DatePreset>('last30days');
-  const [callReportExportPreviewOpen, setCallReportExportPreviewOpen] = useState(false);
 
-  // Unified filters for all tabs
+  useEffect(() => {
+    const tabFromUrl = searchParams?.get('tab');
+    if (tabFromUrl === 'activityLogs') {
+      setActiveTab('activityLogs');
+    }
+  }, [searchParams]);
+  const [datePreset, setDatePreset] = useState<DatePreset>('today');
+  const [callReportExportPreviewOpen, setCallReportExportPreviewOpen] = useState(false);
+  const [activityLogPage, setActivityLogPage] = useState(1);
+  const [activityLogEventType, setActivityLogEventType] = useState<'tracking_enabled' | 'tracking_disabled' | ''>('');
+
+  // Unified filters for all tabs (default to today)
   const [filters, setFilters] = useState({
-    startDate: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
-    endDate: format(new Date(), 'yyyy-MM-dd'),
+    startDate: format(startOfDay(new Date()), 'yyyy-MM-dd'),
+    endDate: format(endOfDay(new Date()), 'yyyy-MM-dd'),
     userId: '',
     course: '',
     status: '',
@@ -81,6 +92,14 @@ export default function ReportsPage() {
     if (!usersResponse) return [];
     return Array.isArray(usersResponse) ? usersResponse : [];
   }, [usersResponse]);
+
+  const activityLogUsers = useMemo(
+    () =>
+      users.filter(
+        (u: any) => u.roleName !== 'Super Admin' && u.roleName !== 'Sub Super Admin'
+      ),
+    [users]
+  );
 
   // Fetch filter options
   const { data: filterOptions } = useQuery({
@@ -132,6 +151,7 @@ export default function ReportsPage() {
       startDate: format(start, 'yyyy-MM-dd'),
       endDate: format(end, 'yyyy-MM-dd'),
     });
+    setActivityLogPage(1);
   };
 
   // Call Reports
@@ -159,38 +179,39 @@ export default function ReportsPage() {
     retry: 2,
   });
 
-  // Lead Analytics
-  const { data: leadAnalytics, isLoading: isLoadingLeads, error: leadAnalyticsError } = useQuery({
-    queryKey: ['leadAnalytics', filters],
-    queryFn: async () => {
-      const params: Record<string, string | number> = {
-        page: 1,
-        limit: 100000, // Very high limit to get all leads in the period for analytics
-      };
-      if (filters.startDate) params.startDate = filters.startDate;
-      if (filters.endDate) params.endDate = filters.endDate;
-      if (filters.userId) params.assignedTo = filters.userId;
-      if (filters.course) params.courseInterested = filters.course;
-      if (filters.status) params.leadStatus = filters.status;
-      if (filters.source) params.source = filters.source;
-      if (filters.district) params.district = filters.district;
-      if (filters.mandal) params.mandal = filters.mandal;
-      if (filters.state) params.state = filters.state;
-      
-      const response = await leadAPI.getAll(params);
-      return response;
-    },
-    enabled: activeTab === 'leads',
-    retry: 2,
+  // Activity Logs (time tracking ON/OFF)
+  const { data: activityLogsData, isLoading: isLoadingActivityLogs } = useQuery({
+    queryKey: [
+      'all-user-login-logs',
+      activityLogPage,
+      filters.userId || undefined,
+      activityLogEventType || undefined,
+      filters.startDate,
+      filters.endDate,
+    ],
+    queryFn: () =>
+      userAPI.getAllUserLoginLogs({
+        page: activityLogPage,
+        limit: 100,
+        ...(filters.userId ? { userId: filters.userId } : {}),
+        ...(activityLogEventType ? { eventType: activityLogEventType } : {}),
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      }),
+    enabled: activeTab === 'activityLogs',
+    staleTime: 30000,
   });
 
-  // Overview Analytics for charts
-  const { data: overviewAnalytics, isLoading: isLoadingOverview } = useQuery({
-    queryKey: ['overviewAnalytics', filters.startDate, filters.endDate],
-    queryFn: () => leadAPI.getOverviewAnalytics({ days: 30 }),
-    enabled: activeTab === 'leads' || activeTab === 'sources',
-    retry: 2,
-  });
+  const activityLogs = (activityLogsData?.logs ?? []) as Array<{
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    userRole: string;
+    eventType: 'tracking_enabled' | 'tracking_disabled';
+    createdAt: string;
+  }>;
+  const activityLogsPagination = activityLogsData?.pagination;
 
   // User Analytics (used for Call reports tab stats + User Analytics tab detail; same date range)
   const { data: userAnalytics, isLoading: isLoadingUserAnalytics } = useQuery({
@@ -232,18 +253,8 @@ export default function ReportsPage() {
   // Export handlers
   const handleExport = (type: 'excel' | 'csv', data: any[], filename: string) => {
     if (!data || data.length === 0) return;
-    
-    // For lead data, use existing export functions
-    if (activeTab === 'leads' && data[0]?.enquiryNumber !== undefined) {
-      if (type === 'excel') {
-        exportToExcel(data, filename);
-      } else {
-        exportToCSV(data, filename);
-      }
-      return;
-    }
 
-    // For other data types, create generic export
+    // Create generic export
     const exportData = data.map((item: any) => {
       const row: any = {};
       Object.keys(item).forEach((key) => {
@@ -332,39 +343,12 @@ export default function ReportsPage() {
     }));
   }, [conversionReports]);
 
-  const sourceChartData = useMemo(() => {
-    if (!leadAnalytics?.leads) return [];
-    const sourceCounts: Record<string, number> = {};
-    
-    leadAnalytics.leads.forEach((lead: any) => {
-      const source = lead.source || 'Unknown';
-      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
-    });
-
-    return Object.entries(sourceCounts)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
-  }, [leadAnalytics]);
-
-  const statusChartData = useMemo(() => {
-    if (!leadAnalytics?.leads) return [];
-    const statusCounts: Record<string, number> = {};
-    
-    leadAnalytics.leads.forEach((lead: any) => {
-      const status = lead.leadStatus || 'New';
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
-
-    return Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
-  }, [leadAnalytics]);
-
   return (
     <div className="space-y-6">
       {/* Tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
-          {(['calls', 'conversions', 'leads', 'sources', 'users', 'abstract'] as TabType[]).map((tab) => (
+          {(['calls', 'conversions', 'users', 'activityLogs', 'abstract'] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -376,9 +360,8 @@ export default function ReportsPage() {
             >
               {tab === 'calls' && 'Call Reports'}
               {tab === 'conversions' && 'Conversion Reports'}
-              {tab === 'leads' && 'Lead Analytics'}
-              {tab === 'sources' && 'Source Analytics'}
               {tab === 'users' && 'User Analytics'}
+              {tab === 'activityLogs' && 'Activity Logs'}
               {tab === 'abstract' && 'Leads Abstract'}
             </button>
           ))}
@@ -437,6 +420,7 @@ export default function ReportsPage() {
                 onChange={(e) => {
                   setFilters({ ...filters, startDate: e.target.value });
                   setDatePreset('custom');
+                  if (activeTab === 'activityLogs') setActivityLogPage(1);
                 }}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
               />
@@ -449,6 +433,7 @@ export default function ReportsPage() {
                 onChange={(e) => {
                   setFilters({ ...filters, endDate: e.target.value });
                   setDatePreset('custom');
+                  if (activeTab === 'activityLogs') setActivityLogPage(1);
                 }}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
               />
@@ -457,17 +442,39 @@ export default function ReportsPage() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User/Counsellor</label>
               <select
                 value={filters.userId}
-                onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
+                onChange={(e) => {
+                  setFilters({ ...filters, userId: e.target.value });
+                  if (activeTab === 'activityLogs') setActivityLogPage(1);
+                }}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
               >
                 <option value="">All Users</option>
-                {users.map((user: any) => (
+                {(activeTab === 'activityLogs' ? activityLogUsers : users).map((user: any) => (
                   <option key={user._id} value={user._id}>
-                    {user.name}
+                    {user.name} {activeTab === 'activityLogs' ? `(${user.roleName})` : ''}
                   </option>
                 ))}
               </select>
             </div>
+            {activeTab === 'activityLogs' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Event</label>
+                <select
+                  value={activityLogEventType}
+                  onChange={(e) => {
+                    setActivityLogEventType(e.target.value as 'tracking_enabled' | 'tracking_disabled' | '');
+                    setActivityLogPage(1);
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+                >
+                  <option value="">All (ON & OFF)</option>
+                  <option value="tracking_enabled">ON</option>
+                  <option value="tracking_disabled">OFF</option>
+                </select>
+              </div>
+            )}
+            {activeTab !== 'activityLogs' && (
+            <>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Source</label>
               <select
@@ -571,6 +578,8 @@ export default function ReportsPage() {
                 <option value="Diploma">Diploma</option>
               </select>
             </div>
+            </>
+            )}
           </div>
         </Card>
       )}
@@ -973,140 +982,6 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Lead Analytics Tab */}
-      {activeTab === 'leads' && (
-        <div className="space-y-6">
-          {isLoadingLeads ? (
-            <Skeleton className="h-64" />
-          ) : leadAnalyticsError ? (
-            <Card className="p-8 text-center">
-              <p className="text-red-600 dark:text-red-400">Failed to load lead analytics. Please try again.</p>
-            </Card>
-          ) : (
-            <>
-              {/* Summary */}
-              {leadAnalytics?.pagination && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <Card className="p-4">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Leads</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{leadAnalytics.pagination.total}</p>
-                  </Card>
-                  <Card className="p-4">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Showing</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{leadAnalytics.leads?.length || 0}</p>
-                  </Card>
-                </div>
-              )}
-
-              {/* Status Chart */}
-              {statusChartData.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Leads by Status</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={statusChartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(props: any) => {
-                          const { name, percent } = props;
-                          return `${name} ${((percent as number) * 100).toFixed(0)}%`;
-                        }}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {statusChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </Card>
-              )}
-
-              {/* Export */}
-              <div className="flex justify-end gap-2 mb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('excel', leadAnalytics?.leads || [], `lead-analytics-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!leadAnalytics?.leads?.length}
-                >
-                  Export Excel
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('csv', leadAnalytics?.leads || [], `lead-analytics-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!leadAnalytics?.leads?.length}
-                >
-                  Export CSV
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Source Analytics Tab */}
-      {activeTab === 'sources' && (
-        <div className="space-y-6">
-          {isLoadingLeads ? (
-            <Skeleton className="h-64" />
-          ) : (
-            <>
-              {/* Source Chart */}
-              {sourceChartData.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Leads by Source</h3>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={sourceChartData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={150} />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#3b82f6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Card>
-              )}
-
-              {/* Source Pie Chart */}
-              {sourceChartData.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Source Distribution</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={sourceChartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(props: any) => {
-                          const { name, percent } = props;
-                          return `${name} ${((percent as number) * 100).toFixed(0)}%`;
-                        }}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {sourceChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </Card>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
       {/* User Analytics Tab – per-user call activity (calls, SMS, status changes) like the counsellor Call activity page */}
       {activeTab === 'users' && (
         <div className="space-y-6">
@@ -1397,6 +1272,113 @@ export default function ReportsPage() {
             </Card>
           )}
         </div>
+      )}
+
+      {/* Activity Logs Tab – time tracking ON/OFF in tabular format */}
+      {activeTab === 'activityLogs' && (
+        <Card className="overflow-hidden p-0">
+          {isLoadingActivityLogs ? (
+            <div className="space-y-0 divide-y divide-slate-100 dark:divide-slate-800">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-4 px-4 py-3 sm:px-5">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                  <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+                  <Skeleton className="h-4 w-24 shrink-0" />
+                </div>
+              ))}
+            </div>
+          ) : activityLogs.length === 0 ? (
+            <div className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400 sm:px-5">
+              No activity logs found for the selected period. Users turn time tracking ON/OFF from their Settings page.
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[500px]">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-800/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
+                        User
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
+                        Role
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
+                        Event
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
+                        Date & Time
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {activityLogs.map((log) => {
+                      const label = log.eventType === 'tracking_enabled' ? 'ON' : 'OFF';
+                      const badgeClass =
+                        log.eventType === 'tracking_enabled'
+                          ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+                      return (
+                        <tr
+                          key={log.id}
+                          className="transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
+                        >
+                          <td className="px-4 py-3 sm:px-5">
+                            <div>
+                              <div className="font-medium text-slate-900 dark:text-slate-100">{log.userName}</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">{log.userEmail}</div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 sm:px-5">
+                            {log.userRole}
+                          </td>
+                          <td className="px-4 py-3 sm:px-5">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+                            >
+                              {label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400 sm:px-5">
+                            {format(new Date(log.createdAt), 'MMM d, yyyy · h:mm a')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {activityLogsPagination && activityLogsPagination.pages > 1 && (
+                <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Page {activityLogsPagination.page} of {activityLogsPagination.pages} · {activityLogsPagination.total} total
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setActivityLogPage((p) => Math.max(1, p - 1))}
+                      disabled={activityLogPage <= 1}
+                      className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() =>
+                        setActivityLogPage((p) => Math.min(activityLogsPagination.pages, p + 1))
+                      }
+                      disabled={activityLogPage >= activityLogsPagination.pages}
+                      className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
       )}
 
       {/* Leads Abstract Tab – State → Districts → Mandals filters; 4-column Kanban */}

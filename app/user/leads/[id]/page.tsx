@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
+import { LeadDetailSkeleton } from '@/components/ui/Skeleton';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useLocations } from '@/lib/useLocations';
 
@@ -948,14 +949,7 @@ export default function UserLeadDetailPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading lead details...</p>
-        </div>
-      </div>
-    );
+    return <LeadDetailSkeleton />;
   }
 
   if (isError || !lead) {
