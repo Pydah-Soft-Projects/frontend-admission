@@ -666,6 +666,8 @@ export interface LeadFilters {
   enquiryNumber?: string;
   page?: number;
   limit?: number;
+  /** When true, only leads with at least one comment or status update today */
+  touchedToday?: boolean;
 }
 
 export interface LeadPagination {

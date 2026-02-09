@@ -179,10 +179,16 @@ export const leadAPI = {
     search?: string;
     enquiryNumber?: string;
     scheduledOn?: string;
+    /** When true, only leads with at least one comment or status update today by current user */
+    touchedToday?: boolean;
   }) => {
     const params = new URLSearchParams();
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
+        if (key === 'touchedToday') {
+          if (value === true) params.append(key, 'true');
+          return;
+        }
         if (value !== undefined && value !== null && value !== '') {
           params.append(key, String(value));
         }

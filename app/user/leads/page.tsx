@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
 import { leadAPI } from '@/lib/api';
@@ -45,6 +46,7 @@ export default function UserLeadsPage() {
   const [comment, setComment] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'assigned' | 'touched'>('assigned');
   const [isMounted, setIsMounted] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<Lead[]>([]);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
@@ -158,8 +160,11 @@ export default function UserLeadsPage() {
     if (debouncedSearch) {
       query.search = debouncedSearch;
     }
+    if (activeTab === 'touched') {
+      query.touchedToday = true;
+    }
     return query;
-  }, [page, limit, filters, debouncedSearch]);
+  }, [page, limit, filters, debouncedSearch, activeTab]);
 
   // Fetch leads with React Query
   const {
@@ -182,6 +187,11 @@ export default function UserLeadsPage() {
   const leads = leadsData?.leads || [];
   const pagination = leadsData?.pagination || { page: 1, limit: 100, total: 0, pages: 1 };
   const needsUpdateCount = leadsData?.needsUpdateCount ?? 0;
+
+  // Reset page when tab changes
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab]);
 
   // Handle filter changes
   const handleFilterChange = <K extends keyof LeadFilters>(
@@ -453,10 +463,36 @@ export default function UserLeadsPage() {
         )}
       </div>
 
+      {/* Tabs: Assigned | Touched Today */}
+      <div className="flex w-full min-w-0 gap-1 rounded-lg border border-slate-200 bg-slate-50/50 p-1 dark:border-slate-700 dark:bg-slate-800/30 sm:w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab('assigned')}
+          className={`flex-1 rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:flex-initial sm:px-4 sm:text-sm ${
+            activeTab === 'assigned'
+              ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          Assigned
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('touched')}
+          className={`flex-1 rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:flex-initial sm:px-4 sm:text-sm ${
+            activeTab === 'touched'
+              ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          Touched Today
+        </button>
+      </div>
+
       {/* Pagination and count at top */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-gray-600 dark:text-slate-300">
+      <div className="space-y-3 min-w-0">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+          <p className="text-xs text-gray-600 dark:text-slate-300 sm:text-sm">
             Showing {leads.length} of {pagination.total} leads
             {pagination.total > 0 && (
               <span className="ml-2">
@@ -477,8 +513,8 @@ export default function UserLeadsPage() {
           )}
         </div>
         {pagination.pages > 1 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 border-b border-gray-200 pb-3 dark:border-slate-700">
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <div className="flex flex-col gap-3 border-b border-gray-200 pb-3 dark:border-slate-700 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-x-auto pb-1 sm:justify-start sm:overflow-visible sm:pb-0 sm:gap-2 [&::-webkit-scrollbar]:h-1">
               <Button
                 variant="outline"
                 onClick={() => setPage(1)}
@@ -554,7 +590,7 @@ export default function UserLeadsPage() {
                 </svg>
               </Button>
             </div>
-            <div className="text-sm text-gray-600 dark:text-slate-300 w-full sm:w-auto text-center sm:text-left">
+            <div className="text-xs text-gray-600 dark:text-slate-300 w-full shrink-0 text-center sm:w-auto sm:text-left sm:text-sm">
               Page {pagination.page} of {pagination.pages}
             </div>
           </div>
@@ -573,8 +609,10 @@ export default function UserLeadsPage() {
       ) : leads.length === 0 && !isLoading ? (
         <Card>
           <EmptyState
-            title="No leads assigned yet"
-            description="You don't have any leads assigned to you. Contact your administrator to get started."
+            title={activeTab === 'touched' ? 'No leads touched today' : 'No leads assigned yet'}
+            description={activeTab === 'touched'
+              ? 'Leads with a comment or status update today will appear here. Add a comment or change status on any lead to track it.'
+              : "You don't have any leads assigned to you. Contact your administrator to get started."}
             icon={
               <svg className="h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -604,9 +642,13 @@ export default function UserLeadsPage() {
                       {(lead.name || '?').charAt(0)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-semibold text-slate-900">
-                        {lead.name}
-                      </h3>
+                      <Link
+                        href={`/user/leads/${lead._id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="truncate text-sm font-semibold text-slate-900 underline underline-offset-2 decoration-orange-500 hover:text-orange-600 dark:text-slate-100 dark:decoration-orange-400 dark:hover:text-orange-400"
+                      >
+                        {lead.name || '—'}
+                      </Link>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusColor(lead.leadStatus || '')}`}>
                           {lead.leadStatus || 'New'}
@@ -635,22 +677,11 @@ export default function UserLeadsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="mt-3 flex gap-1.5 border-t border-slate-100 pt-2">
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      className="!min-h-0 h-8 flex-1 !rounded-lg !text-xs font-medium"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/user/leads/${lead._id}`);
-                      }}
-                    >
-                      View
-                    </Button>
+                  <div className="mt-3 hidden gap-1.5 border-t border-slate-100 pt-2 sm:flex">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="hidden sm:flex !min-h-0 h-8 flex-1 !rounded-lg border-slate-200 !text-xs font-medium"
+                      className="!min-h-0 h-8 flex-1 !rounded-lg border-slate-200 !text-xs font-medium"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleOpenCommentModal(lead, e);
