@@ -57,8 +57,8 @@ export default function UserLayout({ children }: { children: ReactNode }) {
   return (
     <DashboardShell
       navItems={navItems}
-      title="Admissions Team"
-      description="Stay on top of your leads, follow-ups, and conversions."
+      title=""
+      description=""
       role={currentUser?.designation || 'Counsellor'}
       userName={currentUser?.name || 'Team Member'}
       useMobileBottomNav

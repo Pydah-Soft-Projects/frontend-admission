@@ -53,12 +53,14 @@ export default function UserCallActivityPage() {
 
   useEffect(() => {
     setHeaderContent(
-      <div className="flex flex-col items-end gap-1 sm:gap-2 text-right">
-        <h1 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">My call activity</h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-          Calls, SMS, and status changes for the selected date range.
-        </p>
-        <Button size="sm" variant="outline" onClick={() => router.push('/user/dashboard')} className="!text-xs !py-1.5 !px-2.5 !min-h-8 sm:!min-h-0 sm:!text-sm sm:!py-2 sm:!px-3">
+      <div className="flex items-center justify-between gap-4 w-full">
+        <div>
+          <h1 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">My call activity</h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            Calls, SMS, and status changes for the selected date range.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => router.push('/user/dashboard')} className="shrink-0 !text-xs !py-1.5 !px-2.5 !min-h-8 sm:!min-h-0 sm:!text-sm sm:!py-2 sm:!px-3">
           Back to dashboard
         </Button>
       </div>
@@ -212,55 +214,55 @@ export default function UserCallActivityPage() {
                 {[...report.calls.dailyCallActivity]
                   .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
                   .map((day: { date: string; callCount: number; leads?: { leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }) => {
-                  const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
-                  return (
-                    <div key={day.date || dateLabel} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
-                      <div className="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 border-b border-slate-200 dark:border-slate-600">
-                        <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">{dateLabel}</span>
-                        <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {day.callCount} call{day.callCount !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                      {day.leads && day.leads.length > 0 && (
-                        <>
-                          <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
-                            {day.leads.map((lead: any, lidx: number) => (
-                              <div key={lidx} className="px-3 py-2 flex justify-between items-center gap-3 min-w-0">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{lead.leadName}</p>
-                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{lead.leadPhone || '—'}</p>
+                    const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
+                    return (
+                      <div key={day.date || dateLabel} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 border-b border-slate-200 dark:border-slate-600">
+                          <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">{dateLabel}</span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {day.callCount} call{day.callCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {day.leads && day.leads.length > 0 && (
+                          <>
+                            <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+                              {day.leads.map((lead: any, lidx: number) => (
+                                <div key={lidx} className="px-3 py-2 flex justify-between items-center gap-3 min-w-0">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{lead.leadName}</p>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{lead.leadPhone || '—'}</p>
+                                  </div>
+                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 shrink-0 tabular-nums">{lead.callCount}</span>
                                 </div>
-                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 shrink-0 tabular-nums">{lead.callCount}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="hidden sm:block w-full overflow-x-auto -mx-px">
-                            <table className="w-full min-w-0 text-sm border-collapse">
-                              <thead>
-                                <tr className="border-b border-slate-200 dark:border-slate-600">
-                                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-400">Lead</th>
-                                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Phone</th>
-                                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Enquiry #</th>
-                                  <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 dark:text-slate-400 w-16">Calls</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {day.leads.map((lead: any, lidx: number) => (
-                                  <tr key={lidx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                                    <td className="px-3 py-2 text-slate-900 dark:text-slate-100 max-w-[140px] sm:max-w-[200px] truncate" title={lead.leadName}>{lead.leadName}</td>
-                                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{lead.leadPhone || '—'}</td>
-                                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{lead.enquiryNumber || '—'}</td>
-                                    <td className="px-3 py-2 text-right text-slate-900 dark:text-slate-100 font-medium tabular-nums">{lead.callCount}</td>
+                              ))}
+                            </div>
+                            <div className="hidden sm:block w-full overflow-x-auto -mx-px">
+                              <table className="w-full min-w-0 text-sm border-collapse">
+                                <thead>
+                                  <tr className="border-b border-slate-200 dark:border-slate-600">
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-400">Lead</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Phone</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap">Enquiry #</th>
+                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 dark:text-slate-400 w-16">Calls</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                  {day.leads.map((lead: any, lidx: number) => (
+                                    <tr key={lidx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                                      <td className="px-3 py-2 text-slate-900 dark:text-slate-100 max-w-[140px] sm:max-w-[200px] truncate" title={lead.leadName}>{lead.leadName}</td>
+                                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{lead.leadPhone || '—'}</td>
+                                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{lead.enquiryNumber || '—'}</td>
+                                      <td className="px-3 py-2 text-right text-slate-900 dark:text-slate-100 font-medium tabular-nums">{lead.callCount}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}

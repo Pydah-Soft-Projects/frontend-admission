@@ -82,24 +82,9 @@ export default function UserDashboard() {
   }, [router]);
 
   useEffect(() => {
-    setHeaderContent(
-      <div className="flex flex-col items-end gap-2 text-right">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Welcome, {user?.designation || user?.name || 'Counsellor'}
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Snapshot of your assigned leads{user?.designation ? ` · ${user.designation}` : user?.name ? ` · ${user.name}` : ''}
-        </p>
-        <div className="flex gap-2">
-          <Button size="sm" variant="primary" onClick={handleGoToLeads}>
-            View My Leads
-          </Button>
-        </div>
-      </div>
-    );
-
+    clearHeaderContent();
     return () => clearHeaderContent();
-  }, [setHeaderContent, clearHeaderContent, handleGoToLeads, user?.name]);
+  }, [clearHeaderContent]);
 
   useEffect(() => {
     setMobileTopBar({ title: 'Dashboard', iconKey: 'dashboard' });
@@ -133,8 +118,10 @@ export default function UserDashboard() {
       return response.data || response;
     },
     enabled: !!user?._id,
+    placeholderData: (previousData) => previousData,
     staleTime: 60_000,
   });
+
 
   const todayStr = getTodayDateString();
   const { data: scheduledLeadsData } = useQuery({
@@ -250,13 +237,14 @@ export default function UserDashboard() {
     );
   }
 
-  if (isLoadingAnalytics) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <CardSkeleton />
-      </div>
-    );
-  }
+  //   if (isLoadingAnalytics) {
+  //     return (
+  //       <div className="flex min-h-[60vh] items-center justify-center">
+  //         <CardSkeleton />
+  //       </div>
+  //     );
+  //   }
+
 
   if (!analytics) {
     return (
@@ -278,53 +266,62 @@ export default function UserDashboard() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 sm:space-y-6 px-0 sm:px-2 pt-1 pb-2 sm:pt-0 sm:pb-0">
-      {/* Filters: full width, single row, compact, no background */}
-      <div className="w-full flex flex-nowrap items-center gap-2 sm:gap-4">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
-          <label className="text-[10px] sm:text-xs font-medium text-slate-500 whitespace-nowrap shrink-0">Year</label>
-          <select
-            value={dashboardAcademicYear === '' ? '' : dashboardAcademicYear}
-            onChange={(e) => setDashboardAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
-            className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] sm:text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 flex-1 min-w-0 sm:w-24 max-w-full"
-          >
-            <option value="">All</option>
-            {academicYearOptions.map((y: number) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
-          <label className="text-[10px] sm:text-xs font-medium text-slate-500 whitespace-nowrap shrink-0">Group</label>
-          <select
-            value={dashboardStudentGroup}
-            onChange={(e) => setDashboardStudentGroup(e.target.value)}
-            className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] sm:text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 flex-1 min-w-0 sm:w-28 max-w-full"
-          >
-            <option value="">All</option>
-            {studentGroupOptions.map((g: string) => (
-              <option key={g} value={g}>{g}</option>
-            ))}
-          </select>
+      <div className="lg:flex lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:mb-2">
+        <h1 className="hidden lg:block text-3xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+
+        {/* Filters: full width on mobile, single row, compact, no background */}
+        <div className="flex flex-nowrap items-center gap-3 sm:gap-4 lg:gap-6">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
+            <label className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 whitespace-nowrap shrink-0">Year</label>
+            <select
+              value={dashboardAcademicYear === '' ? '' : dashboardAcademicYear}
+              onChange={(e) => setDashboardAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
+              className="rounded border border-slate-200 bg-white px-2 py-1 lg:py-1.5 lg:px-3 text-[11px] sm:text-sm lg:text-base text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 flex-1 min-w-0 sm:w-24 lg:w-32 max-w-full shadow-sm"
+            >
+              <option value="">All</option>
+              {academicYearOptions.map((y: number) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
+            <label className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 whitespace-nowrap shrink-0">Group</label>
+            <select
+              value={dashboardStudentGroup}
+              onChange={(e) => setDashboardStudentGroup(e.target.value)}
+              className="rounded border border-slate-200 bg-white px-2 py-1 lg:py-1.5 lg:px-3 text-[11px] sm:text-sm lg:text-base text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 flex-1 min-w-0 sm:w-28 lg:w-36 max-w-full shadow-sm"
+            >
+              <option value="">All</option>
+              {studentGroupOptions.map((g: string) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Compact stats: Assigned, Interested, Admitted, Not Interested */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-        {summaryCards.map((card, index) => (
-          <div
-            key={card.label}
-            className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[index % STATS_CARD_STYLES.length]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}
-          >
-            <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">
-              {card.label}
-            </p>
-            <p className="mt-0.5 sm:mt-1 text-lg sm:text-xl font-bold text-white drop-shadow-sm">
-              {formatNumber(card.value)}
-            </p>
-            <p className="mt-0.5 text-[10px] sm:text-xs text-white/75">{card.helper}</p>
-          </div>
-        ))}
+        {isLoadingAnalytics && !analytics
+          ? Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-[72px] sm:h-[80px] animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+          ))
+          : summaryCards.map((card, index) => (
+            <div
+              key={card.label}
+              className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[index % STATS_CARD_STYLES.length]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}
+            >
+              <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">
+                {card.label}
+              </p>
+              <p className="mt-0.5 sm:mt-1 text-lg sm:text-xl font-bold text-white drop-shadow-sm">
+                {formatNumber(card.value)}
+              </p>
+              <p className="mt-0.5 text-[10px] sm:text-xs text-white/75">{card.helper}</p>
+            </div>
+          ))}
       </div>
+
 
       {/* Today's scheduled calls - full width, responsive grid */}
       <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -377,10 +374,12 @@ export default function UserDashboard() {
         )}
       </div>
 
-      {/* Status distribution: donut chart with filters (same row, no filter background) */}
-      {statusChartData.length > 0 && (
-        <Card className="p-4 sm:p-5 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700">
-          <div className="relative flex flex-col sm:flex-row items-center justify-center gap-4">
+      {/* Status distribution: donut chart */}
+      <Card className="p-4 sm:p-5 border-slate-200 shadow-sm bg-white dark:bg-slate-900 dark:border-slate-700 min-h-[260px] flex items-center justify-center">
+        {isLoadingAnalytics && !analytics ? (
+          <div className="h-52 sm:h-64 w-52 sm:w-64 animate-pulse rounded-full border-8 border-slate-100 dark:border-slate-800" />
+        ) : statusChartData.length > 0 ? (
+          <div className="relative flex flex-col sm:flex-row items-center justify-center gap-4 w-full">
             <div className="h-52 sm:h-64 w-full max-w-60 mx-auto shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -430,8 +429,13 @@ export default function UserDashboard() {
               </div>
             </div>
           </div>
-        </Card>
-      )}
+        ) : (
+          <div className="text-center py-10">
+            <p className="text-sm text-slate-500 dark:text-slate-400">No data for selected filters</p>
+          </div>
+        )}
+      </Card>
+
 
       <div className="grid gap-6 lg:grid-cols-2">
         {mandalChartData.length > 0 && (
@@ -538,7 +542,7 @@ export default function UserDashboard() {
           </Card>
         )}
       </div>
-    </div>
+    </div >
   );
 }
 

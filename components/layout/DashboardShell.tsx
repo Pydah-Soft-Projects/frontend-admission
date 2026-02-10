@@ -177,7 +177,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const [mobileTopBar, setMobileTopBarState] = useState<MobileTopBarOptions | null>(null);
 
   // Pages where we want minimal top spacing (compact header)
-  const isCompactPage = ['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/leads/assign'].includes(pathname);
+  const isCompactPage = ['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/leads/assign', '/user/dashboard', '/user/leads'].includes(pathname);
 
   // Pages where we want full width (no max-width constraint)
   const isFullWidthPage = ['/superadmin/leads/assign'].includes(pathname);
@@ -604,10 +604,9 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
               <header
                 className={cn(
-                  'flex-shrink-0 px-4 z-10',
+                  'flex-shrink-0 px-4 z-10 sm:px-6 lg:px-8',
                   isCompactPage ? 'pt-2 pb-0 lg:hidden' : 'pt-6 pb-4',
-                  'sm:px-6 lg:px-8',
-                  useMobileBottomNav && 'hidden lg:block'
+                  useMobileBottomNav ? (isCompactPage ? 'hidden' : 'hidden lg:block') : ''
                 )}
               >
                 <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-5 lg:px-6 transition-all duration-300">
@@ -622,8 +621,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       <MenuIcon className="h-5 w-5" />
                     </button>
 
-                    {/* Back Icon - Hide on Dashboard and Leads root pages */}
-                    {!['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports'].includes(pathname) && (
+                    {/* Back Icon - Hide on Dashboard and Leads root pages and User Lead Details */}
+                    {!['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports'].includes(pathname) && !pathname.startsWith('/user/leads/') && (
                       <button
                         type="button"
                         onClick={handleBack}
