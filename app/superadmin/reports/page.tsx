@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Skeleton, ReportDashboardSkeleton } from '@/components/ui/Skeleton';
+import { Skeleton, ReportDashboardSkeleton, LeadsAbstractSkeleton } from '@/components/ui/Skeleton';
 import {
   ResponsiveContainer,
   BarChart,
@@ -46,8 +46,8 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const tabFromUrl = searchParams?.get('tab');
-    if (tabFromUrl === 'activityLogs') {
-      setActiveTab('activityLogs');
+    if (tabFromUrl && ['calls', 'conversions', 'users', 'abstract', 'activityLogs'].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl as TabType);
     }
   }, [searchParams]);
   const [datePreset, setDatePreset] = useState<DatePreset>('today');
@@ -249,7 +249,7 @@ export default function ReportsPage() {
   });
 
   // Leads Abstract (district, mandal, school, college by academic year + student group + state/district filter)
-  const { data: leadsAbstract, isLoading: isLoadingAbstract } = useQuery({
+  const { data: leadsAbstract, isLoading: isLoadingAbstract, isFetching: isFetchingAbstract } = useQuery({
     queryKey: ['leadsAbstract', filters.academicYear, filters.studentGroup, filters.abstractStateId, filters.abstractDistrictId],
     queryFn: () => reportAPI.getLeadsAbstract({
       academicYear: filters.academicYear ?? 2025,
@@ -258,8 +258,9 @@ export default function ReportsPage() {
       districtId: filters.abstractDistrictId || undefined,
     }),
     enabled: activeTab === 'abstract',
-    staleTime: 60000, // Cache 1 min - abstract data is heavy, avoid refetch on tab switch
+    staleTime: 60000,
     retry: 2,
+    placeholderData: (previousData: any) => previousData,
   });
 
   // Export handlers
@@ -372,9 +373,14 @@ export default function ReportsPage() {
             {(['calls', 'conversions', 'users', 'activityLogs', 'abstract'] as TabType[]).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  setActiveTab(tab);
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('tab', tab);
+                  window.history.replaceState({}, '', url.toString());
+                }}
                 className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${activeTab === tab
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                   : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
                   }`}
               >
@@ -389,10 +395,79 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Date Presets + Academic Year (when Call Reports) */}
+      {/* Filters & Date Presets */}
       <div className="flex flex-wrap items-center gap-2">
+        {activeTab === 'calls' && (
+          <>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Academic Year</span>
+            <select
+              value={filters.academicYear}
+              onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? new Date().getFullYear() : Number(e.target.value) })}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 mr-2"
+            >
+              {[2023, 2024, 2025, 2026, 2027].map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <span className="mx-1 text-slate-400 dark:text-slate-500">|</span>
+          </>
+        )}
+
+        {activeTab === 'abstract' && (
+          <>
+            <select
+              value={filters.abstractStateId}
+              onChange={(e) => setFilters({ ...filters, abstractStateId: e.target.value, abstractDistrictId: '' })}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 max-w-[150px]"
+            >
+              <option value="">State: All</option>
+              {(abstractStates || []).map((s: { id: string; name: string }) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.abstractDistrictId}
+              onChange={(e) => setFilters({ ...filters, abstractDistrictId: e.target.value })}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 max-w-[150px]"
+              disabled={!filters.abstractStateId}
+            >
+              <option value="">District: All</option>
+              {(abstractDistricts || []).map((d: { id: string; name: string }) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.academicYear}
+              onChange={(e) => setFilters({ ...filters, academicYear: Number(e.target.value) })}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
+            >
+              <option value="">Year</option>
+              {[2023, 2024, 2025, 2026, 2027].map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.studentGroup}
+              onChange={(e) => setFilters({ ...filters, studentGroup: e.target.value })}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 max-w-[120px]"
+            >
+              <option value="">Group: All</option>
+              <option value="10th">10th</option>
+              <option value="Inter">Inter</option>
+              <option value="Inter-MPC">Inter-MPC</option>
+              <option value="Inter-BIPC">Inter-BIPC</option>
+              <option value="Degree">Degree</option>
+              <option value="Diploma">Diploma</option>
+            </select>
+            <span className="mx-1 text-slate-400 dark:text-slate-500">|</span>
+          </>
+        )}
+
         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Quick Filters:</span>
-        {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek', 'thisMonth', 'lastMonth', 'custom'] as DatePreset[]).map((preset) => (
+        {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek'] as DatePreset[]).map((preset) => (
           <button
             key={preset}
             onClick={() => handleDatePreset(preset)}
@@ -406,26 +481,8 @@ export default function ReportsPage() {
             {preset === 'last7days' && 'Last 7 Days'}
             {preset === 'last30days' && 'Last 30 Days'}
             {preset === 'thisWeek' && 'This Week'}
-            {preset === 'thisMonth' && 'This Month'}
-            {preset === 'lastMonth' && 'Last Month'}
-            {preset === 'custom' && 'Custom'}
           </button>
         ))}
-        {activeTab === 'calls' && (
-          <>
-            <span className="mx-1 text-slate-400 dark:text-slate-500">|</span>
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Academic Year</span>
-            <select
-              value={filters.academicYear}
-              onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? new Date().getFullYear() : Number(e.target.value) })}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
-            >
-              {[2023, 2024, 2025, 2026, 2027].map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </>
-        )}
       </div>
 
       {/* Filters – hidden on Call Reports and Leads Abstract (abstract has its own compact filters) */}
@@ -1402,86 +1459,38 @@ export default function ReportsPage() {
       {activeTab === 'abstract' && (
         <div className="space-y-4">
           {/* Filters: State → District; Academic Year; Student Group */}
-          <Card className="p-4">
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="min-w-[180px]">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">State</label>
-                <select
-                  value={filters.abstractStateId}
-                  onChange={(e) => setFilters({ ...filters, abstractStateId: e.target.value, abstractDistrictId: '' })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                >
-                  <option value="">All States</option>
-                  {(abstractStates || []).map((s: { id: string; name: string }) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-[180px]">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">District</label>
-                <select
-                  value={filters.abstractDistrictId}
-                  onChange={(e) => setFilters({ ...filters, abstractDistrictId: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  disabled={!filters.abstractStateId}
-                >
-                  <option value="">All Districts</option>
-                  {(abstractDistricts || []).map((d: { id: string; name: string }) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-[120px]">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Academic Year</label>
-                <select
-                  value={filters.academicYear}
-                  onChange={(e) => setFilters({ ...filters, academicYear: Number(e.target.value) })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                >
-                  {[2023, 2024, 2025, 2026, 2027].map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-[160px]">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Student Group</label>
-                <select
-                  value={filters.studentGroup}
-                  onChange={(e) => setFilters({ ...filters, studentGroup: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                >
-                  <option value="">All Groups</option>
-                  <option value="10th">10th</option>
-                  <option value="Inter">Inter</option>
-                  <option value="Inter-MPC">Inter-MPC</option>
-                  <option value="Inter-BIPC">Inter-BIPC</option>
-                  <option value="Degree">Degree</option>
-                  <option value="Diploma">Diploma</option>
-                </select>
-              </div>
-            </div>
-          </Card>
-
-          {isLoadingAbstract ? (
-            <Skeleton className="h-96" />
+          {isLoadingAbstract && !leadsAbstract ? (
+            <LeadsAbstractSkeleton />
           ) : leadsAbstract ? (
-            <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]">
               {/* Districts table – always shown first */}
-              <Card className="flex flex-col overflow-hidden shrink-0">
+              <Card className="flex flex-col overflow-hidden h-full">
                 <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
                   <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
                   <p className="text-xs text-slate-500 mt-0.5">Lead count by district · Select a district to see mandal-wise stats</p>
                 </div>
-                <div className="flex-1 min-h-[200px] max-h-[50vh] overflow-y-auto">
-                  {(leadsAbstract.districtBreakdown || []).length === 0 ? (
+                <div className="flex-1 overflow-y-auto">
+                  {isFetchingAbstract ? (
+                    <div className="p-4 space-y-4">
+                      {[...Array(20)].map((_, i) => (
+                        <div key={i} className="flex items-center">
+                          <Skeleton className="h-8 w-full rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (leadsAbstract.districtBreakdown || []).length === 0 ? (
                     <p className="p-4 text-sm text-slate-500">No districts</p>
                   ) : (
                     <ul className="divide-y divide-slate-200 dark:divide-slate-700">
                       {(leadsAbstract.districtBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
                         <li
                           key={row.id ?? `district-${idx}`}
-                          className={`flex items-center justify-between px-4 py-3 text-sm ${row.name === leadsAbstract.maxDistrict ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                            }`}
+                          onClick={() => {
+                            if (row.id) {
+                              setFilters({ ...filters, abstractDistrictId: row.id });
+                            }
+                          }}
+                          className={`flex items-center justify-between px-4 py-3 text-sm cursor-pointer transition-colors ${filters.abstractDistrictId === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
                         >
                           <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
                             {row.name}
@@ -1498,15 +1507,25 @@ export default function ReportsPage() {
               </Card>
 
               {/* Mandals table – only when a district is selected */}
-              {filters.abstractDistrictId && (
-                <Card className="flex flex-col overflow-hidden shrink-0">
+              {filters.abstractDistrictId ? (
+                <Card className="flex flex-col overflow-hidden h-full">
                   <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
                     <p className="text-xs text-slate-500 mt-0.5">Lead count by mandal for selected district</p>
                   </div>
-                  <div className="flex-1 min-h-[200px] max-h-[50vh] overflow-y-auto">
-                    {(leadsAbstract.mandalBreakdown || []).length === 0 ? (
-                      <p className="p-4 text-sm text-slate-500">No mandals</p>
+                  <div className="flex-1 overflow-y-auto">
+                    {isFetchingAbstract ? (
+                      <div className="p-4 space-y-4">
+                        {[...Array(20)].map((_, i) => (
+                          <div key={i} className="flex items-center">
+                            <Skeleton className="h-8 w-full rounded" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (leadsAbstract.mandalBreakdown || []).length === 0 ? (
+                      <div className="flex items-center justify-center h-full p-4 text-sm text-slate-500">
+                        No mandals found for this district
+                      </div>
                     ) : (
                       <ul className="divide-y divide-slate-200 dark:divide-slate-700">
                         {(leadsAbstract.mandalBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
@@ -1528,6 +1547,10 @@ export default function ReportsPage() {
                     )}
                   </div>
                 </Card>
+              ) : (
+                <div className="hidden md:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 h-full bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 p-8 text-center">
+                  <p>Select a district to view mandal breakdown</p>
+                </div>
               )}
             </div>
           ) : (

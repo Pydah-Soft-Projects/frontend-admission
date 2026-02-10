@@ -723,17 +723,17 @@ export default function AssignLeadsPage() {
         </div>
       ) : stats ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Card className="p-4">
-            <div className="text-sm font-medium text-gray-600 dark:text-slate-400">Total Leads</div>
-            <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.totalLeads.toLocaleString()}</div>
+          <Card className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none shadow-md">
+            <div className="text-sm font-medium text-blue-100">Total Leads</div>
+            <div className="mt-1 text-2xl font-bold text-white">{stats.totalLeads.toLocaleString()}</div>
           </Card>
-          <Card className="p-4">
-            <div className="text-sm font-medium text-gray-600 dark:text-slate-400">Assigned Leads</div>
-            <div className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">{stats.assignedCount.toLocaleString()}</div>
+          <Card className="p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-none shadow-md">
+            <div className="text-sm font-medium text-emerald-100">Assigned Leads</div>
+            <div className="mt-1 text-2xl font-bold text-white">{stats.assignedCount.toLocaleString()}</div>
           </Card>
-          <Card className="p-4">
-            <div className="text-sm font-medium text-gray-600 dark:text-slate-400">Unassigned Leads</div>
-            <div className="mt-1 text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.unassignedCount.toLocaleString()}</div>
+          <Card className="p-4 bg-gradient-to-br from-orange-500 to-amber-600 text-white border-none shadow-md">
+            <div className="text-sm font-medium text-orange-100">Unassigned Leads</div>
+            <div className="mt-1 text-2xl font-bold text-white">{stats.unassignedCount.toLocaleString()}</div>
           </Card>
         </div>
       ) : null}
@@ -750,7 +750,7 @@ export default function AssignLeadsPage() {
                 setSearchResults([]);
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'bulk'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
                 }`}
             >
@@ -765,7 +765,7 @@ export default function AssignLeadsPage() {
                 setCount(1000);
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'single'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
                 }`}
             >
@@ -780,7 +780,7 @@ export default function AssignLeadsPage() {
                 setSearchResults([]);
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'remove'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
                 }`}
             >
@@ -792,7 +792,7 @@ export default function AssignLeadsPage() {
                 setInstitutionName('');
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'institution'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
                 }`}
             >
@@ -801,7 +801,7 @@ export default function AssignLeadsPage() {
             <button
               onClick={() => setMode('stats')}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'stats'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
                 }`}
             >

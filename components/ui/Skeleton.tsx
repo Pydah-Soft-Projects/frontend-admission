@@ -108,22 +108,27 @@ export const SuperAdminDashboardSkeleton: React.FC<{ className?: string }> = ({ 
   return (
     <div className={cn('space-y-8', className)}>
       {/* Page header */}
+      {/* Page header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-2">
-          <Skeleton className="h-8 sm:h-9 w-56 sm:w-72 rounded" />
+          {/* Title and subtitle skeletons */}
+          <Skeleton className="h-8 sm:h-9 rounded" width="18rem" />
           <Skeleton className="h-4 w-full max-w-md rounded" />
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {/* Academic Year */}
           <div className="flex items-center gap-2">
-            <Skeleton className="h-4 w-20 rounded" />
-            <Skeleton className="h-9 w-20 rounded-lg" />
+            <Skeleton className="h-4 rounded" width="5rem" />
+            <Skeleton className="h-9 rounded-lg" width="5rem" />
           </div>
+          {/* Student Group */}
           <div className="flex items-center gap-2">
-            <Skeleton className="h-4 w-24 rounded" />
-            <Skeleton className="h-9 w-28 rounded-lg" />
+            <Skeleton className="h-4 rounded" width="6rem" />
+            <Skeleton className="h-9 rounded-lg" width="7rem" />
           </div>
-          <Skeleton className="h-9 w-28 rounded-lg" />
-          <Skeleton className="h-9 w-32 rounded-lg" />
+          {/* Actions */}
+          <Skeleton className="h-9 rounded-lg" width="7rem" />
+          <Skeleton className="h-9 rounded-lg" width="8rem" />
         </div>
       </div>
 
@@ -394,19 +399,52 @@ export const ReportDashboardSkeleton: React.FC<{ className?: string }> = ({ clas
             </div>
           </div>
           <div className="divide-y divide-slate-200 dark:divide-slate-700">
-            {[1, 2, 3, 4, 5].map((i) => (
+            {[...Array(20)].map((_, i) => (
               <div key={i} className="p-4 flex gap-4">
                 <Skeleton className="h-4 w-32 rounded" />
                 <Skeleton className="h-4 w-24 rounded" />
                 <Skeleton className="h-4 w-24 rounded" />
                 <Skeleton className="h-4 w-24 rounded" />
                 <Skeleton className="h-4 w-24 rounded" />
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-6 w-16 rounded-full" />
-                </div>
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+// Leads Abstract Skeleton — 2-column grid for Districts and Mandals
+export const LeadsAbstractSkeleton: React.FC<{ className?: string }> = ({ className }) => {
+  return (
+    <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]", className)}>
+      {/* Districts Column */}
+      <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 h-full">
+        <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 space-y-1">
+          <Skeleton className="h-5 w-24 rounded" />
+          <Skeleton className="h-3 w-48 rounded" />
+        </div>
+        <div className="flex-1 p-4 space-y-4 overflow-hidden">
+          {[...Array(20)].map((_, i) => (
+            <div key={i} className="flex items-center">
+              <Skeleton className="h-8 w-full rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Mandals Column */}
+      <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 h-full">
+        <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 space-y-1">
+          <Skeleton className="h-5 w-24 rounded" />
+          <Skeleton className="h-3 w-48 rounded" />
+        </div>
+        <div className="flex-1 p-4 space-y-4 overflow-hidden">
+          {[...Array(20)].map((_, i) => (
+            <div key={i} className="flex items-center">
+              <Skeleton className="h-8 w-full rounded" />
+            </div>
+          ))}
         </div>
       </div>
     </div>
