@@ -9,8 +9,9 @@ import { User, FilterOptions, Lead } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { showToast } from '@/lib/toast';
-import { useDashboardHeader } from '@/components/layout/DashboardShell';
+// import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
 type AssignmentMode = 'bulk' | 'single' | 'remove' | 'stats' | 'institution';
 
@@ -26,7 +27,7 @@ interface AssignmentStats {
 export default function AssignLeadsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  // const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [mode, setMode] = useState<AssignmentMode>('bulk');
@@ -319,7 +320,12 @@ export default function AssignLeadsPage() {
   const statsQueryMandal = mode === 'stats' ? statsMandal : mandal;
 
   // Fetch assignment statistics (scoped by academic year, student group, and location)
-  const { data: statsData, refetch: refetchStats } = useQuery<{ data: AssignmentStats }>({
+  const {
+    data: statsData,
+    refetch: refetchStats,
+    isLoading: isStatsLoading,
+    isFetching: isStatsFetching
+  } = useQuery<{ data: AssignmentStats }>({
     queryKey: ['assignmentStats', statsQueryMandal, statsQueryState, statsAcademicYear, statsStudentGroup],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
@@ -456,7 +462,7 @@ export default function AssignLeadsPage() {
       const assignedCount = response.data?.assigned || response.assigned || 0;
       const userName = response.data?.userName || 'user';
       showToast.success(`Successfully assigned ${assignedCount} lead${assignedCount !== 1 ? 's' : ''} to ${userName}`);
-      
+
       // Reset form
       if (mode === 'bulk') {
         setSelectedUserId('');
@@ -611,22 +617,22 @@ export default function AssignLeadsPage() {
     });
   };
 
-  const header = useMemo(
-    () => (
-      <div className="flex flex-col items-end gap-2 text-right">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Assign Leads</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Distribute leads to counsellors and sub-admins using bulk or single assignment.
-        </p>
-      </div>
-    ),
-    []
-  );
+  // const header = useMemo(
+  //   () => (
+  //     <div className="flex flex-col items-end gap-2 text-right">
+  //       <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Assign Leads</h1>
+  //       <p className="text-sm text-slate-500 dark:text-slate-400">
+  //         Distribute leads to counsellors and sub-admins using bulk or single assignment.
+  //       </p>
+  //     </div>
+  //   ),
+  //   []
+  // );
 
-  useEffect(() => {
-    setHeaderContent(header);
-    return () => clearHeaderContent();
-  }, [header, setHeaderContent, clearHeaderContent]);
+  // useEffect(() => {
+  //   setHeaderContent(header);
+  //   return () => clearHeaderContent();
+  // }, [header, setHeaderContent, clearHeaderContent]);
 
   if (!isReady || !currentUser) {
     return (
@@ -656,46 +662,66 @@ export default function AssignLeadsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
-      {/* Academic Year and Student Group filters at top – drive stats and bulk assignment context */}
-      <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-200">
-          Academic year:
-        </label>
-        <select
-          value={statsAcademicYear === '' ? '' : statsAcademicYear}
-          onChange={(e) => setStatsAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        >
-          <option value="">All years</option>
-          {filterAcademicYearOptions.map((y: number) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-200">
-          Student group:
-        </label>
-        <select
-          value={statsStudentGroup}
-          onChange={(e) => setStatsStudentGroup(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        >
-          <option value="">All</option>
-          {studentGroupOptions.map((g: string) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </select>
-        <span className="text-xs text-gray-500 dark:text-slate-400">
-          Stats below use these filters.
-        </span>
+    <div className="mx-auto w-full space-y-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Assign Leads</h1>
+          {/* <p className="text-sm text-slate-500 dark:text-slate-400">
+            Distribute leads to counsellors and sub-admins.
+          </p> */}
+        </div>
+
+        {/* Academic Year and Student Group filters – aligned to the right */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-slate-200 whitespace-nowrap">
+              Academic year:
+            </label>
+            <select
+              value={statsAcademicYear === '' ? '' : statsAcademicYear}
+              onChange={(e) => setStatsAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
+              <option value="">All years</option>
+              {filterAcademicYearOptions.map((y: number) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-slate-200 whitespace-nowrap">
+              Student group:
+            </label>
+            <select
+              value={statsStudentGroup}
+              onChange={(e) => setStatsStudentGroup(e.target.value)}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
+              <option value="">All</option>
+              {studentGroupOptions.map((g: string) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Statistics Cards */}
-      {stats && (
+      {/* Show skeleton if fetching or loading. Show real data if available. */}
+      {(isStatsLoading || isStatsFetching) ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="p-4 space-y-2">
+              <Skeleton variant="text" width="40%" height="20px" />
+              <Skeleton variant="text" width="60%" height="32px" />
+            </Card>
+          ))}
+        </div>
+      ) : stats ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Card className="p-4">
             <div className="text-sm font-medium text-gray-600 dark:text-slate-400">Total Leads</div>
@@ -710,7 +736,7 @@ export default function AssignLeadsPage() {
             <div className="mt-1 text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.unassignedCount.toLocaleString()}</div>
           </Card>
         </div>
-      )}
+      ) : null}
 
       {/* Mode Tabs */}
       <Card>
@@ -723,11 +749,10 @@ export default function AssignLeadsPage() {
                 setLeadSearch('');
                 setSearchResults([]);
               }}
-              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                mode === 'bulk'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-              }`}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'bulk'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
             >
               Bulk Assignment
             </button>
@@ -739,11 +764,10 @@ export default function AssignLeadsPage() {
                 setDistrict('');
                 setCount(1000);
               }}
-              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                mode === 'single'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-              }`}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'single'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
             >
               Single Assignment
             </button>
@@ -755,11 +779,10 @@ export default function AssignLeadsPage() {
                 setLeadSearch('');
                 setSearchResults([]);
               }}
-              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                mode === 'remove'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-              }`}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'remove'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
             >
               Remove Assignment
             </button>
@@ -768,21 +791,19 @@ export default function AssignLeadsPage() {
                 setMode('institution');
                 setInstitutionName('');
               }}
-              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                mode === 'institution'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-              }`}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'institution'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
             >
               School/College wise
             </button>
             <button
               onClick={() => setMode('stats')}
-              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                mode === 'stats'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-              }`}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'stats'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
             >
               Unassigned by Location
             </button>
@@ -1510,9 +1531,8 @@ export default function AssignLeadsPage() {
                           );
                           setShowSearchResults(false);
                         }}
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-slate-800 ${
-                          selectedLeadId === lead._id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                        }`}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-slate-800 ${selectedLeadId === lead._id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                          }`}
                       >
                         <div className="font-medium text-slate-900 dark:text-slate-100">{lead.name}</div>
                         <div className="text-xs text-gray-500 dark:text-slate-400">

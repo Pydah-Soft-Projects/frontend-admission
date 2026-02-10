@@ -176,6 +176,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const [headerContent, setHeaderContent] = useState<ReactNode>(null);
   const [mobileTopBar, setMobileTopBarState] = useState<MobileTopBarOptions | null>(null);
 
+  // Pages where we want minimal top spacing (compact header)
+  const isCompactPage = ['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/leads/assign'].includes(pathname);
+
+  // Pages where we want full width (no max-width constraint)
+  const isFullWidthPage = ['/superadmin/leads/assign'].includes(pathname);
+
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('sidebar-collapsed') : null;
     if (saved === 'true') {
@@ -458,18 +464,39 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       )}
     >
       {/* Theme color at top */}
-      <div className="flex flex-shrink-0 flex-col border-b border-orange-200/50 dark:border-orange-800/50 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 dark:from-orange-600 dark:via-amber-600 dark:to-orange-700">
-        <div className="flex items-center gap-3 px-4 py-5">
+      <div className="flex flex-shrink-0 flex-col border-b border-orange-200/50 dark:border-slate-800 bg-orange-50/50 dark:bg-slate-900">
+        <div className="flex items-center justify-between px-4 py-5">
           {!isCollapsed && (
-            <div className="space-y-0.5 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-orange-100">Admission</p>
-              <p className="text-lg font-bold text-white truncate">
-                Command Center
-              </p>
-            </div>
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-500/10 dark:text-orange-500 shadow-sm">
+                  <DashboardGridIcon className="w-6 h-6" />
+                </div>
+                <div className="space-y-0.5 min-w-0">
+                  {/* <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-500">Admission</p> */}
+                  <p className="text-lg font-bold text-slate-900 dark:text-white truncate">
+                    Lead Tracker
+                  </p>
+                </div>
+              </div>
+              {/* Notification Bell in Sidebar Header */}
+              <div className="flex-shrink-0">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl text-orange-600 dark:bg-orange-500/10 dark:text-orange-500">
+                  <NotificationBell />
+                </div>
+              </div>
+            </>
           )}
           {isCollapsed && variant === 'desktop' && (
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white text-xs font-bold">CC</div>
+            <div className="flex flex-col items-center gap-4 w-full">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-orange-600 dark:bg-orange-500/10 dark:text-orange-500">
+                <AcademicIcon className="w-6 h-6" />
+              </div>
+              {/* Notification Bell in Collapsed Sidebar */}
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-orange-600 dark:bg-orange-500/10 dark:text-orange-500">
+                <NotificationBell />
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -485,6 +512,16 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
       {/* Logout at bottom of sidebar */}
       <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 px-3 py-3">
+        {!isCollapsed && (
+          <div className="mb-2 px-3 flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100/50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs font-bold ring-1 ring-orange-200 dark:ring-orange-800">
+              {(userName || 'SA').slice(0, 2).toUpperCase()}
+            </div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-500/90 dark:text-orange-400">
+              {role ? `${role} Space` : 'Workspace'}
+            </p>
+          </div>
+        )}
         <button
           type="button"
           onClick={handleLogout}
@@ -567,11 +604,13 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
               <header
                 className={cn(
-                  'flex-shrink-0 px-4 pt-6 sm:px-6 lg:px-8 pb-4 z-10',
+                  'flex-shrink-0 px-4 z-10',
+                  isCompactPage ? 'pt-2 pb-0 lg:hidden' : 'pt-6 pb-4',
+                  'sm:px-6 lg:px-8',
                   useMobileBottomNav && 'hidden lg:block'
                 )}
               >
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-6 transition-all duration-300">
+                <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-5 lg:px-6 transition-all duration-300">
                   {/* Left Section: Mobile Menu, Back Icon, Header Content */}
                   <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
                     <button
@@ -583,16 +622,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       <MenuIcon className="h-5 w-5" />
                     </button>
 
-                    {/* Back Icon */}
-                    <button
-                      type="button"
-                      onClick={handleBack}
-                      className="group relative inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:border-orange-200 hover:text-orange-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 flex-shrink-0"
-                      aria-label="Go back"
-                      title="Back"
-                    >
-                      <BackIcon className="h-5 w-5" />
-                    </button>
+                    {/* Back Icon - Hide on Dashboard and Leads root pages */}
+                    {!['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports'].includes(pathname) && (
+                      <button
+                        type="button"
+                        onClick={handleBack}
+                        className="group relative inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:border-orange-200 hover:text-orange-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 flex-shrink-0"
+                        aria-label="Go back"
+                        title="Back"
+                      >
+                        <BackIcon className="h-5 w-5" />
+                      </button>
+                    )}
 
                     {/* Header Content (Lead Details, etc.) */}
                     <div className="flex flex-col gap-1 text-left min-w-0 flex-1 ml-1">
@@ -610,46 +651,28 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       )}
                     </div>
                   </div>
-
-                  {/* Right Section: Workspace Logo, Workspace Title, Notification Bell (logout moved to sidebar) */}
-                  <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
-                    {/* Workspace Logo */}
-                    <Link href="/" className="flex cursor-pointer items-center gap-3 group">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-xs font-bold text-white shadow-lg shadow-orange-500/20 transition-transform group-hover:scale-105 ring-2 ring-white dark:ring-slate-800">
-                        {(userName || 'SA').slice(0, 2)}
-                      </span>
-                    </Link>
-
-                    {/* Workspace Title */}
-                    <div className="hidden sm:block">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-500/90 dark:text-orange-400">
-                        {role ? `${role} Space` : 'Workspace'}
-                      </p>
-                    </div>
-
-                    <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block" />
-
-                    {/* Notification Bell */}
-                    <div className="flex-shrink-0">
-                      <NotificationBell />
-                    </div>
-                  </div>
                 </div>
               </header>
 
               <main
                 className={cn(
-                  'relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-8',
+                  'relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden',
+                  isCompactPage
+                    ? 'p-3 sm:px-6 sm:pt-2 lg:px-8 lg:pt-4'
+                    : 'p-3 sm:p-6 lg:p-8',
                   useMobileBottomNav && 'pb-20 pt-[calc(2.75rem+env(safe-area-inset-top))] lg:pt-6 lg:pb-8'
                 )}
               >
-                <div className="mx-auto max-w-[1600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className={cn(
+                  "mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500",
+                  isFullWidthPage ? "w-full" : "max-w-[1600px]"
+                )}>
                   {children}
                 </div>
               </main>
 
-{/* Mobile top bar (user / manager): three-column layout for centered title + safe area */}
-            {useMobileBottomNav && (
+              {/* Mobile top bar (user / manager): three-column layout for centered title + safe area */}
+              {useMobileBottomNav && (
                 <div
                   className={cn(
                     'lg:hidden fixed top-0 left-0 right-0 z-10',

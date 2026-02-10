@@ -218,24 +218,24 @@ export default function SuperAdminDashboard() {
         if (key !== 'total') collector.add(key);
       });
     });
-    
+
     // Priority statuses to always show
     const priorityStatuses = ['Admitted', 'Interested', 'Partial'];
     const allStatuses = Array.from(collector);
-    
+
     // Sort: priority statuses first, then others
     const sorted = [
       ...priorityStatuses.filter(s => allStatuses.includes(s)),
       ...allStatuses.filter(s => !priorityStatuses.includes(s))
     ];
-    
+
     // Return all statuses (or limit if needed, but show priority ones first)
     return sorted;
   }, [statusChanges]);
 
   const statusChangeData = useMemo(() => {
     return statusChanges.map((entry) => {
-      const row: Record<string, number | string | boolean> = { 
+      const row: Record<string, number | string | boolean> = {
         date: formatDateWithToday(entry.date),
         dateKey: entry.date,
         isToday: isToday(entry.date),
@@ -327,14 +327,11 @@ export default function SuperAdminDashboard() {
   return (
     <div className="space-y-8">
       {/* Page header: title + filters + actions */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row mt-0 sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 sm:text-3xl">
             Super Admin Dashboard
           </h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 sm:text-base">
-            Lead management, admissions, and team performance at a glance.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
@@ -391,15 +388,12 @@ export default function SuperAdminDashboard() {
                 className={`overflow-hidden border border-slate-200/80 dark:border-slate-700/80 ${style.bg} shadow-sm`}
               >
                 <div className={`h-1 w-full shrink-0 ${style.bar}`} aria-hidden />
-                <div className="p-4 sm:p-5">
-                  <p className={`text-xs font-semibold uppercase tracking-wider ${style.label}`}>
+                <div className="mt-2 text-center">
+                  <p className={`text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${style.label}`}>
                     {card.label}
                   </p>
-                  <p className={`mt-2 text-2xl font-bold sm:text-3xl ${style.value}`}>
+                  <p className={`mt-1 text-2xl font-bold sm:text-3xl ${style.value}`}>
                     {formatNumber(card.value)}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {card.helper}
                   </p>
                 </div>
               </Card>
@@ -409,48 +403,53 @@ export default function SuperAdminDashboard() {
       </div>
 
       {/* Today's scheduled calls */}
-      <Card className="overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50 px-5 py-4 dark:border-slate-800 dark:bg-slate-800/30 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-              Follow-up calls due today. Set from lead details after a call.
-            </p>
-          </div>
-          <Link href="/superadmin/leads" className="shrink-0">
-            <Button variant="outline" size="sm">View all leads</Button>
+      {/* Today's scheduled calls - Minimal Layout */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-m font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
+          <Link href="/superadmin/leads" className="text-xs font-medium text-orange-600 hover:text-orange-700 dark:text-orange-500">
+            View all
           </Link>
         </div>
-        <div className="p-4 sm:p-5">
-          {scheduledLeads.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">No calls scheduled for today.</p>
-          ) : (
-            <ul className="divide-y divide-slate-200 dark:divide-slate-700 max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
-              {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; phone?: string; nextScheduledCall?: string; assignedTo?: { name?: string } }) => (
-                <li key={lead._id} className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-slate-900 dark:text-slate-100 truncate">{lead.name ?? '—'}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {lead.enquiryNumber && <span>{lead.enquiryNumber}</span>}
-                      {lead.nextScheduledCall && (
-                        <span className="ml-2">
-                          {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-                      {typeof lead.assignedTo === 'object' && lead.assignedTo?.name && (
-                        <span className="ml-2">→ {lead.assignedTo.name}</span>
-                      )}
-                    </p>
+
+        {scheduledLeads.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            No calls scheduled for today.
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
+            {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; phone?: string; nextScheduledCall?: string; assignedTo?: { name?: string } }) => (
+              <li key={lead._id} className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-slate-900 dark:text-slate-100 text-sm truncate">{lead.name ?? '—'}</p>
+                    {lead.enquiryNumber && <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-sm">{lead.enquiryNumber}</span>}
                   </div>
-                  <Link href={`/superadmin/leads/${lead._id}`}>
-                    <Button variant="outline" size="sm">Open</Button>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Card>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {lead.nextScheduledCall && (
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+                        {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    {typeof lead.assignedTo === 'object' && lead.assignedTo?.name && (
+                      <span>• {lead.assignedTo.name}</span>
+                    )}
+                  </div>
+                </div>
+                <Link href={`/superadmin/leads/${lead._id}`}>
+                  <button className="flex items-center justify-center h-7 w-7 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <span className="sr-only">Open</span>
+                    <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* Charts row 1: Leads vs Admissions + Joining Funnel */}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -475,16 +474,16 @@ export default function SuperAdminDashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="6 4" stroke={chartGridColor} />
-                <XAxis 
-                  dataKey="date" 
-                  stroke={chartTextColor} 
+                <XAxis
+                  dataKey="date"
+                  stroke={chartTextColor}
                   tick={{ fill: chartTextColor }}
                   angle={-45}
                   textAnchor="end"
                   height={80}
                 />
                 <YAxis stroke={chartTextColor} tick={{ fill: chartTextColor }} allowDecimals={false} />
-                <Tooltip 
+                <Tooltip
                   contentStyle={tooltipStyle}
                   labelFormatter={(label, payload) => {
                     const data = payload?.[0]?.payload;
@@ -544,16 +543,16 @@ export default function SuperAdminDashboard() {
             <ResponsiveContainer>
               <LineChart data={statusChangeData}>
                 <CartesianGrid strokeDasharray="6 4" stroke={chartGridColor} />
-                <XAxis 
-                  dataKey="date" 
-                  stroke={chartTextColor} 
+                <XAxis
+                  dataKey="date"
+                  stroke={chartTextColor}
                   tick={{ fill: chartTextColor }}
                   angle={-45}
                   textAnchor="end"
                   height={80}
                 />
                 <YAxis stroke={chartTextColor} tick={{ fill: chartTextColor }} allowDecimals={false} />
-                <Tooltip 
+                <Tooltip
                   contentStyle={tooltipStyle}
                   labelFormatter={(label, payload) => {
                     const data = payload?.[0]?.payload;
@@ -632,15 +631,15 @@ export default function SuperAdminDashboard() {
                     );
                   })}
                 </Pie>
-                <Tooltip 
-                  contentStyle={tooltipStyle} 
+                <Tooltip
+                  contentStyle={tooltipStyle}
                   formatter={(value: number, name: string) => [
                     formatNumber(value),
                     name
                   ]}
                 />
-                <Legend 
-                  verticalAlign="bottom" 
+                <Legend
+                  verticalAlign="bottom"
                   height={36}
                   formatter={(value) => value}
                 />
@@ -664,67 +663,66 @@ export default function SuperAdminDashboard() {
           </Link>
         </div>
         <div className="p-5">
-        {userAnalytics.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {userAnalytics.map((user: any) => {
-              const statusEntries = Object.entries(user.statusBreakdown || {}).filter(([_, count]) => (count as number) > 0);
-              return (
-                <div
-                  key={user.userId}
-                  className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{user.name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{user.email}</p>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        user.isActive
+          {userAnalytics.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {userAnalytics.map((user: any) => {
+                const statusEntries = Object.entries(user.statusBreakdown || {}).filter(([_, count]) => (count as number) > 0);
+                return (
+                  <div
+                    key={user.userId}
+                    className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{user.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{user.email}</p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
                           : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
-                      }`}
-                    >
-                      {user.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Assigned</span>
-                      <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                        {formatNumber(user.totalAssigned || 0)}
+                          }`}
+                      >
+                        {user.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    {statusEntries.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-                          Status Breakdown
-                        </p>
-                        {statusEntries.map(([status, count]) => (
-                          <div key={status} className="flex items-center justify-between">
-                            <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{status}</span>
-                            <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-2">
-                              {formatNumber(count as number)}
-                            </span>
-                          </div>
-                        ))}
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Assigned</span>
+                        <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                          {formatNumber(user.totalAssigned || 0)}
+                        </span>
                       </div>
-                    )}
-                    {statusEntries.length === 0 && (
-                      <p className="text-xs text-slate-400 dark:text-slate-500 italic">No leads assigned</p>
-                    )}
+                      {statusEntries.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                            Status Breakdown
+                          </p>
+                          {statusEntries.map(([status, count]) => (
+                            <div key={status} className="flex items-center justify-between">
+                              <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{status}</span>
+                              <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-2">
+                                {formatNumber(count as number)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {statusEntries.length === 0 && (
+                        <p className="text-xs text-slate-400 dark:text-slate-500 italic">No leads assigned</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="py-8 text-center">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              No users found. Use User Management to onboard your counselling team.
-            </p>
-          </div>
-        )}
+                );
+              })}
+            </div>
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No users found. Use User Management to onboard your counselling team.
+              </p>
+            </div>
+          )}
         </div>
       </Card>
     </div>
