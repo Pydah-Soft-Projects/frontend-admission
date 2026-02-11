@@ -1681,11 +1681,37 @@ export default function UserLeadDetailPage() {
                               </div>
                             )}
 
-                            {/* Other types */}
+                            {/* Other types (Status Changes handled above, this handles general updates) */}
                             {!isCall && !isSms && (
-                              <p className="text-xs text-gray-700 dark:text-slate-200 whitespace-pre-wrap line-clamp-3">
-                                {item.description}
-                              </p>
+                              <div className="text-sm text-gray-700 dark:text-slate-200">
+                                {/* If it's a field update with details */}
+                                {item.type === 'field_update' && item.metadata?.fieldUpdate?.changes ? (
+                                  <div className="mt-2 bg-gray-50 dark:bg-slate-800 rounded-lg p-3 border border-gray-100 dark:border-slate-700 space-y-2">
+                                    {item.metadata.fieldUpdate.changes.map((change: any, i: number) => (
+                                      <div key={i} className="grid grid-cols-[120px,1fr] gap-4 text-xs sm:text-sm">
+                                        <div className="font-medium text-gray-500 dark:text-slate-400">
+                                          {change.field}
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-red-500 dark:text-red-400 line-through decoration-red-300 dark:decoration-red-700 decoration-2">
+                                            {change.old || '(empty)'}
+                                          </span>
+                                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                                          </svg>
+                                          <span className="text-green-600 dark:text-green-400 font-medium">
+                                            {change.new || '(empty)'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-700 dark:text-slate-200 whitespace-pre-wrap line-clamp-3">
+                                    {item.description}
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
