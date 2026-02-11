@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { userAPI } from '@/lib/api';
+import { userAPI, userSettingsAPI } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -45,7 +45,7 @@ export default function ProfilePage() {
     const updatePasswordMutation = useMutation({
         mutationFn: async (password: string) => {
             if (!currentUser) throw new Error('User not found');
-            return userAPI.update(currentUser._id, { password });
+            return userSettingsAPI.updateMyProfile({ password });
         },
         onSuccess: () => {
             showToast.success('Password updated successfully');

@@ -95,7 +95,7 @@ export default function UserSettingsPage() {
   const updatePasswordMutation = useMutation({
     mutationFn: async (password: string) => {
       if (!user) throw new Error('User not found');
-      return userAPI.update(user._id, { password });
+      return userSettingsAPI.updateMyProfile({ password });
     },
     onSuccess: () => {
       showToast.success('Password updated successfully');
