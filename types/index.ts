@@ -1,5 +1,5 @@
 // User Types
-export type RoleName = 'Super Admin' | 'Sub Super Admin' | 'User' | 'Student Counselor' | 'Data Entry User';
+export type RoleName = 'Super Admin' | 'Sub Super Admin' | 'Student Counselor' | 'Data Entry User';
 
 export type ModulePermissionLevel = 'read' | 'write';
 

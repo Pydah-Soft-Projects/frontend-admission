@@ -146,7 +146,7 @@ const UserManagementPage = () => {
     mutationFn: async (payload: Parameters<typeof userAPI.create>[0]) => userAPI.create(payload),
     onSuccess: () => {
       showToast.success('User created successfully');
-      setFormState({ name: '', email: '', password: '', roleName: 'User', designation: '' });
+      setFormState({ name: '', email: '', password: '', roleName: 'Student Counselor', designation: '' });
       setPermissionState(createEmptyPermissions());
       setShowCreateUser(false);
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -276,9 +276,7 @@ const UserManagementPage = () => {
       roleName: formState.roleName,
     } as Parameters<typeof userAPI.create>[0];
 
-    if (formState.roleName === 'User') {
-      // Designation logic removed
-    }
+    // Designation logic removed
     if (formState.roleName === 'Student Counselor' || formState.roleName === 'Data Entry User') {
       // Designation logic removed
     }
@@ -309,7 +307,7 @@ const UserManagementPage = () => {
     setFormState((prev) => ({
       ...prev,
       roleName: roleName as RoleName,
-      designation: roleName === 'User' ? prev.designation : '',
+      designation: '',
     }));
     if (roleName === 'Sub Super Admin') {
       setPermissionState(createEmptyPermissions());
@@ -321,7 +319,7 @@ const UserManagementPage = () => {
     setEditFormState((prev) => ({
       ...prev,
       roleName: roleName as RoleName,
-      designation: roleName === 'User' ? prev.designation : '',
+      designation: '',
     }));
     if (roleName === 'Sub Super Admin') {
       setEditPermissionState(createEmptyPermissions());
@@ -352,7 +350,7 @@ const UserManagementPage = () => {
     if (user.isManager) {
       return `${user.roleName} (Manager)`;
     }
-    if (user.roleName === 'User' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') {
+    if (user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') {
       return user.designation || user.roleName;
     }
     return user.roleName;
@@ -437,7 +435,7 @@ const UserManagementPage = () => {
                       manager = users.find((u) => u._id === user.managedBy);
                     }
                   }
-                  const canShowManagerActions = user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User';
+                  const canShowManagerActions = user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User';
                   return (
                     <tr
                       key={user._id}
@@ -640,7 +638,6 @@ const UserManagementPage = () => {
                       onChange={(event) => handleRoleChange(event.target.value)}
                       className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     >
-                      {/* <option value="User">User</option> - Removed */}
                       <option value="Student Counselor">Student Counselor</option>
                       <option value="Data Entry User">Data Entry User</option>
                       <option value="Sub Super Admin">Sub Super Admin</option>
@@ -731,7 +728,7 @@ const UserManagementPage = () => {
                   onClick={() => {
                     setShowCreateUser(false);
                     setPermissionState(createEmptyPermissions());
-                    setFormState({ name: '', email: '', password: '', roleName: 'User', designation: '' });
+                    setFormState({ name: '', email: '', password: '', roleName: 'Student Counselor', designation: '' });
                   }}
                   disabled={createMutation.isPending}
                 >
@@ -784,13 +781,7 @@ const UserManagementPage = () => {
                   payload.password = editFormState.password;
                 }
 
-                if (editFormState.roleName === 'User') {
-                  if (!editFormState.designation.trim()) {
-                    showToast.error('Please provide a designation for this user');
-                    return;
-                  }
-                  payload.designation = editFormState.designation.trim();
-                }
+                // Designation logic removed
                 if (editFormState.roleName === 'Student Counselor' || editFormState.roleName === 'Data Entry User') {
                   payload.designation = editFormState.designation?.trim() || undefined;
                 }
@@ -871,7 +862,6 @@ const UserManagementPage = () => {
                       onChange={(event) => handleEditRoleChange(event.target.value)}
                       className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     >
-                      <option value="User">User</option>
                       <option value="Student Counselor">Student Counselor</option>
                       <option value="Data Entry User">Data Entry User</option>
                       <option value="Sub Super Admin">Sub Super Admin</option>

@@ -580,7 +580,7 @@ export default function LeadsPage() {
           (u: User) =>
             u.isActive &&
             u.roleName !== 'Super Admin' &&
-            (u.roleName === 'User' || u.roleName === 'Student Counselor' || u.roleName === 'Data Entry User' || u.roleName === 'Sub Super Admin')
+            (u.roleName === 'Student Counselor' || u.roleName === 'Data Entry User' || u.roleName === 'Sub Super Admin')
         );
         setAssignableUsers(assignable);
       } catch (error) {
@@ -1718,13 +1718,7 @@ export default function LeadsPage() {
                         {user.name} ({user.email}) - Sub Admin
                       </option>
                     ))}
-                  {assignableUsers
-                    .filter((u) => u.roleName === 'User')
-                    .map((user) => (
-                      <option key={user._id} value={user._id}>
-                        {user.name} ({user.email})
-                      </option>
-                    ))}
+
                   {assignableUsers
                     .filter((u) => u.roleName === 'Student Counselor')
                     .map((user) => (
