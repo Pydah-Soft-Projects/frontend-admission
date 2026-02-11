@@ -42,14 +42,14 @@ export default function LeadDetailPage() {
   const leadId = params?.id as string;
   const [user, setUser] = useState<User | null>(null);
   const [isMounted, setIsMounted] = useState(false);
-  
+
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<LeadUpdatePayload>({});
-  
+
   // Expandable details section
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
-  
+
   // Action bar modals
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -57,13 +57,13 @@ export default function LeadDetailPage() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [statusComment, setStatusComment] = useState('');
-  
+
   // Comment modal state
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [showScheduleCallModal, setShowScheduleCallModal] = useState(false);
   const [scheduleCallDateTime, setScheduleCallDateTime] = useState('');
-  
+
   // Communication modals
   const [showCallNumberModal, setShowCallNumberModal] = useState(false);
   const [selectedCallNumber, setSelectedCallNumber] = useState('');
@@ -80,7 +80,7 @@ export default function LeadDetailPage() {
     selectedTemplates: {} as Record<string, { template: MessageTemplate; variables: Record<string, string> }>,
     languageFilter: 'all' as string,
   });
-  
+
   // Status options (lead pipeline stage – only these allowed for status update)
   const statusOptions = [
     'Interested',
@@ -91,11 +91,11 @@ export default function LeadDetailPage() {
     'Other cet applied',
     'Admitted only',
   ];
-  
+
   const isSuperAdmin = user?.roleName === 'Super Admin' || user?.roleName === 'Sub Super Admin';
   const canDeleteLead = user?.roleName === 'Super Admin';
   const isManager = user?.isManager === true;
-  
+
   // Get the appropriate leads page URL based on user role
   const getLeadsPageUrl = () => {
     if (isSuperAdmin) return '/superadmin/leads';
@@ -164,9 +164,9 @@ export default function LeadDetailPage() {
     enabled: !!leadId && !!user,
   });
 
-  const communications: CommunicationRecord[] = 
-    communicationHistoryResponse?.data?.items || 
-    communicationHistoryResponse?.items || 
+  const communications: CommunicationRecord[] =
+    communicationHistoryResponse?.data?.items ||
+    communicationHistoryResponse?.items ||
     [];
 
   // Fetch communication stats
@@ -180,7 +180,7 @@ export default function LeadDetailPage() {
     staleTime: 30000,
   });
 
-  const communicationStats: CommunicationStatsEntry[] = 
+  const communicationStats: CommunicationStatsEntry[] =
     communicationStatsResponse?.stats || communicationStatsResponse || [];
 
   // Fetch users for assignment
@@ -205,7 +205,7 @@ export default function LeadDetailPage() {
 
     // Group calls by contact number and sort chronologically
     const callsByNumber = new Map<string, CommunicationRecord[]>();
-    
+
     communications
       .filter((comm) => comm.type === 'call')
       .forEach((comm) => {
@@ -218,19 +218,19 @@ export default function LeadDetailPage() {
 
     // Sort each group chronologically and assign sequence numbers
     const allCalls: Array<CommunicationRecord & { sequenceNumber: number; ordinal: string }> = [];
-    
+
     callsByNumber.forEach((calls, contactNumber) => {
-      const sortedCalls = [...calls].sort((a, b) => 
+      const sortedCalls = [...calls].sort((a, b) =>
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
 
       sortedCalls.forEach((call, index) => {
         const sequenceNumber = index + 1;
-        const ordinal = sequenceNumber === 1 ? '1st' : 
-                       sequenceNumber === 2 ? '2nd' : 
-                       sequenceNumber === 3 ? '3rd' : 
-                       `${sequenceNumber}th`;
-        
+        const ordinal = sequenceNumber === 1 ? '1st' :
+          sequenceNumber === 2 ? '2nd' :
+            sequenceNumber === 3 ? '3rd' :
+              `${sequenceNumber}th`;
+
         allCalls.push({
           ...call,
           sequenceNumber,
@@ -240,7 +240,7 @@ export default function LeadDetailPage() {
     });
 
     // Sort all calls by date (newest first for display)
-    return allCalls.sort((a, b) => 
+    return allCalls.sort((a, b) =>
       new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()
     );
   }, [communications]);
@@ -272,14 +272,14 @@ export default function LeadDetailPage() {
     }
 
     // 2. Assignment - check activity logs first, then fallback to lead.assignedAt
-    const assignmentLog = activityLogs.find((log) => 
-      log.type === 'status_change' && 
+    const assignmentLog = activityLogs.find((log) =>
+      log.type === 'status_change' &&
       log.metadata?.assignment
     );
-    
+
     if (assignmentLog) {
-      const assignedUserName = assignmentLog.metadata?.assignment?.assignedTo 
-        ? 'Counsellor' 
+      const assignedUserName = assignmentLog.metadata?.assignment?.assignedTo
+        ? 'Counsellor'
         : 'Unknown';
       items.push({
         id: `assigned-${assignmentLog._id}`,
@@ -291,8 +291,8 @@ export default function LeadDetailPage() {
         metadata: assignmentLog.metadata,
       });
     } else if (lead?.assignedAt && lead?.assignedTo) {
-      const assignedUserName = typeof lead.assignedTo === 'object' 
-        ? lead.assignedTo.name 
+      const assignedUserName = typeof lead.assignedTo === 'object'
+        ? lead.assignedTo.name
         : 'Unknown';
       items.push({
         id: `assigned-${lead._id}`,
@@ -307,7 +307,7 @@ export default function LeadDetailPage() {
     // 3. Calls and SMS from communication records with sequence numbers
     // Group communications by contact number and type, then sort chronologically
     const communicationsByNumber = new Map<string, { calls: typeof communications; sms: typeof communications }>();
-    
+
     communications.forEach((comm) => {
       const number = comm.contactNumber || 'Unknown';
       if (!communicationsByNumber.has(number)) {
@@ -324,23 +324,23 @@ export default function LeadDetailPage() {
     // Sort each group chronologically and assign sequence numbers
     communicationsByNumber.forEach((group, contactNumber) => {
       // Sort calls by date (oldest first for sequence numbering)
-      const sortedCalls = [...group.calls].sort((a, b) => 
+      const sortedCalls = [...group.calls].sort((a, b) =>
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
-      
+
       // Sort SMS by date (oldest first for sequence numbering)
-      const sortedSms = [...group.sms].sort((a, b) => 
+      const sortedSms = [...group.sms].sort((a, b) =>
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
 
       // Add calls with sequence numbers
       sortedCalls.forEach((comm, index) => {
         const sequenceNumber = index + 1;
-        const ordinal = sequenceNumber === 1 ? '1st' : 
-                       sequenceNumber === 2 ? '2nd' : 
-                       sequenceNumber === 3 ? '3rd' : 
-                       `${sequenceNumber}th`;
-        
+        const ordinal = sequenceNumber === 1 ? '1st' :
+          sequenceNumber === 2 ? '2nd' :
+            sequenceNumber === 3 ? '3rd' :
+              `${sequenceNumber}th`;
+
         items.push({
           id: `call-${comm._id}`,
           type: 'call',
@@ -360,16 +360,16 @@ export default function LeadDetailPage() {
       // Add SMS with sequence numbers
       sortedSms.forEach((comm, index) => {
         const sequenceNumber = index + 1;
-        const ordinal = sequenceNumber === 1 ? '1st' : 
-                       sequenceNumber === 2 ? '2nd' : 
-                       sequenceNumber === 3 ? '3rd' : 
-                       `${sequenceNumber}th`;
-        
-        const messageText = comm.template?.renderedContent || 
-                           comm.template?.originalContent || 
-                           'Message sent';
+        const ordinal = sequenceNumber === 1 ? '1st' :
+          sequenceNumber === 2 ? '2nd' :
+            sequenceNumber === 3 ? '3rd' :
+              `${sequenceNumber}th`;
+
+        const messageText = comm.template?.renderedContent ||
+          comm.template?.originalContent ||
+          'Message sent';
         const templateName = comm.template?.name || 'Unknown Template';
-        
+
         items.push({
           id: `sms-${comm._id}`,
           type: 'sms',
@@ -396,7 +396,7 @@ export default function LeadDetailPage() {
       if (log.type === 'status_change' && log.metadata?.assignment) {
         return; // Already added as assignment above
       }
-      
+
       if (log.type === 'status_change') {
         items.push({
           id: `status-${log._id}`,
@@ -434,7 +434,7 @@ export default function LeadDetailPage() {
     });
 
     // Sort by date (newest first)
-    return items.sort((a, b) => 
+    return items.sort((a, b) =>
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   }, [lead, activityLogs, communications]);
@@ -721,7 +721,7 @@ export default function LeadDetailPage() {
     const keys = template.variables && template.variables.length > 0
       ? template.variables.map((v, i) => v.key || `var${i + 1}`)
       : Array.from({ length: template.variableCount }).map((_, i) => `var${i + 1}`);
-    
+
     let pointer = 0;
     return template.content.replace(/\{#var#\}/gi, () => {
       const key = keys[pointer] || `var${pointer + 1}`;
@@ -741,9 +741,9 @@ export default function LeadDetailPage() {
 
   // SMS mutation - send templates to multiple numbers
   const smsMutation = useMutation({
-    mutationFn: async (data: { 
-      contactNumbers: string[]; 
-      templates: Array<{ templateId: string; variables: Array<{ key: string; value: string }> }> 
+    mutationFn: async (data: {
+      contactNumbers: string[];
+      templates: Array<{ templateId: string; variables: Array<{ key: string; value: string }> }>
     }) => {
       return await communicationAPI.sendSms(leadId, data);
     },
@@ -815,41 +815,41 @@ export default function LeadDetailPage() {
 
   const getCallOutcomeColor = (outcome?: string) => {
     if (!outcome) return 'bg-gray-100 text-gray-700';
-    
+
     const outcomeLower = outcome.toLowerCase().trim();
-    
+
     // Positive outcomes - Green
-    if (outcomeLower.includes('answered') || 
-        outcomeLower.includes('interested') ||
-        outcomeLower.includes('yes') ||
-        outcomeLower.includes('confirmed') ||
-        outcomeLower.includes('agreed') ||
-        outcomeLower.includes('accepted')) {
+    if (outcomeLower.includes('answered') ||
+      outcomeLower.includes('interested') ||
+      outcomeLower.includes('yes') ||
+      outcomeLower.includes('confirmed') ||
+      outcomeLower.includes('agreed') ||
+      outcomeLower.includes('accepted')) {
       return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
     }
-    
+
     // Negative outcomes - Red
     if (outcomeLower.includes('not interested') ||
-        outcomeLower.includes('rejected') ||
-        outcomeLower.includes('declined') ||
-        outcomeLower.includes('wrong number') ||
-        outcomeLower.includes('wrong data') ||
-        outcomeLower.includes('switch off') ||
-        (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
+      outcomeLower.includes('rejected') ||
+      outcomeLower.includes('declined') ||
+      outcomeLower.includes('wrong number') ||
+      outcomeLower.includes('wrong data') ||
+      outcomeLower.includes('switch off') ||
+      (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
       return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
     }
-    
+
     // Neutral/Warning outcomes - Yellow/Orange (call back, callback_requested)
     if (outcomeLower.includes('busy') ||
-        outcomeLower.includes('not answered') ||
-        outcomeLower.includes('no answer') ||
-        outcomeLower.includes('missed') ||
-        outcomeLower.includes('call back') ||
-        outcomeLower.includes('callback') ||
-        outcomeLower.includes('follow up')) {
+      outcomeLower.includes('not answered') ||
+      outcomeLower.includes('no answer') ||
+      outcomeLower.includes('missed') ||
+      outcomeLower.includes('call back') ||
+      outcomeLower.includes('callback') ||
+      outcomeLower.includes('follow up')) {
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
     }
-    
+
     // Default - Gray
     return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
   };
@@ -864,16 +864,16 @@ export default function LeadDetailPage() {
         cardBorder: 'border-gray-400',
       };
     }
-    
+
     const outcomeLower = outcome.toLowerCase().trim();
-    
+
     // Positive outcomes - Green
-    if (outcomeLower.includes('answered') || 
-        outcomeLower.includes('interested') ||
-        outcomeLower.includes('yes') ||
-        outcomeLower.includes('confirmed') ||
-        outcomeLower.includes('agreed') ||
-        outcomeLower.includes('accepted')) {
+    if (outcomeLower.includes('answered') ||
+      outcomeLower.includes('interested') ||
+      outcomeLower.includes('yes') ||
+      outcomeLower.includes('confirmed') ||
+      outcomeLower.includes('agreed') ||
+      outcomeLower.includes('accepted')) {
       return {
         iconBg: 'bg-gradient-to-br from-green-500 to-green-600',
         border: 'border-green-400',
@@ -882,15 +882,15 @@ export default function LeadDetailPage() {
         cardBorder: 'border-green-400',
       };
     }
-    
+
     // Negative outcomes - Red
     if (outcomeLower.includes('not interested') ||
-        outcomeLower.includes('rejected') ||
-        outcomeLower.includes('declined') ||
-        outcomeLower.includes('wrong number') ||
-        outcomeLower.includes('wrong data') ||
-        outcomeLower.includes('switch off') ||
-        (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
+      outcomeLower.includes('rejected') ||
+      outcomeLower.includes('declined') ||
+      outcomeLower.includes('wrong number') ||
+      outcomeLower.includes('wrong data') ||
+      outcomeLower.includes('switch off') ||
+      (outcomeLower.includes('no') && !outcomeLower.includes('answer'))) {
       return {
         iconBg: 'bg-gradient-to-br from-red-500 to-red-600',
         border: 'border-red-400',
@@ -899,15 +899,15 @@ export default function LeadDetailPage() {
         cardBorder: 'border-red-400',
       };
     }
-    
+
     // Neutral/Warning outcomes - Yellow/Orange (call back, callback_requested)
     if (outcomeLower.includes('busy') ||
-        outcomeLower.includes('not answered') ||
-        outcomeLower.includes('no answer') ||
-        outcomeLower.includes('missed') ||
-        outcomeLower.includes('call back') ||
-        outcomeLower.includes('callback') ||
-        outcomeLower.includes('follow up')) {
+      outcomeLower.includes('not answered') ||
+      outcomeLower.includes('no answer') ||
+      outcomeLower.includes('missed') ||
+      outcomeLower.includes('call back') ||
+      outcomeLower.includes('callback') ||
+      outcomeLower.includes('follow up')) {
       return {
         iconBg: 'bg-gradient-to-br from-yellow-500 to-yellow-600',
         border: 'border-yellow-400',
@@ -916,7 +916,7 @@ export default function LeadDetailPage() {
         cardBorder: 'border-yellow-400',
       };
     }
-    
+
     // Default - Gray
     return {
       iconBg: 'bg-gradient-to-br from-gray-500 to-gray-600',
@@ -1112,25 +1112,25 @@ export default function LeadDetailPage() {
               </form>
             ) : (
               <div className="space-y-6">
-                  {/* Badges at top - single line */}
-                  <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-                    {lead.enquiryNumber && (
-                      <span className="px-3 py-1.5 text-sm font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 whitespace-nowrap flex-shrink-0">
-                        #{lead.enquiryNumber}
-                      </span>
-                    )}
-                    <span className={`px-3 py-1.5 text-sm font-medium rounded-full border whitespace-nowrap flex-shrink-0 ${getStatusColor(lead.leadStatus)}`}>
-                      {lead.leadStatus || 'New'}
+                {/* Badges at top - single line */}
+                <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                  {lead.enquiryNumber && (
+                    <span className="px-3 py-1.5 text-sm font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 whitespace-nowrap flex-shrink-0">
+                      #{lead.enquiryNumber}
                     </span>
-                    {lead.source && (
-                      <span className="px-3 py-1.5 text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full border border-green-200 dark:border-green-800 whitespace-nowrap flex-shrink-0">
-                        {lead.source}
-                      </span>
-                    )}
-                  </div>
+                  )}
+                  <span className={`px-3 py-1.5 text-sm font-medium rounded-full border whitespace-nowrap flex-shrink-0 ${getStatusColor(lead.leadStatus)}`}>
+                    {lead.leadStatus || 'New'}
+                  </span>
+                  {lead.source && (
+                    <span className="px-3 py-1.5 text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full border border-green-200 dark:border-green-800 whitespace-nowrap flex-shrink-0">
+                      {lead.source}
+                    </span>
+                  )}
+                </div>
 
                 {/* Main student details - larger font with gender and email */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
                   <div>
                     <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Name</label>
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -1151,6 +1151,12 @@ export default function LeadDetailPage() {
                     <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Phone</label>
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 break-all">{lead.phone || '-'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Student Group</label>
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                      <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 break-all">{lead.studentGroup || '-'}</p>
                     </div>
                   </div>
                 </div>
@@ -1192,7 +1198,7 @@ export default function LeadDetailPage() {
                   {!isDetailsExpanded && (
                     <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white via-white/60 to-transparent dark:from-slate-900 dark:via-slate-900/60 dark:to-transparent pointer-events-none z-10 rounded-b-lg"></div>
                   )}
-                  
+
                   {/* Expandable content */}
                   {isDetailsExpanded && (
                     <div className="space-y-6 pb-6">
@@ -1335,7 +1341,7 @@ export default function LeadDetailPage() {
                   const callCount = stats?.callCount || 0;
                   const smsCount = stats?.smsCount || 0;
                   const templateUsage = stats?.templateUsage || [];
-                  
+
                   return (
                     <div
                       key={`${option.label}-${option.number}-${index}`}
@@ -1359,7 +1365,7 @@ export default function LeadDetailPage() {
                           </div>
                         </div>
                       </div>
-                      
+
                       {templateUsage.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
                           <div className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">
@@ -1377,7 +1383,7 @@ export default function LeadDetailPage() {
                           </div>
                         </div>
                       )}
-                      
+
                       <div className="flex flex-col sm:flex-row gap-2 mt-3">
                         <Button
                           variant="secondary"
@@ -1394,10 +1400,10 @@ export default function LeadDetailPage() {
                           variant="primary"
                           size="sm"
                           onClick={() => {
-                            setSmsData({ 
-                              selectedNumbers: [option.number], 
-                              selectedTemplates: {}, 
-                              languageFilter: 'all' 
+                            setSmsData({
+                              selectedNumbers: [option.number],
+                              selectedTemplates: {},
+                              languageFilter: 'all'
                             });
                             setShowSmsModal(true);
                           }}
@@ -1498,7 +1504,7 @@ export default function LeadDetailPage() {
                     const isSms = item.type === 'sms';
                     const dotColor = isCall ? 'bg-green-500' : isSms ? 'bg-purple-500' : 'bg-blue-500';
                     const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : 'border-blue-500';
-                    
+
                     return (
                       <div key={item.id} className="relative pl-6 sm:pl-8 pb-4 sm:pb-6 last:pb-0">
                         {/* Timeline line */}
@@ -1536,7 +1542,7 @@ export default function LeadDetailPage() {
                               </span>
                             )}
                           </div>
-                          
+
                           {/* Call details */}
                           {isCall && (
                             <>
@@ -1555,7 +1561,7 @@ export default function LeadDetailPage() {
                               )}
                             </>
                           )}
-                          
+
                           {/* SMS details */}
                           {isSms && (
                             <div className="space-y-2">
@@ -1564,11 +1570,10 @@ export default function LeadDetailPage() {
                                   <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Template: </span>
                                   <span className="text-xs text-gray-700 dark:text-slate-200">{item.metadata.templateName}</span>
                                   {item.metadata?.status && (
-                                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
-                                      item.metadata.status === 'success' 
-                                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
+                                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${item.metadata.status === 'success'
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
                                         : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                                    }`}>
+                                      }`}>
                                       {item.metadata.status === 'success' ? 'Sent' : 'Failed'}
                                     </span>
                                   )}
@@ -1584,7 +1589,7 @@ export default function LeadDetailPage() {
                               )}
                             </div>
                           )}
-                          
+
                           {/* Other types */}
                           {!isCall && !isSms && (
                             <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
@@ -1642,10 +1647,10 @@ export default function LeadDetailPage() {
                   if (lead) {
                     // Initialize with all available numbers selected
                     const numbers = contactOptions.map(opt => opt.number);
-                    setSmsData({ 
-                      selectedNumbers: numbers, 
-                      selectedTemplates: {}, 
-                      languageFilter: 'all' 
+                    setSmsData({
+                      selectedNumbers: numbers,
+                      selectedTemplates: {},
+                      languageFilter: 'all'
                     });
                     setShowSmsModal(true);
                   }
@@ -2130,7 +2135,7 @@ export default function LeadDetailPage() {
               {contactOptions.map((option, index) => {
                 const stats = communicationStatsMap.get(option.number);
                 const callCount = stats?.callCount || 0;
-                
+
                 return (
                   <button
                     key={`${option.label}-${option.number}-${index}`}
@@ -2141,11 +2146,11 @@ export default function LeadDetailPage() {
                       window.location.href = `tel:${option.number}`;
                       // After a delay, show remarks modal
                       setTimeout(() => {
-                        setCallData({ 
-                          contactNumber: option.number, 
-                          remarks: '', 
-                          outcome: '', 
-                          durationSeconds: 0 
+                        setCallData({
+                          contactNumber: option.number,
+                          remarks: '',
+                          outcome: '',
+                          durationSeconds: 0
                         });
                         setShowCallRemarksModal(true);
                       }, 1000);
@@ -2304,15 +2309,14 @@ export default function LeadDetailPage() {
                         const stats = communicationStatsMap.get(option.number);
                         const smsCount = stats?.smsCount || 0;
                         const isSelected = smsData.selectedNumbers.includes(option.number);
-                        
+
                         return (
                           <label
                             key={`${option.label}-${option.number}-${index}`}
-                            className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                              isSelected
+                            className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${isSelected
                                 ? 'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-600'
                                 : 'bg-white border-gray-200 hover:bg-gray-50 dark:bg-slate-900/50 dark:border-slate-700 dark:hover:bg-slate-800/60'
-                            }`}
+                              }`}
                           >
                             <input
                               type="checkbox"
@@ -2351,7 +2355,7 @@ export default function LeadDetailPage() {
                   <div className="text-sm text-gray-500 mt-2">
                     Selected {smsData.selectedNumbers.length} recipient{smsData.selectedNumbers.length === 1 ? '' : 's'}.
                   </div>
-                  
+
                   <div className="space-y-2 mt-4">
                     <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">
                       Language Filter
@@ -2397,9 +2401,9 @@ export default function LeadDetailPage() {
                         template.variables && template.variables.length > 0
                           ? template.variables
                           : Array.from({ length: template.variableCount }).map((_, index) => ({
-                              key: `var${index + 1}`,
-                              label: `Variable ${index + 1}`,
-                            })) as MessageTemplateVariable[];
+                            key: `var${index + 1}`,
+                            label: `Variable ${index + 1}`,
+                          })) as MessageTemplateVariable[];
 
                       return (
                         <div
@@ -2516,9 +2520,8 @@ export default function LeadDetailPage() {
                 {smsData.selectedNumbers.length === 0
                   ? 'Select at least one contact number.'
                   : Object.keys(smsData.selectedTemplates).length === 0
-                  ? 'Select at least one template to send.'
-                  : `Ready to send using ${Object.keys(smsData.selectedTemplates).length} template${
-                      Object.keys(smsData.selectedTemplates).length > 1 ? 's' : ''
+                    ? 'Select at least one template to send.'
+                    : `Ready to send using ${Object.keys(smsData.selectedTemplates).length} template${Object.keys(smsData.selectedTemplates).length > 1 ? 's' : ''
                     }.`}
               </div>
               <div className="flex gap-2">
@@ -2549,16 +2552,16 @@ export default function LeadDetailPage() {
                       const variablesArray =
                         template.variables && template.variables.length > 0
                           ? template.variables.map((variable, index) => ({
-                              key: variable.key || `var${index + 1}`,
-                              value: variables[variable.key || `var${index + 1}`] || '',
-                            }))
+                            key: variable.key || `var${index + 1}`,
+                            value: variables[variable.key || `var${index + 1}`] || '',
+                          }))
                           : Array.from({ length: template.variableCount }).map((_, index) => {
-                              const key = `var${index + 1}`;
-                              return {
-                                key,
-                                value: variables[key] || '',
-                              };
-                            });
+                            const key = `var${index + 1}`;
+                            return {
+                              key,
+                              value: variables[key] || '',
+                            };
+                          });
 
                       return {
                         templateId: template._id,

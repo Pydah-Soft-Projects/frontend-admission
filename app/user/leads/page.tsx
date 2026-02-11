@@ -47,6 +47,7 @@ export default function UserLeadsPage() {
   const [newStatus, setNewStatus] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'assigned' | 'touched'>('assigned');
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [isMounted, setIsMounted] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<Lead[]>([]);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
@@ -55,6 +56,15 @@ export default function UserLeadsPage() {
   const handleGoToDashboard = useCallback(() => {
     router.push('/user/dashboard');
   }, [router]);
+
+  useEffect(() => {
+    setIsMounted(true);
+    // Restore view mode preference
+    const savedView = localStorage.getItem('leadsViewMode');
+    if (savedView === 'card' || savedView === 'table') {
+      setViewMode(savedView as 'card' | 'table');
+    }
+  }, []);
 
   useEffect(() => {
     setHeaderContent(
@@ -345,7 +355,7 @@ export default function UserLeadsPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 px-0 sm:px-0 pb-2">
-      {/* Search + filters: no card background, compact */}
+      {/* Search + filters + View Toggle */}
       <div className="space-y-2">
         <div className="flex flex-nowrap items-center gap-2">
           <div className="relative min-w-0 flex-1">
@@ -386,6 +396,38 @@ export default function UserLeadsPage() {
               </div>
             )}
           </div>
+
+          {/* View Toggle */}
+          <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('card');
+                localStorage.setItem('leadsViewMode', 'card');
+              }}
+              className={`rounded p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 ${viewMode === 'card' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400'}`}
+              title="Card View"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+            </button>
+            <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('table');
+                localStorage.setItem('leadsViewMode', 'table');
+              }}
+              className={`rounded p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 ${viewMode === 'table' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400'}`}
+              title="Table View"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
+
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
@@ -468,22 +510,20 @@ export default function UserLeadsPage() {
         <button
           type="button"
           onClick={() => setActiveTab('assigned')}
-          className={`flex-1 rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:flex-initial sm:px-4 sm:text-sm ${
-            activeTab === 'assigned'
-              ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600'
-              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
+          className={`flex-1 rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:flex-initial sm:px-4 sm:text-sm ${activeTab === 'assigned'
+            ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600'
+            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
         >
           Assigned
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('touched')}
-          className={`flex-1 rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:flex-initial sm:px-4 sm:text-sm ${
-            activeTab === 'touched'
-              ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600'
-              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
+          className={`flex-1 rounded-md px-3 py-2.5 text-xs font-medium transition-colors sm:flex-initial sm:px-4 sm:text-sm ${activeTab === 'touched'
+            ? 'bg-orange-500 text-white shadow-sm hover:bg-orange-600 dark:bg-orange-500 dark:hover:bg-orange-600'
+            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
         >
           Touched Today
         </button>
@@ -625,6 +665,82 @@ export default function UserLeadsPage() {
           {Array.from({ length: 6 }).map((_, i) => (
             <LeadCardSkeleton key={i} />
           ))}
+        </div>
+      ) : viewMode === 'table' ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                <tr>
+                  <th className="px-6 py-3 font-medium">Name</th>
+                  <th className="px-6 py-3 font-medium">Phone</th>
+                  <th className="px-6 py-3 font-medium">Group</th>
+                  <th className="px-6 py-3 font-medium">District</th>
+                  <th className="px-6 py-3 font-medium">Mandal</th>
+                  <th className="px-6 py-3 font-medium">Status</th>
+                  <th className="px-6 py-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {leads.map((lead: Lead) => (
+                  <tr
+                    key={`table-lead-${lead._id}`}
+                    onClick={() => router.push(`/user/leads/${lead._id}`)}
+                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  >
+                    <td className="px-6 py-3 font-medium text-slate-900 dark:text-slate-100">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-slate-200/60 font-semibold text-xs uppercase">
+                          {(lead.name || '?').charAt(0)}
+                        </div>
+                        <span className="truncate max-w-[150px]">{lead.name || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3 text-slate-600 dark:text-slate-300">
+                      {lead.phone}
+                    </td>
+                    <td className="px-6 py-3 text-slate-600 dark:text-slate-300">
+                      {lead.studentGroup || '—'}
+                    </td>
+                    <td className="px-6 py-3 text-slate-600 dark:text-slate-300">
+                      {lead.district || '—'}
+                    </td>
+                    <td className="px-6 py-3 text-slate-600 dark:text-slate-300">
+                      {lead.mandal || '—'}
+                    </td>
+                    <td className="px-6 py-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusColor(lead.leadStatus || '')}`}>
+                          {lead.leadStatus || 'New'}
+                        </span>
+                        {lead.needsManualUpdate && (
+                          <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700" title="Details need manual update">
+                            Update
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <Button
+                        size="sm"
+                        variant="light"
+                        className="h-8 w-8 p-0 border-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenCommentModal(lead, e);
+                        }}
+                      >
+                        <span className="sr-only">Menu</span>
+                        <svg className="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        </svg>
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <>

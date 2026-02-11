@@ -60,6 +60,7 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
   { href: '/superadmin/master-data', label: 'States, Districts & Mandals', icon: AcademicIcon, permissionKey: 'masterData' },
   { href: '/superadmin/utm-builder', label: 'UTM Builder', icon: TemplateIcon, permissionKey: 'leads' },
   { href: '/superadmin/reports', label: 'Reports', icon: ReportIcon, permissionKey: 'reports' },
+  { href: '/superadmin/profile', label: 'Profile & Settings', icon: UserIcon, permissionKey: 'dashboard' },
 ];
 
 /** Data Entry User sees only this: Create Individual Lead */

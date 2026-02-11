@@ -3,20 +3,28 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { authAPI, userSettingsAPI } from '@/lib/api';
+import { authAPI, userSettingsAPI, userAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
 export default function UserSettingsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(auth.getUser());
   const [timeTrackingEnabled, setTimeTrackingEnabled] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [loginLogs, setLoginLogs] = useState<{ logs: Array<{ id: string; eventType: string; createdAt: string }>; pagination?: { page: number; total: number; pages: number } } | null>(null);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isPasswordExpanded, setIsPasswordExpanded] = useState(false);
 
   const { setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
 
@@ -84,6 +92,43 @@ export default function UserSettingsPage() {
     }
   };
 
+  const updatePasswordMutation = useMutation({
+    mutationFn: async (password: string) => {
+      if (!user) throw new Error('User not found');
+      return userAPI.update(user._id, { password });
+    },
+    onSuccess: () => {
+      showToast.success('Password updated successfully');
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsPasswordExpanded(false);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to update password');
+    },
+  });
+
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || !confirmPassword) {
+      showToast.error('Please fill in both password fields');
+      return;
+    }
+    if (newPassword.length < 6) {
+      showToast.error('Password must be at least 6 characters long');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast.error('Passwords do not match');
+      return;
+    }
+
+    if (window.confirm('Are you sure you want to update your password?')) {
+      updatePasswordMutation.mutate(newPassword);
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -94,6 +139,89 @@ export default function UserSettingsPage() {
           Manage your account preferences and time tracking.
         </p>
       </div>
+
+      <Card className="p-4 sm:p-6">
+        <h2 className="mb-4 text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">Profile Details</h2>
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Name</label>
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700">
+              {user.name}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700">
+              {user.email}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Role</label>
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700">
+              {user.roleName}
+            </div>
+          </div>
+          {user.designation && (
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Designation</label>
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700">
+                {user.designation}
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card className="p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">Security</h2>
+          {!isPasswordExpanded && (
+            <Button variant="outline" size="sm" onClick={() => setIsPasswordExpanded(true)}>
+              Reset Password
+            </Button>
+          )}
+        </div>
+
+        {isPasswordExpanded && (
+          <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-md animate-in fade-in slide-in-from-top-2 duration-300">
+            <Input
+              label="New Password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              autoFocus
+            />
+            <Input
+              label="Confirm New Password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter new password"
+            />
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={updatePasswordMutation.isPending}
+              >
+                {updatePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
+              </Button>
+              <Button
+                type="button"
+                variant="light"
+                onClick={() => {
+                  setIsPasswordExpanded(false);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        )}
+      </Card>
 
       {isLoading ? (
         <Card className="p-4 sm:p-6">
@@ -123,14 +251,12 @@ export default function UserSettingsPage() {
                   aria-checked={timeTrackingEnabled}
                   disabled={isSaving}
                   onClick={() => handleToggle(!timeTrackingEnabled)}
-                  className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    timeTrackingEnabled ? 'bg-orange-500' : 'bg-slate-300 dark:bg-slate-600'
-                  }`}
+                  className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${timeTrackingEnabled ? 'bg-orange-500' : 'bg-slate-300 dark:bg-slate-600'
+                    }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      timeTrackingEnabled ? 'translate-x-5' : 'translate-x-1'
-                    }`}
+                    className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${timeTrackingEnabled ? 'translate-x-5' : 'translate-x-1'
+                      }`}
                   />
                 </button>
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">

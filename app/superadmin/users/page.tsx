@@ -60,7 +60,7 @@ const UserManagementPage = () => {
     name: '',
     email: '',
     password: '',
-    roleName: 'User' as RoleName,
+    roleName: 'Student Counselor' as RoleName,
     designation: '',
   });
   const createEmptyPermissions = () =>
@@ -82,11 +82,13 @@ const UserManagementPage = () => {
     email: string;
     roleName: RoleName;
     designation: string;
+    password?: string;
   }>({
     name: '',
     email: '',
-    roleName: 'User',
+    roleName: 'Student Counselor',
     designation: '',
+    password: '',
   });
   const [editPermissionState, setEditPermissionState] = useState<
     Record<PermissionModuleKey, ModulePermission>
@@ -262,6 +264,11 @@ const UserManagementPage = () => {
       return;
     }
 
+    if (formState.password.length < 6) {
+      showToast.error('Password must be at least 6 characters long');
+      return;
+    }
+
     const payload = {
       name: formState.name.trim(),
       email: formState.email.trim(),
@@ -270,14 +277,10 @@ const UserManagementPage = () => {
     } as Parameters<typeof userAPI.create>[0];
 
     if (formState.roleName === 'User') {
-      if (!formState.designation.trim()) {
-        showToast.error('Please provide a designation for this user');
-        return;
-      }
-      payload.designation = formState.designation.trim();
+      // Designation logic removed
     }
     if (formState.roleName === 'Student Counselor' || formState.roleName === 'Data Entry User') {
-      if (formState.designation?.trim()) payload.designation = formState.designation.trim();
+      // Designation logic removed
     }
 
     if (formState.roleName === 'Sub Super Admin') {
@@ -388,206 +391,206 @@ const UserManagementPage = () => {
 
       <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
         <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-              <thead className="bg-slate-50 dark:bg-slate-800/80">
+          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+            <thead className="bg-slate-50 dark:bg-slate-800/80">
+              <tr>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Name
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Email
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Role
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Status
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Manager
+                </th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 min-w-[200px]">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900/40">
+              {isLoading ? (
                 <tr>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    Name
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    Email
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    Role
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    Status
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    Manager
-                  </th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 min-w-[200px]">
-                    Actions
-                  </th>
+                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                    Loading users…
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900/40">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                      Loading users…
-                    </td>
-                  </tr>
-                ) : filteredUsers.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                      No users match the current search.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredUsers.map((user) => {
-                    let manager: User | undefined = undefined;
-                    if (user.managedBy) {
-                      if (typeof user.managedBy === 'object') {
-                        manager = user.managedBy;
-                      } else if (typeof user.managedBy === 'string') {
-                        manager = users.find((u) => u._id === user.managedBy);
-                      }
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No users match the current search.
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((user) => {
+                  let manager: User | undefined = undefined;
+                  if (user.managedBy) {
+                    if (typeof user.managedBy === 'object') {
+                      manager = user.managedBy;
+                    } else if (typeof user.managedBy === 'string') {
+                      manager = users.find((u) => u._id === user.managedBy);
                     }
-                    const canShowManagerActions = user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User';
-                    return (
-                      <tr
-                        key={user._id}
-                        className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                        onClick={() => router.push(`/superadmin/users/${user._id}/leads`)}
-                      >
-                        <td className="px-3 py-2.5 align-middle text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          {user.name}
-                        </td>
-                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300">
-                          <span className="truncate max-w-[180px] inline-block" title={user.email}>{user.email}</span>
-                        </td>
-                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {displayRole(user)}
-                        </td>
-                        <td className="px-3 py-2.5 align-middle whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                              user.isActive
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
-                                : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
+                  }
+                  const canShowManagerActions = user.roleName === 'User' || user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User';
+                  return (
+                    <tr
+                      key={user._id}
+                      className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                      onClick={() => router.push(`/superadmin/users/${user._id}/leads`)}
+                    >
+                      <td className="px-3 py-2.5 align-middle text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        {user.name}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300">
+                        <span className="truncate max-w-[180px] inline-block" title={user.email}>{user.email}</span>
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {displayRole(user)}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${user.isActive
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
+                            : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
                             }`}
-                          >
-                            {user.isActive ? 'Active' : 'Inactive'}
+                        >
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {manager ? (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
+                            {manager.name}
                           </span>
-                        </td>
-                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {manager ? (
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
-                              {manager.name}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-500">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex flex-wrap items-center justify-end gap-1.5">
-                            {canShowManagerActions && (
-                              <button
-                                type="button"
-                                title={manager ? 'Change Manager' : 'Assign Manager'}
-                                onClick={(event) => handleOpenTeamAssignment(user, event)}
-                                disabled={!canManageUsers}
-                                className={actionBtnBase}
-                              >
-                                <IconUserGroup className="w-3.5 h-3.5 shrink-0" />
-                                <span>{manager ? 'Manager' : 'Assign'}</span>
-                              </button>
-                            )}
-                            {canShowManagerActions && (
-                              <button
-                                type="button"
-                                title={user.isManager ? 'Revoke Manager' : 'Make Manager'}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  if (user.isManager) {
-                                    if (window.confirm(`Revoke Manager privileges from ${user.name}? This will remove them as manager of their team.`)) {
-                                      toggleManagerRoleMutation.mutate(user);
-                                    }
-                                  } else {
-                                    if (window.confirm(`Grant Manager privileges to ${user.name}?`)) {
-                                      toggleManagerRoleMutation.mutate(user);
-                                    }
-                                  }
-                                }}
-                                disabled={toggleManagerRoleMutation.isPending || !canManageUsers}
-                                className={user.isManager
-                                  ? `${actionBtnClass} border-blue-400 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:border-blue-600 dark:bg-blue-900/50 dark:text-blue-200 dark:hover:bg-blue-900/70`
-                                  : actionBtnBase}
-                              >
-                                <IconBadge className="w-3.5 h-3.5 shrink-0" />
-                                <span>{user.isManager ? 'Revoke' : 'Manager'}</span>
-                              </button>
-                            )}
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {canShowManagerActions && (
                             <button
                               type="button"
-                              title={user.isActive ? 'Deactivate' : 'Activate'}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                toggleActiveMutation.mutate(user);
-                              }}
-                              disabled={toggleActiveMutation.isPending || !canManageUsers}
-                              className={actionBtnBase}
-                            >
-                              {user.isActive ? <IconX className="w-3.5 h-3.5 shrink-0" /> : <IconCheck className="w-3.5 h-3.5 shrink-0" />}
-                              <span>{user.isActive ? 'Deactivate' : 'Activate'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              title="Edit user"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (!canManageUsers) return;
-                                setEditingUser(user);
-                                setEditFormState({
-                                  name: user.name,
-                                  email: user.email,
-                                  roleName: user.roleName,
-                                  designation: user.designation || '',
-                                });
-                                if (user.roleName === 'Sub Super Admin') {
-                                  const base = createEmptyPermissions();
-                                  const userPerms = user.permissions || {};
-                                  const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
-                                  PERMISSION_MODULES.forEach((module) => {
-                                    const entry = userPerms[module.key];
-                                    if (entry?.access) {
-                                      seeded[module.key] = {
-                                        access: true,
-                                        permission: entry.permission === 'read' ? 'read' : 'write',
-                                      };
-                                    }
-                                  });
-                                  setEditPermissionState(seeded);
-                                } else {
-                                  setEditPermissionState(createEmptyPermissions());
-                                }
-                                setShowEditUser(true);
-                              }}
+                              title={manager ? 'Change Manager' : 'Assign Manager'}
+                              onClick={(event) => handleOpenTeamAssignment(user, event)}
                               disabled={!canManageUsers}
                               className={actionBtnBase}
                             >
-                              <IconPencil className="w-3.5 h-3.5 shrink-0" />
-                              <span>Edit</span>
+                              <IconUserGroup className="w-3.5 h-3.5 shrink-0" />
+                              <span>{manager ? 'Manager' : 'Assign'}</span>
                             </button>
-                            {canDeleteUsers && (
-                              <button
-                                type="button"
-                                title="Delete user"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  if (!canManageUsers) return;
-                                  if (window.confirm(`Delete ${user.name}? This cannot be undone.`)) {
-                                    deleteUserMutation.mutate(user._id);
+                          )}
+                          {canShowManagerActions && (
+                            <button
+                              type="button"
+                              title={user.isManager ? 'Revoke Manager' : 'Make Manager'}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (user.isManager) {
+                                  if (window.confirm(`Revoke Manager privileges from ${user.name}? This will remove them as manager of their team.`)) {
+                                    toggleManagerRoleMutation.mutate(user);
                                   }
-                                }}
-                                disabled={deleteUserMutation.isPending || !canManageUsers}
-                                className={`${actionBtnClass} border-slate-300 text-rose-600 hover:bg-rose-50 hover:border-rose-300 dark:border-slate-600 dark:text-rose-400 dark:hover:bg-rose-900/30`}
-                              >
-                                <IconTrash className="w-3.5 h-3.5 shrink-0" />
-                                <span>Delete</span>
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                                } else {
+                                  if (window.confirm(`Grant Manager privileges to ${user.name}?`)) {
+                                    toggleManagerRoleMutation.mutate(user);
+                                  }
+                                }
+                              }}
+                              disabled={toggleManagerRoleMutation.isPending || !canManageUsers}
+                              className={user.isManager
+                                ? `${actionBtnClass} border-blue-400 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:border-blue-600 dark:bg-blue-900/50 dark:text-blue-200 dark:hover:bg-blue-900/70`
+                                : actionBtnBase}
+                            >
+                              <IconBadge className="w-3.5 h-3.5 shrink-0" />
+                              <span>{user.isManager ? 'Revoke' : 'Manager'}</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            title={user.isActive ? 'Deactivate' : 'Activate'}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleActiveMutation.mutate(user);
+                            }}
+                            disabled={toggleActiveMutation.isPending || !canManageUsers}
+                            className={actionBtnBase}
+                          >
+                            {user.isActive ? <IconX className="w-3.5 h-3.5 shrink-0" /> : <IconCheck className="w-3.5 h-3.5 shrink-0" />}
+                            <span>{user.isActive ? 'Deactivate' : 'Activate'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            title="Edit user"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (!canManageUsers) return;
+                              setEditingUser(user);
+                              setEditFormState({
+                                name: user.name,
+                                email: user.email,
+                                roleName: user.roleName,
+                                designation: user.designation || '',
+                                password: '',
+                              });
+                              if (user.roleName === 'Sub Super Admin') {
+                                const base = createEmptyPermissions();
+                                const userPerms = user.permissions || {};
+                                const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
+                                PERMISSION_MODULES.forEach((module) => {
+                                  const entry = userPerms[module.key];
+                                  if (entry?.access) {
+                                    seeded[module.key] = {
+                                      access: true,
+                                      permission: entry.permission === 'read' ? 'read' : 'write',
+                                    };
+                                  }
+                                });
+                                setEditPermissionState(seeded);
+                              } else {
+                                setEditPermissionState(createEmptyPermissions());
+                              }
+                              setShowEditUser(true);
+                            }}
+                            disabled={!canManageUsers}
+                            className={actionBtnBase}
+                          >
+                            <IconPencil className="w-3.5 h-3.5 shrink-0" />
+                            <span>Edit</span>
+                          </button>
+                          {canDeleteUsers && (
+                            <button
+                              type="button"
+                              title="Delete user"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (!canManageUsers) return;
+                                if (window.confirm(`Delete ${user.name}? This cannot be undone.`)) {
+                                  deleteUserMutation.mutate(user._id);
+                                }
+                              }}
+                              disabled={deleteUserMutation.isPending || !canManageUsers}
+                              className={`${actionBtnClass} border-slate-300 text-rose-600 hover:bg-rose-50 hover:border-rose-300 dark:border-slate-600 dark:text-rose-400 dark:hover:bg-rose-900/30`}
+                            >
+                              <IconTrash className="w-3.5 h-3.5 shrink-0" />
+                              <span>Delete</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
 
       {showCreateUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
@@ -637,23 +640,15 @@ const UserManagementPage = () => {
                       onChange={(event) => handleRoleChange(event.target.value)}
                       className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     >
-                    <option value="User">User</option>
-                    <option value="Student Counselor">Student Counselor</option>
-                    <option value="Data Entry User">Data Entry User</option>
-                    <option value="Sub Super Admin">Sub Super Admin</option>
-                    <option value="Super Admin">Super Admin</option>
+                      {/* <option value="User">User</option> - Removed */}
+                      <option value="Student Counselor">Student Counselor</option>
+                      <option value="Data Entry User">Data Entry User</option>
+                      <option value="Sub Super Admin">Sub Super Admin</option>
+                      <option value="Super Admin">Super Admin</option>
                     </select>
                   </div>
 
-                  {(formState.roleName === 'User' || formState.roleName === 'Student Counselor' || formState.roleName === 'Data Entry User') && (
-                    <Input
-                      label="Role Name / Designation"
-                      name="designation"
-                      value={formState.designation}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, designation: event.target.value }))}
-                      placeholder="e.g. Senior Counsellor"
-                    />
-                  )}
+                  {/* Designation field removed as per requirement */}
                 </div>
 
                 {isSubSuperAdmin && (
@@ -785,6 +780,10 @@ const UserManagementPage = () => {
                   roleName: editFormState.roleName,
                 };
 
+                if (editFormState.password) {
+                  payload.password = editFormState.password;
+                }
+
                 if (editFormState.roleName === 'User') {
                   if (!editFormState.designation.trim()) {
                     showToast.error('Please provide a designation for this user');
@@ -853,6 +852,16 @@ const UserManagementPage = () => {
                     }
                     placeholder="name@college.com"
                   />
+                  <Input
+                    label="New Password"
+                    name="password"
+                    type="password"
+                    value={editFormState.password || ''}
+                    onChange={(event) =>
+                      setEditFormState((prev) => ({ ...prev, password: event.target.value }))
+                    }
+                    placeholder="Leave blank to keep current"
+                  />
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                       Role
@@ -870,20 +879,7 @@ const UserManagementPage = () => {
                     </select>
                   </div>
 
-                  {(editFormState.roleName === 'User' || editFormState.roleName === 'Student Counselor' || editFormState.roleName === 'Data Entry User') && (
-                    <Input
-                      label="Role Name / Designation"
-                      name="designation"
-                      value={editFormState.designation}
-                      onChange={(event) =>
-                        setEditFormState((prev) => ({
-                          ...prev,
-                          designation: event.target.value,
-                        }))
-                      }
-                      placeholder="e.g. Senior Counsellor"
-                    />
-                  )}
+                  {/* Designation field removed as per requirement */}
                 </div>
 
                 {editFormState.roleName === 'Sub Super Admin' && (
@@ -1167,52 +1163,52 @@ const ManagerTeamCard = ({ manager }: { manager: User }) => {
           </span>
         </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-600 dark:text-slate-400">Team Members</span>
-          <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            {isLoadingTeam ? '...' : formatNumber(teamMembers.length)}
-          </span>
-        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600 dark:text-slate-400">Team Members</span>
+            <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {isLoadingTeam ? '...' : formatNumber(teamMembers.length)}
+            </span>
+          </div>
 
-        {teamMembers.length > 0 && (
-          <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-              Team Members:
-            </p>
-            <div className="space-y-1">
-              {teamMembers.slice(0, 3).map((member: User) => (
-                <div
-                  key={member._id}
-                  className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2"
-                >
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  {member.name} ({member.roleName})
-                </div>
-              ))}
-              {teamMembers.length > 3 && (
-                <div className="text-xs text-slate-500 dark:text-slate-500">
-                  +{teamMembers.length - 3} more
-                </div>
-              )}
+          {teamMembers.length > 0 && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                Team Members:
+              </p>
+              <div className="space-y-1">
+                {teamMembers.slice(0, 3).map((member: User) => (
+                  <div
+                    key={member._id}
+                    className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    {member.name} ({member.roleName})
+                  </div>
+                ))}
+                {teamMembers.length > 3 && (
+                  <div className="text-xs text-slate-500 dark:text-slate-500">
+                    +{teamMembers.length - 3} more
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {teamMembers.length === 0 && (
-          <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              No team members assigned yet
-            </p>
-          </div>
-        )}
-      </div>
-      <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
-        <p className="text-xs text-blue-600 dark:text-blue-400 font-medium text-center">
-          Click to view team analytics →
-        </p>
-      </div>
-    </Card>
+          {teamMembers.length === 0 && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                No team members assigned yet
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
+          <p className="text-xs text-blue-600 dark:text-blue-400 font-medium text-center">
+            Click to view team analytics →
+          </p>
+        </div>
+      </Card>
     </Link>
   );
 };

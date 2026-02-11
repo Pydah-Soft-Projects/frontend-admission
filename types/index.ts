@@ -49,6 +49,7 @@ export interface UpdateUserData {
   email?: string;
   roleName?: RoleName;
   designation?: string;
+  password?: string;
   permissions?: Record<string, ModulePermission>;
   isActive?: boolean;
   isManager?: boolean;
@@ -171,6 +172,7 @@ export interface Lead {
   fatherPhone: string;
   motherName?: string;
   village: string;
+  address?: string;
   district: string;
   courseInterested?: string;
   mandal: string;
@@ -214,6 +216,7 @@ export interface LeadUpdatePayload {
   fatherPhone?: string;
   motherName?: string;
   village?: string;
+  address?: string;
   district?: string;
   courseInterested?: string;
   mandal?: string;

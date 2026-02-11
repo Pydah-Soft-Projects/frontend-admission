@@ -82,14 +82,14 @@ export default function UserLeadDetailPage() {
   });
 
   // Status options (lead pipeline stage – only these allowed for status update)
+
   const statusOptions = [
     'Interested',
-    'Not interested',
+    'Not Interested',
     'Confirmed',
-    'Polycet applied',
-    'Eamcet applied',
-    'Other cet applied',
-    'Admitted only',
+    'CET Applied',
+    'Wrong Data',
+    'Not Answered',
   ];
 
   // Get the appropriate leads page URL for regular users
@@ -509,33 +509,82 @@ export default function UserLeadDetailPage() {
   // Initialize form data
   useEffect(() => {
     if (lead && !isEditing) {
+      // Logic to handle legacy data where full address might be in village field
+      let initAddress = lead.address || '';
+      let initVillage = lead.village || '';
+
+      // Check if address is effectively empty (null, undefined, or empty string after trim)
+      const isAddressEmpty = !initAddress || initAddress.trim() === '';
+
+      if (isAddressEmpty && lead.village) {
+        // User request: "village field will only have to show the word after the first ',' in the address"
+        if (lead.village.includes(',')) {
+          const parts = lead.village.split(',');
+          // First part is address
+          initAddress = parts[0].trim();
+
+          // Second part is village. User said "the word after the first ','". 
+          // We take everything after the first comma to be safe and preserve data.
+          if (parts.length > 1) {
+            initVillage = parts.slice(1).join(',').trim();
+          } else {
+            initVillage = '';
+          }
+        }
+      }
+
+      const rawState = lead.state || 'Andhra Pradesh';
+      const stateForForm = /^ap$/i.test((rawState || '').trim()) ? 'Andhra Pradesh' : rawState.trim();
+
       setFormData({
         name: lead.name,
         phone: lead.phone,
         fatherName: lead.fatherName,
         fatherPhone: lead.fatherPhone,
-        village: lead.village,
-        mandal: lead.mandal,
-        district: lead.district,
-        state: lead.state || 'Andhra Pradesh',
+        village: initVillage,
+        address: initAddress,
+        mandal: lead.mandal?.trim(),
+        district: lead.district?.trim(),
+        state: stateForForm,
         applicationStatus: lead.applicationStatus,
         hallTicketNumber: lead.hallTicketNumber,
         gender: lead.gender,
         interCollege: lead.interCollege,
         rank: lead.rank,
+        studentGroup: lead.studentGroup,
       });
     }
   }, [lead, isEditing]);
 
+  // Normalize state/district for API lookup
+  const normalizeStateForLookup = (s: string) => {
+    const t = (s || '').trim();
+    if (/^ap$/i.test(t)) return 'Andhra Pradesh';
+    return t || undefined;
+  };
+
   // State/district/mandal dropdown options from database
   const selectedState = formData.state ?? lead?.state ?? '';
   const selectedDistrict = formData.district ?? lead?.district ?? '';
+
   const { stateNames, districtNames, mandalNames } = useLocations({
-    stateName: selectedState || undefined,
+    stateName: normalizeStateForLookup(selectedState) || undefined,
     districtName: selectedDistrict || undefined,
   });
-  const availableDistricts = districtNames;
-  const availableMandals = mandalNames;
+
+  // Include lead's district/mandal in options when not in master list (ensures prefilling works)
+  const currentDistrict = formData.district ?? lead?.district ?? '';
+  const currentMandal = formData.mandal ?? lead?.mandal ?? '';
+
+  const availableDistricts =
+    currentDistrict && !districtNames.includes(currentDistrict)
+      ? [currentDistrict, ...districtNames]
+      : districtNames;
+
+  const availableMandals =
+    currentMandal && !mandalNames.includes(currentMandal)
+      ? [currentMandal, ...mandalNames]
+      : mandalNames;
 
   // Mutations
   const updateMutation = useMutation({
@@ -816,12 +865,30 @@ export default function UserLeadDetailPage() {
 
   const getStatusColor = (status?: string) => {
     const s = (status || '').toLowerCase();
-    if (s === 'interested' || s === 'confirmed') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
-    if (s === 'not interested' || s === 'not interest') return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
-    if (s === 'admitted only' || s === 'admitted') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
-    if (s === 'polycet applied' || s === 'eamcet applied' || s === 'other cet applied') return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+
+    // Positive
+    if (s === 'interested' || s === 'confirmed' || s === 'admitted only' || s === 'admitted') {
+      return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+    }
+
+    // Negative / Dead
+    if (s === 'not interested' || s === 'not interest' || s === 'wrong data') {
+      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+    }
+
+    // Pending / Applied
+    if (s === 'cet applied' || s === 'polycet applied' || s === 'eamcet applied' || s === 'other cet applied') {
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+    }
+
+    // Warning / No Action
+    if (s === 'not answered') {
+      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+    }
+
     return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
   };
+
 
   const getCallOutcomeColor = (outcome?: string) => {
     if (!outcome) return 'bg-gray-100 text-gray-700';
@@ -1079,11 +1146,11 @@ export default function UserLeadDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                         <Input
                           value={formData.phone || ''}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                          required
+                          disabled={true}
+                          className="bg-gray-100 text-gray-500 cursor-not-allowed"
                         />
                       </div>
                       <div>
@@ -1095,11 +1162,11 @@ export default function UserLeadDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Father Phone *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Father Phone</label>
                         <Input
                           value={formData.fatherPhone || ''}
-                          onChange={(e) => setFormData({ ...formData, fatherPhone: e.target.value })}
-                          required
+                          disabled={true}
+                          className="bg-gray-100 text-gray-500 cursor-not-allowed"
                         />
                       </div>
                       <div>
@@ -1108,6 +1175,15 @@ export default function UserLeadDetailPage() {
                           value={formData.village || ''}
                           onChange={(e) => setFormData({ ...formData, village: e.target.value })}
                           required
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Address</label>
+                        <textarea
+                          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300 focus:ring-blue-500"
+                          value={formData.address || ''}
+                          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                          placeholder="Enter full address details here..."
                         />
                       </div>
                       <div>
@@ -1153,6 +1229,19 @@ export default function UserLeadDetailPage() {
                           <option value="">Select mandal</option>
                           {availableMandals.map((m) => (
                             <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Student Group</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          value={formData.studentGroup || ''}
+                          onChange={(e) => setFormData({ ...formData, studentGroup: e.target.value })}
+                        >
+                          <option value="">—</option>
+                          {['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'].map((g) => (
+                            <option key={g} value={g}>{g}</option>
                           ))}
                         </select>
                       </div>
@@ -1204,13 +1293,13 @@ export default function UserLeadDetailPage() {
                             {lead.email}
                           </p>
                         )}
-                        {(lead.village || lead.mandal || lead.district || lead.state) && (
+                        {(lead.address || lead.village || lead.mandal || lead.district || lead.state) && (
                           <p className="flex items-center gap-2">
                             <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
-                            {[lead.village, lead.mandal, lead.district, lead.state].filter(Boolean).join(', ')}
+                            {[lead.address, lead.village, lead.mandal, lead.district, lead.state].filter(Boolean).join(', ')}
                           </p>
                         )}
                         {(lead.fatherName || lead.fatherPhone) && (
@@ -1244,6 +1333,14 @@ export default function UserLeadDetailPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                             </svg>
                             {lead.source}
+                          </p>
+                        )}
+                        {lead.studentGroup && (
+                          <p className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            Group: {lead.studentGroup}
                           </p>
                         )}
                         {lead.applicationStatus && <p>{lead.applicationStatus}</p>}
