@@ -163,6 +163,10 @@ export const userSettingsAPI = {
     const response = await api.put('/users/me/settings', data);
     return response.data?.data ?? response.data;
   },
+  updateMyProfile: async (data: { password?: string; name?: string; mobileNumber?: string }) => {
+    const response = await api.put('/users/me/profile', data);
+    return response.data?.data ?? response.data;
+  },
   getMyLoginLogs: async (params?: { page?: number; limit?: number }) => {
     const p = new URLSearchParams();
     if (params?.page) p.append('page', String(params.page));
