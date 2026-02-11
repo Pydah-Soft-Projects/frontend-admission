@@ -8,7 +8,7 @@ import { leadAPI } from '@/lib/api';
 import { User } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { CardSkeleton } from '@/components/ui/Skeleton';
+import { CardSkeleton, UserDashboardSkeleton } from '@/components/ui/Skeleton';
 import { useTheme } from '@/app/providers';
 import {
   ResponsiveContainer,
@@ -231,19 +231,19 @@ export default function UserDashboard() {
 
   if (isAuthorising || !user) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <CardSkeleton />
+      <div className="mx-auto w-full max-w-7xl px-4 py-8">
+        <UserDashboardSkeleton />
       </div>
     );
   }
 
-  //   if (isLoadingAnalytics) {
-  //     return (
-  //       <div className="flex min-h-[60vh] items-center justify-center">
-  //         <CardSkeleton />
-  //       </div>
-  //     );
-  //   }
+  if (isLoadingAnalytics && !analytics) {
+    return (
+      <div className="mx-auto w-full max-w-7xl px-4 py-8">
+        <UserDashboardSkeleton />
+      </div>
+    );
+  }
 
 
   if (!analytics) {

@@ -450,3 +450,83 @@ export const LeadsAbstractSkeleton: React.FC<{ className?: string }> = ({ classN
     </div>
   );
 };
+// User Dashboard skeleton — matches dashboard layout (header, 4 cards, scheduled, charts)
+export const UserDashboardSkeleton: React.FC<{ className?: string }> = ({ className }) => {
+  return (
+    <div className={cn('space-y-6', className)}>
+      {/* Page header and filters */}
+      <div className="lg:flex lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:mb-2 flex flex-col gap-4">
+        <Skeleton className="hidden lg:block h-9 rounded" width="12rem" />
+        <div className="flex flex-nowrap items-center gap-3 sm:gap-4 lg:gap-6">
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+            <Skeleton className="h-4 w-8 rounded shrink-0" />
+            <Skeleton className="h-9 rounded w-24 sm:w-32" />
+          </div>
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+            <Skeleton className="h-4 w-10 rounded shrink-0" />
+            <Skeleton className="h-9 rounded w-28 sm:w-36" />
+          </div>
+        </div>
+      </div>
+
+      {/* 4 summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="h-[72px] sm:h-[80px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse p-3 sm:p-4 space-y-2"
+          >
+            <Skeleton className="h-3 w-20 rounded" />
+            <Skeleton className="h-6 w-12 rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* Today's scheduled calls */}
+      <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 rounded-xl" />
+            <Skeleton className="h-5 w-48 rounded" />
+          </div>
+          <Skeleton className="h-8 w-24 rounded sm:w-32" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 p-3 sm:p-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
+              <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-24 rounded" />
+                <Skeleton className="h-3 w-16 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Status distribution chart */}
+      <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-6 flex flex-col items-center justify-center min-h-[300px]">
+        <Skeleton className="h-64 w-64 rounded-full" />
+      </div>
+
+      {/* Two columns for Mandals and States */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-6 space-y-4">
+            <Skeleton className="h-5 w-32 rounded mb-2" />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="h-64 flex items-center justify-center">
+                <Skeleton className="h-48 w-48 rounded-lg" />
+              </div>
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((j) => (
+                  <Skeleton key={j} className="h-12 w-full rounded-xl" />
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
