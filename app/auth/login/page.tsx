@@ -11,9 +11,10 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { LoginLottie } from '@/components/LoginLottie';
+import { ForgotPasswordModal } from '@/components/auth/ForgotPasswordModal';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().min(1, 'Email or Mobile Number is required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
@@ -26,6 +27,7 @@ function LoginPageContent() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLoginForm, setShowLoginForm] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const {
     register,
@@ -229,9 +231,9 @@ function LoginPageContent() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 lg:space-y-5">
               <Input
-                label="Email"
-                type="email"
-                placeholder="Enter your email"
+                label="Email or Mobile Number"
+                type="text"
+                placeholder="Enter email or mobile number"
                 error={errors.email?.message}
                 {...register('email')}
                 className="py-2 lg:py-2.5"
@@ -245,6 +247,16 @@ function LoginPageContent() {
                 {...register('password')}
                 className="py-2 lg:py-2.5"
               />
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm font-medium text-orange-600 hover:text-orange-500 hover:underline"
+                >
+                  Forgot Password?
+                </button>
+              </div>
 
               <Button
                 type="submit"
@@ -264,6 +276,12 @@ function LoginPageContent() {
 
       {/* Bottom accent line */}
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-60" />
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+      />
     </div>
   );
 }

@@ -66,8 +66,19 @@ export const authAPI = {
     return response.data;
   },
   logout: async () => {
-    const response = await api.post('/auth/logout');
+    try {
+      await api.post('/auth/logout');
+    } catch (err) {
+      // Ignore errors during logout
+    }
+  },
+  resetPasswordDirectly: async (mobileNumber: string) => {
+    const response = await api.post('/auth/forgot-password/reset-direct', { mobileNumber });
     return response.data;
+  },
+  checkUser: async (mobileNumber: string) => {
+    const response = await api.post('/auth/forgot-password/check-user', { mobileNumber });
+    return response.data; // Expect { success: true, data: { exists: true, name: "Name" } }
   },
   getCurrentUser: async () => {
     const response = await api.get('/auth/me');
@@ -1018,12 +1029,12 @@ export const formBuilderAPI = {
     if (params?.includeFields === false) queryParams.append('includeFields', 'false');
     if (params?.showInactive) queryParams.append('showInactive', 'true');
     const query = queryParams.toString();
-    
+
     // Use public endpoint if requested (for lead form page)
-    const endpoint = params?.public 
+    const endpoint = params?.public
       ? `/form-builder/forms/public/${formId}${query ? `?${query}` : ''}`
       : `/form-builder/forms/${formId}${query ? `?${query}` : ''}`;
-    
+
     // For public endpoint, use public API instance
     if (params?.public) {
       const publicApi = axios.create({
@@ -1035,7 +1046,7 @@ export const formBuilderAPI = {
       const response = await publicApi.get(endpoint);
       return response.data;
     }
-    
+
     const response = await api.get(endpoint);
     return response.data;
   },

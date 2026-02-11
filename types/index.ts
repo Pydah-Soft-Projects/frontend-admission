@@ -9,9 +9,11 @@ export interface ModulePermission {
 }
 
 export interface User {
+  id: string; // Add id (same as _id)
   _id: string;
   name: string;
   email: string;
+  mobileNumber?: string;
   roleName: RoleName;
   designation?: string;
   permissions?: Record<string, ModulePermission>;
@@ -38,6 +40,7 @@ export interface LoginCredentials {
 export interface CreateUserData {
   name: string;
   email: string;
+  mobileNumber?: string;
   password: string;
   roleName: RoleName;
   designation?: string;
@@ -47,6 +50,7 @@ export interface CreateUserData {
 export interface UpdateUserData {
   name?: string;
   email?: string;
+  mobileNumber?: string;
   roleName?: RoleName;
   designation?: string;
   password?: string;

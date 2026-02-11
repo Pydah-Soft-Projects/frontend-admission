@@ -59,6 +59,7 @@ const UserManagementPage = () => {
   const [formState, setFormState] = useState({
     name: '',
     email: '',
+    mobileNumber: '',
     password: '',
     roleName: 'Student Counselor' as RoleName,
     designation: '',
@@ -80,12 +81,14 @@ const UserManagementPage = () => {
   const [editFormState, setEditFormState] = useState<{
     name: string;
     email: string;
+    mobileNumber?: string;
     roleName: RoleName;
     designation: string;
     password?: string;
   }>({
     name: '',
     email: '',
+    mobileNumber: '',
     roleName: 'Student Counselor',
     designation: '',
     password: '',
@@ -113,7 +116,7 @@ const UserManagementPage = () => {
     if (!searchTerm.trim()) return users;
     const term = searchTerm.toLowerCase();
     return users.filter((user) =>
-      [user.name, user.email, user.roleName, user.designation].some((field) =>
+      [user.name, user.email, user.mobileNumber, user.roleName, user.designation].some((field) =>
         field?.toLowerCase().includes(term)
       )
     );
@@ -146,7 +149,7 @@ const UserManagementPage = () => {
     mutationFn: async (payload: Parameters<typeof userAPI.create>[0]) => userAPI.create(payload),
     onSuccess: () => {
       showToast.success('User created successfully');
-      setFormState({ name: '', email: '', password: '', roleName: 'Student Counselor', designation: '' });
+      setFormState({ name: '', email: '', mobileNumber: '', password: '', roleName: 'Student Counselor', designation: '' });
       setPermissionState(createEmptyPermissions());
       setShowCreateUser(false);
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -272,6 +275,7 @@ const UserManagementPage = () => {
     const payload = {
       name: formState.name.trim(),
       email: formState.email.trim(),
+      mobileNumber: formState.mobileNumber.trim() || undefined,
       password: formState.password,
       roleName: formState.roleName,
     } as Parameters<typeof userAPI.create>[0];
@@ -399,6 +403,9 @@ const UserManagementPage = () => {
                   Email
                 </th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Mobile
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   Role
                 </th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
@@ -447,6 +454,9 @@ const UserManagementPage = () => {
                       </td>
                       <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300">
                         <span className="truncate max-w-[180px] inline-block" title={user.email}>{user.email}</span>
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {user.mobileNumber || '-'}
                       </td>
                       <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {displayRole(user)}
@@ -532,6 +542,7 @@ const UserManagementPage = () => {
                               setEditFormState({
                                 name: user.name,
                                 email: user.email,
+                                mobileNumber: user.mobileNumber || '',
                                 roleName: user.roleName,
                                 designation: user.designation || '',
                                 password: '',
@@ -622,6 +633,14 @@ const UserManagementPage = () => {
                     value={formState.email}
                     onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
                     placeholder="name@college.com"
+                  />
+                  <Input
+                    label="Mobile Number"
+                    name="mobileNumber"
+                    type="tel"
+                    value={formState.mobileNumber}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, mobileNumber: event.target.value }))}
+                    placeholder="9876543210 (Optional)"
                   />
                   <Input
                     label="Password"
@@ -728,7 +747,7 @@ const UserManagementPage = () => {
                   onClick={() => {
                     setShowCreateUser(false);
                     setPermissionState(createEmptyPermissions());
-                    setFormState({ name: '', email: '', password: '', roleName: 'Student Counselor', designation: '' });
+                    setFormState({ name: '', email: '', mobileNumber: '', password: '', roleName: 'Student Counselor', designation: '' });
                   }}
                   disabled={createMutation.isPending}
                 >
@@ -774,6 +793,7 @@ const UserManagementPage = () => {
                 const payload: Parameters<typeof userAPI.update>[1] = {
                   name: editFormState.name.trim(),
                   email: editFormState.email.trim(),
+                  mobileNumber: editFormState.mobileNumber?.trim() || undefined,
                   roleName: editFormState.roleName,
                 };
 
@@ -842,6 +862,16 @@ const UserManagementPage = () => {
                       setEditFormState((prev) => ({ ...prev, email: event.target.value }))
                     }
                     placeholder="name@college.com"
+                  />
+                  <Input
+                    label="Mobile Number"
+                    name="mobileNumber"
+                    type="tel"
+                    value={editFormState.mobileNumber || ''}
+                    onChange={(event) =>
+                      setEditFormState((prev) => ({ ...prev, mobileNumber: event.target.value }))
+                    }
+                    placeholder="mobile number"
                   />
                   <Input
                     label="New Password"
