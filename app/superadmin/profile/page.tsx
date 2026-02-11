@@ -110,10 +110,10 @@ export default function ProfilePage() {
             </Card>
 
             <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-0 mb-4">
                     <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Security</h2>
                     {!isPasswordExpanded && (
-                        <Button variant="outline" size="sm" onClick={() => setIsPasswordExpanded(true)}>
+                        <Button variant="outline" size="sm" onClick={() => setIsPasswordExpanded(true)} className="w-full sm:w-auto">
                             Reset Password
                         </Button>
                     )}
@@ -136,11 +136,12 @@ export default function ProfilePage() {
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             placeholder="Re-enter new password"
                         />
-                        <div className="flex items-center gap-3 pt-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
                             <Button
                                 type="submit"
                                 variant="primary"
                                 disabled={updatePasswordMutation.isPending}
+                                className="w-full sm:w-auto"
                             >
                                 {updatePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
                             </Button>
@@ -152,6 +153,7 @@ export default function ProfilePage() {
                                     setNewPassword('');
                                     setConfirmPassword('');
                                 }}
+                                className="w-full sm:w-auto"
                             >
                                 Cancel
                             </Button>
