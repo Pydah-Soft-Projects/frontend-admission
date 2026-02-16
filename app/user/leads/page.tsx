@@ -205,13 +205,13 @@ export default function UserLeadsPage() {
 
   // Combined Status Options (Lead Status + Call Outcomes)
   const combinedStatusOptions = useMemo(() => {
-    const backendStatuses = filterOptions?.statuses || [];
+    const backendStatuses = filterOptions?.leadStatuses || [];
     const callOutcomes = [
       'Answered', 'No Answer', 'Interested', 'Not Interested',
       'Confirmed', 'CET Applied'
     ];
     const defaultStatuses = [
-      'New'
+      'New', 'Assigned'
     ];
 
     const uniqueStatuses = new Set([
@@ -552,8 +552,8 @@ export default function UserLeadsPage() {
               <label className="text-[10px] font-medium text-slate-500 shrink-0">Status</label>
               <select
                 className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
-                value={filters.status || ''}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
+                value={filters.leadStatus || ''}
+                onChange={(e) => handleFilterChange('leadStatus', e.target.value)}
               >
                 <option value="">All</option>
                 {combinedStatusOptions.map((status) => (
