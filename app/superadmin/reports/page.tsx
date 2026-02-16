@@ -53,6 +53,7 @@ export default function ReportsPage() {
   }, [searchParams]);
   const [datePreset, setDatePreset] = useState<DatePreset>('today');
   const [callReportExportPreviewOpen, setCallReportExportPreviewOpen] = useState(false);
+  const [exportPreviewDate, setExportPreviewDate] = useState<string>('');
   const [activityLogPage, setActivityLogPage] = useState(1);
   const [activityLogEventType, setActivityLogEventType] = useState<'tracking_enabled' | 'tracking_disabled' | ''>('');
 
@@ -306,18 +307,45 @@ export default function ReportsPage() {
   };
 
   // Call reports: build merged data for Excel (User Performance + Daily Report)
+  // Dedicated queries for Export Preview to support specific date filtering
+  const { data: previewCallReports } = useQuery({
+    queryKey: ['previewCallReports', exportPreviewDate, filters.userId],
+    queryFn: () => reportAPI.getDailyCallReports({
+      startDate: exportPreviewDate,
+      endDate: exportPreviewDate,
+      userId: filters.userId || undefined,
+    }),
+    enabled: callReportExportPreviewOpen && !!exportPreviewDate,
+    staleTime: 0,
+  });
+
+  const { data: previewUserAnalytics } = useQuery({
+    queryKey: ['previewUserAnalytics', exportPreviewDate, filters.academicYear, filters.userId],
+    queryFn: () => leadAPI.getUserAnalytics({
+      startDate: exportPreviewDate,
+      endDate: exportPreviewDate,
+      academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+      userId: filters.userId || undefined,
+    }),
+    enabled: callReportExportPreviewOpen && !!exportPreviewDate,
+    staleTime: 0,
+  });
+
   const callReportMergedData = useMemo(() => {
-    const users = userAnalytics?.users || [];
-    const daily = callReports?.reports || [];
+    // If modal is open, use the data fetched for the specific preview date
+    const users = previewUserAnalytics?.users || [];
+    const daily = previewCallReports?.reports || [];
+
+    // No need to client-side filter Daily Reports anymore as the API returns specific date data
+
     const performanceRows = users.map((u: any) => ({
       User: u.name || u.userName || '—',
       'Total Leads': u.totalAssigned ?? 0,
       Calls: u.calls?.total ?? 0,
       'Avg Call (sec)': u.calls?.averageDuration ?? 0,
       SMS: u.sms?.total ?? 0,
-      'Status Changes': u.statusConversions?.total ?? 0,
+      'Interested': u.interested ?? 0, // Assuming 'interested' represents Interested count
       Confirmed: u.convertedLeads ?? 0,
-      'Conversion Rate %': u.conversionRate ?? 0,
     }));
     const dailyRows = daily.map((r: any) => ({
       Date: format(new Date(r.date), 'yyyy-MM-dd'),
@@ -327,7 +355,7 @@ export default function ReportsPage() {
       'Avg Duration (sec)': r.averageDuration ?? 0,
     }));
     return { performanceRows, dailyRows };
-  }, [userAnalytics?.users, callReports?.reports]);
+  }, [previewUserAnalytics?.users, previewCallReports?.reports]);
 
   const downloadCallReportExcel = () => {
     const { performanceRows, dailyRows } = callReportMergedData;
@@ -341,7 +369,7 @@ export default function ReportsPage() {
       const ws2 = XLSX.utils.json_to_sheet(dailyRows);
       XLSX.utils.book_append_sheet(workbook, ws2, 'Daily Call Report');
     }
-    const filename = `call-report-${filters.startDate}-${filters.endDate}.xlsx`;
+    const filename = `call-report-${exportPreviewDate || filters.startDate}.xlsx`;
     XLSX.writeFile(workbook, filename);
     setCallReportExportPreviewOpen(false);
   };
@@ -796,7 +824,10 @@ export default function ReportsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setCallReportExportPreviewOpen(true)}
+                        onClick={() => {
+                          setExportPreviewDate(filters.startDate);
+                          setCallReportExportPreviewOpen(true);
+                        }}
                         disabled={!(userAnalytics?.users?.length || callReports?.reports?.length)}
                       >
                         Export report (Excel)
@@ -901,11 +932,22 @@ export default function ReportsPage() {
               {callReportExportPreviewOpen && typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50" onClick={() => setCallReportExportPreviewOpen(false)}>
                   <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                    <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-                      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Excel export preview</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                        Report will contain two sheets: <strong>User Performance</strong>, <strong>Daily Call Report</strong>. Click Proceed to download.
-                      </p>
+                    <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Excel export preview</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                          Report will contain two sheets: <strong>User Performance</strong>, <strong>Daily Call Report</strong>. Click Proceed to download.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Filter Date:</span>
+                        <input
+                          type="date"
+                          value={exportPreviewDate}
+                          onChange={(e) => setExportPreviewDate(e.target.value)}
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
+                        />
+                      </div>
                     </div>
                     <div className="flex-1 overflow-auto p-6 space-y-6">
                       {callReportMergedData.performanceRows.length > 0 && (
@@ -920,9 +962,8 @@ export default function ReportsPage() {
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Call (sec)</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">SMS</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Status Changes</th>
+                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Interested</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Confirmed</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Conversion Rate %</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-600 bg-white dark:bg-slate-800/50">
@@ -933,9 +974,8 @@ export default function ReportsPage() {
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Call (sec)']}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.SMS}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Status Changes']}</td>
+                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Interested}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Confirmed}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Conversion Rate %']}%</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -977,7 +1017,7 @@ export default function ReportsPage() {
                       )}
                     </div>
                     <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setCallReportExportPreviewOpen(false)}>
+                      <Button variant="outline" size="sm" onClick={() => { setCallReportExportPreviewOpen(false); setExportPreviewDate(''); }}>
                         Cancel
                       </Button>
                       <Button size="sm" onClick={downloadCallReportExcel} disabled={callReportMergedData.performanceRows.length === 0 && callReportMergedData.dailyRows.length === 0}>
