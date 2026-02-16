@@ -139,6 +139,34 @@ export default function UserLeadDetailPage() {
     staleTime: 30000,
   });
 
+  const [autoUpdateStatus, setAutoUpdateStatus] = useState(true);
+
+  // Fetch filter options to get statuses
+  const { data: filterOptionsData } = useQuery({
+    queryKey: ['filterOptions'],
+    queryFn: async () => {
+      const response = await leadAPI.getFilterOptions();
+      return response.data || response;
+    },
+    staleTime: 300000, // 5 minutes
+  });
+
+  const filterOptions = filterOptionsData || {};
+
+  // Combined Status Options (Filtered for Call Logs)
+  const combinedStatusOptions = useMemo(() => {
+    // Only include specific call outcomes and relevant lead statuses
+    // Removed: New, Admitted, Joined, Assigned, Partial, Lost
+    return [
+      'Answered',
+      'No Answer',
+      'Interested',
+      'Not Interested',
+      'Confirmed',
+      'CET Applied'
+    ].sort();
+  }, []);
+
   const lead = (leadData?.data || leadData) as Lead | undefined;
 
   // Fetch activity logs
@@ -693,6 +721,16 @@ export default function UserLeadDetailPage() {
 
       if (variables.next) {
         handleNextLead();
+      } else {
+        // If auto-update status is checked and we have an outcome, update status directly
+        if (autoUpdateStatus && variables.outcome) {
+          statusUpdateMutation.mutate({ newStatus: variables.outcome });
+        } else {
+          // Otherwise trigger status update modal manually
+          setNewStatus(lead?.leadStatus || '');
+          setStatusComment('');
+          setShowStatusModal(true);
+        }
       }
     },
     onError: (error: any) => {
@@ -1081,21 +1119,12 @@ export default function UserLeadDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </button>
+
           <button
             type="button"
-            onClick={() => { setNewStatus(lead?.leadStatus || ''); setStatusComment(''); setShowStatusModal(true); }}
-            className="flex items-center justify-center size-12 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white shadow-sm"
-            aria-label="Update status"
-          >
-            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => { setCommentText(''); setShowCommentModal(true); }}
+            onClick={() => setShowEditModal(true)}
             className="flex items-center justify-center size-12 rounded-xl bg-slate-600 hover:bg-slate-700 active:scale-95 text-white shadow-sm"
-            aria-label="Add comment"
+            aria-label="Edit Lead"
           >
             <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1125,17 +1154,7 @@ export default function UserLeadDetailPage() {
             {/* Lighter orange gradient background */}
             <div className="absolute inset-0 bg-gradient-to-t from-orange-400 to-orange-600" aria-hidden />
             <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-white/15" aria-hidden />
-            {/* Edit pencil - top right of card (mobile: primary edit entry; desktop: alternative to Actions Edit) */}
-            <button
-              type="button"
-              onClick={() => setShowEditModal(true)}
-              className="absolute top-3 right-3 z-10 flex items-center justify-center size-9 rounded-lg bg-white/90 hover:bg-white text-orange-700 shadow-sm active:scale-95 lg:size-8"
-              aria-label="Edit student details"
-            >
-              <svg className="size-5 lg:size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-            </button>
+
             <div className="relative px-3 py-3 sm:px-6 sm:py-6">
               <>
                 {/* Profile header: avatar (initial) + name + phone - compact on mobile */}
@@ -2104,20 +2123,28 @@ export default function UserLeadDetailPage() {
                 <div>
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Outcome *</label>
                   <select
-                    className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     value={callData.outcome}
                     onChange={(e) => setCallData({ ...callData, outcome: e.target.value })}
                   >
                     <option value="">Select outcome...</option>
-                    <option value="callback_requested">Call back</option>
-                    <option value="switch_off">Switch off</option>
-                    <option value="answered">Answered</option>
-                    <option value="no_answer">No Answer</option>
-                    <option value="busy">Busy</option>
-                    <option value="voicemail">Voicemail</option>
-                    <option value="interested">Interested</option>
-                    <option value="not_interested">Not Interested</option>
+                    {combinedStatusOptions.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
                   </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="autoUpdateStatus"
+                    checked={autoUpdateStatus}
+                    onChange={(e) => setAutoUpdateStatus(e.target.checked)}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                  <label htmlFor="autoUpdateStatus" className="text-sm text-slate-700 dark:text-slate-300">
+                    Update Lead Status to <span className="font-semibold">{callData.outcome || '...'}</span>
+                  </label>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (sec) – optional</label>
@@ -2513,9 +2540,8 @@ export default function UserLeadDetailPage() {
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Name *</label>
                   <Input
                     value={formData.name || ''}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                    className="h-10"
+                    disabled={true}
+                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
                   />
                 </div>
                 <div>
@@ -2530,9 +2556,8 @@ export default function UserLeadDetailPage() {
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Father Name *</label>
                   <Input
                     value={formData.fatherName || ''}
-                    onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
-                    required
-                    className="h-10"
+                    disabled={true}
+                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
                   />
                 </div>
                 <div>
@@ -2547,29 +2572,25 @@ export default function UserLeadDetailPage() {
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Village *</label>
                   <Input
                     value={formData.village || ''}
-                    onChange={(e) => setFormData({ ...formData, village: e.target.value })}
-                    required
-                    className="h-10"
+                    disabled={true}
+                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
                   />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Full Address</label>
                   <textarea
-                    className="flex min-h-[80px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:ring-offset-slate-950 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300"
+                    className="flex min-h-[80px] w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400 dark:ring-offset-slate-950"
                     value={formData.address || ''}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    disabled={true}
                     placeholder="Enter full address details here..."
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">State</label>
                   <select
-                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
+                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
                     value={formData.state || 'Andhra Pradesh'}
-                    onChange={(e) => {
-                      const state = e.target.value;
-                      setFormData({ ...formData, state, district: undefined, mandal: undefined });
-                    }}
+                    disabled={true}
                   >
                     {stateNames.map((s) => (
                       <option key={s} value={s}>{s}</option>
@@ -2579,13 +2600,9 @@ export default function UserLeadDetailPage() {
                 <div>
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">District *</label>
                   <select
-                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
+                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
                     value={formData.district || ''}
-                    onChange={(e) => {
-                      const district = e.target.value;
-                      setFormData({ ...formData, district, mandal: undefined });
-                    }}
-                    required
+                    disabled={true}
                   >
                     <option value="">Select district</option>
                     {availableDistricts.map((d) => (
@@ -2596,10 +2613,9 @@ export default function UserLeadDetailPage() {
                 <div>
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Mandal *</label>
                   <select
-                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
+                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
                     value={formData.mandal || ''}
-                    onChange={(e) => setFormData({ ...formData, mandal: e.target.value })}
-                    required
+                    disabled={true}
                   >
                     <option value="">Select mandal</option>
                     {availableMandals.map((m) => (
@@ -2619,6 +2635,15 @@ export default function UserLeadDetailPage() {
                       <option key={g} value={g}>{g}</option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">College Name</label>
+                  <Input
+                    value={formData.interCollege || ''}
+                    onChange={(e) => setFormData({ ...formData, interCollege: e.target.value })}
+                    className="h-10"
+                    placeholder="Enter college name"
+                  />
                 </div>
               </div>
             </div>

@@ -9,7 +9,9 @@ import { Lead, LeadFilters, FilterOptions, User } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { showToast } from '@/lib/toast';
 import { useTheme } from '@/app/providers';
+import * as XLSX from 'xlsx';
 import {
   ResponsiveContainer,
   BarChart,
@@ -82,7 +84,7 @@ export default function UserLeadsViewPage() {
   // Debounce search inputs
   const debouncedSearch = useDebounce(search, 500);
   const debouncedEnquiryNumber = useDebounce(enquiryNumber, 500);
-  
+
   // Track previous search values to detect actual changes
   const prevSearchRef = useRef<string>('');
   const prevEnquiryRef = useRef<string>('');
@@ -91,7 +93,7 @@ export default function UserLeadsViewPage() {
   useEffect(() => {
     const searchChanged = debouncedSearch !== prevSearchRef.current;
     const enquiryChanged = debouncedEnquiryNumber !== prevEnquiryRef.current;
-    
+
     if (searchChanged || enquiryChanged) {
       setPage(1);
       prevSearchRef.current = debouncedSearch;
@@ -591,12 +593,54 @@ export default function UserLeadsViewPage() {
                 Detailed list of every record currently owned by {viewingUser?.name || 'this counsellor'}.
               </p>
             </div>
-            <Button
-              variant={showLeadsTable ? 'outline' : 'primary'}
-              onClick={() => setShowLeadsTable((prev) => !prev)}
-            >
-              {showLeadsTable ? 'Hide Assigned Leads' : 'See Assigned Leads'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    // Fetch all assigned leads for this user (without pagination if possible, or use current filters)
+                    // For export, we usually want ALL assigned leads, or the current filtered view? 
+                    // User said: "display the only the asisnged leas... update there to export rhe excel for the assigned leads also"
+                    // I will export what corresponds to the current view (or all assigned if no filters).
+                    // Actually, `getAll` with limit=10000 or similar might be needed. 
+                    // Let's use the current `queryFilters` but without pagination limit for export.
+
+                    const exportFilters = { ...queryFilters, limit: 10000, page: 1 };
+                    const response = await leadAPI.getAll(exportFilters);
+                    const leadsToExport = response.data?.leads || response.leads || [];
+
+                    if (leadsToExport.length === 0) {
+                      showToast.error('No leads to export');
+                      return;
+                    }
+
+                    const exportData = leadsToExport.map((lead: any) => ({
+                      'Lead Name': lead.name,
+                      'Phone Number': lead.phone,
+                      'Remarks': lead.notes || '', // Map notes to remarks
+                    }));
+
+                    const worksheet = XLSX.utils.json_to_sheet(exportData);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Assigned Leads');
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    XLSX.writeFile(workbook, `Assigned_Leads_${viewingUser?.name}_${timestamp}.xlsx`);
+                    showToast.success('Leads exported successfully');
+                  } catch (error) {
+                    console.error('Export error:', error);
+                    showToast.error('Failed to export leads');
+                  }
+                }}
+              >
+                Export Excel
+              </Button>
+              <Button
+                variant={showLeadsTable ? 'outline' : 'primary'}
+                onClick={() => setShowLeadsTable((prev) => !prev)}
+              >
+                {showLeadsTable ? 'Hide Assigned Leads' : 'See Assigned Leads'}
+              </Button>
+            </div>
           </div>
 
           {!showLeadsTable && (
@@ -611,362 +655,362 @@ export default function UserLeadsViewPage() {
             <>
               {/* Search and Filters */}
               <Card className="mb-6">
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Search by Enquiry Number
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="ENQ24000001 or 24000001 or 000001"
-                    value={enquiryNumber}
-                    onChange={(e) => setEnquiryNumber(e.target.value)}
-                    className="w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Search by Name/Phone/Email
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="Search leads..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full"
-                  />
-                </div>
-                <div className="flex items-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowFilters(!showFilters)}
-                    className="w-full"
-                  >
-                    {showFilters ? 'Hide' : 'Show'} Filters
-                  </Button>
-                  {(Object.keys(filters).length > 0 || search || enquiryNumber) && (
-                    <Button
-                      variant="outline"
-                      onClick={clearFilters}
-                      className="w-full"
-                    >
-                      Clear
-                    </Button>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Search by Enquiry Number
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="ENQ24000001 or 24000001 or 000001"
+                        value={enquiryNumber}
+                        onChange={(e) => setEnquiryNumber(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Search by Name/Phone/Email
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Search leads..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowFilters(!showFilters)}
+                        className="w-full"
+                      >
+                        {showFilters ? 'Hide' : 'Show'} Filters
+                      </Button>
+                      {(Object.keys(filters).length > 0 || search || enquiryNumber) && (
+                        <Button
+                          variant="outline"
+                          onClick={clearFilters}
+                          className="w-full"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Filter Row */}
+                  {showFilters && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-gray-200">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Mandal
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                          value={filters.mandal || ''}
+                          onChange={(e) => handleFilterChange('mandal', e.target.value)}
+                        >
+                          <option value="">All Mandals</option>
+                          {filterOptions?.mandals?.map((mandal) => (
+                            <option key={mandal} value={mandal}>
+                              {mandal}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          State
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                          value={filters.state || ''}
+                          onChange={(e) => handleFilterChange('state', e.target.value)}
+                        >
+                          <option value="">All States</option>
+                          {filterOptions?.states?.map((state) => (
+                            <option key={state} value={state}>
+                              {state}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Quota
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                          value={filters.quota || ''}
+                          onChange={(e) => handleFilterChange('quota', e.target.value)}
+                        >
+                          <option value="">All Quotas</option>
+                          {filterOptions?.quotas?.map((quota) => (
+                            <option key={quota} value={quota}>
+                              {quota}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Status
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                          value={filters.status || ''}
+                          onChange={(e) => handleFilterChange('status', e.target.value)}
+                        >
+                          <option value="">All Statuses</option>
+                          {filterOptions?.statuses?.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
+              </Card>
 
-              {/* Filter Row */}
-              {showFilters && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-gray-200">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mandal
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                      value={filters.mandal || ''}
-                      onChange={(e) => handleFilterChange('mandal', e.target.value)}
-                    >
-                      <option value="">All Mandals</option>
-                      {filterOptions?.mandals?.map((mandal) => (
-                        <option key={mandal} value={mandal}>
-                          {mandal}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                      value={filters.state || ''}
-                      onChange={(e) => handleFilterChange('state', e.target.value)}
-                    >
-                      <option value="">All States</option>
-                      {filterOptions?.states?.map((state) => (
-                        <option key={state} value={state}>
-                          {state}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quota
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                      value={filters.quota || ''}
-                      onChange={(e) => handleFilterChange('quota', e.target.value)}
-                    >
-                      <option value="">All Quotas</option>
-                      {filterOptions?.quotas?.map((quota) => (
-                        <option key={quota} value={quota}>
-                          {quota}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Status
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
-                      value={filters.status || ''}
-                      onChange={(e) => handleFilterChange('status', e.target.value)}
-                    >
-                      <option value="">All Statuses</option>
-                      {filterOptions?.statuses?.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Results Summary */}
-          <div className="mb-4 flex justify-between items-center">
-            <p className="text-sm text-gray-600">
-              Showing {leads.length} of {pagination.total} leads
-              {pagination.total > 0 && (
-                <span className="ml-2">
-                  (Page {pagination.page} of {pagination.pages})
-                </span>
-              )}
-            </p>
-            {(isLoadingLeads || isFetchingLeads) && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                Loading...
-              </div>
-            )}
-          </div>
-
-          {/* Leads Table */}
-          {isError ? (
-            <Card>
-              <div className="text-center py-8">
-                <p className="text-red-600 mb-4">
-                  Error loading leads: {error instanceof Error ? error.message : 'Unknown error'}
+              {/* Results Summary */}
+              <div className="mb-4 flex justify-between items-center">
+                <p className="text-sm text-gray-600">
+                  Showing {leads.length} of {pagination.total} leads
+                  {pagination.total > 0 && (
+                    <span className="ml-2">
+                      (Page {pagination.page} of {pagination.pages})
+                    </span>
+                  )}
                 </p>
-                <Button onClick={() => refetch()}>Retry</Button>
+                {(isLoadingLeads || isFetchingLeads) && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    Loading...
+                  </div>
+                )}
               </div>
-            </Card>
-          ) : leads.length === 0 && !(isLoadingLeads || isFetchingLeads) ? (
-            <Card>
-              <div className="text-center py-8">
-                <p className="text-gray-600">No leads assigned to this user yet</p>
-              </div>
-            </Card>
-          ) : (
-            <Card>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Enquiry #
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Phone
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Email
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Mandal
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        State
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Created
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white/50 divide-y divide-gray-200">
-                    {leads.map((lead: Lead) => (
-                      <tr
-                        key={lead._id}
-                        className="hover:bg-blue-50/50 transition-colors duration-200 cursor-pointer"
-                        onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-medium text-blue-600">
-                          {lead.enquiryNumber || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {lead.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {lead.phone}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {lead.email || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {lead.mandal}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {lead.state}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full transition-all ${getStatusColor(
-                              lead.leadStatus
-                            )}`}
+
+              {/* Leads Table */}
+              {isError ? (
+                <Card>
+                  <div className="text-center py-8">
+                    <p className="text-red-600 mb-4">
+                      Error loading leads: {error instanceof Error ? error.message : 'Unknown error'}
+                    </p>
+                    <Button onClick={() => refetch()}>Retry</Button>
+                  </div>
+                </Card>
+              ) : leads.length === 0 && !(isLoadingLeads || isFetchingLeads) ? (
+                <Card>
+                  <div className="text-center py-8">
+                    <p className="text-gray-600">No leads assigned to this user yet</p>
+                  </div>
+                </Card>
+              ) : (
+                <Card>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Enquiry #
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Name
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Phone
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Email
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Mandal
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            State
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Created
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white/50 divide-y divide-gray-200">
+                        {leads.map((lead: Lead) => (
+                          <tr
+                            key={lead._id}
+                            className="hover:bg-blue-50/50 transition-colors duration-200 cursor-pointer"
+                            onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
                           >
-                            {lead.leadStatus || 'New'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {lead.createdAt ? formatDate(lead.createdAt) : '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {pagination.pages > 1 && (
-                <div className="mt-6 pt-4 border-t border-gray-200 flex justify-between items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    {/* First Page Button */}
-                    <Button
-                      variant="outline"
-                      onClick={() => setPage(1)}
-                      disabled={page === 1 || isLoadingLeads || isFetchingLeads}
-                      size="sm"
-                      className="p-2"
-                      title="First Page"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                      </svg>
-                    </Button>
-                    
-                    {/* Previous Page Button */}
-                    <Button
-                      variant="outline"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1 || isLoadingLeads || isFetchingLeads}
-                      size="sm"
-                      className="p-2"
-                      title="Previous Page"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </Button>
-
-                    {/* Page Numbers */}
-                    <div className="flex gap-1">
-                      {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                        let pageNum;
-                        if (pagination.pages <= 5) {
-                          pageNum = i + 1;
-                        } else if (page <= 3) {
-                          pageNum = i + 1;
-                        } else if (page >= pagination.pages - 2) {
-                          pageNum = pagination.pages - 4 + i;
-                        } else {
-                          pageNum = page - 2 + i;
-                        }
-                        return (
-                          <Button
-                            key={pageNum}
-                            variant={page === pageNum ? 'primary' : 'outline'}
-                            onClick={() => setPage(pageNum)}
-                            disabled={isLoadingLeads || isFetchingLeads}
-                            size="sm"
-                            className="min-w-[40px]"
-                          >
-                            {pageNum}
-                          </Button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Next Page Button */}
-                    <Button
-                      variant="outline"
-                      onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
-                      disabled={page === pagination.pages || isLoadingLeads || isFetchingLeads}
-                      size="sm"
-                      className="p-2"
-                      title="Next Page"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Button>
-
-                    {/* Last Page Button */}
-                    <Button
-                      variant="outline"
-                      onClick={() => setPage(pagination.pages)}
-                      disabled={page === pagination.pages || isLoadingLeads || isFetchingLeads}
-                      size="sm"
-                      className="p-2"
-                      title="Last Page"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                      </svg>
-                    </Button>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-medium text-blue-600">
+                              {lead.enquiryNumber || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {lead.name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {lead.phone}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {lead.email || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {lead.mandal}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {lead.state}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full transition-all ${getStatusColor(
+                                  lead.leadStatus
+                                )}`}
+                              >
+                                {lead.leadStatus || 'New'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {lead.createdAt ? formatDate(lead.createdAt) : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
 
-                  {/* Jump to Page Dropdown (only if pages > 50) */}
-                  {pagination.pages > 50 && (
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600">Jump to:</label>
-                      <select
-                        value={page}
-                        onChange={(e) => setPage(Number(e.target.value))}
-                        disabled={isLoadingLeads || isFetchingLeads}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm text-sm"
-                      >
-                        {Array.from({ length: Math.ceil(pagination.pages / 50) }, (_, i) => {
-                          const pageValue = (i + 1) * 50;
-                          if (pageValue <= pagination.pages) {
+                  {/* Pagination */}
+                  {pagination.pages > 1 && (
+                    <div className="mt-6 pt-4 border-t border-gray-200 flex justify-between items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        {/* First Page Button */}
+                        <Button
+                          variant="outline"
+                          onClick={() => setPage(1)}
+                          disabled={page === 1 || isLoadingLeads || isFetchingLeads}
+                          size="sm"
+                          className="p-2"
+                          title="First Page"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                          </svg>
+                        </Button>
+
+                        {/* Previous Page Button */}
+                        <Button
+                          variant="outline"
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          disabled={page === 1 || isLoadingLeads || isFetchingLeads}
+                          size="sm"
+                          className="p-2"
+                          title="Previous Page"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </Button>
+
+                        {/* Page Numbers */}
+                        <div className="flex gap-1">
+                          {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
+                            let pageNum;
+                            if (pagination.pages <= 5) {
+                              pageNum = i + 1;
+                            } else if (page <= 3) {
+                              pageNum = i + 1;
+                            } else if (page >= pagination.pages - 2) {
+                              pageNum = pagination.pages - 4 + i;
+                            } else {
+                              pageNum = page - 2 + i;
+                            }
                             return (
-                              <option key={pageValue} value={pageValue}>
-                                Page {pageValue}
-                              </option>
+                              <Button
+                                key={pageNum}
+                                variant={page === pageNum ? 'primary' : 'outline'}
+                                onClick={() => setPage(pageNum)}
+                                disabled={isLoadingLeads || isFetchingLeads}
+                                size="sm"
+                                className="min-w-[40px]"
+                              >
+                                {pageNum}
+                              </Button>
                             );
-                          }
-                          return null;
-                        })}
-                        {!Array.from({ length: Math.ceil(pagination.pages / 50) }, (_, i) => (i + 1) * 50).includes(page) && (
-                          <option value={page}>Page {page} (Current)</option>
-                        )}
-                      </select>
+                          })}
+                        </div>
+
+                        {/* Next Page Button */}
+                        <Button
+                          variant="outline"
+                          onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+                          disabled={page === pagination.pages || isLoadingLeads || isFetchingLeads}
+                          size="sm"
+                          className="p-2"
+                          title="Next Page"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Button>
+
+                        {/* Last Page Button */}
+                        <Button
+                          variant="outline"
+                          onClick={() => setPage(pagination.pages)}
+                          disabled={page === pagination.pages || isLoadingLeads || isFetchingLeads}
+                          size="sm"
+                          className="p-2"
+                          title="Last Page"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                          </svg>
+                        </Button>
+                      </div>
+
+                      {/* Jump to Page Dropdown (only if pages > 50) */}
+                      {pagination.pages > 50 && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-gray-600">Jump to:</label>
+                          <select
+                            value={page}
+                            onChange={(e) => setPage(Number(e.target.value))}
+                            disabled={isLoadingLeads || isFetchingLeads}
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm text-sm"
+                          >
+                            {Array.from({ length: Math.ceil(pagination.pages / 50) }, (_, i) => {
+                              const pageValue = (i + 1) * 50;
+                              if (pageValue <= pagination.pages) {
+                                return (
+                                  <option key={pageValue} value={pageValue}>
+                                    Page {pageValue}
+                                  </option>
+                                );
+                              }
+                              return null;
+                            })}
+                            {!Array.from({ length: Math.ceil(pagination.pages / 50) }, (_, i) => (i + 1) * 50).includes(page) && (
+                              <option value={page}>Page {page} (Current)</option>
+                            )}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Page Info */}
+                      <div className="text-sm text-gray-600">
+                        Page {pagination.page} of {pagination.pages}
+                      </div>
                     </div>
                   )}
-
-                  {/* Page Info */}
-                  <div className="text-sm text-gray-600">
-                    Page {pagination.page} of {pagination.pages}
-                  </div>
-                </div>
+                </Card>
               )}
-            </Card>
-          )}
             </>
           )}
         </main>

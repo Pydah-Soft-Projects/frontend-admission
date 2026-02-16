@@ -176,6 +176,26 @@ export default function UserLeadsPage() {
     return query;
   }, [page, limit, filters, debouncedSearch, activeTab]);
 
+  // Combined Status Options (Lead Status + Call Outcomes)
+  const combinedStatusOptions = useMemo(() => {
+    const backendStatuses = filterOptions?.statuses || [];
+    const callOutcomes = [
+      'Answered', 'No Answer', 'Interested', 'Not Interested',
+      'Confirmed', 'CET Applied'
+    ];
+    const defaultStatuses = [
+      'New'
+    ];
+
+    const uniqueStatuses = new Set([
+      ...backendStatuses,
+      ...callOutcomes,
+      ...defaultStatuses
+    ]);
+
+    return Array.from(uniqueStatuses).sort();
+  }, [filterOptions]);
+
   // Fetch leads with React Query
   const {
     data: leadsData,
@@ -398,7 +418,7 @@ export default function UserLeadsPage() {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+          <div className="hidden sm:flex items-center rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
             <button
               type="button"
               onClick={() => {
@@ -409,7 +429,7 @@ export default function UserLeadsPage() {
               title="Card View"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
               </svg>
             </button>
             <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1"></div>
@@ -448,7 +468,7 @@ export default function UserLeadsPage() {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:grid-cols-5">
             <div className="flex items-center gap-1.5 min-w-0">
               <label className="text-[10px] font-medium text-slate-500 shrink-0">Mandal</label>
               <select
@@ -462,7 +482,7 @@ export default function UserLeadsPage() {
                 ))}
               </select>
             </div>
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="hidden md:flex items-center gap-1.5 min-w-0">
               <label className="text-[10px] font-medium text-slate-500 shrink-0">State</label>
               <select
                 className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -475,7 +495,7 @@ export default function UserLeadsPage() {
                 ))}
               </select>
             </div>
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="hidden md:flex items-center gap-1.5 min-w-0">
               <label className="text-[10px] font-medium text-slate-500 shrink-0">Quota</label>
               <select
                 className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -489,6 +509,19 @@ export default function UserLeadsPage() {
               </select>
             </div>
             <div className="flex items-center gap-1.5 min-w-0">
+              <label className="text-[10px] font-medium text-slate-500 shrink-0">Group</label>
+              <select
+                className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                value={filters.studentGroup || ''}
+                onChange={(e) => handleFilterChange('studentGroup', e.target.value)}
+              >
+                <option value="">All</option>
+                {filterOptions?.studentGroups?.map((group) => (
+                  <option key={group} value={group}>{group}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5 min-w-0 col-span-2 md:col-span-1">
               <label className="text-[10px] font-medium text-slate-500 shrink-0">Status</label>
               <select
                 className="flex-1 min-w-0 rounded border border-slate-200 bg-white py-1 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -496,7 +529,7 @@ export default function UserLeadsPage() {
                 onChange={(e) => handleFilterChange('status', e.target.value)}
               >
                 <option value="">All</option>
-                {filterOptions?.statuses?.map((status) => (
+                {combinedStatusOptions.map((status) => (
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>
@@ -560,7 +593,7 @@ export default function UserLeadsPage() {
                 onClick={() => setPage(1)}
                 disabled={page === 1 || isLoading}
                 size="sm"
-                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                className="min-h-[32px] min-w-[32px] p-0 sm:p-2 sm:min-h-9 sm:min-w-0"
                 title="First Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -572,7 +605,7 @@ export default function UserLeadsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1 || isLoading}
                 size="sm"
-                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                className="min-h-[32px] min-w-[32px] p-0 sm:p-2 sm:min-h-9 sm:min-w-0"
                 title="Previous Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -598,7 +631,7 @@ export default function UserLeadsPage() {
                       onClick={() => setPage(pageNum)}
                       disabled={isLoading}
                       size="sm"
-                      className="min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-[40px]"
+                      className="min-h-[32px] min-w-[32px] px-2 sm:min-h-9 sm:min-w-[40px]"
                     >
                       {pageNum}
                     </Button>
@@ -831,12 +864,9 @@ export default function UserLeadsPage() {
                     onChange={(e) => handleStatusChange(e.target.value)}
                   >
                     <option value="">Keep Current Status</option>
-                    <option value="New">New</option>
-                    <option value="Interested">Interested</option>
-                    <option value="Not Interested">Not Interested</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Lost">Lost</option>
+                    {combinedStatusOptions.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
                   </select>
                 </div>
                 <div>

@@ -12,6 +12,7 @@ import Papa from 'papaparse';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Skeleton, ReportDashboardSkeleton, LeadsAbstractSkeleton } from '@/components/ui/Skeleton';
+import { showToast } from '@/lib/toast';
 import {
   ResponsiveContainer,
   BarChart,
@@ -485,8 +486,8 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {/* Filters – hidden on Call Reports and Leads Abstract (abstract has its own compact filters) */}
-      {activeTab !== 'calls' && activeTab !== 'abstract' && (
+      {/* Filters – hidden on Call Reports, User Analytics, and Leads Abstract */}
+      {activeTab !== 'calls' && activeTab !== 'users' && activeTab !== 'abstract' && (
         <Card className="p-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -661,6 +662,103 @@ export default function ReportsPage() {
         </Card>
       )}
 
+      {/* User Analytics Tab */}
+      {activeTab === 'users' && (
+        <div className="space-y-6">
+          {isLoadingUserAnalytics ? (
+            <ReportDashboardSkeleton />
+          ) : (
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Leads</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">SMS</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Conversion</th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
+                    {userAnalytics?.users?.map((user: any, rowIdx: number) => (
+                      <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800/50' : 'bg-slate-50/80 dark:bg-slate-700/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                          <div className="flex flex-col">
+                            <span>{user.name || user.userName}</span>
+                            <span className="text-xs text-slate-500">{user.roleName || 'User'}</span>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.calls?.total ?? 0}</td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.sms?.total ?? 0}</td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-900 dark:text-slate-100">{user.convertedLeads ?? 0}</span>
+                            <span className={`text-xs ${(user.conversionRate ?? 0) >= 30 ? 'text-green-600' : 'text-slate-500'}`}>
+                              ({user.conversionRate ?? 0}%)
+                            </span>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  showToast.loading('Fetching assigned leads...');
+                                  const response = await leadAPI.getAll({
+                                    assignedTo: user.userId,
+                                    limit: 10000,
+                                    page: 1
+                                  });
+                                  const leads = response.data?.leads || response.leads || [];
+
+                                  if (leads.length === 0) {
+                                    showToast.error('No assigned leads found');
+                                    return;
+                                  }
+
+                                  const exportData = leads.map((lead: any) => ({
+                                    'Lead Name': lead.name,
+                                    'Phone Number': lead.phone,
+                                    'Remarks': lead.notes || '',
+                                  }));
+
+                                  const worksheet = XLSX.utils.json_to_sheet(exportData);
+                                  const workbook = XLSX.utils.book_new();
+                                  XLSX.utils.book_append_sheet(workbook, worksheet, 'Assigned Leads');
+                                  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                                  XLSX.writeFile(workbook, `Assigned_Leads_${user.name || user.userName}_${timestamp}.xlsx`);
+                                  showToast.success('Export successful');
+                                } catch (error) {
+                                  console.error(error);
+                                  showToast.error('Failed to export');
+                                }
+                              }}
+                            >
+                              Export Leads
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => window.location.href = `/superadmin/users/${user.userId}/leads`}
+                            >
+                              View Analytics
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Call Reports Tab */}
       {activeTab === 'calls' && (
         <div className="space-y-6">
@@ -674,7 +772,7 @@ export default function ReportsPage() {
             </Card>
           ) : (
             <>
-              {/* User Performance Stats (Total Users, Assigned Leads, Total Calls, Total SMS + table) */}
+              {/* Original User Performance stats for other tabs (if any) or shared view */}
               {userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 && (
                 <>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -692,6 +790,7 @@ export default function ReportsPage() {
                   </div>
                   {/* User Performance Summary – single export opens preview modal */}
                   <div className="space-y-4">
+
                     <div className="flex flex-wrap items-center justify-between gap-4">
                       <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">User Performance Summary</h3>
                       <Button
@@ -754,8 +853,6 @@ export default function ReportsPage() {
                   </div>
                 </>
               )}
-
-              {/* Daily call reports table (export is merged with User Performance via "Export report" above) */}
               {callReports?.reports && callReports.reports.length > 0 ? (
                 <>
                   <Card className="overflow-hidden border-slate-200 dark:border-slate-700">

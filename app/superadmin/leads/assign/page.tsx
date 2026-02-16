@@ -10,7 +10,9 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { showToast } from '@/lib/toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/Dialog';
+import * as XLSX from 'xlsx';
+
 // import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
 type AssignmentMode = 'bulk' | 'single' | 'remove' | 'stats' | 'institution';
@@ -94,6 +96,37 @@ export default function AssignLeadsPage() {
   const [institutionCount, setInstitutionCount] = useState(1000);
   const [schoolsList, setSchoolsList] = useState<{ id: string; name: string }[]>([]);
   const [collegesList, setCollegesList] = useState<{ id: string; name: string }[]>([]);
+
+  // Export Confirmation State
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportData, setExportData] = useState<any[]>([]);
+  const [exportFileName, setExportFileName] = useState('');
+
+  const handleConfirmExport = () => {
+    try {
+      if (exportData.length === 0) return;
+
+      const dataToExport = exportData.map((lead: any) => ({
+        'Lead Name': lead.name,
+        'Phone Number': lead.phone,
+        'Remarks': lead.remarks || '',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Assigned Leads');
+      XLSX.writeFile(workbook, exportFileName || 'Assigned_Leads.xlsx');
+
+      showToast.success('Leads exported successfully');
+    } catch (error) {
+      console.error('Export failed:', error);
+      showToast.error('Failed to export leads');
+    } finally {
+      setShowExportDialog(false);
+      setExportData([]);
+      setExportFileName('');
+    }
+  };
 
   useEffect(() => {
     const user = auth.getUser();
@@ -462,6 +495,15 @@ export default function AssignLeadsPage() {
       const assignedCount = response.data?.assigned || response.assigned || 0;
       const userName = response.data?.userName || 'user';
       showToast.success(`Successfully assigned ${assignedCount} lead${assignedCount !== 1 ? 's' : ''} to ${userName}`);
+
+      // Auto-export assigned leads to Excel (Ask for confirmation first)
+      const assignedLeads = response.data?.assignedLeads || response.assignedLeads || [];
+      if (assignedLeads.length > 0) {
+        setExportData(assignedLeads);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        setExportFileName(`Assigned_Leads_${userName}_${timestamp}.xlsx`);
+        setShowExportDialog(true);
+      }
 
       // Reset form
       if (mode === 'bulk') {
@@ -1553,6 +1595,44 @@ export default function AssignLeadsPage() {
           )}
         </div>
       </Card>
+      {/* Export Confirmation Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Assigned Leads?</DialogTitle>
+            <DialogDescription>
+              Lead assignment was successful. Would you like to download the list of assigned leads as an Excel file?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              No, Skip
+            </Button>
+            <Button onClick={handleConfirmExport}>
+              Yes, Download Excel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Export Confirmation Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Assigned Leads?</DialogTitle>
+            <DialogDescription>
+              Lead assignment was successful. Would you like to download the list of assigned leads as an Excel file?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              No, Skip
+            </Button>
+            <Button onClick={handleConfirmExport}>
+              Yes, Download Excel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
