@@ -23,6 +23,7 @@ export interface User {
   isActive: boolean;
   /** When false, User/Counsellor/Manager can only access Settings until they enable tracking */
   timeTrackingEnabled?: boolean;
+  autoCallingEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }

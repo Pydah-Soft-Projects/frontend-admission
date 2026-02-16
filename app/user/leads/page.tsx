@@ -39,6 +39,28 @@ export default function UserLeadsPage() {
   const [limit] = useState(100);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<LeadFilters>({});
+
+  // Persist filters for Auto-Calling navigation context
+  useEffect(() => {
+    const savedFilters = sessionStorage.getItem('leadFilters');
+    if (savedFilters) {
+      try {
+        const parsed = JSON.parse(savedFilters);
+        setFilters(parsed);
+      } catch (e) {
+        console.error('Failed to parse saved filters', e);
+      }
+    }
+    const savedSearch = sessionStorage.getItem('leadSearch');
+    if (savedSearch) {
+      setSearch(savedSearch);
+    }
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem('leadFilters', JSON.stringify(filters));
+  }, [filters]);
+
   const [showFilters, setShowFilters] = useState(false);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -91,6 +113,11 @@ export default function UserLeadsPage() {
 
   // Debounce search input
   const debouncedSearch = useDebounce(search, 500);
+
+  useEffect(() => {
+    sessionStorage.setItem('leadSearch', debouncedSearch);
+  }, [debouncedSearch]);
+
   const prevSearchRef = useRef<string>('');
 
   // Reset to page 1 when search changes

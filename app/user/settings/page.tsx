@@ -18,6 +18,7 @@ export default function UserSettingsPage() {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(auth.getUser());
   const [timeTrackingEnabled, setTimeTrackingEnabled] = useState<boolean>(true);
+  const [autoCallingEnabled, setAutoCallingEnabled] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [loginLogs, setLoginLogs] = useState<{ logs: Array<{ id: string; eventType: string; createdAt: string }>; pagination?: { page: number; total: number; pages: number } } | null>(null);
@@ -60,9 +61,11 @@ export default function UserSettingsPage() {
           userSettingsAPI.getMyLoginLogs({ page: 1, limit: 20 }),
         ]);
         setTimeTrackingEnabled(settings?.timeTrackingEnabled ?? true);
+        setAutoCallingEnabled(settings?.autoCallingEnabled ?? false);
         setLoginLogs(logs ?? null);
       } catch {
         setTimeTrackingEnabled(user.timeTrackingEnabled !== false);
+        setAutoCallingEnabled(user.autoCallingEnabled === true);
       } finally {
         setIsLoading(false);
       }
@@ -87,6 +90,24 @@ export default function UserSettingsPage() {
       }
     } catch {
       // Keep current state on error
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAutoCallingToggle = async (enabled: boolean) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      // Assuming updateMySettings supports autoCallingEnabled
+      await userSettingsAPI.updateMySettings({ autoCallingEnabled: enabled } as any);
+      setAutoCallingEnabled(enabled);
+      auth.updateUser({ autoCallingEnabled: enabled } as any);
+      const res = await authAPI.getCurrentUser();
+      if (res) auth.updateUser(res);
+      showToast.success(`Auto-Calling ${enabled ? 'Enabled' : 'Disabled'}`);
+    } catch (error) {
+      showToast.error('Failed to update settings');
     } finally {
       setIsSaving(false);
     }
@@ -265,6 +286,36 @@ export default function UserSettingsPage() {
                   {timeTrackingEnabled ? 'Enabled' : 'Disabled'}
                 </span>
                 {isSaving && <span className="text-xs text-slate-500">Saving…</span>}
+              </div>
+            </div>
+
+            <hr className="border-slate-100 dark:border-slate-700" />
+
+            <div>
+              <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                Auto-Calling Mode
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-3 sm:mb-4 leading-snug">
+                When enabled, the system will automatically navigate to the next lead and initiate a call after you save a call log.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoCallingEnabled}
+                  disabled={isSaving}
+                  onClick={() => handleAutoCallingToggle(!autoCallingEnabled)}
+                  className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${autoCallingEnabled ? 'bg-orange-500' : 'bg-slate-300 dark:bg-slate-600'
+                    }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autoCallingEnabled ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                  />
+                </button>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {autoCallingEnabled ? 'Enabled' : 'Disabled'}
+                </span>
               </div>
             </div>
           </div>

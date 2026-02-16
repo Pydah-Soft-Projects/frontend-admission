@@ -229,11 +229,33 @@ export default function UserLeadDetailPage() {
     enabled: false, // Regular users cannot assign leads
   });
 
+  // Read filters from session storage for context-aware navigation
+  const [storedFilters, setStoredFilters] = useState<any>({});
+
+  useEffect(() => {
+    try {
+      const f = sessionStorage.getItem('leadFilters');
+      const s = sessionStorage.getItem('leadSearch');
+      if (f) {
+        const parsed = JSON.parse(f);
+        if (s) parsed.search = s;
+        setStoredFilters(parsed);
+      } else if (s) {
+        setStoredFilters({ search: s });
+      }
+    } catch (e) {
+      console.error('Error reading filters', e);
+    }
+  }, []);
+
   // Fetch lead IDs for "next lead" navigation: ordered by name, excluding leads touched today (call/SMS/activity)
+  // NOW uses storedFilters to respect "My Leads" context
   const { data: allLeadIds } = useQuery({
-    queryKey: ['leadIds', 'user-leads', 'excludeTouchedToday'],
+    queryKey: ['leadIds', 'user-leads', 'excludeTouchedToday', storedFilters],
     queryFn: async () => {
-      const response = await leadAPI.getAllIds({ excludeTouchedToday: true });
+      // Merge context filters with "excludeTouchedToday"
+      const queryFilters = { ...storedFilters, excludeTouchedToday: true };
+      const response = await leadAPI.getAllIds(queryFilters);
 
       // Handle potential response structure variations
       const ids = response.data?.ids || response.ids || response.data?.data?.ids || [];
@@ -259,6 +281,70 @@ export default function UserLeadDetailPage() {
     return allLeadIds[index + 1];
   }, [allLeadIds, leadId]);
 
+  // Auto-Calling State
+  const [isAutoCalling, setIsAutoCalling] = useState(false);
+  const [autoCallTimer, setAutoCallTimer] = useState<number | null>(null);
+  const [autoCallCancelled, setAutoCallCancelled] = useState(false);
+
+  // Check for auto-calling preference and trigger call on load
+  useEffect(() => {
+    // Only proceed if we have a user, lead data is loaded, and we are not in loading state
+    if (user && !isLoading && lead) {
+      const isAutoNav = sessionStorage.getItem('isAutoNavigating');
+
+      // Check if this navigation was triggered by auto-calling
+      if (isAutoNav === 'true') {
+        // Clear the flag immediately to prevent double triggers
+        sessionStorage.removeItem('isAutoNavigating');
+
+        if ((user as any).autoCallingEnabled) {
+          if (lead.phone) {
+            // Open remarks modal first
+            setSelectedCallNumber(lead.phone);
+            const relatedComm = communications.find(c => c.contactNumber === lead.phone && c.type === 'call');
+            const duration = relatedComm?.durationSeconds || 0;
+            setCallData(prev => ({ ...prev, contactNumber: lead.phone, durationSeconds: duration }));
+            setShowCallRemarksModal(true);
+
+            // Small delay to ensure modal checks render before window location changes (which might be blocked or pause JS)
+            setTimeout(() => {
+              window.location.href = `tel:${lead.phone}`;
+            }, 500);
+          } else {
+            showToast.error('Auto-calling skipped: No phone number');
+          }
+        }
+      }
+    }
+  }, [user, isLoading, lead, communications]);
+
+  const startAutoCallTimer = useCallback(() => {
+    if (!user || !(user as any).autoCallingEnabled || !nextLeadId || autoCallCancelled) return;
+
+    setIsAutoCalling(true);
+    let count = 3;
+    setAutoCallTimer(count);
+
+    const interval = setInterval(() => {
+      count--;
+      if (count <= 0) {
+        clearInterval(interval);
+        setIsAutoCalling(false);
+        setAutoCallTimer(null);
+        if (!autoCallCancelled) {
+          sessionStorage.setItem('isAutoNavigating', 'true');
+          router.push(`/user/leads/${nextLeadId}`);
+        }
+      } else {
+        setAutoCallTimer(count);
+      }
+    }, 1000);
+
+    // Cleanup function to clear interval if component unmounts or cancelled
+    return () => clearInterval(interval);
+  }, [user, nextLeadId, router, autoCallCancelled]);
+
+
   const handleNextLead = useCallback(() => {
     if (nextLeadId) {
       router.push(`/user/leads/${nextLeadId}`);
@@ -268,6 +354,9 @@ export default function UserLeadDetailPage() {
       showToast.info(`No more leads. (List: ${count}, Current: ${leadId})`);
     }
   }, [nextLeadId, router, allLeadIds, leadId]);
+
+
+
 
   const users: User[] = (usersData?.data || usersData || []).filter(
     (u: User) => u.isActive && u.roleName !== 'Super Admin' && u.roleName !== 'Sub Super Admin'
@@ -530,17 +619,12 @@ export default function UserLeadDetailPage() {
     return () => clearHeaderContent();
   }, [lead, user, router, setHeaderContent, clearHeaderContent]);
 
+  // Reset cancelled state when lead changes
   useEffect(() => {
-    setMobileTopBar({
-      title: 'Lead Details',
-      showBack: true,
-      backHref: '/user/leads',
-      iconKey: 'lead-details',
-    });
-    return () => clearMobileTopBar();
-  }, [lead, setMobileTopBar, clearMobileTopBar]);
+    setAutoCallCancelled(false);
+  }, [leadId]);
 
-  // Initialize form data
+
   useEffect(() => {
     if (lead && !showEditModal) {
       // Logic to handle legacy data where full address might be in village field
@@ -725,6 +809,10 @@ export default function UserLeadDetailPage() {
         // If auto-update status is checked and we have an outcome, update status directly
         if (autoUpdateStatus && variables.outcome) {
           statusUpdateMutation.mutate({ newStatus: variables.outcome });
+          // If auto-calling is enabled, start the timer after status update
+          if (user && (user as any).autoCallingEnabled) {
+            startAutoCallTimer();
+          }
         } else {
           // Otherwise trigger status update modal manually
           setNewStatus(lead?.leadStatus || '');
@@ -2031,6 +2119,44 @@ export default function UserLeadDetailPage() {
           </div>
         )}
 
+        {/* Auto-Call Countdown Timer Overlay - Centered and Optimised */}
+        {isAutoCalling && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300 px-4">
+            <Card className="w-full max-w-sm p-6 shadow-2xl border-orange-500 border-2 bg-white dark:bg-slate-900 transform scale-100 animate-in zoom-in-95 duration-200">
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="relative flex h-16 w-16 items-center justify-center">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-20"></span>
+                  <div className="relative inline-flex items-center justify-center rounded-full h-14 w-14 bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-500 text-orange-600 dark:text-orange-400 text-2xl font-bold">
+                    {autoCallTimer}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Auto-Calling Enabled</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Navigating to next lead in <span className="font-semibold text-orange-600 dark:text-orange-400">{autoCallTimer} seconds</span>...
+                  </p>
+                </div>
+
+                <div className="w-full pt-2">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full border-slate-300 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:hover:bg-slate-800 dark:text-slate-100"
+                    onClick={() => {
+                      setIsAutoCalling(false);
+                      setAutoCallCancelled(true);
+                      setAutoCallTimer(null);
+                    }}
+                  >
+                    Stop Auto-Calling
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
         {/* Call Number Selection Modal - radio options, theme styling */}
         {showCallNumberModal && lead && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
@@ -2662,6 +2788,7 @@ export default function UserLeadDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
