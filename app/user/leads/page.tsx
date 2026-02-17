@@ -213,11 +213,11 @@ export default function UserLeadsPage() {
   const combinedStatusOptions = useMemo(() => {
     const backendStatuses = filterOptions?.leadStatuses || [];
     const callOutcomes = [
-      'Answered', 'No Answer', 'Interested', 'Not Interested',
-      'Confirmed', 'CET Applied'
+      'No Answer', 'Interested', 'Not Interested',
+      'Confirmed', 'CET Applied', 'Wrong Data', 'Call Back'
     ];
     const defaultStatuses = [
-      'New', 'Assigned'
+      'Assigned'
     ];
 
     const uniqueStatuses = new Set([
@@ -226,7 +226,7 @@ export default function UserLeadsPage() {
       ...defaultStatuses
     ]);
 
-    return Array.from(uniqueStatuses).sort();
+    return Array.from(uniqueStatuses).filter(s => s !== 'Answered' && s !== 'New').sort();
   }, [filterOptions]);
 
   // Fetch leads with React Query

@@ -180,12 +180,13 @@ export default function UserLeadDetailPage() {
     // Only include specific call outcomes and relevant lead statuses
     // Removed: New, Admitted, Joined, Assigned, Partial, Lost
     return [
-      'Answered',
       'No Answer',
       'Interested',
       'Not Interested',
       'Confirmed',
-      'CET Applied'
+      'CET Applied',
+      'Wrong Data',
+      'Call Back'
     ].sort();
   }, []);
 
