@@ -207,7 +207,7 @@ function LoginPageContent() {
   return (
     <div className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden bg-gray-50 gap-0 lg:gap-6">
       {/* Left: Lottie — larger size, reduced padding */}
-      <div className="relative flex flex-col items-center justify-center pt-0 pb-0 lg:py-12 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white/50 lg:bg-transparent">
+      <div className="relative flex flex-col items-center justify-center pt-20 pb-0 lg:py-12 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white/50 lg:bg-transparent">
         <div className="w-full max-w-[280px] sm:max-w-sm lg:max-w-xl flex items-center justify-center">
           <LoginLottie className="w-full h-auto object-contain" />
         </div>
