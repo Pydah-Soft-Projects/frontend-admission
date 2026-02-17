@@ -51,8 +51,13 @@ export const auth = {
 
   // Clear authentication
   clearAuth: () => {
-    Cookies.remove(TOKEN_KEY);
-    Cookies.remove(USER_KEY);
+    Cookies.remove(TOKEN_KEY, { path: '/' });
+    Cookies.remove(USER_KEY, { path: '/' });
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(TOKEN_KEY);
+      window.localStorage.removeItem(USER_KEY);
+      window.sessionStorage.clear();
+    }
   },
 
   // Logout - calls backend to record logout, then clears auth and redirects

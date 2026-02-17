@@ -54,9 +54,13 @@ api.interceptors.response.use(
 
       if (!isLoginRequest) {
         // Unauthorized on other private routes - clear token and redirect to login
-        Cookies.remove('token');
-        Cookies.remove('user');
+        Cookies.remove('token', { path: '/' });
+        Cookies.remove('user', { path: '/' });
         if (typeof window !== 'undefined') {
+          window.localStorage.removeItem('token');
+          window.localStorage.removeItem('user');
+          window.sessionStorage.clear();
+
           // Only redirect if we are not already on the login page to avoid loops/reloads
           if (!window.location.pathname.includes('/auth/login')) {
             window.location.href = '/auth/login';
