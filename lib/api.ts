@@ -47,12 +47,21 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // If 401 Unauthorized
     if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
-      Cookies.remove('token');
-      Cookies.remove('user');
-      if (typeof window !== 'undefined') {
-        window.location.href = '/auth/login';
+      // Don't redirect if it's a login attempt (user is already trying to login)
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
+
+      if (!isLoginRequest) {
+        // Unauthorized on other private routes - clear token and redirect to login
+        Cookies.remove('token');
+        Cookies.remove('user');
+        if (typeof window !== 'undefined') {
+          // Only redirect if we are not already on the login page to avoid loops/reloads
+          if (!window.location.pathname.includes('/auth/login')) {
+            window.location.href = '/auth/login';
+          }
+        }
       }
     }
     return Promise.reject(error);
