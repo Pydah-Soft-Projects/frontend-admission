@@ -394,6 +394,7 @@ export default function UtmBuilderPage() {
 
   // Comprehensive UTM Sources
   const utmSources = [
+    'College Website',
     'google',
     'meta',
     'facebook',
