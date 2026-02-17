@@ -933,23 +933,6 @@ export default function LeadsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                  Quota
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                  value={filters.quota || ''}
-                  onChange={(e) => handleFilterChange('quota', e.target.value)}
-                >
-                  <option value="">All Quotas</option>
-                  {filterOptions?.quotas?.map((quota) => (
-                    <option key={quota} value={quota}>
-                      {quota}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
                   Lead Status
                 </label>
                 <select
@@ -959,23 +942,6 @@ export default function LeadsPage() {
                 >
                   <option value="">All Lead Statuses</option>
                   {filterOptions?.leadStatuses?.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                  Application Status
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                  value={filters.applicationStatus || ''}
-                  onChange={(e) => handleFilterChange('applicationStatus', e.target.value)}
-                >
-                  <option value="">All Application Statuses</option>
-                  {filterOptions?.applicationStatuses?.map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>
@@ -1170,16 +1136,8 @@ export default function LeadsPage() {
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500 dark:text-slate-400">Course</span>
-                        <span className="font-medium text-gray-900 dark:text-slate-100">{lead.courseInterested || '—'}</span>
-                      </div>
-                      <div className="flex justify-between">
                         <span className="text-gray-500 dark:text-slate-400">Source</span>
                         <span className="font-medium text-gray-900 dark:text-slate-100">{lead.source || '—'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 dark:text-slate-400">Status</span>
-                        <span className="font-medium text-gray-900 dark:text-slate-100">{lead.applicationStatus || 'Not Provided'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500 dark:text-slate-400">Counsellor Assigned</span>
@@ -1272,37 +1230,11 @@ export default function LeadsPage() {
                       </th>
                       <th
                         className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
-                        onClick={() => handleSort('courseInterested')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Course
-                          {sortField === 'courseInterested' && (
-                            <span className="text-blue-600 dark:text-blue-300">
-                              {sortOrder === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </div>
-                      </th>
-                      <th
-                        className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                         onClick={() => handleSort('source')}
                       >
                         <div className="flex items-center gap-1">
                           Source
                           {sortField === 'source' && (
-                            <span className="text-blue-600 dark:text-blue-300">
-                              {sortOrder === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </div>
-                      </th>
-                      <th
-                        className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
-                        onClick={() => handleSort('applicationStatus')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Status
-                          {sortField === 'applicationStatus' && (
                             <span className="text-blue-600 dark:text-blue-300">
                               {sortOrder === 'asc' ? '↑' : '↓'}
                             </span>
@@ -1382,14 +1314,8 @@ export default function LeadsPage() {
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.courseInterested || '—'}>
-                            {lead.courseInterested || '—'}
-                          </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.source || '—'}>
                             {lead.source || '—'}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={lead.applicationStatus || 'Not Provided'}>
-                            {lead.applicationStatus || 'Not Provided'}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-slate-300" title={assignedUserName}>
                             {assignedUserName}
