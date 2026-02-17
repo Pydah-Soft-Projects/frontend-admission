@@ -1,7 +1,7 @@
 {
-  "name": "Admission CRM",
-  "short_name": "Admission CRM",
-  "description": "Admission CRM Application",
+  "name": "Leads Tracker",
+  "short_name": "Leads Tracker",
+  "description": "Leads Tracker Application",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
