@@ -1,6 +1,6 @@
 {
   "name": "Admission CRM",
-  "short_name": "CRM",
+  "short_name": "Admission CRM",
   "description": "Admission CRM Application",
   "start_url": "/",
   "display": "standalone",
