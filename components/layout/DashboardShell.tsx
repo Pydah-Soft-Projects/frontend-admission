@@ -183,6 +183,9 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   // Pages where we want full width (no max-width constraint)
   const isFullWidthPage = ['/superadmin/leads/assign'].includes(pathname);
 
+  // Pages where we want reduced vertical spacing but keep header visible
+  const isReducedSpacingPage = ['/superadmin/users'].includes(pathname);
+
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('sidebar-collapsed') : null;
     if (saved === 'true') {
@@ -460,7 +463,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         'shadow-[4px_0_24px_-8px_rgba(249,115,22,0.12)] dark:shadow-[4px_0_24px_-8px_rgba(0,0,0,0.25)]',
         isCollapsed ? 'w-[72px]' : 'w-64',
         variant === 'desktop'
-          ? 'h-screen flex-shrink-0 z-30'
+          ? 'h-screen flex-shrink-0 z-10'
           : 'h-full rounded-2xl border border-slate-200 dark:border-slate-700'
       )}
     >
@@ -611,7 +614,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               <header
                 className={cn(
                   'flex-shrink-0 px-4 z-10',
-                  isCompactPage ? 'pt-2 pb-0 lg:hidden' : 'pt-6 pb-4',
+                  isCompactPage ? 'pt-2 pb-0 lg:hidden' : (isReducedSpacingPage ? 'pt-6 pb-0' : 'pt-6 pb-4'),
                   'sm:px-6 lg:px-8',
                   useMobileBottomNav && 'hidden lg:block'
                 )}
@@ -629,7 +632,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                     </button>
 
                     {/* Back Icon - Hide on Dashboard and Leads root pages */}
-                    {!['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports'].includes(pathname) && (
+                    {!['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/users'].includes(pathname) && (
                       <button
                         type="button"
                         onClick={handleBack}
@@ -665,7 +668,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   'relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden',
                   isCompactPage
                     ? 'p-3 sm:px-6 sm:pt-2 lg:px-8 lg:pt-4'
-                    : 'p-3 sm:p-6 lg:p-8',
+                    : (isReducedSpacingPage ? 'p-3 sm:p-6 lg:px-8 lg:pb-8 lg:pt-2' : 'p-3 sm:p-6 lg:p-8'),
                   useMobileBottomNav && 'pb-20 pt-[calc(2.75rem+env(safe-area-inset-top))] lg:pt-6 lg:pb-8'
                 )}
               >

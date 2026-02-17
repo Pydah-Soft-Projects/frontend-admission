@@ -124,11 +124,8 @@ const UserManagementPage = () => {
 
   const headerContent = useMemo(
     () => (
-      <div className="flex flex-col items-end gap-2 text-right">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">User Management</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Maintain super admin and counsellor access, manage activation, and onboard your team quickly.
-        </p>
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">User Management</h1>
       </div>
     ),
     []
@@ -164,6 +161,10 @@ const UserManagementPage = () => {
       userAPI.update(user._id, { isActive: !user.isActive }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      // Update selected user detail if open
+      if (selectedUserDetail) {
+        setSelectedUserDetail(prev => prev ? ({ ...prev, isActive: !prev.isActive }) : null);
+      }
     },
     onError: () => {
       showToast.error('Unable to update user status');
@@ -179,6 +180,7 @@ const UserManagementPage = () => {
       setSelectedUserForAssignment(null);
       setSelectedManagerId('');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      setShowUserDetail(false); // Close detail modal after assignment to refresh context or start fresh
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to update team assignment');
@@ -196,6 +198,9 @@ const UserManagementPage = () => {
       const action = user.isManager ? 'promoted to' : 'revoked';
       showToast.success(`User ${action} Manager successfully`);
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      if (selectedUserDetail && selectedUserDetail._id === user._id) {
+        setSelectedUserDetail(prev => prev ? ({ ...prev, isManager: !prev.isManager }) : null);
+      }
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to update user role');
@@ -210,6 +215,7 @@ const UserManagementPage = () => {
       setShowEditUser(false);
       setEditingUser(null);
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      setShowUserDetail(false);
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to update user');
@@ -221,6 +227,7 @@ const UserManagementPage = () => {
     onSuccess: () => {
       showToast.success('User deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      setShowUserDetail(false);
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to delete user');
@@ -231,8 +238,17 @@ const UserManagementPage = () => {
     return users.filter((u) => u.isManager === true);
   }, [users]);
 
-  const handleOpenTeamAssignment = (user: User, event: React.MouseEvent) => {
-    event.stopPropagation();
+  // New state for user detail modal
+  const [showUserDetail, setShowUserDetail] = useState(false);
+  const [selectedUserDetail, setSelectedUserDetail] = useState<User | null>(null);
+
+  const handleRowClick = (user: User) => {
+    setSelectedUserDetail(user);
+    setShowUserDetail(true);
+  };
+
+  const handleOpenTeamAssignment = (user: User, event?: React.MouseEvent) => {
+    if (event) event.stopPropagation();
     setSelectedUserForAssignment(user);
     // Safely get manager ID - handle null, object, or string
     let managerId = '';
@@ -414,21 +430,21 @@ const UserManagementPage = () => {
                 <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   Manager
                 </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 min-w-[200px]">
-                  Actions
+                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 min-w-[120px]">
+
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900/40">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                     Loading users…
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                     No users match the current search.
                   </td>
                 </tr>
@@ -442,12 +458,12 @@ const UserManagementPage = () => {
                       manager = users.find((u) => u._id === user.managedBy);
                     }
                   }
-                  const canShowManagerActions = user.roleName === 'Sub Super Admin' || user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User';
+
                   return (
                     <tr
                       key={user._id}
                       className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                      onClick={() => router.push(`/superadmin/users/${user._id}/leads`)}
+                      onClick={() => handleRowClick(user)}
                     >
                       <td className="px-3 py-2.5 align-middle text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                         {user.name}
@@ -480,117 +496,8 @@ const UserManagementPage = () => {
                           <span className="text-slate-400 dark:text-slate-500">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
-                          {canShowManagerActions && (
-                            <button
-                              type="button"
-                              title={manager ? 'Change Manager' : 'Assign Manager'}
-                              onClick={(event) => handleOpenTeamAssignment(user, event)}
-                              disabled={!canManageUsers}
-                              className={actionBtnBase}
-                            >
-                              <IconUserGroup className="w-3.5 h-3.5 shrink-0" />
-                              <span>{manager ? 'Manager' : 'Assign'}</span>
-                            </button>
-                          )}
-                          {canShowManagerActions && (
-                            <button
-                              type="button"
-                              title={user.isManager ? 'Revoke Manager' : 'Make Manager'}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (user.isManager) {
-                                  if (window.confirm(`Revoke Manager privileges from ${user.name}? This will remove them as manager of their team.`)) {
-                                    toggleManagerRoleMutation.mutate(user);
-                                  }
-                                } else {
-                                  if (window.confirm(`Grant Manager privileges to ${user.name}?`)) {
-                                    toggleManagerRoleMutation.mutate(user);
-                                  }
-                                }
-                              }}
-                              disabled={toggleManagerRoleMutation.isPending || !canManageUsers}
-                              className={user.isManager
-                                ? `${actionBtnClass} border-blue-400 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:border-blue-600 dark:bg-blue-900/50 dark:text-blue-200 dark:hover:bg-blue-900/70`
-                                : actionBtnBase}
-                            >
-                              <IconBadge className="w-3.5 h-3.5 shrink-0" />
-                              <span>{user.isManager ? 'Revoke' : 'Manager'}</span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            title={user.isActive ? 'Deactivate' : 'Activate'}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleActiveMutation.mutate(user);
-                            }}
-                            disabled={toggleActiveMutation.isPending || !canManageUsers}
-                            className={actionBtnBase}
-                          >
-                            {user.isActive ? <IconX className="w-3.5 h-3.5 shrink-0" /> : <IconCheck className="w-3.5 h-3.5 shrink-0" />}
-                            <span>{user.isActive ? 'Deactivate' : 'Activate'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            title="Edit user"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (!canManageUsers) return;
-                              setEditingUser(user);
-                              setEditFormState({
-                                name: user.name,
-                                email: user.email,
-                                mobileNumber: user.mobileNumber || '',
-                                roleName: user.roleName,
-                                designation: user.designation || '',
-                                password: '',
-                              });
-                              if (user.roleName === 'Sub Super Admin') {
-                                const base = createEmptyPermissions();
-                                const userPerms = user.permissions || {};
-                                const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
-                                PERMISSION_MODULES.forEach((module) => {
-                                  const entry = userPerms[module.key];
-                                  if (entry?.access) {
-                                    seeded[module.key] = {
-                                      access: true,
-                                      permission: entry.permission === 'read' ? 'read' : 'write',
-                                    };
-                                  }
-                                });
-                                setEditPermissionState(seeded);
-                              } else {
-                                setEditPermissionState(createEmptyPermissions());
-                              }
-                              setShowEditUser(true);
-                            }}
-                            disabled={!canManageUsers}
-                            className={actionBtnBase}
-                          >
-                            <IconPencil className="w-3.5 h-3.5 shrink-0" />
-                            <span>Edit</span>
-                          </button>
-                          {canDeleteUsers && (
-                            <button
-                              type="button"
-                              title="Delete user"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (!canManageUsers) return;
-                                if (window.confirm(`Delete ${user.name}? This cannot be undone.`)) {
-                                  deleteUserMutation.mutate(user._id);
-                                }
-                              }}
-                              disabled={deleteUserMutation.isPending || !canManageUsers}
-                              className={`${actionBtnClass} border-slate-300 text-rose-600 hover:bg-rose-50 hover:border-rose-300 dark:border-slate-600 dark:text-rose-400 dark:hover:bg-rose-900/30`}
-                            >
-                              <IconTrash className="w-3.5 h-3.5 shrink-0" />
-                              <span>Delete</span>
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                        <IconPencil className="inline-block w-4 h-4 text-slate-400" />
                       </td>
                     </tr>
                   );
@@ -600,6 +507,173 @@ const UserManagementPage = () => {
           </table>
         </div>
       </div>
+
+      {/* User Detail Modal */}
+      {showUserDetail && selectedUserDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <Card className="w-full max-w-md space-y-6 p-6 shadow-xl shadow-blue-100/40 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-lg font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                  {selectedUserDetail.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                    {selectedUserDetail.name}
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {selectedUserDetail.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-full bg-slate-100 p-1.5 text-slate-500 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                onClick={() => setShowUserDetail(false)}
+              >
+                <IconX className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-900/50 text-sm">
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Role</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">{displayRole(selectedUserDetail)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</p>
+                  <span
+                    className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${selectedUserDetail.isActive
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
+                      : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
+                      }`}
+                  >
+                    {selectedUserDetail.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Mobile</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">{selectedUserDetail.mobileNumber || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Manager</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">
+                    {selectedUserDetail.managedBy && typeof selectedUserDetail.managedBy !== 'string'
+                      ? selectedUserDetail.managedBy.name
+                      : selectedUserDetail.managedBy
+                        ? (users.find(u => u._id === selectedUserDetail.managedBy) as User)?.name || 'Unknown'
+                        : '-'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Actions</h3>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleOpenTeamAssignment(selectedUserDetail)}
+                    disabled={!canManageUsers}
+                    className="justify-start"
+                  >
+                    <IconUserGroup className="w-4 h-4 mr-2" />
+                    Assign Manager
+                  </Button>
+
+                  {canManageUsers && (selectedUserDetail.roleName === 'Super Admin' || selectedUserDetail.roleName === 'Sub Super Admin' ? false : true) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (selectedUserDetail.isManager) {
+                          if (window.confirm(`Revoke Manager privileges from ${selectedUserDetail.name}?`)) {
+                            toggleManagerRoleMutation.mutate(selectedUserDetail);
+                          }
+                        } else {
+                          if (window.confirm(`Grant Manager privileges to ${selectedUserDetail.name}?`)) {
+                            toggleManagerRoleMutation.mutate(selectedUserDetail);
+                          }
+                        }
+                      }}
+                      className={selectedUserDetail.isManager ? "justify-start border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" : "justify-start"}
+                    >
+                      <IconBadge className="w-4 h-4 mr-2" />
+                      {selectedUserDetail.isManager ? 'Revoke Manager' : 'Make Manager'}
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    onClick={() => toggleActiveMutation.mutate(selectedUserDetail)}
+                    disabled={!canManageUsers}
+                    className={selectedUserDetail.isActive ? "justify-start text-rose-600 hover:bg-rose-50 border-rose-200" : "justify-start text-emerald-600 hover:bg-emerald-50 border-emerald-200"}
+                  >
+                    {selectedUserDetail.isActive ? <IconX className="w-4 h-4 mr-2" /> : <IconCheck className="w-4 h-4 mr-2" />}
+                    {selectedUserDetail.isActive ? 'Deactivate' : 'Activate'}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingUser(selectedUserDetail);
+                      setEditFormState({
+                        name: selectedUserDetail.name,
+                        email: selectedUserDetail.email,
+                        mobileNumber: selectedUserDetail.mobileNumber || '',
+                        roleName: selectedUserDetail.roleName,
+                        designation: selectedUserDetail.designation || '',
+                        password: '',
+                      });
+                      if (selectedUserDetail.roleName === 'Sub Super Admin') {
+                        const base = createEmptyPermissions();
+                        const userPerms = selectedUserDetail.permissions || {};
+                        const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
+                        PERMISSION_MODULES.forEach((module) => {
+                          const entry = userPerms[module.key];
+                          if (entry?.access) {
+                            seeded[module.key] = {
+                              access: true,
+                              permission: entry.permission === 'read' ? 'read' : 'write',
+                            };
+                          }
+                        });
+                        setEditPermissionState(seeded);
+                      } else {
+                        setEditPermissionState(createEmptyPermissions());
+                      }
+                      setShowEditUser(true);
+                      // Keep detail modal open or close it? 
+                      // User might want to see updated details. Let's keep it open, but edit modal is on top.
+                    }}
+                    disabled={!canManageUsers}
+                    className="justify-start"
+                  >
+                    <IconPencil className="w-4 h-4 mr-2" />
+                    Edit Details
+                  </Button>
+                </div>
+
+                {canDeleteUsers && (
+                  <Button
+                    variant="outline" // Changed to outline but with red styling to match design system better for destructive in a list
+                    onClick={() => {
+                      if (window.confirm(`Delete ${selectedUserDetail.name}? This cannot be undone.`)) {
+                        deleteUserMutation.mutate(selectedUserDetail._id);
+                      }
+                    }}
+                    disabled={!canManageUsers}
+                    className="justify-start border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 w-full mt-2"
+                  >
+                    <IconTrash className="w-4 h-4 mr-2" />
+                    Delete User Permanently
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {showCreateUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
