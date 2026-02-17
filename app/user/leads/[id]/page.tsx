@@ -303,6 +303,19 @@ export default function UserLeadDetailPage() {
     return allLeadIds[index + 1];
   }, [allLeadIds, leadId]);
 
+  // Fetch next lead details for preview
+  const { data: nextLeadData } = useQuery({
+    queryKey: ['lead', nextLeadId],
+    queryFn: async () => {
+      if (!nextLeadId) return null;
+      const response = await leadAPI.getById(nextLeadId);
+      return response.data || response;
+    },
+    enabled: !!nextLeadId,
+    staleTime: 60000,
+  });
+  const nextLead = (nextLeadData?.data || nextLeadData) as Lead | undefined;
+
   // Auto-Calling State
   const [isAutoCalling, setIsAutoCalling] = useState(false);
   const [autoCallTimer, setAutoCallTimer] = useState<number | null>(null);
@@ -345,7 +358,7 @@ export default function UserLeadDetailPage() {
     if (!user || !(user as any).autoCallingEnabled || !nextLeadId || autoCallCancelled) return;
 
     setIsAutoCalling(true);
-    let count = 3;
+    let count = 5;
     setAutoCallTimer(count);
 
     const interval = setInterval(() => {
@@ -2154,10 +2167,30 @@ export default function UserLeadDetailPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Auto-Calling Enabled</h3>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Auto-Calling Enabled</h3>
+
+                  {nextLead && (
+                    <div className="py-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide font-semibold mb-1">Next Call</p>
+                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                        {nextLead.name}
+                      </p>
+                      <div className="flex justify-center gap-2 mt-1">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                          {nextLead.studentGroup || 'No Group'}
+                        </span>
+                        {(nextLead.village || nextLead.mandal) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                            {nextLead.village || nextLead.mandal}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Navigating to next lead in <span className="font-semibold text-orange-600 dark:text-orange-400">{autoCallTimer} seconds</span>...
+                    Calling in <span className="font-bold text-orange-600 dark:text-orange-400 text-lg">{autoCallTimer}s</span>...
                   </p>
                 </div>
 
