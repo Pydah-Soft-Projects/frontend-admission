@@ -5,6 +5,10 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "Lead Tracker",
   description: "Track your leads and opportunities",
+  icons: {
+    icon: "/Lead Tracker.png",
+    apple: "/Lead Tracker.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -13,6 +17,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -20,8 +26,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#000000" />
+      </head>
       <body className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <PwaInstallPrompt />
+        </Providers>
       </body>
     </html>
   );
