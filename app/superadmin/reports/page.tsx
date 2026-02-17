@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -55,6 +55,7 @@ export default function ReportsPage() {
   const [callReportExportPreviewOpen, setCallReportExportPreviewOpen] = useState(false);
   const [exportPreviewDate, setExportPreviewDate] = useState<string>('');
   const [activityLogPage, setActivityLogPage] = useState(1);
+  const [expandedActivityLogId, setExpandedActivityLogId] = useState<string | null>(null);
   const [activityLogEventType, setActivityLogEventType] = useState<'tracking_enabled' | 'tracking_disabled' | ''>('');
 
   // Unified filters for all tabs (default to today)
@@ -425,7 +426,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Filters & Date Presets */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 mt-4">
         {activeTab === 'calls' && (
           <>
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Academic Year</span>
@@ -495,6 +496,51 @@ export default function ReportsPage() {
           </>
         )}
 
+        {/* Activity Logs Specific Filters in Top Bar */}
+        {activeTab === 'activityLogs' && (
+          <>
+            <input
+              type="date"
+              value={filters.startDate}
+              onChange={(e) => {
+                setFilters({ ...filters, startDate: e.target.value });
+                setDatePreset('custom');
+                setActivityLogPage(1);
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+              placeholder="Start Date"
+            />
+            <span className="text-slate-400">-</span>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={(e) => {
+                setFilters({ ...filters, endDate: e.target.value });
+                setDatePreset('custom');
+                setActivityLogPage(1);
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+              placeholder="End Date"
+            />
+            <select
+              value={filters.userId}
+              onChange={(e) => {
+                setFilters({ ...filters, userId: e.target.value });
+                setActivityLogPage(1);
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 max-w-[150px]"
+            >
+              <option value="">All Users</option>
+              {activityLogUsers.map((user: any) => (
+                <option key={user._id} value={user._id}>
+                  {user.name} ({user.roleName})
+                </option>
+              ))}
+            </select>
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
+          </>
+        )}
+
         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Quick Filters:</span>
         {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek'] as DatePreset[]).map((preset) => (
           <button
@@ -514,180 +560,158 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {/* Filters – hidden on Call Reports, User Analytics, and Leads Abstract */}
-      {activeTab !== 'calls' && activeTab !== 'users' && activeTab !== 'abstract' && (
-        <Card className="p-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Filters – hidden on Call Reports, User Analytics, Leads Abstract AND Activity Logs (since moved to top) */}
+      {activeTab !== 'calls' && activeTab !== 'users' && activeTab !== 'abstract' && activeTab !== 'activityLogs' && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 mt-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
+            <input
+              type="date"
+              value={filters.startDate}
+              onChange={(e) => {
+                setFilters({ ...filters, startDate: e.target.value });
+                setDatePreset('custom');
+              }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">End Date</label>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={(e) => {
+                setFilters({ ...filters, endDate: e.target.value });
+                setDatePreset('custom');
+              }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User/Counsellor</label>
+            <select
+              value={filters.userId}
+              onChange={(e) => {
+                setFilters({ ...filters, userId: e.target.value });
+              }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+            >
+              <option value="">All Users</option>
+              {users.map((user: any) => (
+                <option key={user._id} value={user._id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Since activityLogs is excluded above, we don't need this check anymore */}
+          <>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
-              <input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) => {
-                  setFilters({ ...filters, startDate: e.target.value });
-                  setDatePreset('custom');
-                  if (activeTab === 'activityLogs') setActivityLogPage(1);
-                }}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">End Date</label>
-              <input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) => {
-                  setFilters({ ...filters, endDate: e.target.value });
-                  setDatePreset('custom');
-                  if (activeTab === 'activityLogs') setActivityLogPage(1);
-                }}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User/Counsellor</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Source</label>
               <select
-                value={filters.userId}
-                onChange={(e) => {
-                  setFilters({ ...filters, userId: e.target.value });
-                  if (activeTab === 'activityLogs') setActivityLogPage(1);
-                }}
+                value={filters.source}
+                onChange={(e) => setFilters({ ...filters, source: e.target.value })}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
               >
-                <option value="">All Users</option>
-                {(activeTab === 'activityLogs' ? activityLogUsers : users).map((user: any) => (
-                  <option key={user._id} value={user._id}>
-                    {user.name} {activeTab === 'activityLogs' ? `(${user.roleName})` : ''}
+                <option value="">All Sources</option>
+                {filterOptions?.sources?.map((source: string) => (
+                  <option key={source} value={source}>
+                    {source}
                   </option>
                 ))}
               </select>
             </div>
-            {activeTab === 'activityLogs' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Event</label>
-                <select
-                  value={activityLogEventType}
-                  onChange={(e) => {
-                    setActivityLogEventType(e.target.value as 'tracking_enabled' | 'tracking_disabled' | '');
-                    setActivityLogPage(1);
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                >
-                  <option value="">All (ON & OFF)</option>
-                  <option value="tracking_enabled">ON</option>
-                  <option value="tracking_disabled">OFF</option>
-                </select>
-              </div>
-            )}
-            {activeTab !== 'activityLogs' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Source</label>
-                  <select
-                    value={filters.source}
-                    onChange={(e) => setFilters({ ...filters, source: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  >
-                    <option value="">All Sources</option>
-                    {filterOptions?.sources?.map((source: string) => (
-                      <option key={source} value={source}>
-                        {source}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Course</label>
-                  <select
-                    value={filters.course}
-                    onChange={(e) => setFilters({ ...filters, course: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  >
-                    <option value="">All Courses</option>
-                    {filterOptions?.courses?.map((course: string) => (
-                      <option key={course} value={course}>
-                        {course}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
-                  <select
-                    value={filters.status}
-                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  >
-                    <option value="">All Statuses</option>
-                    {filterOptions?.leadStatuses?.map((status: string) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">District</label>
-                  <select
-                    value={filters.district}
-                    onChange={(e) => setFilters({ ...filters, district: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  >
-                    <option value="">All Districts</option>
-                    {filterOptions?.districts?.map((district: string) => (
-                      <option key={district} value={district}>
-                        {district}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mandal</label>
-                  <select
-                    value={filters.mandal}
-                    onChange={(e) => setFilters({ ...filters, mandal: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  >
-                    <option value="">All Mandals</option>
-                    {filterOptions?.mandals?.map((mandal: string) => (
-                      <option key={mandal} value={mandal}>
-                        {mandal}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Academic Year</label>
-                  <select
-                    value={filters.academicYear}
-                    onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? 2025 : Number(e.target.value) })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  >
-                    {[2023, 2024, 2025, 2026, 2027].map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Student Group</label>
-                  <select
-                    value={filters.studentGroup}
-                    onChange={(e) => setFilters({ ...filters, studentGroup: e.target.value })}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-                  >
-                    <option value="">All Groups</option>
-                    <option value="10th">10th</option>
-                    <option value="Inter">Inter</option>
-                    <option value="Inter-MPC">Inter-MPC</option>
-                    <option value="Inter-BIPC">Inter-BIPC</option>
-                    <option value="Degree">Degree</option>
-                    <option value="Diploma">Diploma</option>
-                  </select>
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Course</label>
+              <select
+                value={filters.course}
+                onChange={(e) => setFilters({ ...filters, course: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Courses</option>
+                {filterOptions?.courses?.map((course: string) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Statuses</option>
+                {filterOptions?.leadStatuses?.map((status: string) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">District</label>
+              <select
+                value={filters.district}
+                onChange={(e) => setFilters({ ...filters, district: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Districts</option>
+                {filterOptions?.districts?.map((district: string) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mandal</label>
+              <select
+                value={filters.mandal}
+                onChange={(e) => setFilters({ ...filters, mandal: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Mandals</option>
+                {filterOptions?.mandals?.map((mandal: string) => (
+                  <option key={mandal} value={mandal}>
+                    {mandal}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Academic Year</label>
+              <select
+                value={filters.academicYear}
+                onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? 2025 : Number(e.target.value) })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                {[2023, 2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Student Group</label>
+              <select
+                value={filters.studentGroup}
+                onChange={(e) => setFilters({ ...filters, studentGroup: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+              >
+                <option value="">All Groups</option>
+                <option value="10th">10th</option>
+                <option value="Inter">Inter</option>
+                <option value="Inter-MPC">Inter-MPC</option>
+                <option value="Inter-BIPC">Inter-BIPC</option>
+                <option value="Degree">Degree</option>
+                <option value="Diploma">Diploma</option>
+              </select>
+            </div>
+          </>
+        </div>
       )}
 
       {/* User Analytics Tab */}
@@ -1487,7 +1511,7 @@ export default function ReportsPage() {
 
       {/* Activity Logs Tab – time tracking ON/OFF in tabular format */}
       {activeTab === 'activityLogs' && (
-        <Card className="overflow-hidden p-0">
+        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-600 mt-4">
           {isLoadingActivityLogs ? (
             <div className="space-y-0 divide-y divide-slate-100 dark:divide-slate-800">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -1508,55 +1532,133 @@ export default function ReportsPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[500px]">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-800/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
+                    <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
                         User
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
                         Role
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
-                        Event
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                        Date
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400 sm:px-5">
-                        Date & Time
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                        Sessions
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                        Total Duration
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">
+                        First Login
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">
+
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {activityLogs.map((log) => {
-                      const label = log.eventType === 'tracking_enabled' ? 'ON' : 'OFF';
-                      const badgeClass =
-                        log.eventType === 'tracking_enabled'
-                          ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
+                    {activityLogs.map((log: any, idx: number) => {
+                      // Convert duration (ms) to HH:MM
+                      const durationMs = log.totalDuration || 0;
+                      const hours = Math.floor(durationMs / (1000 * 60 * 60));
+                      const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+                      const durationStr = `${hours}h ${minutes}m`;
+                      const isExpanded = expandedActivityLogId === log.key; // Using composed key (userId_date) from backend
+
                       return (
-                        <tr
-                          key={log.id}
-                          className="transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
-                        >
-                          <td className="px-4 py-3 sm:px-5">
-                            <div>
-                              <div className="font-medium text-slate-900 dark:text-slate-100">{log.userName}</div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400">{log.userEmail}</div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 sm:px-5">
-                            {log.userRole}
-                          </td>
-                          <td className="px-4 py-3 sm:px-5">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
-                            >
-                              {label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400 sm:px-5">
-                            {format(new Date(log.createdAt), 'MMM d, yyyy · h:mm a')}
-                          </td>
-                        </tr>
+                        <Fragment key={log.id}>
+                          <tr
+                            onClick={() => setExpandedActivityLogId(isExpanded ? null : log.key)}
+                            className={`cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-slate-50/80 dark:bg-slate-700/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}`}
+                          >
+                            <td className="whitespace-nowrap px-6 py-4 sm:px-6">
+                              <div>
+                                <div className="font-medium text-slate-900 dark:text-slate-100">{log.userName}</div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">{log.userEmail}</div>
+                              </div>
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600 dark:text-slate-400 sm:px-6">
+                              {log.userRole}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100 sm:px-6">
+                              {format(new Date(log.date), 'MMM d, yyyy')}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600 dark:text-slate-400 sm:px-6">
+                              {log.sessionCount || 0}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 sm:px-6">
+                              <span className="font-semibold text-slate-900 dark:text-slate-100">{durationStr}</span>
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 sm:px-6">
+                              {log.isActive ? (
+                                <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                                  Active Now
+                                </span>
+                              ) : (
+                                <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                  Completed
+                                </span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-600 dark:text-slate-400 sm:px-6">
+                              {log.firstLogin ? format(new Date(log.firstLogin), 'h:mm a') : '—'}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-right sm:px-6">
+                              <span className="text-slate-400">
+                                {isExpanded ? (
+                                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                  </svg>
+                                ) : (
+                                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                )}
+                              </span>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="bg-slate-50 dark:bg-slate-800/80">
+                              <td colSpan={8} className="px-6 py-4 sm:px-6">
+                                <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                                  <h4 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Detailed Sessions</h4>
+                                  <div className="space-y-2">
+                                    {log.sessions && log.sessions.length > 0 ? (
+                                      log.sessions.map((session: any, sIdx: number) => {
+                                        const sDuration = session.duration || 0;
+                                        const sHours = Math.floor(sDuration / (1000 * 60 * 60));
+                                        const sMinutes = Math.floor((sDuration % (1000 * 60 * 60)) / (1000 * 60));
+                                        return (
+                                          <div key={sIdx} className="flex items-center text-sm text-slate-600 dark:text-slate-400">
+                                            <div className="w-2 h-2 rounded-full bg-orange-400 mr-3"></div>
+                                            <span className="font-medium mr-2">Session {sIdx + 1}:</span>
+                                            <span className="mr-2">
+                                              {format(new Date(session.startTime), 'h:mm a')}
+                                            </span>
+                                            <span className="mr-2 text-slate-400">→</span>
+                                            <span className="mr-4">
+                                              {session.endTime ? format(new Date(session.endTime), 'h:mm a') : 'Active Now'}
+                                            </span>
+                                            <span className="ml-auto font-medium text-slate-700 dark:text-slate-300">
+                                              ({sHours}h {sMinutes}m)
+                                            </span>
+                                          </div>
+                                        );
+                                      })
+                                    ) : (
+                                      <p className="text-sm text-slate-500">No detailed sessions recorded.</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       );
                     })}
                   </tbody>
@@ -1565,7 +1667,7 @@ export default function ReportsPage() {
               {activityLogsPagination && activityLogsPagination.pages > 1 && (
                 <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Page {activityLogsPagination.page} of {activityLogsPagination.pages} · {activityLogsPagination.total} total
+                    Page {activityLogsPagination.page} of {activityLogsPagination.pages} · {activityLogsPagination.total} records
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -1589,7 +1691,7 @@ export default function ReportsPage() {
               )}
             </>
           )}
-        </Card>
+        </div>
       )}
 
       {/* Leads Abstract Tab – State → Districts → Mandals filters; 4-column Kanban */}

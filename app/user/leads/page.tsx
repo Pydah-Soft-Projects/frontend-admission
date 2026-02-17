@@ -626,7 +626,7 @@ export default function UserLeadsPage() {
                 onClick={() => setPage(1)}
                 disabled={page === 1 || isLoading}
                 size="sm"
-                className="h-9 w-9 p-0 shrink-0"
+                className="h-9 w-9 p-0 shrink-0 hover:border-orange-400 hover:text-orange-400 transition-colors"
                 title="First Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -638,7 +638,7 @@ export default function UserLeadsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1 || isLoading}
                 size="sm"
-                className="h-9 w-9 p-0 shrink-0"
+                className="h-9 w-9 p-0 shrink-0 hover:border-orange-400 hover:text-orange-400 transition-colors"
                 title="Previous Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -664,7 +664,10 @@ export default function UserLeadsPage() {
                       onClick={() => setPage(pageNum)}
                       disabled={isLoading}
                       size="sm"
-                      className="h-9 min-w-[36px] px-2"
+                      className={`h-9 min-w-[36px] px-2 transition-colors ${page === pageNum
+                          ? '!bg-orange-400 !border-orange-400 hover:!bg-orange-500'
+                          : 'hover:border-orange-400 hover:text-orange-400'
+                        }`}
                     >
                       {pageNum}
                     </Button>
@@ -676,7 +679,7 @@ export default function UserLeadsPage() {
                 onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
                 disabled={page === pagination.pages || isLoading}
                 size="sm"
-                className="h-9 w-9 p-0 shrink-0"
+                className="h-9 w-9 p-0 shrink-0 hover:border-orange-400 hover:text-orange-400 transition-colors"
                 title="Next Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -688,7 +691,7 @@ export default function UserLeadsPage() {
                 onClick={() => setPage(pagination.pages)}
                 disabled={page === pagination.pages || isLoading}
                 size="sm"
-                className="h-9 w-9 p-0 shrink-0"
+                className="h-9 w-9 p-0 shrink-0 hover:border-orange-400 hover:text-orange-400 transition-colors"
                 title="Last Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -816,45 +819,52 @@ export default function UserLeadsPage() {
               >
                 <div className="h-0.5 w-full bg-slate-100 group-hover:bg-orange-100 transition-colors" aria-hidden />
                 <div className="relative flex flex-1 flex-col p-3 sm:p-4">
-                  <div className="flex items-start gap-2 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-slate-200/60 font-semibold text-sm uppercase">
-                      {(lead.name || '?').charAt(0)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/user/leads/${lead._id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="truncate text-sm font-semibold text-slate-900 underline underline-offset-2 decoration-orange-500 hover:text-orange-600 dark:text-slate-100 dark:decoration-orange-400 dark:hover:text-orange-400"
-                      >
-                        {lead.name || '—'}
-                      </Link>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusColor(lead.leadStatus || '')}`}>
-                          {lead.leadStatus || 'New'}
-                        </span>
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-400 text-white shadow-sm ring-1 ring-orange-600/20 font-semibold text-sm uppercase">
+                        {(lead.name || '?').charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/user/leads/${lead._id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="block truncate text-sm font-semibold text-slate-900 underline underline-offset-2 decoration-orange-500 hover:text-orange-600 dark:text-slate-100 dark:decoration-orange-400 dark:hover:text-orange-400"
+                        >
+                          {lead.name || '—'}
+                        </Link>
                         {lead.needsManualUpdate && (
-                          <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700" title="Details need manual update">
+                          <span className="mt-1 inline-block rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700" title="Details need manual update">
                             Update
                           </span>
                         )}
                       </div>
                     </div>
+                    <span className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusColor(lead.leadStatus || '')}`}>
+                      {lead.leadStatus || 'New'}
+                    </span>
                   </div>
-                  <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-2">
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <svg className="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
-                      <span className="truncate font-medium text-slate-800">{lead.phone}</span>
-                    </div>
-                    {(lead.mandal || lead.village) && (
-                      <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                        <svg className="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+
+                  <div className="mt-1.5 ml-11">
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                         </svg>
-                        <span className="truncate">{[lead.village, lead.mandal].filter(Boolean).join(', ') || '—'}</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">{lead.phone}</span>
                       </div>
-                    )}
+                      {(lead.mandal || lead.village) && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-600">•</span>
+                          <div className="flex items-center gap-1 min-w-0">
+                            <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="truncate">{[lead.village, lead.mandal].filter(Boolean).join(', ')}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div className="mt-3 hidden gap-1.5 border-t border-slate-100 pt-2 sm:flex">
                     <Button
