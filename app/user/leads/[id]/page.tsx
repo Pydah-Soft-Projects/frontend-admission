@@ -74,6 +74,7 @@ export default function UserLeadDetailPage() {
   const [showCallNumberModal, setShowCallNumberModal] = useState(false);
   const [selectedCallNumber, setSelectedCallNumber] = useState('');
   const [showCallRemarksModal, setShowCallRemarksModal] = useState(false);
+  const [callScheduledDate, setCallScheduledDate] = useState('');
   const [callData, setCallData] = useState({
     contactNumber: '',
     remarks: '',
@@ -838,6 +839,7 @@ export default function UserLeadDetailPage() {
       setShowCallRemarksModal(false);
       setCallData({ contactNumber: '', remarks: '', outcome: '', durationSeconds: 0 });
       setSelectedCallNumber('');
+      setCallScheduledDate('');
       showToast.success('Call logged successfully!');
 
       if (variables.next) {
@@ -2286,104 +2288,132 @@ export default function UserLeadDetailPage() {
           </div>
         )}
 
-        {/* Log Call Details Modal - compact, optimised */}
+        {/* Log Call Details Modal - compact, optimised for mobile */}
         {showCallRemarksModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50">
-            <Card className="max-w-md w-full p-4 sm:p-5">
-              <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">Log Call Details</h2>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-                  <div className="min-w-0">
-                    <p className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400">Contact</p>
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{callData.contactNumber}</p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-all duration-300">
+            <Card className="max-w-md w-full max-h-[90vh] flex flex-col p-0 bg-white dark:bg-slate-900 shadow-xl rounded-2xl overflow-hidden">
+              <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar">
+                <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3 sticky top-0 bg-white dark:bg-slate-900 z-10">Log Call Details</h2>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                    <div className="min-w-0">
+                      <p className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400">Contact</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{callData.contactNumber}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Call #</p>
+                      <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
+                        {(communicationStatsMap.get(callData.contactNumber)?.callCount || 0) + 1}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Call #</p>
-                    <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
-                      {(communicationStatsMap.get(callData.contactNumber)?.callCount || 0) + 1}
-                    </p>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Outcome *</label>
+                    <select
+                      className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      value={callData.outcome}
+                      onChange={(e) => setCallData({ ...callData, outcome: e.target.value })}
+                    >
+                      <option value="">Select outcome...</option>
+                      {combinedStatusOptions.map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Outcome *</label>
-                  <select
-                    className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={callData.outcome}
-                    onChange={(e) => setCallData({ ...callData, outcome: e.target.value })}
-                  >
-                    <option value="">Select outcome...</option>
-                    {combinedStatusOptions.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="autoUpdateStatus"
-                    checked={autoUpdateStatus}
-                    onChange={(e) => setAutoUpdateStatus(e.target.checked)}
-                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                  />
-                  <label htmlFor="autoUpdateStatus" className="text-sm text-slate-700 dark:text-slate-300">
-                    Update Lead Status to <span className="font-semibold">{callData.outcome || '...'}</span>
-                  </label>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (sec) – optional</label>
-                  <Input
-                    type="number"
-                    value={callData.durationSeconds || ''}
-                    onChange={(e) => setCallData({ ...callData, durationSeconds: parseInt(e.target.value) || 0 })}
-                    placeholder="e.g. 120"
-                    min="0"
-                    className="text-sm py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Remarks – optional</label>
-                  <textarea
-                    className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={callData.remarks}
-                    onChange={(e) => setCallData({ ...callData, remarks: e.target.value })}
-                    placeholder="Add call remarks..."
-                  />
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => callMutation.mutate(callData)}
-                    disabled={!callData.outcome || callMutation.isPending}
-                  >
-                    {callMutation.isPending ? 'Saving...' : 'Save Call'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowCallRemarksModal(false);
-                      setCallData({ contactNumber: '', remarks: '', outcome: '', durationSeconds: 0 });
-                      setSelectedCallNumber('');
-                    }}
-                  >
-                    Skip
-                  </Button>
-                </div>
+                  {/* Conditional Next Scheduled Call Input */}
+                  {['call back', 'interested', 'busy', 'no answer'].some(s => (callData.outcome || '').toLowerCase().includes(s)) && (
+                    <div className="p-3 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800/30 rounded-lg">
+                      <label className="block text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
+                        Schedule Next Call/Follow-up
+                      </label>
+                      <input
+                        type="datetime-local"
+                        className="w-full px-2.5 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:border-orange-900/50 dark:bg-slate-800 dark:text-slate-100"
+                        value={callScheduledDate}
+                        onChange={(e) => setCallScheduledDate(e.target.value)}
+                      />
+                    </div>
+                  )}
 
-                {/* Separate 'Log & Next' row for better mobile ergonomics */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800"
-                    onClick={() => callMutation.mutate({ ...callData, next: true })}
-                    disabled={!callData.outcome || callMutation.isPending || !nextLeadId}
-                  >
-                    {callMutation.isPending ? 'Saving...' : 'Log & Next Lead →'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="autoUpdateStatus"
+                      checked={autoUpdateStatus}
+                      onChange={(e) => setAutoUpdateStatus(e.target.checked)}
+                      className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                    />
+                    <label htmlFor="autoUpdateStatus" className="text-sm text-slate-700 dark:text-slate-300">
+                      Update Lead Status to <span className="font-semibold">{callData.outcome || '...'}</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (sec) – optional</label>
+                    <Input
+                      type="number"
+                      value={callData.durationSeconds || ''}
+                      onChange={(e) => setCallData({ ...callData, durationSeconds: parseInt(e.target.value) || 0 })}
+                      placeholder="e.g. 120"
+                      min="0"
+                      className="text-sm py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Remarks – optional</label>
+                    <textarea
+                      className="w-full px-2.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      value={callData.remarks}
+                      onChange={(e) => setCallData({ ...callData, remarks: e.target.value })}
+                      placeholder="Add call remarks..."
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="flex-1"
+                      onClick={async () => {
+                        if (callScheduledDate) {
+                          await scheduleCallMutation.mutateAsync({ nextScheduledCall: new Date(callScheduledDate).toISOString() });
+                        }
+                        callMutation.mutate(callData);
+                      }}
+                      disabled={!callData.outcome || callMutation.isPending || scheduleCallMutation.isPending}
+                    >
+                      {callMutation.isPending || scheduleCallMutation.isPending ? 'Saving...' : 'Save Call'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowCallRemarksModal(false);
+                        setCallData({ contactNumber: '', remarks: '', outcome: '', durationSeconds: 0 });
+                        setSelectedCallNumber('');
+                        setCallScheduledDate('');
+                      }}
+                    >
+                      Skip
+                    </Button>
+                  </div>
+
+                  {/* Separate 'Log & Next' row for better mobile ergonomics */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30 border-blue-200 dark:border-blue-800"
+                      onClick={async () => {
+                        if (callScheduledDate) {
+                          await scheduleCallMutation.mutateAsync({ nextScheduledCall: new Date(callScheduledDate).toISOString() });
+                        }
+                        callMutation.mutate({ ...callData, next: true });
+                      }}
+                      disabled={!callData.outcome || callMutation.isPending || scheduleCallMutation.isPending || !nextLeadId}
+                    >
+                      {callMutation.isPending || scheduleCallMutation.isPending ? 'Saving...' : 'Log & Next Lead →'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </Card>
