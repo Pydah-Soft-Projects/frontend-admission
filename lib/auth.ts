@@ -69,7 +69,7 @@ export const auth = {
     }
     auth.clearAuth();
     if (typeof window !== 'undefined') {
-      window.location.href = '/auth/login';
+      window.location.replace('/auth/login');
     }
   },
 
