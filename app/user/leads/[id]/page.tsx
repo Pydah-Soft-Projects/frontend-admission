@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
@@ -86,6 +86,28 @@ export default function UserLeadDetailPage() {
     selectedTemplates: {} as Record<string, { template: MessageTemplate; variables: Record<string, string> }>,
     languageFilter: 'all' as string,
   });
+
+  // Call start time tracker
+  const callStartTime = useRef<number | null>(null);
+
+  // Track call duration when app comes back to foreground
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && callStartTime.current) {
+        const endTime = Date.now();
+        const duration = Math.round((endTime - callStartTime.current) / 1000);
+        if (duration > 0) {
+          setCallData(prev => ({ ...prev, durationSeconds: duration }));
+        }
+        callStartTime.current = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Status options (lead pipeline stage – only these allowed for status update)
 
@@ -308,6 +330,7 @@ export default function UserLeadDetailPage() {
 
             // Small delay to ensure modal checks render before window location changes (which might be blocked or pause JS)
             setTimeout(() => {
+              callStartTime.current = Date.now();
               window.location.href = `tel:${lead.phone}`;
             }, 500);
           } else {
@@ -2203,6 +2226,7 @@ export default function UserLeadDetailPage() {
                       return;
                     }
                     setShowCallNumberModal(false);
+                    callStartTime.current = Date.now();
                     window.location.href = `tel:${selectedCallNumber.replace(/\s/g, '')}`;
                     setTimeout(() => {
                       setCallData({ contactNumber: selectedCallNumber, remarks: '', outcome: '', durationSeconds: 0 });

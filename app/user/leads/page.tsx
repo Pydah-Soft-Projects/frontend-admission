@@ -39,6 +39,7 @@ export default function UserLeadsPage() {
   const [limit] = useState(100);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<LeadFilters>({});
+  const [isRestored, setIsRestored] = useState(false);
 
   // Persist filters for Auto-Calling navigation context
   useEffect(() => {
@@ -55,11 +56,14 @@ export default function UserLeadsPage() {
     if (savedSearch) {
       setSearch(savedSearch);
     }
+    setIsRestored(true);
   }, []);
 
   useEffect(() => {
-    sessionStorage.setItem('leadFilters', JSON.stringify(filters));
-  }, [filters]);
+    if (isRestored) {
+      sessionStorage.setItem('leadFilters', JSON.stringify(filters));
+    }
+  }, [filters, isRestored]);
 
   const [showFilters, setShowFilters] = useState(false);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
@@ -115,8 +119,10 @@ export default function UserLeadsPage() {
   const debouncedSearch = useDebounce(search, 500);
 
   useEffect(() => {
-    sessionStorage.setItem('leadSearch', debouncedSearch);
-  }, [debouncedSearch]);
+    if (isRestored) {
+      sessionStorage.setItem('leadSearch', debouncedSearch);
+    }
+  }, [debouncedSearch, isRestored]);
 
   const prevSearchRef = useRef<string>('');
 
