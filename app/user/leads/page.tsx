@@ -620,13 +620,13 @@ export default function UserLeadsPage() {
         </div>
         {pagination.pages > 1 && (
           <div className="flex flex-col gap-3 border-b border-gray-200 pb-3 dark:border-slate-700 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
-            <div className="flex min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-x-auto pb-1 sm:justify-start sm:overflow-visible sm:pb-0 sm:gap-2 [&::-webkit-scrollbar]:h-1">
+            <div className="flex w-full min-w-0 flex-nowrap items-center justify-center gap-1.5 overflow-x-auto pb-1 sm:w-auto sm:justify-start sm:overflow-visible sm:pb-0 sm:gap-2 [&::-webkit-scrollbar]:h-1">
               <Button
                 variant="outline"
                 onClick={() => setPage(1)}
                 disabled={page === 1 || isLoading}
                 size="sm"
-                className="min-h-[32px] min-w-[32px] p-0 sm:p-2 sm:min-h-9 sm:min-w-0"
+                className="h-9 w-9 p-0 shrink-0"
                 title="First Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -638,14 +638,14 @@ export default function UserLeadsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1 || isLoading}
                 size="sm"
-                className="min-h-[32px] min-w-[32px] p-0 sm:p-2 sm:min-h-9 sm:min-w-0"
+                className="h-9 w-9 p-0 shrink-0"
                 title="Previous Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </Button>
-              <div className="flex gap-1">
+              <div className="flex gap-1 shrink-0">
                 {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
                   let pageNum;
                   if (pagination.pages <= 5) {
@@ -664,7 +664,7 @@ export default function UserLeadsPage() {
                       onClick={() => setPage(pageNum)}
                       disabled={isLoading}
                       size="sm"
-                      className="min-h-[32px] min-w-[32px] px-2 sm:min-h-9 sm:min-w-[40px]"
+                      className="h-9 min-w-[36px] px-2"
                     >
                       {pageNum}
                     </Button>
@@ -676,7 +676,7 @@ export default function UserLeadsPage() {
                 onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
                 disabled={page === pagination.pages || isLoading}
                 size="sm"
-                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                className="h-9 w-9 p-0 shrink-0"
                 title="Next Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -688,16 +688,13 @@ export default function UserLeadsPage() {
                 onClick={() => setPage(pagination.pages)}
                 disabled={page === pagination.pages || isLoading}
                 size="sm"
-                className="min-h-[44px] min-w-[44px] p-2 sm:min-h-9 sm:min-w-0"
+                className="h-9 w-9 p-0 shrink-0"
                 title="Last Page"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
               </Button>
-            </div>
-            <div className="text-xs text-gray-600 dark:text-slate-300 w-full shrink-0 text-center sm:w-auto sm:text-left sm:text-sm">
-              Page {pagination.page} of {pagination.pages}
             </div>
           </div>
         )}
