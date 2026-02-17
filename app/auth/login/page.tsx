@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { Home } from 'lucide-react';
 import { authAPI, CRM_FRONTEND_URL } from '@/lib/api';
 import { auth } from '@/lib/auth';
 import { Input } from '@/components/ui/Input';
@@ -203,22 +205,30 @@ function LoginPageContent() {
 
   // Show normal login form: two-column layout (Lottie | Form) on large screens
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden bg-gray-50 gap-4 lg:gap-6">
+    <div className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden bg-gray-50 gap-0 lg:gap-6">
       {/* Left: Lottie — larger size, reduced padding */}
-      <div className="relative flex flex-col items-center justify-center px-4 py-4 lg:py-12 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white/50 lg:bg-transparent">
-        <div className="w-full max-w-sm lg:max-w-lg h-56 sm:h-64 lg:h-[32rem] flex items-center justify-center">
-          <LoginLottie className="h-full w-full" />
+      <div className="relative flex flex-col items-center justify-center pt-0 pb-0 lg:py-12 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white/50 lg:bg-transparent">
+        <div className="w-full max-w-[280px] sm:max-w-sm lg:max-w-xl flex items-center justify-center">
+          <LoginLottie className="w-full h-auto object-contain" />
         </div>
-        <p className="hidden lg:block mt-4 text-center text-sm font-medium text-gray-600 max-w-xs">
+        <p className="hidden lg:block mt-8 text-center text-sm font-medium text-gray-600 max-w-xs">
           Manage leads and track admissions in one place
         </p>
       </div>
 
       {/* Right: Login form — compact padding */}
-      <div className="relative flex flex-col items-center justify-center py-4 px-4 sm:px-6 lg:px-12 bg-white lg:bg-transparent">
+      <div className="relative flex flex-col items-center justify-start lg:justify-center pt-4 pb-8 px-4 sm:px-6 lg:px-12 bg-white lg:bg-transparent">
         <div className="w-full max-w-md">
-          <Card className="bg-white border-0 lg:border border-gray-200 shadow-none lg:shadow-xl p-0 lg:p-6">
-            <div className="text-center mb-4 lg:mb-8">
+          <Card className="relative bg-white border-0 lg:border border-gray-200 shadow-none lg:shadow-xl p-0 lg:p-6">
+            <Link
+              href="/"
+              className="absolute top-9 left-6 hidden lg:inline-flex p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-orange-600 transition-colors duration-200 ease-in-out group z-10"
+              title="Go to Home"
+            >
+              <Home className="w-5 h-5 lg:w-6 lg:h-6 transform group-hover:scale-110 transition-transform" />
+            </Link>
+
+            <div className="text-center mb-4 lg:mb-8 pt-2 lg:pt-4">
               <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">Lead Tracker</h2>
               <p className="mt-1 lg:mt-2 text-sm text-gray-600">Sign in to your account</p>
             </div>

@@ -78,6 +78,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
@@ -85,4 +86,35 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 
 .animate-shimmer {
   animation: shimmer 2s infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: var(--tw-opacity, 0.2);
+    /* Use the opacity set on the element if possible, otherwise fallback */
+  }
+
+  50% {
+    transform: translateY(-50vh) translateX(20px);
+  }
+
+  90% {
+    opacity: var(--tw-opacity, 0.2);
+  }
+
+  100% {
+    transform: translateY(-120vh) translateX(-20px);
+    opacity: 0;
+  }
+}
+
+.animate-float {
+  animation-name: float;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }

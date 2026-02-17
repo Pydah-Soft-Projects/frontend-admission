@@ -11,6 +11,7 @@ import {
   ReactElement,
 } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/Button';
@@ -469,8 +470,13 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           {!isCollapsed && (
             <>
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-500/10 dark:text-orange-500 shadow-sm">
-                  <DashboardGridIcon className="w-6 h-6" />
+                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-500/10 dark:text-orange-500 shadow-sm overflow-hidden">
+                  <Image
+                    src="/Lead Tracker.png"
+                    alt="Logo"
+                    fill
+                    className="object-cover"
+                  />
                 </div>
                 <div className="space-y-0.5 min-w-0">
                   {/* <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-500">Admission</p> */}

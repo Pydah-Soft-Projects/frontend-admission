@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
+import Image from 'next/image';
+import FloatingBubbles from '@/components/FloatingBubbles';
 
 export default function Home() {
   const router = useRouter();
@@ -43,29 +45,37 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden bg-gray-50">
+    <div className="min-h-screen flex flex-col relative overflow-hidden bg-white">
+      {/* Moving Background Elements */}
+      {/* Moving Background Elements */}
+      <FloatingBubbles />
+
       <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-5">
         <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white text-sm font-bold shadow-lg shadow-orange-500/25">
-            LT
-          </span>
+          <Image
+            src="/Lead Tracker.png"
+            alt="Lead Tracker"
+            width={36}
+            height={36}
+            className="h-9 w-9 rounded-xl object-contain"
+          />
           <span className="text-lg font-semibold text-gray-800">Lead Tracker</span>
         </div>
-        <Link href="/auth/login" className="text-sm font-medium text-gray-600 hover:text-orange-600 transition-colors">
+        {/* <Link href="/auth/login" className="text-sm font-medium text-gray-600 hover:text-orange-600 transition-colors">
           Sign in
-        </Link>
+        </Link> */}
       </header>
 
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-24 sm:py-32">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-16 sm:py-32">
         <div className="mx-auto max-w-4xl text-center">
           {/* Badge */}
-          <p className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-orange-700 mb-8">
+          <p className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-4 py-1.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-orange-700 mb-6 sm:mb-8">
             <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
             Admissions &amp; Enquiry Management
           </p>
 
           {/* Headline */}
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl md:text-6xl lg:text-7xl">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-5xl md:text-6xl lg:text-7xl">
             <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent">
               Lead Management
             </span>
@@ -74,27 +84,27 @@ export default function Home() {
               Tracker
             </span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 sm:text-xl leading-relaxed">
+          <p className="mx-auto mt-4 sm:mt-6 max-w-2xl text-base sm:text-xl text-gray-600 leading-relaxed px-2 sm:px-0">
             Streamline enquiries, assign leads effortlessly, and gain real-time insights across your teams with a modern analytics dashboard.
           </p>
 
           {/* CTAs */}
-          <div className="mt-10 flex flex-col sm:flex-row gap-4 items-center justify-center">
+          <div className="mt-8 sm:mt-10 flex flex-row gap-3 items-center justify-center px-2">
             <Button
-              size="xl"
+              size="lg"
               variant="primary"
               onClick={() => router.push('/auth/login')}
-              className="min-w-[200px] shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 transition-shadow"
+              className="flex-1 sm:flex-none sm:min-w-[200px] shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 transition-shadow text-sm sm:text-base h-11 sm:h-auto"
             >
               Get Started
             </Button>
-            <Link href="/lead-form">
+            <Link href="/lead-form" className="flex-1 sm:flex-none">
               <Button
-                size="xl"
+                size="lg"
                 variant="outline"
-                className="min-w-[200px] border-2 border-gray-300 hover:border-orange-400 hover:bg-orange-50"
+                className="w-full sm:min-w-[200px] border-2 border-gray-300 hover:border-orange-400 hover:bg-orange-50 text-sm sm:text-base h-11 sm:h-auto"
               >
-                Submit Lead Form
+                Lead Form
               </Button>
             </Link>
           </div>
