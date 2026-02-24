@@ -12,6 +12,7 @@ import Papa from 'papaparse';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Skeleton, ReportDashboardSkeleton, LeadsAbstractSkeleton } from '@/components/ui/Skeleton';
+import { cn, formatSecondsToMMSS } from '@/lib/utils';
 import { showToast } from '@/lib/toast';
 import {
   ResponsiveContainer,
@@ -343,7 +344,7 @@ export default function ReportsPage() {
       User: u.name || u.userName || '—',
       'Total Leads': u.totalAssigned ?? 0,
       Calls: u.calls?.total ?? 0,
-      'Avg Call (sec)': u.calls?.averageDuration ?? 0,
+      'Avg Call': formatSecondsToMMSS(u.calls?.averageDuration ?? 0),
       SMS: u.sms?.total ?? 0,
       'Interested': u.interested ?? 0, // Assuming 'interested' represents Interested count
       Confirmed: u.convertedLeads ?? 0,
@@ -352,8 +353,8 @@ export default function ReportsPage() {
       Date: format(new Date(r.date), 'yyyy-MM-dd'),
       User: r.userName || '—',
       Calls: r.callCount ?? 0,
-      'Total Duration (sec)': r.totalDuration ?? 0,
-      'Avg Duration (sec)': r.averageDuration ?? 0,
+      'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
+      'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
     }));
     return { performanceRows, dailyRows };
   }, [previewUserAnalytics?.users, previewCallReports?.reports]);
@@ -880,7 +881,7 @@ export default function ReportsPage() {
                                   <span>{user.calls?.total ?? 0}</span>
                                   {user.calls?.averageDuration > 0 && (
                                     <span className="text-xs text-slate-500">
-                                      Avg: {Math.floor(user.calls.averageDuration / 60)}m {user.calls.averageDuration % 60}s
+                                      Avg: {formatSecondsToMMSS(user.calls.averageDuration)}
                                     </span>
                                   )}
                                 </div>
@@ -934,10 +935,10 @@ export default function ReportsPage() {
                               <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{report.userName}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.callCount}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
-                                {Math.floor(report.totalDuration / 60)}m {report.totalDuration % 60}s
+                                {formatSecondsToMMSS(report.totalDuration)}
                               </td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
-                                {Math.floor(report.averageDuration / 60)}m {report.averageDuration % 60}s
+                                {formatSecondsToMMSS(report.averageDuration)}
                               </td>
                             </tr>
                           ))}
@@ -984,7 +985,7 @@ export default function ReportsPage() {
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Leads</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Call (sec)</th>
+                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Call</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">SMS</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Interested</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Confirmed</th>
@@ -996,7 +997,7 @@ export default function ReportsPage() {
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Leads']}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Call (sec)']}</td>
+                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Call']}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.SMS}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Interested}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Confirmed}</td>
@@ -1017,8 +1018,8 @@ export default function ReportsPage() {
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Date</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Duration (sec)</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Duration (sec)</th>
+                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Duration</th>
+                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Duration</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-600 bg-white dark:bg-slate-800/50">
@@ -1027,8 +1028,8 @@ export default function ReportsPage() {
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Date}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Duration (sec)']}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Duration (sec)']}</td>
+                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Duration']}</td>
+                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Duration']}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1350,7 +1351,7 @@ export default function ReportsPage() {
                                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{lead.leadPhone}</td>
                                       <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.callCount}</td>
                                       <td className="px-3 py-2 text-slate-900 dark:text-slate-100">
-                                        {Math.floor(lead.totalDuration / 60)}m {lead.totalDuration % 60}s
+                                        {formatSecondsToMMSS(lead.totalDuration)}
                                       </td>
                                     </tr>
                                   ))}
