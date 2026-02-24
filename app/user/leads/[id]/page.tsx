@@ -28,6 +28,7 @@ import { showToast } from '@/lib/toast';
 import { LeadDetailSkeleton } from '@/components/ui/Skeleton';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useLocations } from '@/lib/useLocations';
+import { cn, formatSecondsToMMSS, parseMMSSToSeconds } from '@/lib/utils';
 
 // Timeline item type
 interface TimelineItem {
@@ -1671,7 +1672,7 @@ export default function UserLeadDetailPage() {
                                     <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1">
                                       {item.metadata?.outcome && <>Outcome: {item.metadata.outcome}</>}
                                       {item.metadata?.outcome && item.metadata?.duration && ' · '}
-                                      {item.metadata?.duration != null && <>Duration: {item.metadata.duration}s</>}
+                                      {item.metadata?.duration != null && <>Duration: {formatSecondsToMMSS(item.metadata.duration)}</>}
                                     </p>
                                   )}
                                 </>
@@ -1899,7 +1900,7 @@ export default function UserLeadDetailPage() {
                             )}
                             {call.durationSeconds && (
                               <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                                {call.durationSeconds}s
+                                {formatSecondsToMMSS(call.durationSeconds)}
                               </span>
                             )}
                           </div>
@@ -2349,13 +2350,18 @@ export default function UserLeadDetailPage() {
                     </label>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (sec) – optional</label>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (MM:SS) – optional</label>
                     <Input
-                      type="number"
-                      value={callData.durationSeconds || ''}
-                      onChange={(e) => setCallData({ ...callData, durationSeconds: parseInt(e.target.value) || 0 })}
-                      placeholder="e.g. 120"
-                      min="0"
+                      type="text"
+                      value={formatSecondsToMMSS(callData.durationSeconds)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Basic validation for MM:SS format or just digits
+                        if (/^[0-9:]*$/.test(val)) {
+                          setCallData({ ...callData, durationSeconds: parseMMSSToSeconds(val) });
+                        }
+                      }}
+                      placeholder="e.g. 02:05"
                       className="text-sm py-2"
                     />
                   </div>
