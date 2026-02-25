@@ -2350,19 +2350,14 @@ export default function UserLeadDetailPage() {
                     </label>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (MM:SS) – optional</label>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duration (sec) – auto-filled</label>
                     <Input
-                      type="text"
-                      value={formatSecondsToMMSS(callData.durationSeconds)}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        // Basic validation for MM:SS format or just digits
-                        if (/^[0-9:]*$/.test(val)) {
-                          setCallData({ ...callData, durationSeconds: parseMMSSToSeconds(val) });
-                        }
-                      }}
-                      placeholder="e.g. 02:05"
-                      className="text-sm py-2"
+                      type="number"
+                      value={callData.durationSeconds || ''}
+                      readOnly
+                      placeholder="Duration"
+                      min="0"
+                      className="text-sm py-2 bg-slate-50 dark:bg-slate-800/50 cursor-not-allowed"
                     />
                   </div>
                   <div>

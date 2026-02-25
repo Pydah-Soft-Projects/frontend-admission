@@ -30,7 +30,7 @@ import {
 
 type TabType = 'calls' | 'conversions' | 'users' | 'abstract' | 'activityLogs';
 
-type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom';
+type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom' | 'overall';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -146,6 +146,14 @@ export default function ReportsPage() {
         start = startOfMonth(subDays(now, 30));
         end = endOfMonth(subDays(now, 30));
         break;
+      case 'overall':
+        setFilters({
+          ...filters,
+          startDate: '',
+          endDate: '',
+        });
+        setActivityLogPage(1);
+        return;
       default:
         return;
     }
@@ -543,7 +551,7 @@ export default function ReportsPage() {
         )}
 
         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Quick Filters:</span>
-        {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek'] as DatePreset[]).map((preset) => (
+        {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek', 'overall'] as DatePreset[]).map((preset) => (
           <button
             key={preset}
             onClick={() => handleDatePreset(preset)}
@@ -557,6 +565,7 @@ export default function ReportsPage() {
             {preset === 'last7days' && 'Last 7 Days'}
             {preset === 'last30days' && 'Last 30 Days'}
             {preset === 'thisWeek' && 'This Week'}
+            {preset === 'overall' && 'Overall'}
           </button>
         ))}
       </div>
