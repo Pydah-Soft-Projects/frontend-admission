@@ -336,59 +336,61 @@ export default function UserDashboard() {
 
       {/* Today's scheduled calls - full width, responsive grid */}
       {/* Today's scheduled calls - simple list, no card background */}
-      <div className="w-full space-y-3 pt-2">
-        <div className="flex items-center gap-3 px-1">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-100 to-amber-100 text-orange-600 dark:from-orange-900/40 dark:to-amber-900/30 dark:text-orange-400">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+      {user?.roleName !== 'PRO' && (
+        <div className="w-full space-y-3 pt-2">
+          <div className="flex items-center gap-3 px-1">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-100 to-amber-100 text-orange-600 dark:from-orange-900/40 dark:to-amber-900/30 dark:text-orange-400">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide">Today&apos;s scheduled calls</h2>
           </div>
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide">Today&apos;s scheduled calls</h2>
-        </div>
 
-        {scheduledLeads.length === 0 ? (
-          <div className="px-4 py-6 text-center rounded-xl border border-slate-100 bg-white/50 dark:border-slate-800 dark:bg-slate-900/50">
-            <p className="text-sm font-medium text-slate-500">No calls scheduled for today.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
-            {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; nextScheduledCall?: string }) => {
-              const timeStr = lead.nextScheduledCall
-                ? new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                : null;
-              return (
-                <button
-                  key={lead._id}
-                  type="button"
-                  onClick={() => router.push(`/user/leads/${lead._id}`)}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-orange-300 hover:shadow-md active:scale-[0.99] dark:border-slate-700 dark:bg-slate-800 dark:hover:border-orange-700/50"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-bold text-sm">
-                    {(lead.name || '?').charAt(0)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-slate-900 dark:text-slate-100 text-sm">{lead.name ?? '—'}</p>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{lead.enquiryNumber ?? '—'}</span>
-                      {timeStr && (
-                        <>
-                          <span>•</span>
-                          <span className="text-orange-600 dark:text-orange-400 font-medium">{timeStr}</span>
-                        </>
-                      )}
+          {scheduledLeads.length === 0 ? (
+            <div className="px-4 py-6 text-center rounded-xl border border-slate-100 bg-white/50 dark:border-slate-800 dark:bg-slate-900/50">
+              <p className="text-sm font-medium text-slate-500">No calls scheduled for today.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
+              {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; nextScheduledCall?: string }) => {
+                const timeStr = lead.nextScheduledCall
+                  ? new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                  : null;
+                return (
+                  <button
+                    key={lead._id}
+                    type="button"
+                    onClick={() => router.push(`/user/leads/${lead._id}`)}
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-orange-300 hover:shadow-md active:scale-[0.99] dark:border-slate-700 dark:bg-slate-800 dark:hover:border-orange-700/50"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-bold text-sm">
+                      {(lead.name || '?').charAt(0)}
                     </div>
-                  </div>
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-slate-900 dark:text-slate-100 text-sm">{lead.name ?? '—'}</p>
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span>{lead.enquiryNumber ?? '—'}</span>
+                        {timeStr && (
+                          <>
+                            <span>•</span>
+                            <span className="text-orange-600 dark:text-orange-400 font-medium">{timeStr}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Status distribution: donut chart with filters (same row, no filter background) */}
       {statusChartData.length > 0 && (

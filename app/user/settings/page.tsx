@@ -354,39 +354,42 @@ export default function UserSettingsPage() {
                   {isSaving && <div className="text-xs text-orange-500 mt-1">Saving changes...</div>}
                 </div>
 
-                <hr className="border-slate-100 dark:border-slate-700" />
+                {user?.roleName !== 'PRO' && (
+                  <>
+                    <hr className="border-slate-100 dark:border-slate-700" />
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+                          Auto-Calling Mode
+                        </h2>
 
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
-                      Auto-Calling Mode
-                    </h2>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={autoCallingEnabled}
+                            disabled={isSaving}
+                            onClick={() => handleAutoCallingToggle(!autoCallingEnabled)}
+                            className={`relative inline-flex h-6 w-11 sm:h-7 sm:w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${autoCallingEnabled ? 'bg-orange-500' : 'bg-slate-300 dark:bg-slate-600'
+                              }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 sm:h-6 sm:w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autoCallingEnabled ? 'translate-x-5' : 'translate-x-0.5 sm:translate-x-1'
+                                }`}
+                            />
+                          </button>
+                          <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 w-14 sm:w-auto">
+                            {autoCallingEnabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </div>
+                      </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={autoCallingEnabled}
-                        disabled={isSaving}
-                        onClick={() => handleAutoCallingToggle(!autoCallingEnabled)}
-                        className={`relative inline-flex h-6 w-11 sm:h-7 sm:w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${autoCallingEnabled ? 'bg-orange-500' : 'bg-slate-300 dark:bg-slate-600'
-                          }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 sm:h-6 sm:w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autoCallingEnabled ? 'translate-x-5' : 'translate-x-0.5 sm:translate-x-1'
-                            }`}
-                        />
-                      </button>
-                      <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 w-14 sm:w-auto">
-                        {autoCallingEnabled ? 'Enabled' : 'Disabled'}
-                      </span>
+                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-0 leading-snug pr-0 sm:pr-8">
+                        Automatically navigates to the next lead after saving a call log.
+                      </p>
                     </div>
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-0 leading-snug pr-0 sm:pr-8">
-                    Automatically navigates to the next lead after saving a call log.
-                  </p>
-                </div>
+                  </>
+                )}
               </div>
             </Card>
           )}

@@ -30,13 +30,16 @@ const setQuickRange = (days: number): [string, string] => {
 
 export default function UserCallActivityPage() {
   const router = useRouter();
+  const [user, setUser] = useState<any>(null);
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
 
   const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
 
   useEffect(() => {
-    setMobileTopBar({ title: 'My call activity', iconKey: 'analytics' });
+    const currentUser = auth.getUser();
+    setUser(currentUser);
+    setMobileTopBar({ title: currentUser?.roleName === 'PRO' ? 'Activity' : 'My call activity', iconKey: 'analytics' });
     return () => clearMobileTopBar();
   }, [setMobileTopBar, clearMobileTopBar]);
 
@@ -55,9 +58,13 @@ export default function UserCallActivityPage() {
   useEffect(() => {
     setHeaderContent(
       <div className="flex flex-col items-end gap-1 sm:gap-2 text-right">
-        <h1 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">My call activity</h1>
+        <h1 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">
+          {user?.roleName === 'PRO' ? 'Activity' : 'My call activity'}
+        </h1>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-          Calls, SMS, and status changes for the selected date range.
+          {user?.roleName === 'PRO'
+            ? 'Summary of leads and status changes.'
+            : 'Calls, SMS, and status changes for the selected date range.'}
         </p>
         <Button size="sm" variant="outline" onClick={() => router.push('/user/dashboard')} className="!text-xs !py-1.5 !px-2.5 !min-h-8 sm:!min-h-0 sm:!text-sm sm:!py-2 sm:!px-3">
           Back to dashboard
@@ -65,7 +72,7 @@ export default function UserCallActivityPage() {
       </div>
     );
     return () => clearHeaderContent();
-  }, [setHeaderContent, clearHeaderContent, router]);
+  }, [setHeaderContent, clearHeaderContent, router, user?.roleName]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['my-call-analytics', startDate, endDate],
@@ -181,32 +188,36 @@ export default function UserCallActivityPage() {
       ) : (
         <>
           {/* Summary cards - colored gradients like dashboard */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
-            <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[0]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
-              <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Total calls</p>
-              <p className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-bold text-white drop-shadow-sm">{report.calls?.total ?? 0}</p>
-              {report.calls?.averageDuration > 0 && (
-                <p className="mt-0.5 text-[10px] sm:text-xs text-white/75">
-                  Avg {formatSecondsToMMSS(report.calls.averageDuration)}
-                </p>
-              )}
-            </div>
-            <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[1]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
-              <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Total SMS</p>
-              <p className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-bold text-white drop-shadow-sm">{report.sms?.total ?? 0}</p>
-            </div>
-            <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[2]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
+          <div className={`grid gap-2 sm:gap-4 ${user?.roleName === 'PRO' ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
+            {user?.roleName !== 'PRO' && (
+              <>
+                <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[0]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
+                  <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Total calls</p>
+                  <p className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-bold text-white drop-shadow-sm">{report.calls?.total ?? 0}</p>
+                  {report.calls?.averageDuration > 0 && (
+                    <p className="mt-0.5 text-[10px] sm:text-xs text-white/75">
+                      Avg {formatSecondsToMMSS(report.calls.averageDuration)}
+                    </p>
+                  )}
+                </div>
+                <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[1]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
+                  <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Total SMS</p>
+                  <p className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-bold text-white drop-shadow-sm">{report.sms?.total ?? 0}</p>
+                </div>
+              </>
+            )}
+            <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${user?.roleName === 'PRO' ? STATS_CARD_STYLES[0] : STATS_CARD_STYLES[2]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
               <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Status changes</p>
               <p className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-bold text-white drop-shadow-sm">{report.statusConversions?.total ?? 0}</p>
             </div>
-            <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[3]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
+            <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${user?.roleName === 'PRO' ? STATS_CARD_STYLES[1] : STATS_CARD_STYLES[3]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
               <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Assigned leads</p>
               <p className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-bold text-white drop-shadow-sm">{report.totalAssigned ?? 0}</p>
             </div>
           </div>
 
           {/* Day-wise call activity - latest date first, date formatted as "Feb 23, 2026" */}
-          {report.calls?.dailyCallActivity && report.calls.dailyCallActivity.length > 0 && (
+          {user?.roleName !== 'PRO' && report.calls?.dailyCallActivity && report.calls.dailyCallActivity.length > 0 && (
             <div>
               <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3 sm:mb-4">Day-wise call activity</h2>
               <div className="space-y-3 sm:space-y-4">
@@ -267,7 +278,7 @@ export default function UserCallActivityPage() {
           )}
 
           {/* Calls by lead - organised table, responsive */}
-          {report.calls && report.calls.total > 0 && report.calls.byLead?.length > 0 && (
+          {user?.roleName !== 'PRO' && report.calls && report.calls.total > 0 && report.calls.byLead?.length > 0 && (
             <Card className="p-4 sm:p-6 overflow-hidden">
               <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3 sm:mb-4">Calls by lead</h2>
               <div className="sm:hidden space-y-2">
@@ -310,7 +321,7 @@ export default function UserCallActivityPage() {
           )}
 
           {/* SMS - organised table, responsive */}
-          {report.sms && report.sms.total > 0 && (
+          {user?.roleName !== 'PRO' && report.sms && report.sms.total > 0 && (
             <Card className="p-4 sm:p-6 overflow-hidden">
               <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3 sm:mb-4">SMS sent ({report.sms.total})</h2>
               {report.sms.templateUsage?.length > 0 && (
@@ -379,9 +390,15 @@ export default function UserCallActivityPage() {
             </Card>
           )}
 
-          {!report.calls?.total && !report.sms?.total && !report.statusConversions?.total && (
+          {user?.roleName !== 'PRO' && !report.calls?.total && !report.sms?.total && !report.statusConversions?.total && (
             <Card className="p-4 sm:p-8 text-center">
               <p className="text-sm text-slate-500 dark:text-slate-400">No calls, SMS, or status changes in this date range.</p>
+            </Card>
+          )}
+
+          {user?.roleName === 'PRO' && !report.statusConversions?.total && !report.totalAssigned && (
+            <Card className="p-4 sm:p-8 text-center">
+              <p className="text-sm text-slate-500 dark:text-slate-400">No activity or assignments in this date range.</p>
             </Card>
           )}
         </>

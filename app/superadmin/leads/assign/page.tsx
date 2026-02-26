@@ -693,13 +693,14 @@ export default function AssignLeadsPage() {
     (u) =>
       u.isActive &&
       u.roleName !== 'Super Admin' &&
-      (u.roleName === 'Student Counselor' || u.roleName === 'Data Entry User' || u.roleName === 'Sub Super Admin')
+      ['Student Counselor', 'Data Entry User', 'Sub Super Admin', 'PRO'].includes(u.roleName)
   );
 
   const usersByRole = {
     'Sub Super Admin': assignableUsers.filter((u) => u.roleName === 'Sub Super Admin'),
     'Student Counselor': assignableUsers.filter((u) => u.roleName === 'Student Counselor'),
     'Data Entry User': assignableUsers.filter((u) => u.roleName === 'Data Entry User'),
+    'PRO': assignableUsers.filter((u) => u.roleName === 'PRO'),
   };
 
   return (
@@ -1032,10 +1033,16 @@ export default function AssignLeadsPage() {
                     required
                   >
                     <option value="">Choose user…</option>
-                    {assignableUsers.map((user) => (
-                      <option key={user._id} value={user._id}>
-                        {user.name} ({user.email})
-                      </option>
+                    {Object.entries(usersByRole).map(([role, roleUsers]) => (
+                      roleUsers.length > 0 && (
+                        <optgroup key={role} label={role === 'Sub Super Admin' ? 'Sub Super Admins' : role + 's'}>
+                          {roleUsers.map((user) => (
+                            <option key={user._id} value={user._id}>
+                              {user.name} ({user.email})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )
                     ))}
                   </select>
                 </div>
@@ -1116,6 +1123,15 @@ export default function AssignLeadsPage() {
                   {usersByRole['Data Entry User'].length > 0 && (
                     <optgroup label="Data Entry Users">
                       {usersByRole['Data Entry User'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['PRO'].length > 0 && (
+                    <optgroup label="PRO Users">
+                      {usersByRole['PRO'].map((user) => (
                         <option key={user._id} value={user._id}>
                           {user.name} ({user.email})
                         </option>
@@ -1316,6 +1332,15 @@ export default function AssignLeadsPage() {
                       ))}
                     </optgroup>
                   )}
+                  {usersByRole['PRO'].length > 0 && (
+                    <optgroup label="PRO Users">
+                      {usersByRole['PRO'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                   Select a user or sub-admin to assign leads to.
@@ -1506,6 +1531,15 @@ export default function AssignLeadsPage() {
                   {usersByRole['Data Entry User'].length > 0 && (
                     <optgroup label="Data Entry Users">
                       {usersByRole['Data Entry User'].map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {usersByRole['PRO'].length > 0 && (
+                    <optgroup label="PRO Users">
+                      {usersByRole['PRO'].map((user) => (
                         <option key={user._id} value={user._id}>
                           {user.name} ({user.email})
                         </option>

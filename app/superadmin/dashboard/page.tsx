@@ -291,9 +291,14 @@ export default function SuperAdminDashboard() {
       helper: 'Captured so far',
     },
     {
-      label: 'Assigned Leads',
-      value: overviewAnalytics?.totals.assignedLeads ?? 0,
-      helper: 'Assigned to team members',
+      label: 'Counselor Assigned',
+      value: overviewAnalytics?.totals.assignedLeadsToCounselor ?? 0,
+      helper: 'Assigned to counselors',
+    },
+    {
+      label: 'PRO Assigned',
+      value: overviewAnalytics?.totals.assignedLeadsToPro ?? 0,
+      helper: 'Assigned to PRO users',
     },
     {
       label: 'Unassigned Leads',
@@ -309,11 +314,6 @@ export default function SuperAdminDashboard() {
       label: 'Admissions',
       value: overviewAnalytics?.totals.admissions ?? 0,
       helper: 'Approved & enrolled',
-    },
-    {
-      label: 'Admitted Leads',
-      value: overviewAnalytics?.totals.admittedLeads ?? 0,
-      helper: 'Converted via workflows',
     },
   ]), [overviewAnalytics]);
 

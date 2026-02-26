@@ -335,7 +335,7 @@ export default function UserLeadDetailPage() {
         // Clear the flag immediately to prevent double triggers
         sessionStorage.removeItem('isAutoNavigating');
 
-        if ((user as any).autoCallingEnabled) {
+        if (user.roleName !== 'PRO' && (user as any).autoCallingEnabled) {
           if (lead.phone) {
             // Open remarks modal first
             setSelectedCallNumber(lead.phone);
@@ -850,7 +850,7 @@ export default function UserLeadDetailPage() {
         if (autoUpdateStatus && variables.outcome) {
           statusUpdateMutation.mutate({ newStatus: variables.outcome });
           // If auto-calling is enabled, start the timer after status update
-          if (user && (user as any).autoCallingEnabled) {
+          if (user && user.roleName !== 'PRO' && (user as any).autoCallingEnabled) {
             startAutoCallTimer();
           }
         } else {
@@ -1222,16 +1222,18 @@ export default function UserLeadDetailPage() {
         aria-label="Quick actions"
       >
         <div className="flex items-center justify-center gap-3 w-full max-w-sm mx-auto">
-          <button
-            type="button"
-            onClick={() => lead && setShowCallNumberModal(true)}
-            className="flex items-center justify-center size-12 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
-            aria-label="Call"
-          >
-            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
-          </button>
+          {user.roleName !== 'PRO' && (
+            <button
+              type="button"
+              onClick={() => lead && setShowCallNumberModal(true)}
+              className="flex items-center justify-center size-12 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
+              aria-label="Call"
+            >
+              <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -1406,16 +1408,18 @@ export default function UserLeadDetailPage() {
           <div className="hidden sm:block">
             <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">Actions</p>
             <div className="flex flex-wrap gap-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => lead && setShowCallNumberModal(true)}
-                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-green-50 hover:bg-green-100 border border-green-200 dark:bg-green-900/20 dark:border-green-800 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 text-xs sm:text-sm font-medium"
-              >
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-                Call
-              </button>
+              {user.roleName !== 'PRO' && (
+                <button
+                  type="button"
+                  onClick={() => lead && setShowCallNumberModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-green-50 hover:bg-green-100 border border-green-200 dark:bg-green-900/20 dark:border-green-800 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 text-xs sm:text-sm font-medium"
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  Call
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -1501,19 +1505,21 @@ export default function UserLeadDetailPage() {
                       </div>
                       {/* Call/SMS buttons - hidden on mobile (sticky action bar used there) */}
                       <div className="hidden sm:flex gap-2 mt-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCallData({ contactNumber: option.number, remarks: '', outcome: '', durationSeconds: 0 });
-                            setShowCallNumberModal(true);
-                          }}
-                          className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500 text-slate-700 dark:text-slate-200"
-                          aria-label="Call"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                        </button>
+                        {user.roleName !== 'PRO' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCallData({ contactNumber: option.number, remarks: '', outcome: '', durationSeconds: 0 });
+                              setShowCallNumberModal(true);
+                            }}
+                            className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500 text-slate-700 dark:text-slate-200"
+                            aria-label="Call"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
@@ -1538,46 +1544,48 @@ export default function UserLeadDetailPage() {
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3 border-b border-slate-200 dark:border-slate-700">
                 <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">History & Remarks</p>
-                <div className="flex flex-nowrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (lead.nextScheduledCall) {
-                        const d = new Date(lead.nextScheduledCall);
-                        setScheduleCallDateTime(d.toISOString().slice(0, 16));
-                      } else {
-                        const now = new Date();
-                        now.setMinutes(0, 0, 0);
-                        now.setHours(now.getHours() + 1);
-                        setScheduleCallDateTime(now.toISOString().slice(0, 16));
-                      }
-                      setShowScheduleCallModal(true);
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 min-h-8 px-3 rounded-md text-xs font-medium bg-orange-500 hover:bg-orange-600 text-white shadow-sm active:scale-[0.98] shrink-0"
-                  >
-                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    {lead.nextScheduledCall ? 'Reschedule' : 'Schedule call'}
-                  </button>
-                  {lead.nextScheduledCall && (
+                {user.roleName !== 'PRO' && (
+                  <div className="flex flex-nowrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm('Clear scheduled call for this lead?')) {
-                          scheduleCallMutation.mutate({ nextScheduledCall: null });
+                        if (lead.nextScheduledCall) {
+                          const d = new Date(lead.nextScheduledCall);
+                          setScheduleCallDateTime(d.toISOString().slice(0, 16));
+                        } else {
+                          const now = new Date();
+                          now.setMinutes(0, 0, 0);
+                          now.setHours(now.getHours() + 1);
+                          setScheduleCallDateTime(now.toISOString().slice(0, 16));
                         }
+                        setShowScheduleCallModal(true);
                       }}
-                      disabled={scheduleCallMutation.isPending}
-                      className="inline-flex items-center justify-center gap-1.5 min-h-8 px-3 rounded-md text-xs font-medium border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98] disabled:opacity-50 shrink-0"
+                      className="inline-flex items-center justify-center gap-1.5 min-h-8 px-3 rounded-md text-xs font-medium bg-orange-500 hover:bg-orange-600 text-white shadow-sm active:scale-[0.98] shrink-0"
                     >
                       <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      Clear schedule
+                      {lead.nextScheduledCall ? 'Reschedule' : 'Schedule call'}
                     </button>
-                  )}
-                </div>
+                    {lead.nextScheduledCall && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('Clear scheduled call for this lead?')) {
+                            scheduleCallMutation.mutate({ nextScheduledCall: null });
+                          }
+                        }}
+                        disabled={scheduleCallMutation.isPending}
+                        className="inline-flex items-center justify-center gap-1.5 min-h-8 px-3 rounded-md text-xs font-medium border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98] disabled:opacity-50 shrink-0"
+                      >
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Clear schedule
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="px-3 py-2 sm:px-4 sm:py-3 space-y-2">
                 {/* Date row */}

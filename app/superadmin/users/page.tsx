@@ -733,6 +733,7 @@ const UserManagementPage = () => {
                     >
                       <option value="Student Counselor">Student Counselor</option>
                       <option value="Data Entry User">Data Entry User</option>
+                      <option value="PRO">PRO</option>
                       <option value="Sub Super Admin">Sub Super Admin</option>
                       <option value="Super Admin">Super Admin</option>
                     </select>
@@ -968,6 +969,7 @@ const UserManagementPage = () => {
                     >
                       <option value="Student Counselor">Student Counselor</option>
                       <option value="Data Entry User">Data Entry User</option>
+                      <option value="PRO">PRO</option>
                       <option value="Sub Super Admin">Sub Super Admin</option>
                       <option value="Super Admin">Super Admin</option>
                     </select>

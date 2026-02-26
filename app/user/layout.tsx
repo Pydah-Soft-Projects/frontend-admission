@@ -1,15 +1,15 @@
 'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { DashboardShell, DashboardNavItem, HomeIcon, ListIcon, ChartBarIcon, SettingsIcon } from '@/components/layout/DashboardShell';
 import { auth } from '@/lib/auth';
 import type { User } from '@/types';
 
-const navItems: DashboardNavItem[] = [
+const navItems: (DashboardNavItem & { isActivity?: boolean })[] = [
   { href: '/user/dashboard', label: 'Dashboard', icon: HomeIcon },
   { href: '/user/leads', label: 'My Leads', icon: ListIcon },
-  { href: '/user/call-activity', label: 'Call activity', icon: ChartBarIcon },
+  { href: '/user/call-activity', label: 'Activity', icon: ChartBarIcon, isActivity: true },
   { href: '/user/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -18,6 +18,19 @@ export default function UserLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() || '';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isReady, setIsReady] = useState(false);
+
+  const filteredNavItems = useMemo(() => {
+    if (!currentUser) return navItems;
+    return navItems.map(item => {
+      if (item.isActivity) {
+        return {
+          ...item,
+          label: currentUser.roleName === 'PRO' ? 'Activity' : 'Call activity'
+        };
+      }
+      return item;
+    });
+  }, [currentUser]);
 
   useEffect(() => {
     const user = auth.getUser();
@@ -56,7 +69,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
 
   return (
     <DashboardShell
-      navItems={navItems}
+      navItems={filteredNavItems}
       title="Admissions Team"
       description="Stay on top of your leads, follow-ups, and conversions."
       role={currentUser?.designation || 'Counsellor'}

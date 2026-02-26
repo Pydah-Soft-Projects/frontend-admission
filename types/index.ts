@@ -1,5 +1,5 @@
 // User Types
-export type RoleName = 'Super Admin' | 'Sub Super Admin' | 'Student Counselor' | 'Data Entry User';
+export type RoleName = 'Super Admin' | 'Sub Super Admin' | 'Student Counselor' | 'Data Entry User' | 'PRO';
 
 export type ModulePermissionLevel = 'read' | 'write';
 
@@ -721,6 +721,8 @@ export interface OverviewAnalytics {
     confirmedLeads: number;
     admittedLeads: number;
     assignedLeads?: number;
+    assignedLeadsToCounselor?: number;
+    assignedLeadsToPro?: number;
     unassignedLeads?: number;
     joinings: {
       draft: number;

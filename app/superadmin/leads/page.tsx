@@ -580,7 +580,7 @@ export default function LeadsPage() {
           (u: User) =>
             u.isActive &&
             u.roleName !== 'Super Admin' &&
-            (u.roleName === 'Student Counselor' || u.roleName === 'Data Entry User' || u.roleName === 'Sub Super Admin')
+            ['Student Counselor', 'Data Entry User', 'Sub Super Admin', 'PRO'].includes(u.roleName)
         );
         setAssignableUsers(assignable);
       } catch (error) {
@@ -1637,28 +1637,22 @@ export default function LeadsPage() {
                   onChange={(e) => setAssignSelectedUserId(e.target.value)}
                 >
                   <option value="">Choose a user or sub-admin…</option>
-                  {assignableUsers
-                    .filter((u) => u.roleName === 'Sub Super Admin')
-                    .map((user) => (
-                      <option key={user._id} value={user._id}>
-                        {user.name} ({user.email}) - Sub Admin
-                      </option>
-                    ))}
-
-                  {assignableUsers
-                    .filter((u) => u.roleName === 'Student Counselor')
-                    .map((user) => (
-                      <option key={user._id} value={user._id}>
-                        {user.name} ({user.email}) - Counselor
-                      </option>
-                    ))}
-                  {assignableUsers
-                    .filter((u) => u.roleName === 'Data Entry User')
-                    .map((user) => (
-                      <option key={user._id} value={user._id}>
-                        {user.name} ({user.email}) - Data Entry
-                      </option>
-                    ))}
+                  {Object.entries({
+                    'Sub Super Admin': assignableUsers.filter((u) => u.roleName === 'Sub Super Admin'),
+                    'Student Counselor': assignableUsers.filter((u) => u.roleName === 'Student Counselor'),
+                    'Data Entry User': assignableUsers.filter((u) => u.roleName === 'Data Entry User'),
+                    'PRO': assignableUsers.filter((u) => u.roleName === 'PRO'),
+                  }).map(([role, roleUsers]) => (
+                    roleUsers.length > 0 && (
+                      <optgroup key={role} label={role}>
+                        {roleUsers.map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.name} ({user.email}) - {role === 'Sub Super Admin' ? 'Sub Admin' : role}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )
+                  ))}
                 </select>
               </div>
               <div className="flex gap-2 pt-4">
@@ -1765,4 +1759,5 @@ export default function LeadsPage() {
     </div>
   );
 }
+
 
