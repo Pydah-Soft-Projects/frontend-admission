@@ -834,6 +834,19 @@ export default function ReportsPage() {
             </Card>
           ) : (
             <>
+              <div className="flex justify-end mb-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setExportPreviewDate(filters.startDate);
+                    setCallReportExportPreviewOpen(true);
+                  }}
+                  disabled={!(userAnalytics?.users?.length || callReports?.reports?.length)}
+                >
+                  Export Comprehensive Report (Excel)
+                </Button>
+              </div>
               {/* Original User Performance stats for other tabs (if any) or shared view */}
               {userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 && (
                 <>
@@ -853,19 +866,8 @@ export default function ReportsPage() {
                   {/* User Performance Summary – single export opens preview modal */}
                   <div className="space-y-4">
 
-                    <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
                       <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">User Performance Summary</h3>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setExportPreviewDate(filters.startDate);
-                          setCallReportExportPreviewOpen(true);
-                        }}
-                        disabled={!(userAnalytics?.users?.length || callReports?.reports?.length)}
-                      >
-                        Export report (Excel)
-                      </Button>
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
                       <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
@@ -920,6 +922,43 @@ export default function ReportsPage() {
               )}
               {callReports?.reports && callReports.reports.length > 0 ? (
                 <>
+                  <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Daily Call Reports</h3>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const exportData = callReports.reports.map((r: any) => ({
+                            Date: format(new Date(r.date), 'yyyy-MM-dd'),
+                            User: r.userName || '—',
+                            Calls: r.callCount ?? 0,
+                            'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
+                            'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
+                          }));
+                          handleExport('excel', exportData, `daily-call-reports-${filters.startDate}-${filters.endDate}`);
+                        }}
+                      >
+                        Export Excel
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const exportData = callReports.reports.map((r: any) => ({
+                            Date: format(new Date(r.date), 'yyyy-MM-dd'),
+                            User: r.userName || '—',
+                            Calls: r.callCount ?? 0,
+                            'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
+                            'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
+                          }));
+                          handleExport('csv', exportData, `daily-call-reports-${filters.startDate}-${filters.endDate}`);
+                        }}
+                      >
+                        Export CSV
+                      </Button>
+                    </div>
+                  </div>
                   <Card className="overflow-hidden border-slate-200 dark:border-slate-700">
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
