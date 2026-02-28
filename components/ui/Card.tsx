@@ -33,7 +33,7 @@ export const Card: React.FC<CardProps> = ({
       {(title || description) && (
         <div className={cn("mb-6 space-y-1.5", noPadding && "px-6 pt-6 sm:px-8 sm:pt-8")}>
           {title && (
-            <h3 className="text-xl font-bold bg-clip-text text-transparent bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-white dark:via-slate-200 dark:to-slate-300">
+            <h3 className="text-xl font-bold text-[#0f172a] dark:text-[#f8fafc]">
               {title}
             </h3>
           )}

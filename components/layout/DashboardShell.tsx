@@ -388,7 +388,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   isCollapsed && 'justify-center',
                   isActive
                     ? cn('bg-[#ffedd5] text-[#c2410c] font-semibold dark:bg-[#7c2d12]/30 dark:text-[#fb923c]', !isCollapsed && 'border-l-2 border-[#f97316] dark:border-[#fb923c]')
-                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'
+                    : 'text-[#000000] hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'
                 )}
                 title={isCollapsed ? item.label : undefined}
               >
@@ -396,7 +396,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   <Icon
                     className={cn(
                       'h-5 w-5 flex-shrink-0 transition-colors duration-200',
-                      isActive ? 'text-[#ea580c] dark:text-[#fb923c]' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
+                      isActive ? 'text-[#ea580c] dark:text-[#fb923c]' : 'text-slate-500 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
                     )}
                   />
                 )}
@@ -460,7 +460,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       className={cn(
         'relative flex flex-col overflow-hidden transition-[width] duration-300',
         'bg-white border-r border-slate-200 dark:border-slate-800 dark:bg-slate-900',
-        'shadow-[4px_0_24px_-8px_rgba(249,115,22,0.12)] dark:shadow-[4px_0_24px_-8px_rgba(0,0,0,0.25)]',
+        'shadow-[4px_0_24px_-8px_#ea580c1f] dark:shadow-[4px_0_24px_-8px_rgba(0,0,0,0.25)]',
         isCollapsed ? 'w-[72px]' : 'w-64',
         variant === 'desktop'
           ? 'h-screen flex-shrink-0 z-10'
@@ -536,7 +536,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           onClick={handleLogout}
           className={cn(
             'flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
-            'text-slate-600 hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-950/30 dark:hover:text-red-400'
+            'text-[#000000] hover:bg-[#fef2f2] hover:text-[#dc2626] dark:text-slate-400 dark:hover:bg-[#450a0a]/30 dark:hover:text-[#f87171]'
           )}
           aria-label="Logout"
           title="Logout"

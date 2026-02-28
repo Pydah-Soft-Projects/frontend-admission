@@ -406,14 +406,14 @@ export default function SuperAdminDashboard() {
       {/* Today's scheduled calls - Minimal Layout */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-m font-semibold text-slate-900 dark:text-slate-100">Today&apos;s scheduled calls</h2>
-          <Link href="/superadmin/leads" className="text-xs font-medium text-orange-600 hover:text-orange-700 dark:text-orange-500">
+          <h2 className="text-m font-semibold text-[#0f172a] dark:text-[#f1f5f9]">Today&apos;s scheduled calls</h2>
+          <Link href="/superadmin/leads" className="text-xs font-medium text-[#ea580c] hover:text-[#c2410c] dark:text-[#f97316]">
             View all
           </Link>
         </div>
 
         {scheduledLeads.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <div className="rounded-lg border border-dashed border-[#e2e8f0] p-4 text-center text-xs text-[#64748b] dark:border-[#334155] dark:text-[#94a3b8]">
             No calls scheduled for today.
           </div>
         ) : (
@@ -425,10 +425,10 @@ export default function SuperAdminDashboard() {
                     <p className="font-medium text-slate-900 dark:text-slate-100 text-sm truncate">{lead.name ?? '—'}</p>
                     {lead.enquiryNumber && <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-sm">{lead.enquiryNumber}</span>}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <div className="flex items-center gap-2 text-xs text-[#64748b] dark:text-[#94a3b8] mt-0.5">
                     {lead.nextScheduledCall && (
                       <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#fb923c]"></span>
                         {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     )}
