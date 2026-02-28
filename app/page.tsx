@@ -76,11 +76,11 @@ export default function Home() {
 
           {/* Headline */}
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-5xl md:text-6xl lg:text-7xl">
-            <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent">
+            <span className="text-gray-900">
               Lead Management
             </span>
             <br />
-            <span className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 bg-clip-text text-transparent">
+            <span className="text-orange-600">
               Tracker
             </span>
           </h1>
@@ -119,7 +119,7 @@ export default function Home() {
       </main>
 
       {/* Bottom accent line */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-60" />
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-500 opacity-60" />
     </div>
   );
 }
