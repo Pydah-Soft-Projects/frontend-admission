@@ -25,6 +25,16 @@ const IconTrash = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
   </svg>
 );
+const IconList = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+  </svg>
+);
+const IconCards = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+  </svg>
+);
 const IconUserGroup = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -53,6 +63,7 @@ const UserManagementPage = () => {
   const { hasAccess: canAccessUsers, canWrite: canManageUsers } = useModulePermission('users');
   const currentUser = auth.getUser();
   const canDeleteUsers = canManageUsers && currentUser?.roleName !== 'Sub Super Admin';
+  const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [showEditUser, setShowEditUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -112,6 +123,16 @@ const UserManagementPage = () => {
 
   const users = (data?.data || data || []) as User[];
 
+  const stats = useMemo(() => {
+    return {
+      total: users.length,
+      subAdmins: users.filter(u => u.roleName === 'Sub Super Admin').length,
+      counselors: users.filter(u => u.roleName === 'Student Counselor').length,
+      dataEntry: users.filter(u => u.roleName === 'Data Entry User').length,
+      pro: users.filter(u => u.roleName === 'PRO').length,
+    };
+  }, [users]);
+
   const filteredUsers = useMemo(() => {
     if (!searchTerm.trim()) return users;
     const term = searchTerm.toLowerCase();
@@ -124,11 +145,52 @@ const UserManagementPage = () => {
 
   const headerContent = useMemo(
     () => (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between w-full">
         <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">User Management</h1>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <Input
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="w-full xl:w-64"
+            />
+          </div>
+          <div className="flex shrink-0 items-center rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-1 shadow-sm dark:border-[#334155] dark:bg-[#0f172a]">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-all ${viewMode === 'list'
+                ? 'bg-[#ffffff] text-[#334155] shadow dark:bg-[#1e293b] dark:text-[#f1f5f9]'
+                : 'text-[#64748b] hover:text-[#334155] dark:text-[#94a3b8] dark:hover:text-[#f1f5f9]'
+                }`}
+              title="List View"
+            >
+              <IconList className="w-4 h-4 mr-1.5" /> List
+            </button>
+            <button
+              onClick={() => setViewMode('card')}
+              className={`flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-all ${viewMode === 'card'
+                ? 'bg-[#ffffff] text-[#334155] shadow dark:bg-[#1e293b] dark:text-[#f1f5f9]'
+                : 'text-[#64748b] hover:text-[#334155] dark:text-[#94a3b8] dark:hover:text-[#f1f5f9]'
+                }`}
+              title="Card View"
+            >
+              <IconCards className="w-4 h-4 mr-1.5" /> Cards
+            </button>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowCreateUser(true)}
+            disabled={!canManageUsers}
+            className="h-9 shrink-0 px-4 font-medium"
+          >
+            Create User
+          </Button>
+        </div>
       </div>
     ),
-    []
+    [searchTerm, viewMode, canManageUsers]
   );
 
   useEffect(() => {
@@ -386,132 +448,221 @@ const UserManagementPage = () => {
   const actionBtnBase = `${actionBtnClass} border-slate-300 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100`;
 
   return (
-    <div className="w-full space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-        <div className="min-w-0 flex-1">
-          <Input
-            placeholder="Search users by name, email, or role…"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            className="w-full"
-          />
-        </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => setShowCreateUser(true)}
-          disabled={!canManageUsers}
-          className="h-9 shrink-0 px-4 font-medium"
-        >
-          Create User
-        </Button>
+    <div className="w-full space-y-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+        <Card className="p-4 bg-[#3b82f6] text-[#ffffff] border-none shadow-md dark:bg-[#2563eb]">
+          <div className="text-xs font-medium text-[#f1f5f9] uppercase tracking-wider">Total Users</div>
+          <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.total}</div>
+        </Card>
+        <Card className="p-4 bg-[#8b5cf6] text-[#ffffff] border-none shadow-md dark:bg-[#7c3aed]">
+          <div className="text-xs font-medium text-[#f1f5f9] uppercase tracking-wider">Sub Super Admins</div>
+          <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.subAdmins}</div>
+        </Card>
+        <Card className="p-4 bg-[#10b981] text-[#ffffff] border-none shadow-md dark:bg-[#059669]">
+          <div className="text-xs font-medium text-[#f1f5f9] uppercase tracking-wider">Counselors</div>
+          <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.counselors}</div>
+        </Card>
+        <Card className="p-4 bg-[#f97316] text-[#ffffff] border-none shadow-md dark:bg-[#ea580c]">
+          <div className="text-xs font-medium text-[#f1f5f9] uppercase tracking-wider">Data Entry Users</div>
+          <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.dataEntry}</div>
+        </Card>
+        <Card className="p-4 bg-[#0ea5e9] text-[#ffffff] border-none shadow-md dark:bg-[#0284c7]">
+          <div className="text-xs font-medium text-[#f1f5f9] uppercase tracking-wider">PRO</div>
+          <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.pro}</div>
+        </Card>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-            <thead className="bg-slate-50 dark:bg-slate-800/80">
-              <tr>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  Name
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  Email
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  Mobile
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  Role
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  Status
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  Manager
-                </th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 min-w-[120px]">
+      {viewMode === 'list' ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+              <thead className="bg-slate-50 dark:bg-slate-800/80">
+                <tr>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Name
+                  </th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Email
+                  </th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Mobile
+                  </th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Role
+                  </th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Status
+                  </th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Manager
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 min-w-[120px]">
 
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900/40">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                    Loading users…
-                  </td>
+                  </th>
                 </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No users match the current search.
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map((user) => {
-                  let manager: User | undefined = undefined;
-                  if (user.managedBy) {
-                    if (typeof user.managedBy === 'object') {
-                      manager = user.managedBy;
-                    } else if (typeof user.managedBy === 'string') {
-                      manager = users.find((u) => u._id === user.managedBy);
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900/40">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                      Loading users…
+                    </td>
+                  </tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                      No users match the current search.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((user) => {
+                    let manager: User | undefined = undefined;
+                    if (user.managedBy) {
+                      if (typeof user.managedBy === 'object') {
+                        manager = user.managedBy;
+                      } else if (typeof user.managedBy === 'string') {
+                        manager = users.find((u) => u._id === user.managedBy);
+                      }
                     }
-                  }
 
-                  return (
-                    <tr
-                      key={user._id}
-                      className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                      onClick={() => handleRowClick(user)}
-                    >
-                      <td className="px-3 py-2.5 align-middle text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                        {user.name}
-                      </td>
-                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300">
-                        <span className="truncate max-w-[180px] inline-block" title={user.email}>{user.email}</span>
-                      </td>
-                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                        {user.mobileNumber || '-'}
-                      </td>
-                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                        {displayRole(user)}
-                      </td>
-                      <td className="px-3 py-2.5 align-middle whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${user.isActive
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
-                            : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
-                            }`}
-                        >
-                          {user.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                        {manager ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
-                            {manager.name}
+                    return (
+                      <tr
+                        key={user._id}
+                        className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                        onClick={() => handleRowClick(user)}
+                      >
+                        <td className="px-3 py-2.5 align-middle text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          {user.name}
+                        </td>
+                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300">
+                          <span className="truncate max-w-[180px] inline-block" title={user.email}>{user.email}</span>
+                        </td>
+                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {user.mobileNumber || '-'}
+                        </td>
+                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {displayRole(user)}
+                        </td>
+                        <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${user.isActive
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
+                              : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
+                              }`}
+                          >
+                            {user.isActive ? 'Active' : 'Inactive'}
                           </span>
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-500">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
-                        <IconPencil className="inline-block w-4 h-4 text-slate-400" />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                        <td className="px-3 py-2.5 align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {manager ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
+                              {manager.name}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                          <IconPencil className="inline-block w-4 h-4 text-slate-400" />
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {isLoading ? (
+            <div className="col-span-full py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+              Loading users…
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="col-span-full py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+              No users match the current search.
+            </div>
+          ) : (
+            filteredUsers.map((user) => {
+              let manager: User | undefined = undefined;
+              if (user.managedBy) {
+                if (typeof user.managedBy === 'object') {
+                  manager = user.managedBy;
+                } else if (typeof user.managedBy === 'string') {
+                  manager = users.find((u) => u._id === user.managedBy);
+                }
+              }
+              return (
+                <Card
+                  key={user._id}
+                  className="group flex cursor-pointer flex-col justify-between p-5 transition-all hover:border-blue-200 hover:shadow-md dark:hover:border-blue-900/50"
+                  onClick={() => handleRowClick(user)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {user.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                          {user.name}
+                        </div>
+                        <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+                          {displayRole(user)}
+                        </div>
+                      </div>
+                    </div>
+                    <button className="rounded-full p-1.5 text-slate-400 opacity-0 transition-opacity hover:bg-slate-100 hover:text-slate-900 group-hover:opacity-100 dark:hover:bg-slate-800 dark:hover:text-slate-100">
+                      <IconPencil className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-2 truncate">
+                      <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span className="truncate">{user.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      {user.mobileNumber || '-'}
+                    </div>
+                    {manager && (
+                      <div className="flex items-center gap-2">
+                        <IconUserGroup className="h-4 w-4 shrink-0 text-slate-400" />
+                        <span className="truncate">Manager: {manager.name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${user.isActive
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
+                        : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
+                        }`}
+                    >
+                      {user.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      ID: {user._id.slice(-4)}
+                    </span>
+                  </div>
+                </Card>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* User Detail Modal */}
       {showUserDetail && selectedUserDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <Card className="w-full max-w-md space-y-6 p-6 shadow-xl shadow-blue-100/40 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
+          <Card className="w-full max-w-md space-y-6 p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-lg font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
@@ -677,7 +828,7 @@ const UserManagementPage = () => {
 
       {showCreateUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <Card className="w-full max-w-4xl space-y-6 p-6 shadow-xl shadow-blue-100/40 dark:shadow-none">
+          <Card className="w-full max-w-4xl space-y-6 p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create New User</h2>
               <button
@@ -692,7 +843,7 @@ const UserManagementPage = () => {
               <div
                 className={isSubSuperAdmin ? 'grid gap-6 lg:grid-cols-[minmax(0,0.55fr)_minmax(0,0.45fr)]' : 'space-y-4'}
               >
-                <div className={isSubSuperAdmin ? 'space-y-4' : 'space-y-4'}>
+                <div className={isSubSuperAdmin ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'grid grid-cols-1 gap-4 sm:grid-cols-2'}>
                   <Input
                     label="Full Name"
                     name="name"
@@ -743,7 +894,7 @@ const UserManagementPage = () => {
                 </div>
 
                 {isSubSuperAdmin && (
-                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20 sm:col-span-2 lg:col-span-1">
                     <div className="space-y-1">
                       <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
                         Module Permissions
@@ -840,7 +991,7 @@ const UserManagementPage = () => {
       {/* Edit User Modal */}
       {showEditUser && editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <Card className="w-full max-w-4xl space-y-6 p-6 shadow-xl shadow-blue-100/40 dark:shadow-none">
+          <Card className="w-full max-w-4xl space-y-6 p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                 Edit User
@@ -916,7 +1067,7 @@ const UserManagementPage = () => {
               >
                 <div
                   className={
-                    editFormState.roleName === 'Sub Super Admin' ? 'space-y-4' : 'space-y-4'
+                    editFormState.roleName === 'Sub Super Admin' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'grid grid-cols-1 gap-4 sm:grid-cols-2'
                   }
                 >
                   <Input
@@ -979,7 +1130,7 @@ const UserManagementPage = () => {
                 </div>
 
                 {editFormState.roleName === 'Sub Super Admin' && (
-                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20 sm:col-span-2 lg:col-span-1">
                     <div className="space-y-1">
                       <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
                         Module Permissions
@@ -1107,7 +1258,7 @@ const UserManagementPage = () => {
       {/* Team Assignment Modal */}
       {showTeamAssignmentModal && selectedUserForAssignment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <Card className="w-full max-w-md space-y-6 p-6 shadow-xl shadow-blue-100/40 dark:shadow-none">
+          <Card className="w-full max-w-md space-y-6 p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                 Assign Team Member

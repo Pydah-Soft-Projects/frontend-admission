@@ -556,7 +556,7 @@ export default function ReportsPage() {
             key={preset}
             onClick={() => handleDatePreset(preset)}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${datePreset === preset
-              ? 'bg-blue-600 text-white'
+              ? 'bg-[#2563eb] text-[#ffffff] shadow-sm'
               : 'bg-[#f1f5f9] text-[#334155] hover:bg-[#e2e8f0] dark:bg-[#334155] dark:text-[#cbd5e1] dark:hover:bg-[#475569]'
               }`}
           >

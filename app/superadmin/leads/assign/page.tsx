@@ -765,25 +765,25 @@ export default function AssignLeadsPage() {
         </div>
       ) : stats ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Card className="p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none shadow-md">
-            <div className="text-sm font-medium text-blue-100">Total Leads</div>
-            <div className="mt-1 text-2xl font-bold text-white">{stats.totalLeads.toLocaleString()}</div>
+          <Card className="p-4 bg-[#3b82f6] text-[#ffffff] border-none shadow-md dark:bg-[#2563eb]">
+            <div className="text-sm font-medium text-[#f1f5f9]">Total Leads</div>
+            <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.totalLeads.toLocaleString()}</div>
           </Card>
-          <Card className="p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-none shadow-md">
-            <div className="text-sm font-medium text-emerald-100">Assigned Leads</div>
-            <div className="mt-1 text-2xl font-bold text-white">{stats.assignedCount.toLocaleString()}</div>
+          <Card className="p-4 bg-[#10b981] text-[#ffffff] border-none shadow-md dark:bg-[#059669]">
+            <div className="text-sm font-medium text-[#f1f5f9]">Assigned Leads</div>
+            <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.assignedCount.toLocaleString()}</div>
           </Card>
-          <Card className="p-4 bg-gradient-to-br from-orange-500 to-amber-600 text-white border-none shadow-md">
-            <div className="text-sm font-medium text-orange-100">Unassigned Leads</div>
-            <div className="mt-1 text-2xl font-bold text-white">{stats.unassignedCount.toLocaleString()}</div>
+          <Card className="p-4 bg-[#f97316] text-[#ffffff] border-none shadow-md dark:bg-[#ea580c]">
+            <div className="text-sm font-medium text-[#f1f5f9]">Unassigned Leads</div>
+            <div className="mt-1 text-2xl font-bold text-[#ffffff]">{stats.unassignedCount.toLocaleString()}</div>
           </Card>
         </div>
       ) : null}
 
       {/* Mode Tabs */}
-      <Card>
-        <div className="border-b border-gray-200 dark:border-slate-700">
-          <nav className="flex space-x-4" aria-label="Tabs">
+      <div>
+        <div className="border-b border-[#e2e8f0] dark:border-[#334155]">
+          <nav className="flex space-x-4 overflow-x-auto" aria-label="Tabs">
             <button
               onClick={() => {
                 setMode('bulk');
@@ -792,8 +792,8 @@ export default function AssignLeadsPage() {
                 setSearchResults([]);
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'bulk'
-                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
+                : 'border-transparent text-[#64748b] hover:border-[#cbd5e1] hover:text-[#334155] dark:text-[#94a3b8] dark:hover:text-[#cbd5e1]'
                 }`}
             >
               Bulk Assignment
@@ -807,8 +807,8 @@ export default function AssignLeadsPage() {
                 setCount(1000);
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'single'
-                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
+                : 'border-transparent text-[#64748b] hover:border-[#cbd5e1] hover:text-[#334155] dark:text-[#94a3b8] dark:hover:text-[#cbd5e1]'
                 }`}
             >
               Single Assignment
@@ -822,8 +822,8 @@ export default function AssignLeadsPage() {
                 setSearchResults([]);
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'remove'
-                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
+                : 'border-transparent text-[#64748b] hover:border-[#cbd5e1] hover:text-[#334155] dark:text-[#94a3b8] dark:hover:text-[#cbd5e1]'
                 }`}
             >
               Remove Assignment
@@ -834,8 +834,8 @@ export default function AssignLeadsPage() {
                 setInstitutionName('');
               }}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'institution'
-                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
+                : 'border-transparent text-[#64748b] hover:border-[#cbd5e1] hover:text-[#334155] dark:text-[#94a3b8] dark:hover:text-[#cbd5e1]'
                 }`}
             >
               School/College wise
@@ -843,8 +843,8 @@ export default function AssignLeadsPage() {
             <button
               onClick={() => setMode('stats')}
               className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === 'stats'
-                ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
+                : 'border-transparent text-[#64748b] hover:border-[#cbd5e1] hover:text-[#334155] dark:text-[#94a3b8] dark:hover:text-[#cbd5e1]'
                 }`}
             >
               Unassigned by Location
@@ -1629,7 +1629,7 @@ export default function AssignLeadsPage() {
             </form>
           )}
         </div>
-      </Card>
+      </div>
       {/* Export Confirmation Dialog */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
         <DialogContent>

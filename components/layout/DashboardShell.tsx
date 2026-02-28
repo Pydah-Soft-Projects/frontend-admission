@@ -468,12 +468,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       )}
     >
       {/* Theme color at top */}
-      <div className="flex flex-shrink-0 flex-col border-b border-[#fdba74] dark:border-slate-800 bg-[#ffedd5] dark:bg-slate-900">
+      <div className="flex flex-shrink-0 flex-col border-b border-[#fdba74] dark:border-slate-800 bg-[#fed7aa] dark:bg-slate-900">
         <div className="flex items-center justify-between px-4 py-5">
           {!isCollapsed && (
             <>
               <div className="flex items-center gap-3">
-                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#ffedd5] text-[#ea580c] dark:bg-[#431407] dark:text-[#f97316] shadow-sm overflow-hidden">
+                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#fed7aa] text-[#ea580c] dark:bg-[#431407] dark:text-[#f97316] shadow-sm overflow-hidden">
                   <Image
                     src="/Lead Tracker.png"
                     alt="Logo"
