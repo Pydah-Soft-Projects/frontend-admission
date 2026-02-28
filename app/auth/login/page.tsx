@@ -171,7 +171,7 @@ function LoginPageContent() {
   // Show loading state while verifying SSO token
   if (isVerifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
+      <div style={{ backgroundColor: '#f9fafb' }} className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="text-center relative z-10">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ea580c] mx-auto"></div>
           <p className="mt-4 text-gray-600">Verifying authentication...</p>
@@ -183,7 +183,7 @@ function LoginPageContent() {
   // Show error state if SSO verification failed and no login form should be shown
   if (error && !showLoginForm) {
     return (
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
+      <div style={{ backgroundColor: '#f9fafb' }} className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="text-center relative z-10">
           <div className="max-w-md w-full">
             <Card className="bg-white border border-gray-200 shadow-xl">
@@ -205,7 +205,7 @@ function LoginPageContent() {
 
   // Show normal login form: two-column layout (Lottie | Form) on large screens
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden bg-gray-50 gap-0 lg:gap-6">
+    <div style={{ backgroundColor: '#f9fafb' }} className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden gap-0 lg:gap-6">
       {/* Left: Lottie — larger size, reduced padding */}
       <div className="relative flex flex-col items-center justify-center pt-20 pb-0 lg:py-12 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white/50 lg:bg-transparent">
         <div className="w-full max-w-[280px] sm:max-w-sm lg:max-w-xl flex items-center justify-center">
@@ -299,7 +299,7 @@ function LoginPageContent() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
+      <div style={{ backgroundColor: '#f9fafb' }} className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="text-center relative z-10">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ea580c] mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
