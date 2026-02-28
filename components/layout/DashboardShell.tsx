@@ -387,7 +387,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   'flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 outline-none select-none cursor-pointer',
                   isCollapsed && 'justify-center',
                   isActive
-                    ? cn('bg-orange-100 text-orange-700 font-semibold dark:bg-orange-900/30 dark:text-orange-400', !isCollapsed && 'border-l-2 border-orange-500 dark:border-orange-400')
+                    ? cn('bg-[#ffedd5] text-[#c2410c] font-semibold dark:bg-[#7c2d12]/30 dark:text-[#fb923c]', !isCollapsed && 'border-l-2 border-[#f97316] dark:border-[#fb923c]')
                     : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'
                 )}
                 title={isCollapsed ? item.label : undefined}
@@ -396,7 +396,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   <Icon
                     className={cn(
                       'h-5 w-5 flex-shrink-0 transition-colors duration-200',
-                      isActive ? 'text-orange-600 dark:text-orange-400' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
+                      isActive ? 'text-[#ea580c] dark:text-[#fb923c]' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
                     )}
                   />
                 )}
@@ -413,7 +413,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       className={cn(
                         'ml-auto inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full',
                         isActive
-                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                          ? 'bg-[#ffedd5] text-[#c2410c] dark:bg-[#7c2d12]/40 dark:text-[#fdba74]'
                           : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                       )}
                     >
@@ -434,7 +434,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   className={cn(
                     "absolute right-1 p-1.5 rounded-md transition-colors cursor-pointer",
                     isActive
-                      ? "text-orange-600 hover:bg-orange-100/50 dark:text-orange-400"
+                      ? "text-[#ea580c] hover:bg-[#ffedd5]/50 dark:text-[#fb923c]"
                       : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800"
                   )}
                 >
@@ -468,12 +468,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       )}
     >
       {/* Theme color at top */}
-      <div className="flex flex-shrink-0 flex-col border-b border-orange-200/50 dark:border-slate-800 bg-orange-50/50 dark:bg-slate-900">
+      <div className="flex flex-shrink-0 flex-col border-b border-[#fed7aa]/50 dark:border-slate-800 bg-[#fff7ed]/50 dark:bg-slate-900">
         <div className="flex items-center justify-between px-4 py-5">
           {!isCollapsed && (
             <>
               <div className="flex items-center gap-3">
-                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-500/10 dark:text-orange-500 shadow-sm overflow-hidden">
+                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#ffedd5] text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316] shadow-sm overflow-hidden">
                   <Image
                     src="/Lead Tracker.png"
                     alt="Logo"
@@ -490,7 +490,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               </div>
               {/* Notification Bell in Sidebar Header */}
               <div className="flex-shrink-0">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl text-orange-600 dark:bg-orange-500/10 dark:text-orange-500">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316]">
                   <NotificationBell />
                 </div>
               </div>
@@ -498,11 +498,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           )}
           {isCollapsed && variant === 'desktop' && (
             <div className="flex flex-col items-center gap-4 w-full">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-orange-600 dark:bg-orange-500/10 dark:text-orange-500">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316]">
                 <AcademicIcon className="w-6 h-6" />
               </div>
               {/* Notification Bell in Collapsed Sidebar */}
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-orange-600 dark:bg-orange-500/10 dark:text-orange-500">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316]">
                 <NotificationBell />
               </div>
             </div>
@@ -523,10 +523,10 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 px-3 py-3">
         {!isCollapsed && (
           <div className="mb-2 px-3 flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100/50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs font-bold ring-1 ring-orange-200 dark:ring-orange-800">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ffedd5]/50 text-[#c2410c] dark:bg-[#7c2d12]/30 dark:text-[#fb923c] text-xs font-bold ring-1 ring-[#fed7aa] dark:ring-[#9a3412]">
               {(userName || 'SA').slice(0, 2).toUpperCase()}
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-500/90 dark:text-orange-400">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f97316]/90 dark:text-[#fb923c]">
               {role ? `${role} Space` : 'Workspace'}
             </p>
           </div>
@@ -548,7 +548,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
       <button
         type="button"
-        className="absolute top-[4.25rem] -right-3 hidden h-8 w-8 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-500 shadow-md transition-all hover:scale-105 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-orange-600 dark:hover:bg-orange-950/50 dark:hover:text-orange-400 lg:flex z-10 cursor-pointer"
+        className="absolute top-[4.25rem] -right-3 hidden h-8 w-8 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-500 shadow-md transition-all hover:scale-105 hover:border-[#fdba74] hover:bg-[#fff7ed] hover:text-[#ea580c] focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-[#ea580c] dark:hover:bg-[#431407]/50 dark:hover:text-[#fb923c] lg:flex z-10 cursor-pointer"
         onClick={() => setIsCollapsed((prev) => !prev)}
         aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
@@ -624,7 +624,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
                     <button
                       type="button"
-                      className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition hover:border-orange-200 hover:text-orange-600 hover:shadow-md focus:outline-none lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
+                      className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition hover:border-[#fed7aa] hover:text-[#ea580c] hover:shadow-md focus:outline-none lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
                       onClick={() => setIsMobileOpen(true)}
                       aria-label="Toggle navigation menu"
                     >
@@ -636,7 +636,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       <button
                         type="button"
                         onClick={handleBack}
-                        className="group relative inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:border-orange-200 hover:text-orange-600 hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 flex-shrink-0"
+                        className="group relative inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:border-[#fed7aa] hover:text-[#ea580c] hover:shadow-md focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 flex-shrink-0"
                         aria-label="Go back"
                         title="Back"
                       >
@@ -650,7 +650,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                         headerContent
                       ) : (
                         <>
-                          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-linear-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 truncate">
+                          <h1 className="text-xl font-bold text-[#1e293b] dark:text-white truncate">
                             {title}
                           </h1>
                           {description && (
@@ -686,8 +686,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   className={cn(
                     'lg:hidden fixed top-0 left-0 right-0 z-10',
                     'pt-[env(safe-area-inset-top)]',
-                    'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 shadow-md',
-                    'dark:from-orange-600 dark:via-orange-700 dark:to-amber-700'
+                    'bg-gradient-to-r from-[#f97316] via-[#ea580c] to-[#d97706] shadow-md',
+                    'dark:from-[#ea580c] dark:via-[#c2410c] dark:to-[#b45309]'
                   )}
                 >
                   <div className="flex h-11 min-h-11 items-center px-3">
@@ -703,7 +703,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                               handleBack();
                             }
                           }}
-                          className="flex cursor-pointer items-center justify-center w-9 h-9 rounded-lg text-white hover:bg-orange-600/80 dark:hover:bg-orange-700/80"
+                          className="flex cursor-pointer items-center justify-center w-9 h-9 rounded-lg text-white hover:bg-[#ea580c]/80 dark:hover:bg-[#c2410c]/80"
                           aria-label="Back"
                         >
                           <BackIcon className="h-5 w-5" />

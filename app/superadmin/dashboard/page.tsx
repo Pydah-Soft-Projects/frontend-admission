@@ -71,12 +71,12 @@ const getTodayDateString = () => {
 };
 
 const summaryCardConfig = [
-  { bar: 'bg-orange-500', bg: 'bg-orange-50 dark:bg-orange-950/30', label: 'text-orange-700 dark:text-orange-300', value: 'text-orange-900 dark:text-orange-100' },
-  { bar: 'bg-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-950/30', label: 'text-emerald-700 dark:text-emerald-300', value: 'text-emerald-900 dark:text-emerald-100' },
-  { bar: 'bg-rose-500', bg: 'bg-rose-50 dark:bg-rose-950/30', label: 'text-rose-700 dark:text-rose-300', value: 'text-rose-900 dark:text-rose-100' },
-  { bar: 'bg-violet-500', bg: 'bg-violet-50 dark:bg-violet-950/30', label: 'text-violet-700 dark:text-violet-300', value: 'text-violet-900 dark:text-violet-100' },
-  { bar: 'bg-amber-500', bg: 'bg-amber-50 dark:bg-amber-950/30', label: 'text-amber-700 dark:text-amber-300', value: 'text-amber-900 dark:text-amber-100' },
-  { bar: 'bg-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950/30', label: 'text-indigo-700 dark:text-indigo-300', value: 'text-indigo-900 dark:text-indigo-100' },
+  { bar: 'bg-[#f97316]', bg: 'bg-[#fff7ed] dark:bg-[#fff7ed]/10', label: 'text-[#c2410c] dark:text-[#ffedd5]', value: 'text-[#7c2d12] dark:text-[#ffedd5]' },
+  { bar: 'bg-[#10b981]', bg: 'bg-[#ecfdf5] dark:bg-[#ecfdf5]/10', label: 'text-[#047857] dark:text-[#d1fae5]', value: 'text-[#064e3b] dark:text-[#d1fae5]' },
+  { bar: 'bg-[#f43f5e]', bg: 'bg-[#fff1f2] dark:bg-[#fff1f2]/10', label: 'text-[#be123c] dark:text-[#ffe4e6]', value: 'text-[#881337] dark:text-[#ffe4e6]' },
+  { bar: 'bg-[#8b5cf6]', bg: 'bg-[#f5f3ff] dark:bg-[#f5f3ff]/10', label: 'text-[#6d28d9] dark:text-[#ede9fe]', value: 'text-[#4c1d95] dark:text-[#ede9fe]' },
+  { bar: 'bg-[#f59e0b]', bg: 'bg-[#fffbeb] dark:bg-[#fffbeb]/10', label: 'text-[#b45309] dark:text-[#fef3c7]', value: 'text-[#78350f] dark:text-[#fef3c7]' },
+  { bar: 'bg-[#6366f1]', bg: 'bg-[#eef2ff] dark:bg-[#eef2ff]/10', label: 'text-[#4338ca] dark:text-[#e0e7ff]', value: 'text-[#312e81] dark:text-[#e0e7ff]' },
 ];
 
 const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
