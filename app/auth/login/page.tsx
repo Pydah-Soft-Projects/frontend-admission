@@ -173,7 +173,7 @@ function LoginPageContent() {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
         <div className="text-center relative z-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ea580c] mx-auto"></div>
           <p className="mt-4 text-gray-600">Verifying authentication...</p>
         </div>
       </div>
@@ -191,7 +191,7 @@ function LoginPageContent() {
                 <p className="text-red-600 mb-4 font-medium">{error}</p>
                 <a
                   href={CRM_FRONTEND_URL}
-                  className="text-orange-600 hover:underline"
+                  className="text-[#ea580c] hover:underline"
                 >
                   Return to CRM Portal
                 </a>
@@ -222,7 +222,7 @@ function LoginPageContent() {
           <Card className="relative bg-white border-0 lg:border border-gray-200 shadow-none lg:shadow-xl p-0 lg:p-6">
             <Link
               href="/"
-              className="absolute top-9 left-6 hidden lg:inline-flex p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-orange-600 transition-colors duration-200 ease-in-out group z-10"
+              className="absolute top-9 left-6 hidden lg:inline-flex p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-[#ea580c] transition-colors duration-200 ease-in-out group z-10"
               title="Go to Home"
             >
               <Home className="w-5 h-5 lg:w-6 lg:h-6 transform group-hover:scale-110 transition-transform" />
@@ -262,7 +262,7 @@ function LoginPageContent() {
                 <button
                   type="button"
                   onClick={() => setShowForgotPassword(true)}
-                  className="text-sm font-medium text-orange-600 hover:text-orange-500 hover:underline"
+                  className="text-sm font-medium text-[#ea580c] hover:text-[#f97316] hover:underline"
                 >
                   Forgot Password?
                 </button>
@@ -285,7 +285,7 @@ function LoginPageContent() {
       </div>
 
       {/* Bottom accent line */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-60" />
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#f97316] opacity-60" />
 
       {/* Forgot Password Modal */}
       <ForgotPasswordModal
@@ -301,7 +301,7 @@ export default function LoginPage() {
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gray-50">
         <div className="text-center relative z-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ea580c] mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>

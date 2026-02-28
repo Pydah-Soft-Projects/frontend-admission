@@ -69,8 +69,8 @@ export default function Home() {
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-16 sm:py-32">
         <div className="mx-auto max-w-4xl text-center">
           {/* Badge */}
-          <p className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-4 py-1.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-orange-700 mb-6 sm:mb-8">
-            <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
+          <p className="inline-flex items-center gap-1.5 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-4 py-1.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[#c2410c] mb-6 sm:mb-8">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#f97316] animate-pulse" />
             Admissions &amp; Enquiry Management
           </p>
 
