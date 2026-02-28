@@ -36,10 +36,10 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 // Call reports tab: gradient styles for stats cards (Total Users, Assigned Leads, Total Calls, Total SMS)
 const CALL_REPORT_CARD_STYLES = [
-  'from-blue-500 to-indigo-600 shadow-blue-500/25',
-  'from-emerald-500 to-teal-600 shadow-emerald-500/25',
-  'from-orange-500 to-amber-600 shadow-orange-500/25',
-  'from-violet-500 to-purple-600 shadow-violet-500/25',
+  'bg-[#3b82f6] shadow-[0_4px_14px_0_rgba(59,130,246,0.39)]',
+  'bg-[#10b981] shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]',
+  'bg-[#f97316] shadow-[0_4px_14px_0_rgba(249,115,22,0.39)]',
+  'bg-[#8b5cf6] shadow-[0_4px_14px_0_rgba(139,92,246,0.39)]',
 ];
 
 export default function ReportsPage() {
@@ -419,7 +419,7 @@ export default function ReportsPage() {
                   window.history.replaceState({}, '', url.toString());
                 }}
                 className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${activeTab === tab
-                  ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+                  ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
                   : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
                   }`}
               >
@@ -438,7 +438,7 @@ export default function ReportsPage() {
       <div className="flex flex-wrap items-center gap-2 mt-4">
         {activeTab === 'calls' && (
           <>
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Academic Year</span>
+            <span className="text-sm font-medium text-[#334155] dark:text-[#cbd5e1]">Academic Year</span>
             <select
               value={filters.academicYear}
               onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? new Date().getFullYear() : Number(e.target.value) })}
@@ -550,14 +550,14 @@ export default function ReportsPage() {
           </>
         )}
 
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Quick Filters:</span>
+        <span className="text-sm font-medium text-[#334155] dark:text-[#cbd5e1]">Quick Filters:</span>
         {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek', 'overall'] as DatePreset[]).map((preset) => (
           <button
             key={preset}
             onClick={() => handleDatePreset(preset)}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${datePreset === preset
               ? 'bg-blue-600 text-white'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
+              : 'bg-[#f1f5f9] text-[#334155] hover:bg-[#e2e8f0] dark:bg-[#334155] dark:text-[#cbd5e1] dark:hover:bg-[#475569]'
               }`}
           >
             {preset === 'today' && 'Today'}
@@ -574,7 +574,7 @@ export default function ReportsPage() {
       {activeTab !== 'calls' && activeTab !== 'users' && activeTab !== 'abstract' && activeTab !== 'activityLogs' && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 mt-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
+            <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">Start Date</label>
             <input
               type="date"
               value={filters.startDate}
@@ -586,7 +586,7 @@ export default function ReportsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">End Date</label>
+            <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">End Date</label>
             <input
               type="date"
               value={filters.endDate}
@@ -598,7 +598,7 @@ export default function ReportsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User/Counsellor</label>
+            <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">User/Counsellor</label>
             <select
               value={filters.userId}
               onChange={(e) => {
@@ -618,7 +618,7 @@ export default function ReportsPage() {
           {/* Since activityLogs is excluded above, we don't need this check anymore */}
           <>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Source</label>
+              <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">Source</label>
               <select
                 value={filters.source}
                 onChange={(e) => setFilters({ ...filters, source: e.target.value })}
@@ -633,7 +633,7 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Course</label>
+              <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">Course</label>
               <select
                 value={filters.course}
                 onChange={(e) => setFilters({ ...filters, course: e.target.value })}
@@ -648,7 +648,7 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
+              <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">Status</label>
               <select
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value })}
@@ -663,7 +663,7 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">District</label>
+              <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">District</label>
               <select
                 value={filters.district}
                 onChange={(e) => setFilters({ ...filters, district: e.target.value })}
@@ -678,7 +678,7 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mandal</label>
+              <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">Mandal</label>
               <select
                 value={filters.mandal}
                 onChange={(e) => setFilters({ ...filters, mandal: e.target.value })}
@@ -693,7 +693,7 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Academic Year</label>
+              <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">Academic Year</label>
               <select
                 value={filters.academicYear}
                 onChange={(e) => setFilters({ ...filters, academicYear: e.target.value === '' ? 2025 : Number(e.target.value) })}
@@ -705,7 +705,7 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Student Group</label>
+              <label className="block text-sm font-medium text-[#334155] dark:text-[#cbd5e1] mb-1">Student Group</label>
               <select
                 value={filters.studentGroup}
                 onChange={(e) => setFilters({ ...filters, studentGroup: e.target.value })}
@@ -731,10 +731,10 @@ export default function ReportsPage() {
             <ReportDashboardSkeleton />
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+              <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
+                <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                   <thead>
-                    <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                    <tr className="bg-[#475569] dark:bg-[#334155]">
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Leads</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
@@ -745,7 +745,7 @@ export default function ReportsPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
                     {userAnalytics?.users?.map((user: any, rowIdx: number) => (
-                      <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800/50' : 'bg-slate-50/80 dark:bg-slate-700/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
+                      <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
                           <div className="flex flex-col">
                             <span>{user.name || user.userName}</span>
@@ -857,7 +857,7 @@ export default function ReportsPage() {
                       { label: 'Total Calls', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[2] },
                       { label: 'Total SMS', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.sms?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[3] },
                     ].map((item, i) => (
-                      <div key={i} className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${item.style} p-4 shadow-lg`}>
+                      <div key={i} className={`overflow-hidden rounded-xl border-0 ${item.style} p-4 shadow-lg`}>
                         <p className="text-sm font-semibold uppercase tracking-wider text-white/90">{item.label}</p>
                         <p className="mt-2 text-2xl font-bold text-white drop-shadow-sm">{item.value}</p>
                       </div>
@@ -869,10 +869,10 @@ export default function ReportsPage() {
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
                       <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">User Performance Summary</h3>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+                    <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
+                      <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                         <thead>
-                          <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                          <tr className="bg-[#475569] dark:bg-[#334155]">
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Leads</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
@@ -884,7 +884,7 @@ export default function ReportsPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
                           {userAnalytics.users.map((user: any, rowIdx: number) => (
-                            <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800/50' : 'bg-slate-50/80 dark:bg-slate-700/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
+                            <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
                               <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{user.name || user.userName}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
@@ -961,9 +961,9 @@ export default function ReportsPage() {
                   </div>
                   <Card className="overflow-hidden border-slate-200 dark:border-slate-700">
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+                      <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                         <thead>
-                          <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                          <tr className="bg-[#475569] dark:bg-[#334155]">
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Date</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
@@ -971,11 +971,11 @@ export default function ReportsPage() {
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Avg Duration</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
+                        <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                           {callReports.reports.map((report: any, idx: number) => (
                             <tr
                               key={idx}
-                              className={idx % 2 === 0 ? 'bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-slate-50/80 dark:bg-slate-700/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}
+                              className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}
                             >
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
                                 {format(new Date(report.date), 'MMM dd, yyyy')}
@@ -1026,8 +1026,8 @@ export default function ReportsPage() {
                       {callReportMergedData.performanceRows.length > 0 && (
                         <div>
                           <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: User Performance</h4>
-                          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600 text-sm">
+                          <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
+                            <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569] text-sm">
                               <thead>
                                 <tr className="bg-slate-100 dark:bg-slate-800">
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
@@ -1039,9 +1039,9 @@ export default function ReportsPage() {
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Confirmed</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 dark:divide-slate-600 bg-white dark:bg-slate-800/50">
+                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569] bg-[#ffffff] dark:bg-[#1e293b]/50">
                                 {callReportMergedData.performanceRows.map((row: any, idx: number) => (
-                                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-slate-800/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
+                                  <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Leads']}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
@@ -1059,8 +1059,8 @@ export default function ReportsPage() {
                       {callReportMergedData.dailyRows.length > 0 && (
                         <div>
                           <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: Daily Call Report</h4>
-                          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600 text-sm">
+                          <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
+                            <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569] text-sm">
                               <thead>
                                 <tr className="bg-slate-100 dark:bg-slate-800">
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Date</th>
@@ -1070,9 +1070,9 @@ export default function ReportsPage() {
                                   <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Duration</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 dark:divide-slate-600 bg-white dark:bg-slate-800/50">
+                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569] bg-[#ffffff] dark:bg-[#1e293b]/50">
                                 {callReportMergedData.dailyRows.map((row: any, idx: number) => (
-                                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-slate-800/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
+                                  <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Date}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
                                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
@@ -1205,8 +1205,8 @@ export default function ReportsPage() {
               {conversionReports?.reports && conversionReports.reports.length > 0 ? (
                 <Card className="overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                      <thead className="bg-slate-50 dark:bg-slate-900">
+                    <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                      <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Counsellor</th>
                           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Leads</th>
@@ -1334,8 +1334,8 @@ export default function ReportsPage() {
                           {user.calls.dailyCallActivity.map((day: { date: string; callCount: number; leads?: { leadId: string; leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }, dayIdx: number) => {
                             const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
                             return (
-                              <div key={dayIdx} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
-                                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-600">
+                              <div key={dayIdx} className="rounded-lg border border-[#e2e8f0] dark:border-[#475569] overflow-hidden">
+                                <div className="flex items-center justify-between px-3 py-2 border-b border-[#e2e8f0] dark:border-[#475569]">
                                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                                     {dateLabel}
                                   </span>
@@ -1346,7 +1346,7 @@ export default function ReportsPage() {
                                 {day.leads && day.leads.length > 0 && (
                                   <div className="overflow-x-auto">
                                     <table className="min-w-full text-sm">
-                                      <thead className="border-b border-slate-200 dark:border-slate-600">
+                                      <thead className="border-b border-[#e2e8f0] dark:border-[#475569]">
                                         <tr>
                                           <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
                                           <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
@@ -1354,7 +1354,7 @@ export default function ReportsPage() {
                                           <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-600 dark:text-slate-400">Calls</th>
                                         </tr>
                                       </thead>
-                                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                      <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
                                         {day.leads.map((lead: any, lidx: number) => (
                                           <tr key={lidx}>
                                             <td className="px-3 py-1.5 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
@@ -1384,7 +1384,7 @@ export default function ReportsPage() {
                           {user.calls.byLead && user.calls.byLead.length > 0 ? (
                             <div className="overflow-x-auto">
                               <table className="min-w-full text-sm">
-                                <thead className="bg-slate-50 dark:bg-slate-800">
+                                <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
                                   <tr>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
@@ -1392,7 +1392,7 @@ export default function ReportsPage() {
                                     <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Total Duration</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
                                   {user.calls.byLead.map((lead: any, idx: number) => (
                                     <tr key={idx}>
                                       <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
@@ -1426,7 +1426,7 @@ export default function ReportsPage() {
                             <h5 className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Template Usage</h5>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                               {user.sms.templateUsage.map((template: any, idx: number) => (
-                                <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded">
+                                <div key={idx} className="flex items-center justify-between p-2 bg-[#f8fafc] dark:bg-[#1e293b] rounded">
                                   <span className="text-sm text-slate-700 dark:text-slate-300">{template.name}</span>
                                   <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                     {template.count} times ({template.uniqueLeads} leads)
@@ -1441,14 +1441,14 @@ export default function ReportsPage() {
                         {user.sms.byLead && user.sms.byLead.length > 0 && (
                           <div className="overflow-x-auto">
                             <table className="min-w-full text-sm">
-                              <thead className="bg-slate-50 dark:bg-slate-800">
+                              <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
                                 <tr>
                                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
                                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
                                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">SMS Count</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
                                 {user.sms.byLead.map((lead: any, idx: number) => (
                                   <tr key={idx}>
                                     <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
@@ -1491,13 +1491,13 @@ export default function ReportsPage() {
                         {user.statusConversions.byLead && user.statusConversions.byLead.length > 0 && (
                           <div className="overflow-x-auto">
                             <table className="min-w-full text-sm">
-                              <thead className="bg-slate-50 dark:bg-slate-800">
+                              <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
                                 <tr>
                                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
                                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Conversions</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
                                 {user.statusConversions.byLead.map((lead: any, idx: number) => (
                                   <tr key={idx}>
                                     <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
@@ -1560,7 +1560,7 @@ export default function ReportsPage() {
 
       {/* Activity Logs Tab – time tracking ON/OFF in tabular format */}
       {activeTab === 'activityLogs' && (
-        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-600 mt-4">
+        <div className="overflow-hidden rounded-lg border border-[#e2e8f0] dark:border-[#475569] mt-4">
           {isLoadingActivityLogs ? (
             <div className="space-y-0 divide-y divide-slate-100 dark:divide-slate-800">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -1581,9 +1581,9 @@ export default function ReportsPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+                <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                   <thead>
-                    <tr className="bg-gradient-to-r from-slate-600 to-slate-700 dark:from-slate-700 dark:to-slate-800">
+                    <tr className="bg-[#475569] dark:bg-[#334155]">
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
                         User
                       </th>
@@ -1610,7 +1610,7 @@ export default function ReportsPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
+                  <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                     {activityLogs.map((log: any, idx: number) => {
                       // Convert duration (ms) to HH:MM
                       const durationMs = log.totalDuration || 0;
@@ -1623,7 +1623,7 @@ export default function ReportsPage() {
                         <Fragment key={log.id}>
                           <tr
                             onClick={() => setExpandedActivityLogId(isExpanded ? null : log.key)}
-                            className={`cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-slate-50/80 dark:bg-slate-700/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}`}
+                            className={`cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}`}
                           >
                             <td className="whitespace-nowrap px-6 py-4 sm:px-6">
                               <div>
@@ -1672,7 +1672,7 @@ export default function ReportsPage() {
                             </td>
                           </tr>
                           {isExpanded && (
-                            <tr className="bg-slate-50 dark:bg-slate-800/80">
+                            <tr className="bg-[#f8fafc] dark:bg-[#1e293b]/80">
                               <td colSpan={8} className="px-6 py-4 sm:px-6">
                                 <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/50">
                                   <h4 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Detailed Sessions</h4>
@@ -1753,7 +1753,7 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]">
               {/* Districts table – always shown first */}
               <Card className="flex flex-col overflow-hidden h-full">
-                <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                   <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
                   <p className="text-xs text-slate-500 mt-0.5">Lead count by district · Select a district to see mandal-wise stats</p>
                 </div>
@@ -1769,7 +1769,7 @@ export default function ReportsPage() {
                   ) : (leadsAbstract.districtBreakdown || []).length === 0 ? (
                     <p className="p-4 text-sm text-slate-500">No districts</p>
                   ) : (
-                    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                    <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
                       {(leadsAbstract.districtBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
                         <li
                           key={row.id ?? `district-${idx}`}
@@ -1797,7 +1797,7 @@ export default function ReportsPage() {
               {/* Mandals table – only when a district is selected */}
               {filters.abstractDistrictId ? (
                 <Card className="flex flex-col overflow-hidden h-full">
-                  <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                  <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
                     <p className="text-xs text-slate-500 mt-0.5">Lead count by mandal for selected district</p>
                   </div>
@@ -1815,7 +1815,7 @@ export default function ReportsPage() {
                         No mandals found for this district
                       </div>
                     ) : (
-                      <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                      <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
                         {(leadsAbstract.mandalBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
                           <li
                             key={row.id ?? `mandal-${idx}`}
@@ -1836,7 +1836,7 @@ export default function ReportsPage() {
                   </div>
                 </Card>
               ) : (
-                <div className="hidden md:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 h-full bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 p-8 text-center">
+                <div className="hidden md:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cbd5e1] dark:border-[#475569] dark:bg-[#334155]/50 text-slate-400 p-8 text-center">
                   <p>Select a district to view mandal breakdown</p>
                 </div>
               )}

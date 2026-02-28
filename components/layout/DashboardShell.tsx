@@ -468,12 +468,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       )}
     >
       {/* Theme color at top */}
-      <div className="flex flex-shrink-0 flex-col border-b border-[#fed7aa]/50 dark:border-slate-800 bg-[#fff7ed]/50 dark:bg-slate-900">
+      <div className="flex flex-shrink-0 flex-col border-b border-[#fdba74] dark:border-slate-800 bg-[#ffedd5] dark:bg-slate-900">
         <div className="flex items-center justify-between px-4 py-5">
           {!isCollapsed && (
             <>
               <div className="flex items-center gap-3">
-                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#ffedd5] text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316] shadow-sm overflow-hidden">
+                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#ffedd5] text-[#ea580c] dark:bg-[#431407] dark:text-[#f97316] shadow-sm overflow-hidden">
                   <Image
                     src="/Lead Tracker.png"
                     alt="Logo"
@@ -490,7 +490,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               </div>
               {/* Notification Bell in Sidebar Header */}
               <div className="flex-shrink-0">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316]">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl text-[#ea580c] dark:bg-[#431407] dark:text-[#f97316]">
                   <NotificationBell />
                 </div>
               </div>
@@ -498,11 +498,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           )}
           {isCollapsed && variant === 'desktop' && (
             <div className="flex flex-col items-center gap-4 w-full">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#ea580c] dark:bg-[#431407] dark:text-[#f97316]">
                 <AcademicIcon className="w-6 h-6" />
               </div>
               {/* Notification Bell in Collapsed Sidebar */}
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#ea580c] dark:bg-[#f97316]/10 dark:text-[#f97316]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#ea580c] dark:bg-[#431407] dark:text-[#f97316]">
                 <NotificationBell />
               </div>
             </div>
@@ -519,31 +519,49 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         {renderNavItems(filteredNavItems)}
       </nav>
 
-      {/* Logout at bottom of sidebar */}
+      {/* Profile and Logout at bottom of sidebar */}
       <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 px-3 py-3">
-        {!isCollapsed && (
-          <div className="mb-2 px-3 flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ffedd5]/50 text-[#c2410c] dark:bg-[#7c2d12]/30 dark:text-[#fb923c] text-xs font-bold ring-1 ring-[#fed7aa] dark:ring-[#9a3412]">
-              {(userName || 'SA').slice(0, 2).toUpperCase()}
+        {!isCollapsed ? (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#ea580c] text-white text-sm font-bold shadow-sm">
+                {(userName || 'SA').slice(0, 1).toUpperCase()}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100" title={userName || 'Super Admin'}>
+                  {userName || 'Super Admin'}
+                </p>
+                <p className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400" title={role ? `${role} Space` : 'Workspace'}>
+                  {role ? `${role} Space` : 'Workspace'}
+                </p>
+              </div>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f97316]/90 dark:text-[#fb923c]">
-              {role ? `${role} Space` : 'Workspace'}
-            </p>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="group flex h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-[#fef2f2] dark:hover:bg-[#450a0a]/30"
+              aria-label="Logout"
+              title="Logout"
+            >
+              <LogoutIcon className="h-5 w-5 text-slate-500 transition-colors group-hover:text-[#dc2626] dark:text-slate-400 dark:group-hover:text-[#f87171]" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ea580c] text-white text-sm font-bold shadow-sm" title={userName || 'Super Admin'}>
+              {(userName || 'SA').slice(0, 1).toUpperCase()}
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="group flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-[#fef2f2] dark:hover:bg-[#450a0a]/30"
+              aria-label="Logout"
+              title="Logout"
+            >
+              <LogoutIcon className="h-5 w-5 text-slate-500 transition-colors group-hover:text-[#dc2626] dark:text-slate-400 dark:group-hover:text-[#f87171]" />
+            </button>
           </div>
         )}
-        <button
-          type="button"
-          onClick={handleLogout}
-          className={cn(
-            'flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
-            'text-[#000000] hover:bg-[#fef2f2] hover:text-[#dc2626] dark:text-slate-400 dark:hover:bg-[#450a0a]/30 dark:hover:text-[#f87171]'
-          )}
-          aria-label="Logout"
-          title="Logout"
-        >
-          <LogoutIcon className="h-5 w-5 shrink-0" />
-          {!isCollapsed && <span className="truncate text-sm font-medium">Logout</span>}
-        </button>
       </div>
 
       <button
@@ -569,7 +587,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   return (
     <DashboardHeaderContext.Provider value={headerContextValue}>
       <PermissionContext.Provider value={permissionContextValue}>
-        <div className="relative min-h-screen bg-gray-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 selection:bg-orange-100 selection:text-orange-800">
+        <div className="relative min-h-screen bg-gray-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 selection:bg-[#ffedd5] selection:text-[#9a3412]">
 
           <div className="relative flex h-screen w-full overflow-hidden">
             <div className="hidden lg:block flex-shrink-0">{renderSidebar('desktop')}</div>
