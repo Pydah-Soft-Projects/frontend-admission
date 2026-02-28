@@ -80,7 +80,7 @@ export default function Home() {
               Lead Management
             </span>
             <br />
-            <span className="text-orange-600">
+            <span style={{ color: '#ea580c' }}>
               Tracker
             </span>
           </h1>
@@ -94,7 +94,7 @@ export default function Home() {
               size="lg"
               variant="primary"
               onClick={() => router.push('/auth/login')}
-              className="flex-1 sm:flex-none sm:min-w-[200px] shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 transition-shadow text-sm sm:text-base h-11 sm:h-auto"
+              className="flex-1 sm:flex-none sm:min-w-[200px] shadow-lg shadow-[#f97316]/30 hover:shadow-[#f97316]/40 transition-shadow text-sm sm:text-base h-11 sm:h-auto"
             >
               Get Started
             </Button>
@@ -102,7 +102,7 @@ export default function Home() {
               <Button
                 size="lg"
                 variant="outline"
-                className="w-full sm:min-w-[200px] border-2 border-gray-300 hover:border-orange-400 hover:bg-orange-50 text-sm sm:text-base h-11 sm:h-auto"
+                className="w-full sm:min-w-[200px] border-2 border-gray-300 hover:border-[#fb923c] hover:bg-[#fff7ed] text-sm sm:text-base h-11 sm:h-auto"
               >
                 Lead Form
               </Button>
@@ -111,7 +111,7 @@ export default function Home() {
 
           <p className="mt-8 text-sm text-gray-500">
             Already have an account?{' '}
-            <Link href="/auth/login" className="font-semibold text-orange-600 hover:underline">
+            <Link href="/auth/login" className="font-semibold text-[#ea580c] hover:underline">
               Sign in
             </Link>
           </p>
@@ -119,7 +119,7 @@ export default function Home() {
       </main>
 
       {/* Bottom accent line */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-500 opacity-60" />
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#f97316] opacity-60" />
     </div>
   );
 }

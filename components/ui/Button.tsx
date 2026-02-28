@@ -21,13 +21,13 @@ export const Button: React.FC<ButtonProps> = ({
 
   const variants = {
     primary:
-      'text-white bg-orange-600 hover:bg-orange-700 focus:ring-orange-300 dark:bg-orange-600 dark:hover:bg-orange-700 dark:focus:ring-orange-800',
+      'text-white bg-[#ea580c] hover:bg-[#c2410c] focus:ring-[#fdba74] dark:bg-[#ea580c] dark:hover:bg-[#c2410c] dark:focus:ring-[#9a3412]',
     secondary: // Treated as "Alternative" in Flowbite
-      'text-gray-900 bg-white border border-gray-200 hover:bg-gray-100 hover:text-orange-700 focus:z-10 focus:ring-gray-100 dark:focus:ring-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:text-white dark:hover:bg-gray-700',
+      'text-gray-900 bg-white border border-gray-200 hover:bg-gray-100 hover:text-[#ea580c] focus:z-10 focus:ring-gray-100 dark:focus:ring-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 dark:hover:text-white dark:hover:bg-gray-700',
     danger:
-      'text-white bg-red-700 hover:bg-red-800 focus:ring-red-300 dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-900',
+      'text-white bg-[#b91c1c] hover:bg-[#991b1b] focus:ring-[#fca5a5] dark:bg-[#dc2626] dark:hover:bg-[#b91c1c] dark:focus:ring-[#7f1d1d]',
     outline: // Similar to "Alternative" but often transparent background initially
-      'text-orange-700 hover:text-white border border-orange-600 hover:bg-orange-600 focus:ring-orange-300 dark:border-orange-500 dark:text-orange-400 dark:hover:text-white dark:hover:bg-orange-500 dark:focus:ring-orange-800',
+      'text-[#ea580c] hover:text-white border border-[#ea580c] hover:bg-[#ea580c] focus:ring-[#fdba74] dark:border-[#f97316] dark:text-[#fb923c] dark:hover:text-white dark:hover:bg-[#f97316] dark:focus:ring-[#9a3412]',
     light:
       'text-gray-900 bg-white border border-gray-300 hover:bg-gray-100 focus:ring-gray-100 dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:hover:bg-gray-700 dark:hover:border-gray-600 dark:focus:ring-gray-700',
   } as const;
