@@ -8,7 +8,7 @@ const DotLottieReact = dynamic(
 );
 
 const LOTTIE_URL =
-  'https://lottie.host/7ba3d633-f3b3-44b8-be05-b0543d171450/Gy1h1Z4rfG.lottie';
+  'https://lottie.host/ec3df1b8-0da2-46f7-a7f0-37c05e5013ae/2NwoBicIt7.lottie';
 
 export function LoginLottie({ className }: { className?: string }) {
   return (
