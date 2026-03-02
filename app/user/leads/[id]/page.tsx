@@ -192,7 +192,7 @@ export default function UserLeadDetailPage() {
   // Combined Status Options (Filtered for Call Logs)
   const combinedStatusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed'].sort();
+      return ['Interested', 'Not Interested','Not Answered', 'Wrong Data', 'Call Back', 'Confirmed'].sort();
     }
 
     // Default/Other roles
