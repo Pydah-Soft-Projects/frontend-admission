@@ -192,7 +192,7 @@ export default function UserLeadDetailPage() {
   // Combined Status Options (Filtered for Call Logs)
   const combinedStatusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested','Not Answered', 'Wrong Data', 'Call Back', 'Confirmed'].sort();
+      return ['Interested', 'Not Interested', 'Not Answered', 'Wrong Data', 'Call Back', 'Confirmed'].sort();
     }
 
     // Default/Other roles
@@ -711,6 +711,7 @@ export default function UserLeadDetailPage() {
       setFormData({
         name: lead.name,
         phone: lead.phone,
+        alternateMobile: lead.alternateMobile || '',
         fatherName: lead.fatherName,
         fatherPhone: lead.fatherPhone,
         village: initVillage,
@@ -920,6 +921,9 @@ export default function UserLeadDetailPage() {
     }
     if (lead.fatherPhone) {
       options.push({ label: 'Father Phone', number: lead.fatherPhone });
+    }
+    if (lead.alternateMobile) {
+      options.push({ label: 'Alternate Mobile', number: lead.alternateMobile });
     }
     return options;
   }, [lead]);
@@ -2853,6 +2857,20 @@ export default function UserLeadDetailPage() {
                     value={formData.fatherPhone || ''}
                     disabled={true}
                     className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                    Alternate Mobile
+                    <span className="text-[10px] normal-case font-normal text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">Optional</span>
+                  </label>
+                  <Input
+                    value={formData.alternateMobile || ''}
+                    onChange={(e) => setFormData({ ...formData, alternateMobile: e.target.value })}
+                    className="h-10"
+                    placeholder="Enter alternate mobile number"
+                    type="tel"
+                    maxLength={15}
                   />
                 </div>
                 <div>
