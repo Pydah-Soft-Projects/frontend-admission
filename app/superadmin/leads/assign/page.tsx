@@ -677,17 +677,6 @@ export default function AssignLeadsPage() {
   //   return () => clearHeaderContent();
   // }, [header, setHeaderContent, clearHeaderContent]);
 
-  if (!isReady || !currentUser) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
-          <p className="text-sm text-gray-600 dark:text-slate-300">Loading…</p>
-        </div>
-      </div>
-    );
-  }
-
   // Filter users: include Users, Student Counselors, Data Entry Users, Sub Super Admins (exclude Super Admin)
   const { assignableUsers, usersByRole } = useMemo(() => {
     const assignable = users.filter(
@@ -706,6 +695,18 @@ export default function AssignLeadsPage() {
 
     return { assignableUsers: assignable, usersByRole: byRole };
   }, [users]);
+
+  if (!isReady || !currentUser) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+          <p className="text-sm text-gray-600 dark:text-slate-300">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="mx-auto w-full space-y-6">
