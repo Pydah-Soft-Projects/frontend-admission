@@ -173,6 +173,7 @@ export interface Lead {
   hallTicketNumber?: string;
   name: string;
   phone: string;
+  alternateMobile?: string;
   email?: string;
   fatherName: string;
   fatherPhone: string;
@@ -219,6 +220,7 @@ export interface LeadUpdatePayload {
   hallTicketNumber?: string;
   name?: string;
   phone?: string;
+  alternateMobile?: string;
   email?: string;
   fatherName?: string;
   fatherPhone?: string;
