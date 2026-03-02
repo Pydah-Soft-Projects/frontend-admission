@@ -1359,6 +1359,26 @@ export const managerAPI = {
   },
 };
 
+// Visitor API
+export const visitorAPI = {
+  generateCode: async (leadId: string) => {
+    const response = await api.post('/visitors/generate', { leadId });
+    return response.data;
+  },
+  verifyCode: async (code: string) => {
+    const response = await api.get(`/visitors/verify/${code}`);
+    return response.data;
+  },
+  consumeCode: async (code: string, leadId: string) => {
+    const response = await api.post('/visitors/consume', { code, leadId });
+    return response.data;
+  },
+  getRecent: async () => {
+    const response = await api.get('/visitors/recent');
+    return response.data;
+  },
+};
+
 export default api;
 
 

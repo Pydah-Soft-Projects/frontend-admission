@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { leadAPI, communicationAPI, userAPI } from '@/lib/api';
+import { leadAPI, communicationAPI, userAPI, visitorAPI } from '@/lib/api';
 import {
   Lead,
   LeadUpdatePayload,
@@ -88,6 +88,10 @@ export default function UserLeadDetailPage() {
     selectedTemplates: {} as Record<string, { template: MessageTemplate; variables: Record<string, string> }>,
     languageFilter: 'all' as string,
   });
+
+  // Visitor Code State
+  const [showVisitorCodeModal, setShowVisitorCodeModal] = useState(false);
+  const [generatedVisitorCode, setGeneratedVisitorCode] = useState<{ code: string; expiresAt: string } | null>(null);
 
   // Call start time tracker
   const callStartTime = useRef<number | null>(null);
@@ -1017,6 +1021,22 @@ export default function UserLeadDetailPage() {
     },
   });
 
+  const visitorCodeMutation = useMutation({
+    mutationFn: (id: string) => visitorAPI.generateCode(id),
+    onSuccess: (response) => {
+      if (response.success) {
+        setGeneratedVisitorCode(response.data);
+        setShowVisitorCodeModal(true);
+        showToast.success('Visitor code generated! It has been logged to the server.');
+      } else {
+        showToast.error(response.message || 'Failed to generate code');
+      }
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to generate visitor code');
+    },
+  });
+
   // Handlers
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1317,6 +1337,25 @@ export default function UserLeadDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </button>
+
+            {/* Visitor Code Button - Only for Student Counsellor */}
+            {user.roleName === 'Student Counselor' && (
+              <button
+                type="button"
+                onClick={() => visitorCodeMutation.mutate(leadId)}
+                disabled={visitorCodeMutation.isPending}
+                className="flex items-center justify-center size-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm disabled:opacity-50"
+                aria-label="Send Visitor Code"
+              >
+                {visitorCodeMutation.isPending ? (
+                  <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Right: Add Comment Button */}
@@ -1523,6 +1562,25 @@ export default function UserLeadDetailPage() {
                 </svg>
                 Next Lead
               </button>
+
+              {/* Visitor Code Button - Desktop */}
+              {user.roleName === 'Student Counselor' && (
+                <button
+                  type="button"
+                  onClick={() => visitorCodeMutation.mutate(leadId)}
+                  disabled={visitorCodeMutation.isPending}
+                  className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all active:scale-95 text-xs sm:text-sm font-medium disabled:opacity-50"
+                >
+                  {visitorCodeMutation.isPending ? (
+                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                  )}
+                  Visitor Code
+                </button>
+              )}
             </div>
           </div>
 
@@ -2965,6 +3023,36 @@ export default function UserLeadDetailPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Visitor Code Display Modal */}
+      <Dialog open={showVisitorCodeModal} onOpenChange={setShowVisitorCodeModal}>
+        <DialogContent className="max-w-md w-full p-6 bg-white dark:bg-slate-900 border-t-4 border-t-indigo-600">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-center">Visitor Code Generated</DialogTitle>
+          </DialogHeader>
+          <div className="py-8 flex flex-col items-center">
+            <div className="text-5xl font-mono font-bold tracking-widest text-indigo-600 dark:text-indigo-400 mb-4">
+              {generatedVisitorCode?.code}
+            </div>
+            <p className="text-sm text-slate-500 text-center px-4">
+              This code is valid for 24 hours. Please share this with the visitor for verification at the desk.
+            </p>
+            {generatedVisitorCode?.expiresAt && (
+              <p className="text-xs text-slate-400 mt-2">
+                Expires on: {new Date(generatedVisitorCode.expiresAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-center">
+            <Button
+              onClick={() => setShowVisitorCodeModal(false)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-8"
+            >
+              Done
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
