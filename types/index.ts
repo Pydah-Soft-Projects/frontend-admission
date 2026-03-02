@@ -59,6 +59,7 @@ export interface UpdateUserData {
   isActive?: boolean;
   isManager?: boolean;
   managedBy?: string | null;
+  unassignLeads?: boolean;
 }
 
 // Course & Branch Types

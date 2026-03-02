@@ -689,19 +689,23 @@ export default function AssignLeadsPage() {
   }
 
   // Filter users: include Users, Student Counselors, Data Entry Users, Sub Super Admins (exclude Super Admin)
-  const assignableUsers = users.filter(
-    (u) =>
-      u.isActive &&
-      u.roleName !== 'Super Admin' &&
-      ['Student Counselor', 'Data Entry User', 'Sub Super Admin', 'PRO'].includes(u.roleName)
-  );
+  const { assignableUsers, usersByRole } = useMemo(() => {
+    const assignable = users.filter(
+      (u) =>
+        u.isActive &&
+        u.roleName !== 'Super Admin' &&
+        ['Student Counselor', 'Data Entry User', 'Sub Super Admin', 'PRO'].includes(u.roleName)
+    );
 
-  const usersByRole = {
-    'Sub Super Admin': assignableUsers.filter((u) => u.roleName === 'Sub Super Admin'),
-    'Student Counselor': assignableUsers.filter((u) => u.roleName === 'Student Counselor'),
-    'Data Entry User': assignableUsers.filter((u) => u.roleName === 'Data Entry User'),
-    'PRO': assignableUsers.filter((u) => u.roleName === 'PRO'),
-  };
+    const byRole = {
+      'Sub Super Admin': assignable.filter((u) => u.roleName === 'Sub Super Admin'),
+      'Student Counselor': assignable.filter((u) => u.roleName === 'Student Counselor'),
+      'Data Entry User': assignable.filter((u) => u.roleName === 'Data Entry User'),
+      'PRO': assignable.filter((u) => u.roleName === 'PRO'),
+    };
+
+    return { assignableUsers: assignable, usersByRole: byRole };
+  }, [users]);
 
   return (
     <div className="mx-auto w-full space-y-6">

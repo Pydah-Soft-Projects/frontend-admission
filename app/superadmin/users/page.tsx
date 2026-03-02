@@ -7,6 +7,7 @@ import type { User, ModulePermission, RoleName } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/Dialog';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { useRouter } from 'next/navigation';
@@ -111,6 +112,8 @@ const UserManagementPage = () => {
   const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false);
   const [selectedUserForAssignment, setSelectedUserForAssignment] = useState<User | null>(null);
   const [selectedManagerId, setSelectedManagerId] = useState('');
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
+  const [userToDeactivate, setUserToDeactivate] = useState<User | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -219,12 +222,12 @@ const UserManagementPage = () => {
   });
 
   const toggleActiveMutation = useMutation({
-    mutationFn: async (user: User) =>
-      userAPI.update(user._id, { isActive: !user.isActive }),
-    onSuccess: () => {
+    mutationFn: async ({ user, unassignLeads }: { user: User; unassignLeads?: boolean }) =>
+      userAPI.update(user._id, { isActive: !user.isActive, unassignLeads }),
+    onSuccess: (_, { user }) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       // Update selected user detail if open
-      if (selectedUserDetail) {
+      if (selectedUserDetail && selectedUserDetail._id === user._id) {
         setSelectedUserDetail(prev => prev ? ({ ...prev, isActive: !prev.isActive }) : null);
       }
     },
@@ -756,8 +759,15 @@ const UserManagementPage = () => {
 
                   <Button
                     variant="outline"
-                    onClick={() => toggleActiveMutation.mutate(selectedUserDetail)}
-                    disabled={!canManageUsers}
+                    onClick={() => {
+                      if (selectedUserDetail.isActive) {
+                        setUserToDeactivate(selectedUserDetail);
+                        setShowDeactivateDialog(true);
+                      } else {
+                        toggleActiveMutation.mutate({ user: selectedUserDetail });
+                      }
+                    }}
+                    disabled={!canManageUsers || toggleActiveMutation.isPending}
                     className={selectedUserDetail.isActive ? "justify-start text-rose-600 hover:bg-rose-50 border-rose-200" : "justify-start text-emerald-600 hover:bg-emerald-50 border-emerald-200"}
                   >
                     {selectedUserDetail.isActive ? <IconX className="w-4 h-4 mr-2" /> : <IconCheck className="w-4 h-4 mr-2" />}
@@ -825,6 +835,59 @@ const UserManagementPage = () => {
           </Card>
         </div>
       )}
+
+      {/* Deactivate User Dialog */}
+      <Dialog open={showDeactivateDialog} onOpenChange={setShowDeactivateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate User?</DialogTitle>
+            <DialogDescription>
+              You are about to deactivate {userToDeactivate?.name}. What would you like to do with their assigned leads?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <Button
+              variant="outline"
+              className="justify-start text-left h-auto py-3 border-rose-200 hover:bg-rose-50"
+              onClick={() => {
+                if (userToDeactivate) {
+                  toggleActiveMutation.mutate({ user: userToDeactivate, unassignLeads: true });
+                  setShowDeactivateDialog(false);
+                }
+              }}
+              disabled={toggleActiveMutation.isPending}
+            >
+              <div>
+                <div className="font-semibold text-rose-700">Deactivate & Unassign Leads</div>
+                <div className="text-xs text-rose-600 font-normal mt-1 whitespace-normal text-left">User will be deactivated and all their leads will be returned to the unassigned pool.</div>
+              </div>
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start text-left h-auto py-3"
+              onClick={() => {
+                if (userToDeactivate) {
+                  toggleActiveMutation.mutate({ user: userToDeactivate, unassignLeads: false });
+                  setShowDeactivateDialog(false);
+                }
+              }}
+              disabled={toggleActiveMutation.isPending}
+            >
+              <div>
+                <div className="font-semibold text-slate-700 dark:text-slate-300">Deactivate Only</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-normal mt-1 whitespace-normal text-left">User will be deactivated but their leads will remain assigned to them.</div>
+              </div>
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-center mt-2"
+              onClick={() => setShowDeactivateDialog(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {showCreateUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">

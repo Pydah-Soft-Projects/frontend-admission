@@ -8,7 +8,7 @@ import { leadAPI } from '@/lib/api';
 import { User } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { CardSkeleton } from '@/components/ui/Skeleton';
+import { UserDashboardSkeleton } from '@/components/ui/Skeleton';
 import { useTheme } from '@/app/providers';
 import {
   ResponsiveContainer,
@@ -28,6 +28,7 @@ import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
 interface Analytics {
   totalLeads: number;
+  overallTotalLeads?: number;
   statusBreakdown: Record<string, number>;
   mandalBreakdown: Array<{ mandal: string; count: number }>;
   stateBreakdown: Array<{ state: string; count: number }>;
@@ -103,9 +104,19 @@ export default function UserDashboard() {
   }, [setHeaderContent, clearHeaderContent, handleGoToLeads, user?.name]);
 
   useEffect(() => {
-    setMobileTopBar({ title: 'Dashboard', iconKey: 'dashboard' });
+    const isPro = user?.roleName === 'PRO';
+    setMobileTopBar({
+      title: 'Dashboard',
+      iconKey: 'dashboard',
+      ...(isPro && {
+        rightAction: {
+          iconKey: 'leads',
+          onClick: () => router.push('/user/leads'),
+        },
+      }),
+    });
     return () => clearMobileTopBar();
-  }, [setMobileTopBar, clearMobileTopBar]);
+  }, [setMobileTopBar, clearMobileTopBar, user?.roleName, router]);
 
   const { data: filterOptionsData } = useQuery({
     queryKey: ['filterOptions'],
@@ -181,29 +192,65 @@ export default function UserDashboard() {
   );
 
   const summaryCards = useMemo(
-    () => [
-      {
-        label: 'Assigned Leads',
-        value: analytics?.totalLeads ?? 0,
-        helper: 'Allotted to you',
-      },
-      {
-        label: 'Interested',
-        value: analytics?.statusBreakdown?.Interested ?? analytics?.statusBreakdown?.interested ?? 0,
-        helper: 'High intent',
-      },
-      {
-        label: 'Confirmed',
-        value: analytics?.statusBreakdown?.Confirmed ?? analytics?.statusBreakdown?.confirmed ?? 0,
-        helper: 'Joined',
-      },
-      {
-        label: 'Not Interested',
-        value: analytics?.statusBreakdown?.['Not Interested'] ?? analytics?.statusBreakdown?.['Not interested'] ?? 0,
-        helper: 'Declined',
-      },
-    ],
-    [analytics]
+    () => {
+      const isPro = user?.roleName === 'PRO';
+      const breakdown = analytics?.statusBreakdown || {};
+
+      const getVal = (labels: string[]) => {
+        for (const label of labels) {
+          if (breakdown[label] !== undefined) return breakdown[label];
+          // Try case variations
+          const lower = label.toLowerCase();
+          const found = Object.entries(breakdown).find(([k]) => k.toLowerCase() === lower);
+          if (found) return found[1];
+        }
+        return 0;
+      };
+
+      const cards = [
+        {
+          label: 'Assigned Leads',
+          value: analytics?.overallTotalLeads ?? analytics?.totalLeads ?? 0,
+          helper: 'Allotted to you',
+        },
+        {
+          label: 'Interested',
+          value: getVal(['Interested']),
+          helper: 'High intent',
+        },
+      ];
+
+      if (isPro) {
+        cards.push(
+          {
+            label: 'Scheduled Revisit',
+            value: getVal(['Scheduled Revisit', 'Scheduled revisit']),
+            helper: 'Upcoming visits',
+          },
+          {
+            label: 'Confirmed',
+            value: getVal(['Confirmed']),
+            helper: 'Finalized',
+          }
+        );
+      } else {
+        cards.push(
+          {
+            label: 'Confirmed',
+            value: getVal(['Confirmed']),
+            helper: 'Joined',
+          },
+          {
+            label: 'Not Interested',
+            value: getVal(['Not Interested']),
+            helper: 'Declined',
+          }
+        );
+      }
+
+      return cards;
+    },
+    [analytics, user?.roleName]
   );
 
   const chartColors = useMemo(
@@ -254,11 +301,9 @@ export default function UserDashboard() {
     [statusChartData]
   );
 
-  if (isAuthorising || !user) {
+  if (isAuthorising || !user || (isLoadingAnalytics && !analytics)) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <CardSkeleton />
-      </div>
+      <UserDashboardSkeleton />
     );
   }
 
@@ -336,7 +381,7 @@ export default function UserDashboard() {
 
       {/* Today's scheduled calls - full width, responsive grid */}
       {/* Today's scheduled calls - simple list, no card background */}
-      {user?.roleName !== 'PRO' && (
+      {true && (
         <div className="w-full space-y-3 pt-2">
           <div className="flex items-center gap-3 px-1">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-100 to-amber-100 text-orange-600 dark:from-orange-900/40 dark:to-amber-900/30 dark:text-orange-400">

@@ -450,3 +450,127 @@ export const LeadsAbstractSkeleton: React.FC<{ className?: string }> = ({ classN
     </div>
   );
 };
+// User Dashboard skeleton — matches dashboard layout (4 cards, scheduled calls, status chart, mandal/group charts)
+export const UserDashboardSkeleton: React.FC<{ className?: string }> = ({ className }) => {
+  return (
+    <div className={cn('mx-auto w-full max-w-7xl space-y-4 sm:space-y-6 px-0 sm:px-2 pt-1 pb-2 sm:pt-0 sm:pb-0', className)}>
+      {/* Filters skeleton */}
+      <div className="w-full flex flex-nowrap items-center gap-2 sm:gap-4">
+        {[1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-1.5 min-w-0">
+            <Skeleton className="h-3 w-8 rounded opacity-30" />
+            <Skeleton className="h-6 w-24 sm:w-28 rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* 4 summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="overflow-hidden rounded-xl border-0 bg-slate-100 dark:bg-slate-800 p-3 sm:p-4 min-h-[72px] sm:min-h-[80px]"
+          >
+            <Skeleton className="h-3 w-16 mb-2 opacity-50" />
+            <Skeleton className="h-6 w-12 mb-1" />
+            <Skeleton className="h-2 w-20 opacity-40" />
+          </div>
+        ))}
+      </div>
+
+      {/* Today's scheduled calls */}
+      <div className="w-full space-y-3 pt-2">
+        <div className="flex items-center gap-3 px-1">
+          <Skeleton className="h-8 w-8 rounded-full opacity-60" />
+          <Skeleton className="h-4 w-48 rounded" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-24 rounded" />
+                <Skeleton className="h-2.5 w-16 rounded" />
+              </div>
+              <Skeleton className="h-8 w-8 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Status Distribution Chart Card */}
+      <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-5 dark:border-slate-700 dark:bg-slate-900 shadow-sm">
+        <Skeleton className="h-5 w-32 mb-4 rounded px-1" />
+        <div className="grid gap-2 sm:gap-6 lg:grid-cols-2 lg:items-center">
+          <div className="h-52 sm:h-72 flex items-center justify-center">
+            <Skeleton className="h-44 w-44 sm:h-64 sm:w-64 rounded-full" />
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                  <Skeleton className="h-3 w-20 rounded" />
+                </div>
+                <div className="text-right space-y-1">
+                  <Skeleton className="h-3.5 w-10 rounded" />
+                  <Skeleton className="h-2.5 w-6 rounded opacity-40" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Charts */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Mandal Chart (Horizontal bars) */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-700 dark:bg-slate-900 shadow-sm">
+          <Skeleton className="h-5 w-40 mb-6 rounded" />
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+            <div className="h-[200px] sm:h-64 lg:h-72 flex flex-col justify-around py-4">
+              {[1, 2, 3, 4, 5].map(j => (
+                <div key={j} className="flex items-center gap-2">
+                  <Skeleton className="h-2 w-16 rounded opacity-30" />
+                  <Skeleton className={cn("h-4 rounded opacity-60", j % 2 === 0 ? "w-full" : "w-2/3")} />
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2 sm:space-y-3">
+              {[1, 2, 3, 4].map(j => (
+                <div key={j} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 px-3 py-2.5 sm:px-4 sm:py-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                    <Skeleton className="h-3 w-20 rounded" />
+                  </div>
+                  <Skeleton className="h-4 w-12 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Group Chart (Pie) */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-700 dark:bg-slate-900 shadow-sm">
+          <Skeleton className="h-5 w-48 mb-6 rounded" />
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+            <div className="h-[200px] sm:h-64 lg:h-72 flex items-center justify-center">
+              <Skeleton className="h-40 w-40 sm:h-56 sm:w-56 rounded-full" />
+            </div>
+            <div className="space-y-2 sm:space-y-3">
+              {[1, 2, 3, 4].map(j => (
+                <div key={j} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 px-3 py-2.5 sm:px-4 sm:py-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                    <Skeleton className="h-3 w-16 rounded" />
+                  </div>
+                  <Skeleton className="h-4 w-12 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

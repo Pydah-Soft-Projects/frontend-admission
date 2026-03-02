@@ -88,6 +88,13 @@ export default function SuperAdminDashboard() {
   const [isTeamLoading, setIsTeamLoading] = useState(true);
   const [dashboardAcademicYear, setDashboardAcademicYear] = useState<number | ''>('');
   const [dashboardStudentGroup, setDashboardStudentGroup] = useState<string>('');
+  const [showAllCalls, setShowAllCalls] = useState(false);
+  const [userCounts, setUserCounts] = useState({
+    counselors: 0,
+    pros: 0,
+    dataEntry: 0,
+    subAdmins: 0,
+  });
 
   useEffect(() => {
     const currentUser = auth.getUser();
@@ -104,7 +111,17 @@ export default function SuperAdminDashboard() {
       try {
         const response = await userAPI.getAll();
         const allUsers = response.data || response;
-        // Filter out Super Admin and Sub Super Admin users
+
+        // Calculate counts for various roles
+        const counts = {
+          counselors: allUsers.filter((u: User) => u.roleName === 'Student Counselor').length,
+          pros: allUsers.filter((u: User) => u.roleName === 'PRO').length,
+          dataEntry: allUsers.filter((u: User) => u.roleName === 'Data Entry User').length,
+          subAdmins: allUsers.filter((u: User) => u.roleName === 'Sub Super Admin').length,
+        };
+        setUserCounts(counts);
+
+        // Filter out Super Admin and Sub Super Admin users for the performance table/cards
         const filteredUsers = allUsers.filter(
           (user: User) => user.roleName !== 'Super Admin' && user.roleName !== 'Sub Super Admin'
         );
@@ -402,53 +419,93 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* Today's scheduled calls */}
-      {/* Today's scheduled calls - Minimal Layout */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-m font-semibold text-[#0f172a] dark:text-[#f1f5f9]">Today&apos;s scheduled calls</h2>
-          <Link href="/superadmin/leads" className="text-xs font-medium text-[#ea580c] hover:text-[#c2410c] dark:text-[#f97316]">
-            View all
-          </Link>
+      {/* Today's scheduled calls & User Role Counts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Today's scheduled calls - Left Column */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-m font-semibold text-[#0f172a] dark:text-[#f1f5f9]">Today&apos;s scheduled calls</h2>
+            <Link href="/superadmin/leads" className="text-xs font-medium text-[#ea580c] hover:text-[#c2410c] dark:text-[#f97316]">
+              View all
+            </Link>
+          </div>
+
+          {scheduledLeads.length === 0 ? (
+            <div className="h-full rounded-lg border border-dashed border-[#e2e8f0] p-4 flex items-center justify-center text-xs text-[#64748b] dark:border-[#334155] dark:text-[#94a3b8]">
+              No calls scheduled for today.
+            </div>
+          ) : (
+            <>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
+                {scheduledLeads.slice(0, showAllCalls ? undefined : 5).map((lead: { _id: string; name?: string; enquiryNumber?: string; phone?: string; nextScheduledCall?: string; assignedTo?: { name?: string } }) => (
+                  <li key={lead._id} className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-slate-900 dark:text-slate-100 text-sm truncate">{lead.name ?? '—'}</p>
+                        {lead.enquiryNumber && <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-sm">{lead.enquiryNumber}</span>}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[#64748b] dark:text-[#94a3b8] mt-0.5">
+                        {lead.nextScheduledCall && (
+                          <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#fb923c]"></span>
+                            {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                        {typeof lead.assignedTo === 'object' && lead.assignedTo?.name && (
+                          <span>• {lead.assignedTo.name}</span>
+                        )}
+                      </div>
+                    </div>
+                    <Link href={`/superadmin/leads/${lead._id}`}>
+                      <button className="flex items-center justify-center h-7 w-7 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        <span className="sr-only">Open</span>
+                        <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {scheduledLeads.length > 5 && (
+                <button
+                  onClick={() => setShowAllCalls(!showAllCalls)}
+                  className="mt-1 w-full rounded-md py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 transition-colors border border-slate-200 dark:border-slate-800"
+                >
+                  {showAllCalls ? 'Show Less' : `Show ${scheduledLeads.length - 5} More`}
+                </button>
+              )}
+            </>
+          )}
         </div>
 
-        {scheduledLeads.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[#e2e8f0] p-4 text-center text-xs text-[#64748b] dark:border-[#334155] dark:text-[#94a3b8]">
-            No calls scheduled for today.
+        {/* User Counts Grid - Right Column */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-m font-semibold text-[#0f172a] dark:text-[#f1f5f9]">Users Roster Registry</h2>
+            <Link href="/superadmin/users" className="text-xs font-medium text-[#ea580c] hover:text-[#c2410c] dark:text-[#f97316]">
+              Directory
+            </Link>
           </div>
-        ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
-            {scheduledLeads.map((lead: { _id: string; name?: string; enquiryNumber?: string; phone?: string; nextScheduledCall?: string; assignedTo?: { name?: string } }) => (
-              <li key={lead._id} className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-900 dark:text-slate-100 text-sm truncate">{lead.name ?? '—'}</p>
-                    {lead.enquiryNumber && <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-sm">{lead.enquiryNumber}</span>}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-[#64748b] dark:text-[#94a3b8] mt-0.5">
-                    {lead.nextScheduledCall && (
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#fb923c]"></span>
-                        {new Date(lead.nextScheduledCall).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                    {typeof lead.assignedTo === 'object' && lead.assignedTo?.name && (
-                      <span>• {lead.assignedTo.name}</span>
-                    )}
-                  </div>
-                </div>
-                <Link href={`/superadmin/leads/${lead._id}`}>
-                  <button className="flex items-center justify-center h-7 w-7 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                    <span className="sr-only">Open</span>
-                    <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+            <Card className="flex flex-col justify-center p-2.5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border-blue-100 dark:border-blue-800/50">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Counselors</p>
+              <p className="text-xl font-black text-blue-900 dark:text-blue-100">{userCounts.counselors}</p>
+            </Card>
+            <Card className="flex flex-col justify-center p-2.5 bg-gradient-to-br from-purple-50 to-fuchsia-50 dark:from-purple-900/10 dark:to-fuchsia-900/10 border-purple-100 dark:border-purple-800/50">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">PRO Users</p>
+              <p className="text-xl font-black text-purple-900 dark:text-purple-100">{userCounts.pros}</p>
+            </Card>
+            <Card className="flex flex-col justify-center p-2.5 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10 border-emerald-100 dark:border-emerald-800/50">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Data Entry</p>
+              <p className="text-xl font-black text-emerald-900 dark:text-emerald-100">{userCounts.dataEntry}</p>
+            </Card>
+            <Card className="flex flex-col justify-center p-2.5 bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/10 dark:to-pink-900/10 border-rose-100 dark:border-rose-800/50">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Sub Admins</p>
+              <p className="text-xl font-black text-rose-900 dark:text-rose-100">{userCounts.subAdmins}</p>
+            </Card>
+          </div>
+        </div>
       </div>
 
       {/* Charts row 1: Leads vs Admissions + Joining Funnel */}

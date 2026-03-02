@@ -267,7 +267,7 @@ export default function LeadDetailPage() {
         date: lead.createdAt,
         title: 'Enquiry Created',
         description: `Enquiry #${lead.enquiryNumber || 'N/A'} was created`,
-        performedBy: typeof lead.uploadedBy === 'object' ? lead.uploadedBy.name : undefined,
+        performedBy: (lead.uploadedBy && typeof lead.uploadedBy === 'object') ? lead.uploadedBy.name : undefined,
       });
     }
 
@@ -287,7 +287,7 @@ export default function LeadDetailPage() {
         date: assignmentLog.createdAt,
         title: 'Assigned to Counsellor',
         description: assignmentLog.comment || `Assigned to counsellor`,
-        performedBy: typeof assignmentLog.performedBy === 'object' ? assignmentLog.performedBy.name : undefined,
+        performedBy: (assignmentLog.performedBy && typeof assignmentLog.performedBy === 'object') ? assignmentLog.performedBy.name : undefined,
         metadata: assignmentLog.metadata,
       });
     } else if (lead?.assignedAt && lead?.assignedTo) {
@@ -300,7 +300,7 @@ export default function LeadDetailPage() {
         date: lead.assignedAt,
         title: 'Assigned to Counsellor',
         description: `Assigned to ${assignedUserName}`,
-        performedBy: typeof lead.assignedBy === 'object' ? lead.assignedBy.name : undefined,
+        performedBy: (lead.assignedBy && typeof lead.assignedBy === 'object') ? lead.assignedBy.name : undefined,
       });
     }
 
@@ -347,7 +347,7 @@ export default function LeadDetailPage() {
           date: comm.sentAt,
           title: `${ordinal} Call - ${contactNumber}`,
           description: comm.remarks || comm.callOutcome || 'Call logged',
-          performedBy: typeof comm.sentBy === 'object' ? comm.sentBy.name : undefined,
+          performedBy: (comm.sentBy && typeof comm.sentBy === 'object') ? comm.sentBy.name : undefined,
           metadata: {
             outcome: comm.callOutcome,
             duration: comm.durationSeconds,
@@ -376,7 +376,7 @@ export default function LeadDetailPage() {
           date: comm.sentAt,
           title: `${ordinal} Message - ${contactNumber}`,
           description: `Template: ${templateName}\n${messageText}`,
-          performedBy: typeof comm.sentBy === 'object' ? comm.sentBy.name : undefined,
+          performedBy: (comm.sentBy && typeof comm.sentBy === 'object') ? comm.sentBy.name : undefined,
           metadata: {
             contactNumber: contactNumber,
             sequenceNumber: sequenceNumber,
@@ -404,7 +404,7 @@ export default function LeadDetailPage() {
           date: log.createdAt,
           title: 'Status Changed',
           description: `Changed from "${log.oldStatus || 'N/A'}" to "${log.newStatus || 'N/A'}"${log.comment ? ` - ${log.comment}` : ''}`,
-          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          performedBy: (log.performedBy && typeof log.performedBy === 'object') ? log.performedBy.name : undefined,
           metadata: {
             oldStatus: log.oldStatus,
             newStatus: log.newStatus,
@@ -418,7 +418,7 @@ export default function LeadDetailPage() {
           date: log.createdAt,
           title: 'Comment Added',
           description: log.comment || '',
-          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          performedBy: (log.performedBy && typeof log.performedBy === 'object') ? log.performedBy.name : undefined,
         });
       } else if (log.type === 'quota_change' || log.metadata?.fieldUpdate) {
         items.push({
@@ -427,7 +427,7 @@ export default function LeadDetailPage() {
           date: log.createdAt,
           title: 'Details Updated',
           description: log.comment || 'Student details were updated',
-          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          performedBy: (log.performedBy && typeof log.performedBy === 'object') ? log.performedBy.name : undefined,
           metadata: log.metadata,
         });
       }

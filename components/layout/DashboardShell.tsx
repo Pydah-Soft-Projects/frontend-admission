@@ -95,6 +95,10 @@ export type MobileTopBarOptions = {
   backHref?: string;
   /** Icon key for mobile top bar: dashboard | leads | lead-details | team | team-member | analytics | team-leads */
   iconKey?: keyof typeof MOBILE_TOP_BAR_ICONS;
+  rightAction?: {
+    iconKey: keyof typeof MOBILE_TOP_BAR_ICONS;
+    onClick: () => void;
+  };
 };
 
 type DashboardHeaderContextValue = {
@@ -738,8 +742,22 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                         {mobileTopBar?.title ?? title}
                       </span>
                     </h1>
-                    {/* Right: spacer (same width as left) */}
-                    <div className="w-10 flex-shrink-0" aria-hidden />
+                    {/* Right: action or spacer (same width as left) */}
+                    <div className="flex w-10 flex-shrink-0 items-center justify-end">
+                      {mobileTopBar?.rightAction ? (() => {
+                        const ActionIcon = MOBILE_TOP_BAR_ICONS[mobileTopBar.rightAction.iconKey];
+                        return (
+                          <button
+                            type="button"
+                            onClick={mobileTopBar.rightAction.onClick}
+                            className="flex cursor-pointer items-center justify-center w-9 h-9 rounded-lg text-white hover:bg-[#ea580c]/80 dark:hover:bg-[#c2410c]/80"
+                            aria-label="Action"
+                          >
+                            {ActionIcon && <ActionIcon className="h-5 w-5" />}
+                          </button>
+                        );
+                      })() : null}
+                    </div>
                   </div>
                 </div>
               )}

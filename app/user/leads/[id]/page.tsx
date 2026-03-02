@@ -112,15 +112,27 @@ export default function UserLeadDetailPage() {
   }, []);
 
   // Status options (lead pipeline stage – only these allowed for status update)
-
-  const statusOptions = [
-    'Interested',
-    'Not Interested',
-    'Confirmed',
-    'CET Applied',
-    'Wrong Data',
-    'Not Answered',
-  ];
+  const statusOptions = useMemo(() => {
+    if (user?.roleName === 'Student Counselor') {
+      return ['Interested', 'Not Interested', 'Confirmed', 'Visited', 'Admitted'];
+    }
+    if (user?.roleName === 'PRO') {
+      return ['Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'];
+    }
+    // Default list for admins/other roles
+    return [
+      'Interested',
+      'Not Interested',
+      'Confirmed',
+      'CET Applied',
+      'Wrong Data',
+      'Not Answered',
+      'Visited',
+      'Admitted',
+      'Not Available',
+      'Scheduled Revisit'
+    ];
+  }, [user?.roleName]);
 
   // Get the appropriate leads page URL for regular users
   const getLeadsPageUrl = () => {
@@ -179,8 +191,11 @@ export default function UserLeadDetailPage() {
 
   // Combined Status Options (Filtered for Call Logs)
   const combinedStatusOptions = useMemo(() => {
-    // Only include specific call outcomes and relevant lead statuses
-    // Removed: New, Admitted, Joined, Assigned, Partial, Lost
+    if (user?.roleName === 'Student Counselor') {
+      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed'].sort();
+    }
+
+    // Default/Other roles
     return [
       'No Answer',
       'Interested',
@@ -190,7 +205,7 @@ export default function UserLeadDetailPage() {
       'Wrong Data',
       'Call Back'
     ].sort();
-  }, []);
+  }, [user?.roleName]);
 
   const lead = (leadData?.data || leadData) as Lead | undefined;
 
@@ -471,7 +486,7 @@ export default function UserLeadDetailPage() {
         date: lead.createdAt,
         title: 'Enquiry Created',
         description: `Enquiry #${lead.enquiryNumber || 'N/A'} was created`,
-        performedBy: typeof lead.uploadedBy === 'object' ? lead.uploadedBy.name : undefined,
+        performedBy: (lead.uploadedBy && typeof lead.uploadedBy === 'object') ? lead.uploadedBy.name : undefined,
       });
     }
 
@@ -491,7 +506,7 @@ export default function UserLeadDetailPage() {
         date: assignmentLog.createdAt,
         title: 'Assigned to Counsellor',
         description: assignmentLog.comment || `Assigned to counsellor`,
-        performedBy: typeof assignmentLog.performedBy === 'object' ? assignmentLog.performedBy.name : undefined,
+        performedBy: (assignmentLog.performedBy && typeof assignmentLog.performedBy === 'object') ? assignmentLog.performedBy.name : undefined,
         metadata: assignmentLog.metadata,
       });
     } else if (lead?.assignedAt && lead?.assignedTo) {
@@ -504,7 +519,7 @@ export default function UserLeadDetailPage() {
         date: lead.assignedAt,
         title: 'Assigned to Counsellor',
         description: `Assigned to ${assignedUserName}`,
-        performedBy: typeof lead.assignedBy === 'object' ? lead.assignedBy.name : undefined,
+        performedBy: (lead.assignedBy && typeof lead.assignedBy === 'object') ? lead.assignedBy.name : undefined,
       });
     }
 
@@ -551,7 +566,7 @@ export default function UserLeadDetailPage() {
           date: comm.sentAt,
           title: `${ordinal} Call - ${contactNumber}`,
           description: comm.remarks || comm.callOutcome || 'Call logged',
-          performedBy: typeof comm.sentBy === 'object' ? comm.sentBy.name : undefined,
+          performedBy: (comm.sentBy && typeof comm.sentBy === 'object') ? comm.sentBy.name : undefined,
           metadata: {
             outcome: comm.callOutcome,
             duration: comm.durationSeconds,
@@ -580,7 +595,7 @@ export default function UserLeadDetailPage() {
           date: comm.sentAt,
           title: `${ordinal} Message - ${contactNumber}`,
           description: `Template: ${templateName}\n${messageText}`,
-          performedBy: typeof comm.sentBy === 'object' ? comm.sentBy.name : undefined,
+          performedBy: (comm.sentBy && typeof comm.sentBy === 'object') ? comm.sentBy.name : undefined,
           metadata: {
             contactNumber: contactNumber,
             sequenceNumber: sequenceNumber,
@@ -608,7 +623,7 @@ export default function UserLeadDetailPage() {
           date: log.createdAt,
           title: 'Status Changed',
           description: `Changed from "${log.oldStatus || 'N/A'}" to "${log.newStatus || 'N/A'}"${log.comment ? ` - ${log.comment}` : ''}`,
-          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          performedBy: (log.performedBy && typeof log.performedBy === 'object') ? log.performedBy.name : undefined,
           metadata: {
             oldStatus: log.oldStatus,
             newStatus: log.newStatus,
@@ -622,7 +637,7 @@ export default function UserLeadDetailPage() {
           date: log.createdAt,
           title: 'Comment Added',
           description: log.comment || '',
-          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          performedBy: (log.performedBy && typeof log.performedBy === 'object') ? log.performedBy.name : undefined,
         });
       } else if (log.type === 'quota_change' || log.type === 'field_update' || log.metadata?.fieldUpdate) {
         items.push({
@@ -631,7 +646,7 @@ export default function UserLeadDetailPage() {
           date: log.createdAt,
           title: 'Details Updated',
           description: log.comment || 'Student details were updated',
-          performedBy: typeof log.performedBy === 'object' ? log.performedBy.name : undefined,
+          performedBy: (log.performedBy && typeof log.performedBy === 'object') ? log.performedBy.name : undefined,
           metadata: log.metadata,
         });
       }
@@ -1215,63 +1230,102 @@ export default function UserLeadDetailPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-3 sm:space-y-6 px-0 sm:px-4 pb-36 sm:pb-6 pt-3 sm:pt-6 lg:px-8 lg:pb-6">
-      {/* Mobile-only sticky action bar: icons only (above bottom nav) */}
+      {/* Mobile-only sticky action bar: redesigned for better reach and centering */}
       <div
-        className="lg:hidden fixed left-0 right-0 z-20 flex items-center justify-center gap-3 px-4 py-3 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-700 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+        className="sm:hidden fixed left-0 right-0 z-20 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-700 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] px-4 py-3"
         style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
-        aria-label="Quick actions"
       >
-        <div className="flex items-center justify-center gap-3 w-full max-w-sm mx-auto">
-          {user.roleName !== 'PRO' && (
-            <button
-              type="button"
-              onClick={() => lead && setShowCallNumberModal(true)}
-              className="flex items-center justify-center size-12 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
-              aria-label="Call"
-            >
-              <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-            </button>
-          )}
-          <button
+        <div className="flex items-center justify-center gap-3 max-w-lg mx-auto">
+          {/* Left: Comments Label/Link */}
+          {/* <button
             type="button"
+            className="flex flex-col items-center gap-0.5 min-w-[60px]"
             onClick={() => {
-              if (lead) {
-                setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
-                setShowSmsModal(true);
+              const commentsSection = document.getElementById('comments-section');
+              if (commentsSection) {
+                commentsSection.scrollIntoView({ behavior: 'smooth' });
               }
             }}
-            className="flex items-center justify-center size-12 rounded-xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white shadow-sm"
-            aria-label="SMS"
           >
-            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-          </button>
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Comments</span>
+          </button> */}
 
-          <button
-            type="button"
-            onClick={() => setShowEditModal(true)}
-            className="flex items-center justify-center size-12 rounded-xl bg-slate-600 hover:bg-slate-700 active:scale-95 text-white shadow-sm"
-            aria-label="Edit Lead"
-          >
-            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
+          {/* Action Icons */}
+          <div className="flex items-center justify-center gap-2.5">
+            {user.roleName !== 'PRO' && (
+              <button
+                type="button"
+                onClick={() => lead && setShowCallNumberModal(true)}
+                className="flex items-center justify-center size-10 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
+                aria-label="Call"
+              >
+                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (lead) {
+                  setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
+                  setShowSmsModal(true);
+                }
+              }}
+              className="flex items-center justify-center size-10 rounded-xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white shadow-sm"
+              aria-label="SMS"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </button>
 
-          {/* Next Lead Button - Mobile Only */}
-          <button
+            {/* Status Update Button - Refresh Icon */}
+            <button
+              type="button"
+              onClick={() => setShowStatusModal(true)}
+              className="flex items-center justify-center size-10 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white shadow-sm"
+              aria-label="Update Status"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="flex items-center justify-center size-10 rounded-xl bg-slate-600 hover:bg-slate-700 active:scale-95 text-white shadow-sm"
+              aria-label="Edit Lead"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleNextLead}
+              className="flex items-center justify-center size-10 rounded-xl text-white shadow-sm transition-all bg-blue-600 hover:bg-blue-700 active:scale-95"
+              aria-label="Next Lead"
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Right: Add Comment Button */}
+          {/* <button
             type="button"
-            onClick={handleNextLead}
-            className="flex items-center justify-center size-12 rounded-xl text-white shadow-sm transition-all bg-blue-600 hover:bg-blue-700 active:scale-95"
-            aria-label="Next Lead"
+            className="flex flex-col items-center gap-0.5 min-w-[60px] text-blue-600 dark:text-blue-400"
+            onClick={() => {
+              setCommentText('');
+              setShowCommentModal(true);
+            }}
           >
-            <svg className="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </button>
+            <span className="text-sm font-bold">Add</span>
+          </button> */}
         </div>
       </div>
 
@@ -1454,6 +1508,16 @@ export default function UserLeadDetailPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 Edit
+              </button>
+              <button
+                type="button"
+                onClick={handleNextLead}
+                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all active:scale-95 text-xs sm:text-sm font-medium"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+                Next Lead
               </button>
             </div>
           </div>
@@ -1807,7 +1871,7 @@ export default function UserLeadDetailPage() {
             </div>
 
             {/* Comments - no card, compact */}
-            <div>
+            <div id="comments-section">
               <div className="flex justify-between items-center mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">
                 <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400">Comments</p>
                 <Button
