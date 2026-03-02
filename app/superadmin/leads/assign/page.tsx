@@ -47,11 +47,14 @@ export default function AssignLeadsPage() {
   const [statsState, setStatsState] = useState('');
   const [statsDistrict, setStatsDistrict] = useState('');
   const [statsMandal, setStatsMandal] = useState('');
+  const [statsCycleNumber, setStatsCycleNumber] = useState<number | ''>('');
   const [statsLocationDistricts, setStatsLocationDistricts] = useState<LocationOption[]>([]);
   const [statsLocationMandals, setStatsLocationMandals] = useState<LocationOption[]>([]);
   const [academicYear, setAcademicYear] = useState<number | ''>(2025);
   const [studentGroup, setStudentGroup] = useState<string>('');
   const [count, setCount] = useState(1000);
+  const [targetDate, setTargetDate] = useState<string>('');
+  const [cycleNumber, setCycleNumber] = useState<number | ''>('');
   const [isReady, setIsReady] = useState(false);
 
   // Location dropdowns (cascade: State → District → Mandal) from locations API
@@ -69,6 +72,7 @@ export default function AssignLeadsPage() {
   const [removeLocationMandals, setRemoveLocationMandals] = useState<LocationOption[]>([]);
   const [removeAcademicYear, setRemoveAcademicYear] = useState<number | ''>('');
   const [removeStudentGroup, setRemoveStudentGroup] = useState<string>('');
+  const [removeCycleNumber, setRemoveCycleNumber] = useState<number | ''>('');
   const [removeCount, setRemoveCount] = useState(100);
 
   const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
@@ -360,13 +364,14 @@ export default function AssignLeadsPage() {
     isLoading: isStatsLoading,
     isFetching: isStatsFetching
   } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStats', statsQueryMandal, statsQueryState, statsAcademicYear, statsStudentGroup],
+    queryKey: ['assignmentStats', statsQueryMandal, statsQueryState, statsAcademicYear, statsStudentGroup, statsCycleNumber],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         mandal: statsQueryMandal || undefined,
         state: statsQueryState || undefined,
         academicYear: statsAcademicYear !== '' ? statsAcademicYear : undefined,
         studentGroup: statsStudentGroup || undefined,
+        cycleNumber: statsCycleNumber !== '' ? statsCycleNumber : undefined,
       });
       // Backend returns { success, data: { totalLeads, assignedCount, ... }, message }
       const payload = response?.data ?? response ?? {};
@@ -419,7 +424,7 @@ export default function AssignLeadsPage() {
 
   // Assigned count for selected user (for remove-assignment tab)
   const { data: assignedCountData } = useQuery<{ data?: { count?: number } }>({
-    queryKey: ['assignedCountForUser', removeUserId, removeMandal, removeState, removeAcademicYear, removeStudentGroup],
+    queryKey: ['assignedCountForUser', removeUserId, removeMandal, removeState, removeAcademicYear, removeStudentGroup, removeCycleNumber],
     queryFn: async () => {
       if (!removeUserId) return { data: { count: 0 } };
       const response = await leadAPI.getAssignedCountForUser({
@@ -428,6 +433,7 @@ export default function AssignLeadsPage() {
         state: removeState || undefined,
         academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
         studentGroup: removeStudentGroup || undefined,
+        cycleNumber: removeCycleNumber !== '' ? removeCycleNumber : undefined,
       });
       return { data: response.data ?? response };
     },
@@ -486,6 +492,7 @@ export default function AssignLeadsPage() {
       count?: number;
       leadIds?: string[];
       institutionName?: string;
+      targetDate?: string;
     }) => leadAPI.assignLeads(payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
@@ -514,6 +521,8 @@ export default function AssignLeadsPage() {
         setDistrict('');
         setStudentGroup('');
         setAcademicYear(2025);
+        setCycleNumber('');
+        setTargetDate('');
         setCount(1000);
       } else if (mode === 'institution') {
         setInstitutionUserId('');
@@ -539,6 +548,7 @@ export default function AssignLeadsPage() {
       state?: string;
       academicYear?: number | string;
       studentGroup?: string;
+      cycleNumber?: number | string;
       count: number;
     }) => leadAPI.removeAssignments(payload),
     onSuccess: (response) => {
@@ -554,6 +564,7 @@ export default function AssignLeadsPage() {
       setRemoveDistrict('');
       setRemoveAcademicYear('');
       setRemoveStudentGroup('');
+      setRemoveCycleNumber('');
       setRemoveCount(100);
     },
     onError: (error: any) => {
@@ -583,6 +594,7 @@ export default function AssignLeadsPage() {
       state: state || undefined,
       academicYear,
       studentGroup: studentGroup || undefined,
+      targetDate: targetDate || undefined,
       count,
     });
   };
@@ -750,6 +762,23 @@ export default function AssignLeadsPage() {
               {studentGroupOptions.map((g: string) => (
                 <option key={g} value={g}>
                   {g}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-slate-200 whitespace-nowrap">
+              Cycle:
+            </label>
+            <select
+              value={statsCycleNumber === '' ? '' : statsCycleNumber}
+              onChange={(e) => setStatsCycleNumber(e.target.value === '' ? '' : Number(e.target.value))}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
+              <option value="">All Cycles</option>
+              {[1, 2, 3, 4, 5].map((c) => (
+                <option key={c} value={c}>
+                  Cycle {c}
                 </option>
               ))}
             </select>
@@ -1390,8 +1419,38 @@ export default function AssignLeadsPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Cycle (Filter Leads)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={cycleNumber}
+                    onChange={(e) => setCycleNumber(e.target.value === '' ? '' : Number(e.target.value))}
+                  >
+                    <option value="">Default (Cycle 1)</option>
+                    {[1, 2, 3, 4, 5].map((c) => (
+                      <option key={c} value={c}>
+                        Cycle {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Target Date (Auto Reclaim)
+                  </label>
+                  <Input
+                    type="date"
+                    value={targetDate}
+                    onChange={(e) => setTargetDate(e.target.value)}
+                    className="w-full px-3 py-2"
+                  />
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Restrict to a specific student group (e.g. 10th, Inter, Degree).
+                    'Not Interested' leads reclaim after this date.
                   </p>
                 </div>
               </div>
@@ -1673,6 +1732,6 @@ export default function AssignLeadsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

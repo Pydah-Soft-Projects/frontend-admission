@@ -209,6 +209,7 @@ export const leadAPI = {
     scheduledOn?: string;
     /** When true, only leads with at least one comment or status update today by current user */
     touchedToday?: boolean;
+    cycleNumber?: number | string;
   }) => {
     const params = new URLSearchParams();
     if (filters) {
@@ -367,6 +368,7 @@ export const leadAPI = {
     leadIds?: string[];
     assignNow?: boolean;
     institutionName?: string;
+    targetDate?: string;
   }) => {
     const response = await api.post('/leads/assign', data);
     return response.data;
@@ -378,6 +380,7 @@ export const leadAPI = {
     studentGroup?: string;
     institutionName?: string;
     forBreakdown?: 'school' | 'college';
+    cycleNumber?: number | string;
   }) => {
     const queryParams = new URLSearchParams();
     if (params?.mandal) queryParams.append('mandal', params.mandal);
@@ -386,17 +389,19 @@ export const leadAPI = {
     if (params?.studentGroup) queryParams.append('studentGroup', params.studentGroup);
     if (params?.institutionName) queryParams.append('institutionName', params.institutionName);
     if (params?.forBreakdown) queryParams.append('forBreakdown', params.forBreakdown);
+    if (params?.cycleNumber != null && params.cycleNumber !== '') queryParams.append('cycleNumber', String(params.cycleNumber));
     const query = queryParams.toString();
     const response = await api.get(`/leads/assign/stats${query ? `?${query}` : ''}`);
     return response.data;
   },
-  getAssignedCountForUser: async (params: { userId: string; mandal?: string; state?: string; academicYear?: number | string; studentGroup?: string }) => {
+  getAssignedCountForUser: async (params: { userId: string; mandal?: string; state?: string; academicYear?: number | string; studentGroup?: string; cycleNumber?: number | string }) => {
     const queryParams = new URLSearchParams();
     queryParams.append('userId', params.userId);
     if (params.mandal) queryParams.append('mandal', params.mandal);
     if (params.state) queryParams.append('state', params.state);
     if (params.academicYear != null && params.academicYear !== '') queryParams.append('academicYear', String(params.academicYear));
     if (params.studentGroup) queryParams.append('studentGroup', params.studentGroup);
+    if (params.cycleNumber != null && params.cycleNumber !== '') queryParams.append('cycleNumber', String(params.cycleNumber));
     const response = await api.get(`/leads/assign/assigned-count?${queryParams.toString()}`);
     return response.data;
   },

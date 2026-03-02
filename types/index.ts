@@ -209,6 +209,8 @@ export interface Lead {
   notes?: string;
   uploadedBy?: User | string;
   uploadBatchId?: string;
+  cycle_number?: number;
+  target_date?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -677,6 +679,8 @@ export interface LeadFilters {
   limit?: number;
   /** When true, only leads with at least one comment or status update today */
   touchedToday?: boolean;
+  cycleNumber?: number | string;
+  targetDate?: string;
 }
 
 export interface LeadPagination {
