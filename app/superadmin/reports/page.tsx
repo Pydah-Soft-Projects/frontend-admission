@@ -54,7 +54,8 @@ export default function ReportsPage() {
   }, [searchParams]);
   const [datePreset, setDatePreset] = useState<DatePreset>('today');
   const [callReportExportPreviewOpen, setCallReportExportPreviewOpen] = useState(false);
-  const [exportPreviewDate, setExportPreviewDate] = useState<string>('');
+  const [exportPreviewStartDate, setExportPreviewStartDate] = useState<string>('');
+  const [exportPreviewEndDate, setExportPreviewEndDate] = useState<string>('');
   const [activityLogPage, setActivityLogPage] = useState(1);
   const [expandedActivityLogId, setExpandedActivityLogId] = useState<string | null>(null);
   const [activityLogEventType, setActivityLogEventType] = useState<'tracking_enabled' | 'tracking_disabled' | ''>('');
@@ -226,7 +227,7 @@ export default function ReportsPage() {
   const activityLogsPagination = activityLogsData?.pagination;
 
   // User Analytics (used for Call reports tab stats + User Analytics tab detail; same date range)
-  const { data: userAnalytics, isLoading: isLoadingUserAnalytics } = useQuery({
+  const { data: userAnalytics, isLoading: isLoadingUserAnalytics, error: userAnalyticsError } = useQuery({
     queryKey: ['userAnalytics', filters.startDate, filters.endDate, filters.academicYear],
     queryFn: () => leadAPI.getUserAnalytics({
       startDate: filters.startDate,
@@ -318,26 +319,26 @@ export default function ReportsPage() {
 
   // Call reports: build merged data for Excel (User Performance + Daily Report)
   // Dedicated queries for Export Preview to support specific date filtering
-  const { data: previewCallReports } = useQuery({
-    queryKey: ['previewCallReports', exportPreviewDate, filters.userId],
+  const { data: previewCallReports, isLoading: isPreviewCallsLoading, isFetching: isPreviewCallsFetching } = useQuery({
+    queryKey: ['previewCallReports', exportPreviewStartDate, exportPreviewEndDate, filters.userId],
     queryFn: () => reportAPI.getDailyCallReports({
-      startDate: exportPreviewDate,
-      endDate: exportPreviewDate,
+      startDate: exportPreviewStartDate,
+      endDate: exportPreviewEndDate,
       userId: filters.userId || undefined,
     }),
-    enabled: callReportExportPreviewOpen && !!exportPreviewDate,
+    enabled: callReportExportPreviewOpen && (!!exportPreviewStartDate || datePreset === 'overall'),
     staleTime: 0,
   });
 
-  const { data: previewUserAnalytics } = useQuery({
-    queryKey: ['previewUserAnalytics', exportPreviewDate, filters.academicYear, filters.userId],
+  const { data: previewUserAnalytics, isLoading: isPreviewUserLoading, isFetching: isPreviewUserFetching } = useQuery({
+    queryKey: ['previewUserAnalytics', exportPreviewStartDate, exportPreviewEndDate, filters.academicYear, filters.userId],
     queryFn: () => leadAPI.getUserAnalytics({
-      startDate: exportPreviewDate,
-      endDate: exportPreviewDate,
+      startDate: exportPreviewStartDate,
+      endDate: exportPreviewEndDate,
       academicYear: filters.academicYear != null ? filters.academicYear : undefined,
       userId: filters.userId || undefined,
     }),
-    enabled: callReportExportPreviewOpen && !!exportPreviewDate,
+    enabled: callReportExportPreviewOpen && (!!exportPreviewStartDate || datePreset === 'overall'),
     staleTime: 0,
   });
 
@@ -379,9 +380,11 @@ export default function ReportsPage() {
       const ws2 = XLSX.utils.json_to_sheet(dailyRows);
       XLSX.utils.book_append_sheet(workbook, ws2, 'Daily Call Report');
     }
-    const filename = `call-report-${exportPreviewDate || filters.startDate}.xlsx`;
+    const filename = `call-report-${exportPreviewStartDate || filters.startDate}.xlsx`;
     XLSX.writeFile(workbook, filename);
     setCallReportExportPreviewOpen(false);
+    setExportPreviewStartDate('');
+    setExportPreviewEndDate('');
   };
 
   // Prepare chart data
@@ -826,10 +829,10 @@ export default function ReportsPage() {
         <div className="space-y-6">
           {isLoadingCalls || isLoadingUserAnalytics ? (
             <ReportDashboardSkeleton />
-          ) : callReportsError ? (
+          ) : callReportsError || userAnalyticsError ? (
             <Card className="p-8 text-center">
               <p className="text-red-600 dark:text-red-400">
-                Failed to load call reports. Please try again.
+                Failed to load reports. {callReportsError ? 'Call reports error.' : ''} {userAnalyticsError ? 'User analytics error.' : ''} Please try again.
               </p>
             </Card>
           ) : (
@@ -839,7 +842,8 @@ export default function ReportsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setExportPreviewDate(filters.startDate);
+                    setExportPreviewStartDate(filters.startDate);
+                    setExportPreviewEndDate(filters.endDate);
                     setCallReportExportPreviewOpen(true);
                   }}
                   disabled={!(userAnalytics?.users?.length || callReports?.reports?.length)}
@@ -875,11 +879,21 @@ export default function ReportsPage() {
                           <tr className="bg-[#475569] dark:bg-[#334155]">
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Leads</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                              {datePreset === 'today' ? 'Today Calls Done' :
+                                datePreset === 'yesterday' ? 'Yesterday Calls Done' :
+                                  datePreset === 'last7days' ? 'Last 7 Days Calls Done' :
+                                    datePreset === 'last30days' ? 'Last 30 Days Calls Done' :
+                                      datePreset === 'thisWeek' ? 'This Week Calls Done' :
+                                        datePreset === 'thisMonth' ? 'This Month Calls Done' :
+                                          datePreset === 'lastMonth' ? 'Last Month Calls Done' :
+                                            datePreset === 'custom' ? 'Custom Range Calls Done' :
+                                              'Overall Calls Done'}
+                            </th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">SMS</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Status Changes</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Interested Leads</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Confirmed</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Conversion Rate</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Remaining Leads</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
@@ -887,29 +901,13 @@ export default function ReportsPage() {
                             <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
                               <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{user.name || user.userName}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</td>
-                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
-                                <div className="flex flex-col">
-                                  <span>{user.calls?.total ?? 0}</span>
-                                  {user.calls?.averageDuration > 0 && (
-                                    <span className="text-xs text-slate-500">
-                                      Avg: {formatSecondsToMMSS(user.calls.averageDuration)}
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.calls?.total ?? 0}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.sms?.total ?? 0}</td>
-                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.statusConversions?.total ?? 0}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.interested ?? 0}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.convertedLeads ?? 0}</td>
                               <td className="whitespace-nowrap px-6 py-4 text-sm">
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${(user.conversionRate ?? 0) >= 50
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                    : (user.conversionRate ?? 0) >= 30
-                                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                    }`}
-                                >
-                                  {user.conversionRate ?? 0}%
+                                <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
+                                  {(user.totalAssigned || 0) - (user.calls?.total ?? 0)}
                                 </span>
                               </td>
                             </tr>
@@ -1012,85 +1010,105 @@ export default function ReportsPage() {
                           Report will contain two sheets: <strong>User Performance</strong>, <strong>Daily Call Report</strong>. Click Proceed to download.
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Filter Date:</span>
-                        <input
-                          type="date"
-                          value={exportPreviewDate}
-                          onChange={(e) => setExportPreviewDate(e.target.value)}
-                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
-                        />
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">From:</span>
+                          <input
+                            type="date"
+                            value={exportPreviewStartDate}
+                            onChange={(e) => setExportPreviewStartDate(e.target.value)}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">To:</span>
+                          <input
+                            type="date"
+                            value={exportPreviewEndDate}
+                            onChange={(e) => setExportPreviewEndDate(e.target.value)}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
+                          />
+                        </div>
                       </div>
                     </div>
                     <div className="flex-1 overflow-auto p-6 space-y-6">
-                      {callReportMergedData.performanceRows.length > 0 && (
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: User Performance</h4>
-                          <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
-                            <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569] text-sm">
-                              <thead>
-                                <tr className="bg-slate-100 dark:bg-slate-800">
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Leads</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Call</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">SMS</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Interested</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Confirmed</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569] bg-[#ffffff] dark:bg-[#1e293b]/50">
-                                {callReportMergedData.performanceRows.map((row: any, idx: number) => (
-                                  <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Leads']}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Call']}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.SMS}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Interested}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Confirmed}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                      {(isPreviewCallsLoading || isPreviewUserLoading || isPreviewCallsFetching || isPreviewUserFetching) ? (
+                        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                          <p className="text-slate-500 dark:text-slate-400 font-medium">Fetching report data...</p>
                         </div>
-                      )}
-                      {callReportMergedData.dailyRows.length > 0 && (
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: Daily Call Report</h4>
-                          <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
-                            <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569] text-sm">
-                              <thead>
-                                <tr className="bg-slate-100 dark:bg-slate-800">
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Date</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Duration</th>
-                                  <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Duration</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569] bg-[#ffffff] dark:bg-[#1e293b]/50">
-                                {callReportMergedData.dailyRows.map((row: any, idx: number) => (
-                                  <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Date}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Duration']}</td>
-                                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Duration']}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                      {callReportMergedData.performanceRows.length === 0 && callReportMergedData.dailyRows.length === 0 && (
-                        <p className="text-slate-500 dark:text-slate-400">No data to export.</p>
+                      ) : (
+                        <>
+                          {callReportMergedData.performanceRows.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: User Performance</h4>
+                              <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
+                                <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569] text-sm">
+                                  <thead>
+                                    <tr className="bg-slate-100 dark:bg-slate-800">
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Leads</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Call</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">SMS</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Interested</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Confirmed</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569] bg-[#ffffff] dark:bg-[#1e293b]/50">
+                                    {callReportMergedData.performanceRows.map((row: any, idx: number) => (
+                                      <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Leads']}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Call']}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.SMS}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Interested}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Confirmed}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                          {callReportMergedData.dailyRows.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: Daily Call Report</h4>
+                              <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
+                                <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569] text-sm">
+                                  <thead>
+                                    <tr className="bg-slate-100 dark:bg-slate-800">
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Date</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Duration</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Duration</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569] bg-[#ffffff] dark:bg-[#1e293b]/50">
+                                    {callReportMergedData.dailyRows.map((row: any, idx: number) => (
+                                      <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Date}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.User}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Total Duration']}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Duration']}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                          {callReportMergedData.performanceRows.length === 0 && callReportMergedData.dailyRows.length === 0 && (
+                            <p className="text-slate-500 dark:text-slate-400 text-center py-12">No data found for the selected range.</p>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { setCallReportExportPreviewOpen(false); setExportPreviewDate(''); }}>
+                      <Button variant="outline" size="sm" onClick={() => { setCallReportExportPreviewOpen(false); setExportPreviewStartDate(''); setExportPreviewEndDate(''); }}>
                         Cancel
                       </Button>
                       <Button size="sm" onClick={downloadCallReportExcel} disabled={callReportMergedData.performanceRows.length === 0 && callReportMergedData.dailyRows.length === 0}>
@@ -1104,702 +1122,666 @@ export default function ReportsPage() {
             </>
           )}
         </div>
-      )}
+      )
+      }
 
       {/* Conversion Reports Tab */}
-      {activeTab === 'conversions' && (
-        <div className="space-y-6">
-          {isLoadingConversions ? (
-            <Skeleton className="h-64" />
-          ) : conversionReportsError ? (
-            <Card className="p-8 text-center">
-              <p className="text-red-600 dark:text-red-400">Failed to load conversion reports. Please try again.</p>
-            </Card>
-          ) : (
-            <>
-              {/* Summary Cards */}
-              {conversionReports?.summary && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <Card className="p-4">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Leads</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.totalLeads}</p>
-                  </Card>
-                  <Card className="p-4">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Admissions</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.totalAdmissions}</p>
-                  </Card>
-                  <Card className="p-4">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Conversion Rate</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.overallConversionRate}%</p>
-                  </Card>
-                  <Card className="p-4">
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Counsellors</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.totalCounsellors}</p>
-                  </Card>
-                </div>
-              )}
-
-              {/* Status Conversions Summary */}
-              {conversionReports?.reports && conversionReports.reports.some((r: any) => r.statusConversions && Object.keys(r.statusConversions).length > 0) && (
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Status Conversions Overview</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {conversionReports.reports.map((report: any) => (
-                      report.statusConversions && Object.keys(report.statusConversions).length > 0 && (
-                        <div key={report.userId} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">{report.userName}</h4>
-                          <div className="space-y-1">
-                            {Object.entries(report.statusConversions).map(([conversion, count]: [string, any]) => (
-                              <div key={conversion} className="flex justify-between text-xs">
-                                <span className="text-slate-600 dark:text-slate-400">{conversion}</span>
-                                <span className="font-medium text-slate-900 dark:text-slate-100">{count}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    ))}
+      {
+        activeTab === 'conversions' && (
+          <div className="space-y-6">
+            {isLoadingConversions ? (
+              <Skeleton className="h-64" />
+            ) : conversionReportsError ? (
+              <Card className="p-8 text-center">
+                <p className="text-red-600 dark:text-red-400">Failed to load conversion reports. Please try again.</p>
+              </Card>
+            ) : (
+              <>
+                {/* Summary Cards */}
+                {conversionReports?.summary && (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Leads</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.totalLeads}</p>
+                    </Card>
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Admissions</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.totalAdmissions}</p>
+                    </Card>
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Conversion Rate</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.overallConversionRate}%</p>
+                    </Card>
+                    <Card className="p-4">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Counsellors</p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{conversionReports.summary.totalCounsellors}</p>
+                    </Card>
                   </div>
-                </Card>
-              )}
+                )}
 
-              {/* Charts */}
-              {conversionChartData.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Conversion by Counsellor</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={conversionChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="leads" fill="#3b82f6" name="Total Leads" />
-                      <Bar dataKey="converted" fill="#10b981" name="Converted" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Card>
-              )}
-
-              {/* Export and Table */}
-              <div className="flex justify-end gap-2 mb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('excel', conversionReports?.reports || [], `conversion-reports-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!conversionReports?.reports?.length}
-                >
-                  Export Excel
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('csv', conversionReports?.reports || [], `conversion-reports-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!conversionReports?.reports?.length}
-                >
-                  Export CSV
-                </Button>
-              </div>
-
-              {/* Table */}
-              {conversionReports?.reports && conversionReports.reports.length > 0 ? (
-                <Card className="overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                      <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Counsellor</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Leads</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirmed</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Converted</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status Changes</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Conversion Rate</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
-                        {conversionReports.reports.map((report: any) => (
-                          <tr key={report.userId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                            <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{report.userName}</td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.totalLeads}</td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.confirmedLeads || 0}</td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.convertedLeads}</td>
-                            <td className="px-6 py-4 text-sm">
-                              {report.statusChangeCount > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                                    {report.statusChangeCount} changes
-                                  </span>
-                                  {report.statusConversions && Object.keys(report.statusConversions).length > 0 && (
-                                    <span className="text-xs text-slate-500">
-                                      ({Object.keys(report.statusConversions).length} types)
-                                    </span>
-                                  )}
+                {/* Status Conversions Summary */}
+                {conversionReports?.reports && conversionReports.reports.some((r: any) => r.statusConversions && Object.keys(r.statusConversions).length > 0) && (
+                  <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Status Conversions Overview</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {conversionReports.reports.map((report: any) => (
+                        report.statusConversions && Object.keys(report.statusConversions).length > 0 && (
+                          <div key={report.userId} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+                            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">{report.userName}</h4>
+                            <div className="space-y-1">
+                              {Object.entries(report.statusConversions).map(([conversion, count]: [string, any]) => (
+                                <div key={conversion} className="flex justify-between text-xs">
+                                  <span className="text-slate-600 dark:text-slate-400">{conversion}</span>
+                                  <span className="font-medium text-slate-900 dark:text-slate-100">{count}</span>
                                 </div>
-                              ) : (
-                                <span className="text-slate-400">0</span>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm">
-                              <span
-                                className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${report.conversionRate >= 50
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                  : report.conversionRate >= 30
-                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                  }`}
-                              >
-                                {report.conversionRate}%
-                              </span>
-                            </td>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Charts */}
+                {conversionChartData.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Conversion by Counsellor</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={conversionChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="leads" fill="#3b82f6" name="Total Leads" />
+                        <Bar dataKey="converted" fill="#10b981" name="Converted" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </Card>
+                )}
+
+                {/* Export and Table */}
+                <div className="flex justify-end gap-2 mb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExport('excel', conversionReports?.reports || [], `conversion-reports-${filters.startDate}-${filters.endDate}`)}
+                    disabled={!conversionReports?.reports?.length}
+                  >
+                    Export Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExport('csv', conversionReports?.reports || [], `conversion-reports-${filters.startDate}-${filters.endDate}`)}
+                    disabled={!conversionReports?.reports?.length}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
+
+                {/* Table */}
+                {conversionReports?.reports && conversionReports.reports.length > 0 ? (
+                  <Card className="overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                        <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Counsellor</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Leads</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirmed</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Converted</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status Changes</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Conversion Rate</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              ) : (
-                <Card className="p-8 text-center">
-                  <p className="text-slate-500 dark:text-slate-400">No conversion reports found for the selected period.</p>
-                </Card>
-              )}
-            </>
-          )}
-        </div>
-      )}
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
+                          {conversionReports.reports.map((report: any) => (
+                            <tr key={report.userId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                              <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{report.userName}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.totalLeads}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.confirmedLeads || 0}</td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.convertedLeads}</td>
+                              <td className="px-6 py-4 text-sm">
+                                {report.statusChangeCount > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                      {report.statusChangeCount} changes
+                                    </span>
+                                    {report.statusConversions && Object.keys(report.statusConversions).length > 0 && (
+                                      <span className="text-xs text-slate-500">
+                                        ({Object.keys(report.statusConversions).length} types)
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400">0</span>
+                                )}
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${report.conversionRate >= 50
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : report.conversionRate >= 30
+                                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                    }`}
+                                >
+                                  {report.conversionRate}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                ) : (
+                  <Card className="p-8 text-center">
+                    <p className="text-slate-500 dark:text-slate-400">No conversion reports found for the selected period.</p>
+                  </Card>
+                )}
+              </>
+            )}
+          </div>
+        )
+      }
 
       {/* User Analytics Tab – per-user call activity (calls, SMS, status changes) like the counsellor Call activity page */}
-      {activeTab === 'users' && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center gap-4 rounded-lg bg-slate-100 dark:bg-slate-800 p-3">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Date range: <strong>{filters.startDate}</strong> to <strong>{filters.endDate}</strong>
-            </span>
-            {filters.academicYear != null && (
+      {
+        activeTab === 'users' && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center gap-4 rounded-lg bg-slate-100 dark:bg-slate-800 p-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Academic Year: <strong>{filters.academicYear}</strong> (assigned leads filter)
+                Date range: <strong>{filters.startDate}</strong> to <strong>{filters.endDate}</strong>
               </span>
-            )}
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Full call activity (day-wise calls, SMS, status changes) per user below.
-            </span>
-          </div>
-          {isLoadingUserAnalytics ? (
-            <Skeleton className="h-64" />
-          ) : userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 ? (
-            <>
-              {/* Export */}
-              <div className="flex justify-end gap-2 mb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('excel', userAnalytics.users || [], `user-analytics-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!userAnalytics?.users?.length}
-                >
-                  Export Excel
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleExport('csv', userAnalytics.users || [], `user-analytics-${filters.startDate}-${filters.endDate}`)}
-                  disabled={!userAnalytics?.users?.length}
-                >
-                  Export CSV
-                </Button>
-              </div>
+              {filters.academicYear != null && (
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Academic Year: <strong>{filters.academicYear}</strong> (assigned leads filter)
+                </span>
+              )}
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Full call activity (day-wise calls, SMS, status changes) per user below.
+              </span>
+            </div>
+            {isLoadingUserAnalytics ? (
+              <Skeleton className="h-64" />
+            ) : userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 ? (
+              <>
+                {/* Export */}
+                <div className="flex justify-end gap-2 mb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExport('excel', userAnalytics.users || [], `user-analytics-${filters.startDate}-${filters.endDate}`)}
+                    disabled={!userAnalytics?.users?.length}
+                  >
+                    Export Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExport('csv', userAnalytics.users || [], `user-analytics-${filters.startDate}-${filters.endDate}`)}
+                    disabled={!userAnalytics?.users?.length}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
 
-              {/* Per-user call activity (same structure as user/call-activity page) */}
-              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200 mt-2 mb-2">Call activity by user</h3>
-              {userAnalytics.users.map((user: any) => (
-                <Card key={user.userId} className="p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{user.name || user.userName}</h3>
-                    <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${user.isActive
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                        }`}
-                    >
-                      {user.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
+                {/* Per-user call activity (same structure as user/call-activity page) */}
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200 mt-2 mb-2">Call activity by user</h3>
+                {userAnalytics.users.map((user: any) => (
+                  <Card key={user.userId} className="p-6">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{user.name || user.userName}</h3>
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${user.isActive
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                          }`}
+                      >
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
 
-                  <div className="space-y-6">
-                    {/* Day-wise call activity (data from user.calls.dailyCallActivity) */}
-                    {user.calls?.dailyCallActivity && user.calls.dailyCallActivity.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                          Day-wise call activity
-                        </h4>
-                        <div className="space-y-3">
-                          {user.calls.dailyCallActivity.map((day: { date: string; callCount: number; leads?: { leadId: string; leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }, dayIdx: number) => {
-                            const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
-                            return (
-                              <div key={dayIdx} className="rounded-lg border border-[#e2e8f0] dark:border-[#475569] overflow-hidden">
-                                <div className="flex items-center justify-between px-3 py-2 border-b border-[#e2e8f0] dark:border-[#475569]">
-                                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    {dateLabel}
-                                  </span>
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                    {day.callCount} call{day.callCount !== 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                                {day.leads && day.leads.length > 0 && (
-                                  <div className="overflow-x-auto">
-                                    <table className="min-w-full text-sm">
-                                      <thead className="border-b border-[#e2e8f0] dark:border-[#475569]">
-                                        <tr>
-                                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
-                                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
-                                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Enquiry #</th>
-                                          <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-600 dark:text-slate-400">Calls</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                                        {day.leads.map((lead: any, lidx: number) => (
-                                          <tr key={lidx}>
-                                            <td className="px-3 py-1.5 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
-                                            <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.leadPhone || '—'}</td>
-                                            <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.enquiryNumber || '—'}</td>
-                                            <td className="px-3 py-1.5 text-right text-slate-900 dark:text-slate-100">{lead.callCount}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
+                    <div className="space-y-6">
+                      {/* Day-wise call activity (data from user.calls.dailyCallActivity) */}
+                      {user.calls?.dailyCallActivity && user.calls.dailyCallActivity.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                            Day-wise call activity
+                          </h4>
+                          <div className="space-y-3">
+                            {user.calls.dailyCallActivity.map((day: { date: string; callCount: number; leads?: { leadId: string; leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }, dayIdx: number) => {
+                              const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
+                              return (
+                                <div key={dayIdx} className="rounded-lg border border-[#e2e8f0] dark:border-[#475569] overflow-hidden">
+                                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#e2e8f0] dark:border-[#475569]">
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                      {dateLabel}
+                                    </span>
+                                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                      {day.callCount} call{day.callCount !== 1 ? 's' : ''}
+                                    </span>
                                   </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                  {day.leads && day.leads.length > 0 && (
+                                    <div className="overflow-x-auto">
+                                      <table className="min-w-full text-sm">
+                                        <thead className="border-b border-[#e2e8f0] dark:border-[#475569]">
+                                          <tr>
+                                            <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
+                                            <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
+                                            <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Enquiry #</th>
+                                            <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-600 dark:text-slate-400">Calls</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                                          {day.leads.map((lead: any, lidx: number) => (
+                                            <tr key={lidx}>
+                                              <td className="px-3 py-1.5 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
+                                              <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.leadPhone || '—'}</td>
+                                              <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.enquiryNumber || '—'}</td>
+                                              <td className="px-3 py-1.5 text-right text-slate-900 dark:text-slate-100">{lead.callCount}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Calls Section */}
-                    {user.calls && user.calls.total > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                          Calls Made ({user.calls.total})
-                        </h4>
-                        <div className="space-y-2">
-                          {user.calls.byLead && user.calls.byLead.length > 0 ? (
+                      {/* Calls Section */}
+                      {user.calls && user.calls.total > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                            Calls Made ({user.calls.total})
+                          </h4>
+                          <div className="space-y-2">
+                            {user.calls.byLead && user.calls.byLead.length > 0 ? (
+                              <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm">
+                                  <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Calls</th>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Total Duration</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                                    {user.calls.byLead.map((lead: any, idx: number) => (
+                                      <tr key={idx}>
+                                        <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
+                                        <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{lead.leadPhone}</td>
+                                        <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.callCount}</td>
+                                        <td className="px-3 py-2 text-slate-900 dark:text-slate-100">
+                                          {formatSecondsToMMSS(lead.totalDuration)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-slate-500">No calls made in this period</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SMS Section */}
+                      {user.sms && user.sms.total > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                            SMS/Texts Sent ({user.sms.total})
+                          </h4>
+
+                          {/* Template Usage */}
+                          {user.sms.templateUsage && user.sms.templateUsage.length > 0 && (
+                            <div className="mb-4">
+                              <h5 className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Template Usage</h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {user.sms.templateUsage.map((template: any, idx: number) => (
+                                  <div key={idx} className="flex items-center justify-between p-2 bg-[#f8fafc] dark:bg-[#1e293b] rounded">
+                                    <span className="text-sm text-slate-700 dark:text-slate-300">{template.name}</span>
+                                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                      {template.count} times ({template.uniqueLeads} leads)
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* SMS by Lead */}
+                          {user.sms.byLead && user.sms.byLead.length > 0 && (
                             <div className="overflow-x-auto">
                               <table className="min-w-full text-sm">
                                 <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
                                   <tr>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
-                                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Calls</th>
-                                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Total Duration</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">SMS Count</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                                  {user.calls.byLead.map((lead: any, idx: number) => (
+                                  {user.sms.byLead.map((lead: any, idx: number) => (
                                     <tr key={idx}>
                                       <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
                                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{lead.leadPhone}</td>
-                                      <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.callCount}</td>
-                                      <td className="px-3 py-2 text-slate-900 dark:text-slate-100">
-                                        {formatSecondsToMMSS(lead.totalDuration)}
+                                      <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.smsCount}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Status Conversions Section */}
+                      {user.statusConversions && user.statusConversions.total > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                            Status Conversions ({user.statusConversions.total})
+                          </h4>
+
+                          {/* Conversion Breakdown */}
+                          {user.statusConversions.breakdown && Object.keys(user.statusConversions.breakdown).length > 0 && (
+                            <div className="mb-4">
+                              <h5 className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Conversion Types</h5>
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(user.statusConversions.breakdown).map(([conversion, count]: [string, any]) => (
+                                  <span
+                                    key={conversion}
+                                    className="inline-flex rounded-full px-3 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                  >
+                                    {conversion}: {count}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Conversions by Lead */}
+                          {user.statusConversions.byLead && user.statusConversions.byLead.length > 0 && (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full text-sm">
+                                <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Conversions</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                                  {user.statusConversions.byLead.map((lead: any, idx: number) => (
+                                    <tr key={idx}>
+                                      <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
+                                      <td className="px-3 py-2">
+                                        <div className="flex flex-wrap gap-1">
+                                          {lead.conversions.map((conv: any, cIdx: number) => (
+                                            <span
+                                              key={cIdx}
+                                              className="inline-flex rounded px-2 py-0.5 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                                            >
+                                              {conv.from} → {conv.to}
+                                            </span>
+                                          ))}
+                                        </div>
                                       </td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             </div>
-                          ) : (
-                            <p className="text-sm text-slate-500">No calls made in this period</p>
                           )}
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* SMS Section */}
-                    {user.sms && user.sms.total > 0 && (
+                      {/* Lead Summary */}
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                          SMS/Texts Sent ({user.sms.total})
-                        </h4>
-
-                        {/* Template Usage */}
-                        {user.sms.templateUsage && user.sms.templateUsage.length > 0 && (
-                          <div className="mb-4">
-                            <h5 className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Template Usage</h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {user.sms.templateUsage.map((template: any, idx: number) => (
-                                <div key={idx} className="flex items-center justify-between p-2 bg-[#f8fafc] dark:bg-[#1e293b] rounded">
-                                  <span className="text-sm text-slate-700 dark:text-slate-300">{template.name}</span>
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                    {template.count} times ({template.uniqueLeads} leads)
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
+                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Lead Summary</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-xs text-slate-600 dark:text-slate-400">Total Assigned</p>
+                            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</p>
                           </div>
-                        )}
-
-                        {/* SMS by Lead */}
-                        {user.sms.byLead && user.sms.byLead.length > 0 && (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                              <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
-                                <tr>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Phone</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">SMS Count</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                                {user.sms.byLead.map((lead: any, idx: number) => (
-                                  <tr key={idx}>
-                                    <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
-                                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{lead.leadPhone}</td>
-                                    <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.smsCount}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          <div>
+                            <p className="text-xs text-slate-600 dark:text-slate-400">Active Leads</p>
+                            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{user.activeLeads || 0}</p>
                           </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Status Conversions Section */}
-                    {user.statusConversions && user.statusConversions.total > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                          Status Conversions ({user.statusConversions.total})
-                        </h4>
-
-                        {/* Conversion Breakdown */}
-                        {user.statusConversions.breakdown && Object.keys(user.statusConversions.breakdown).length > 0 && (
-                          <div className="mb-4">
-                            <h5 className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Conversion Types</h5>
-                            <div className="flex flex-wrap gap-2">
-                              {Object.entries(user.statusConversions.breakdown).map(([conversion, count]: [string, any]) => (
-                                <span
-                                  key={conversion}
-                                  className="inline-flex rounded-full px-3 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
-                                >
-                                  {conversion}: {count}
-                                </span>
-                              ))}
-                            </div>
+                          <div>
+                            <p className="text-xs text-slate-600 dark:text-slate-400">Confirmed</p>
+                            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                              {user.statusBreakdown?.['Confirmed'] || user.statusBreakdown?.['confirmed'] || 0}
+                            </p>
                           </div>
-                        )}
-
-                        {/* Conversions by Lead */}
-                        {user.statusConversions.byLead && user.statusConversions.byLead.length > 0 && (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                              <thead className="bg-[#f8fafc] dark:bg-[#1e293b]">
-                                <tr>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Lead</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400">Conversions</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                                {user.statusConversions.byLead.map((lead: any, idx: number) => (
-                                  <tr key={idx}>
-                                    <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
-                                    <td className="px-3 py-2">
-                                      <div className="flex flex-wrap gap-1">
-                                        {lead.conversions.map((conv: any, cIdx: number) => (
-                                          <span
-                                            key={cIdx}
-                                            className="inline-flex rounded px-2 py-0.5 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
-                                          >
-                                            {conv.from} → {conv.to}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          <div>
+                            <p className="text-xs text-slate-600 dark:text-slate-400">Converted</p>
+                            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{user.convertedLeads || 0}</p>
                           </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Lead Summary */}
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Lead Summary</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-xs text-slate-600 dark:text-slate-400">Total Assigned</p>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-600 dark:text-slate-400">Active Leads</p>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{user.activeLeads || 0}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-600 dark:text-slate-400">Confirmed</p>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                            {user.statusBreakdown?.['Confirmed'] || user.statusBreakdown?.['confirmed'] || 0}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-600 dark:text-slate-400">Converted</p>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{user.convertedLeads || 0}</p>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
-            </>
-          ) : (
-            <Card className="p-8 text-center">
-              <p className="text-slate-500 dark:text-slate-400">No user analytics available.</p>
-            </Card>
-          )}
-        </div>
-      )}
+                  </Card>
+                ))}
+              </>
+            ) : (
+              <Card className="p-8 text-center">
+                <p className="text-slate-500 dark:text-slate-400">No user analytics available.</p>
+              </Card>
+            )}
+          </div>
+        )
+      }
 
       {/* Activity Logs Tab – time tracking ON/OFF in tabular format */}
-      {activeTab === 'activityLogs' && (
-        <div className="overflow-hidden rounded-lg border border-[#e2e8f0] dark:border-[#475569] mt-4">
-          {isLoadingActivityLogs ? (
-            <div className="space-y-0 divide-y divide-slate-100 dark:divide-slate-800">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex items-center justify-between gap-4 px-4 py-3 sm:px-5">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-48" />
+      {
+        activeTab === 'activityLogs' && (
+          <div className="overflow-hidden rounded-lg border border-[#e2e8f0] dark:border-[#475569] mt-4">
+            {isLoadingActivityLogs ? (
+              <div className="space-y-0 divide-y divide-slate-100 dark:divide-slate-800">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between gap-4 px-4 py-3 sm:px-5">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                    <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+                    <Skeleton className="h-4 w-24 shrink-0" />
                   </div>
-                  <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-                  <Skeleton className="h-4 w-24 shrink-0" />
-                </div>
-              ))}
-            </div>
-          ) : activityLogs.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400 sm:px-5">
-              No activity logs found for the selected period. Users turn time tracking ON/OFF from their Settings page.
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
-                  <thead>
-                    <tr className="bg-[#475569] dark:bg-[#334155]">
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                        User
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                        Role
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                        Date
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                        Sessions
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                        Total Duration
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">
-                        First Login
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">
+                ))}
+              </div>
+            ) : activityLogs.length === 0 ? (
+              <div className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400 sm:px-5">
+                No activity logs found for the selected period. Users turn time tracking ON/OFF from their Settings page.
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
+                    <thead>
+                      <tr className="bg-[#475569] dark:bg-[#334155]">
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                          User
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                          Role
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                          Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                          Sessions
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                          Total Duration
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">
+                          First Login
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">
 
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569]">
-                    {activityLogs.map((log: any, idx: number) => {
-                      // Convert duration (ms) to HH:MM
-                      const durationMs = log.totalDuration || 0;
-                      const hours = Math.floor(durationMs / (1000 * 60 * 60));
-                      const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-                      const durationStr = `${hours}h ${minutes}m`;
-                      const isExpanded = expandedActivityLogId === log.key; // Using composed key (userId_date) from backend
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569]">
+                      {activityLogs.map((log: any, idx: number) => {
+                        // Convert duration (ms) to HH:MM
+                        const durationMs = log.totalDuration || 0;
+                        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+                        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+                        const durationStr = `${hours}h ${minutes}m`;
+                        const isExpanded = expandedActivityLogId === log.key; // Using composed key (userId_date) from backend
 
-                      return (
-                        <Fragment key={log.id}>
-                          <tr
-                            onClick={() => setExpandedActivityLogId(isExpanded ? null : log.key)}
-                            className={`cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}`}
-                          >
-                            <td className="whitespace-nowrap px-6 py-4 sm:px-6">
-                              <div>
-                                <div className="font-medium text-slate-900 dark:text-slate-100">{log.userName}</div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">{log.userEmail}</div>
-                              </div>
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600 dark:text-slate-400 sm:px-6">
-                              {log.userRole}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100 sm:px-6">
-                              {format(new Date(log.date), 'MMM d, yyyy')}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600 dark:text-slate-400 sm:px-6">
-                              {log.sessionCount || 0}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 sm:px-6">
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">{durationStr}</span>
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 sm:px-6">
-                              {log.isActive ? (
-                                <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/40 dark:text-green-300">
-                                  Active Now
-                                </span>
-                              ) : (
-                                <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                  Completed
-                                </span>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-600 dark:text-slate-400 sm:px-6">
-                              {log.firstLogin ? format(new Date(log.firstLogin), 'h:mm a') : '—'}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right sm:px-6">
-                              <span className="text-slate-400">
-                                {isExpanded ? (
-                                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                  </svg>
-                                ) : (
-                                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                )}
-                              </span>
-                            </td>
-                          </tr>
-                          {isExpanded && (
-                            <tr className="bg-[#f8fafc] dark:bg-[#1e293b]/80">
-                              <td colSpan={8} className="px-6 py-4 sm:px-6">
-                                <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/50">
-                                  <h4 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Detailed Sessions</h4>
-                                  <div className="space-y-2">
-                                    {log.sessions && log.sessions.length > 0 ? (
-                                      log.sessions.map((session: any, sIdx: number) => {
-                                        const sDuration = session.duration || 0;
-                                        const sHours = Math.floor(sDuration / (1000 * 60 * 60));
-                                        const sMinutes = Math.floor((sDuration % (1000 * 60 * 60)) / (1000 * 60));
-                                        return (
-                                          <div key={sIdx} className="flex items-center text-sm text-slate-600 dark:text-slate-400">
-                                            <div className="w-2 h-2 rounded-full bg-orange-400 mr-3"></div>
-                                            <span className="font-medium mr-2">Session {sIdx + 1}:</span>
-                                            <span className="mr-2">
-                                              {format(new Date(session.startTime), 'h:mm a')}
-                                            </span>
-                                            <span className="mr-2 text-slate-400">→</span>
-                                            <span className="mr-4">
-                                              {session.endTime ? format(new Date(session.endTime), 'h:mm a') : 'Active Now'}
-                                            </span>
-                                            <span className="ml-auto font-medium text-slate-700 dark:text-slate-300">
-                                              ({sHours}h {sMinutes}m)
-                                            </span>
-                                          </div>
-                                        );
-                                      })
-                                    ) : (
-                                      <p className="text-sm text-slate-500">No detailed sessions recorded.</p>
-                                    )}
-                                  </div>
+                        return (
+                          <Fragment key={log.id}>
+                            <tr
+                              onClick={() => setExpandedActivityLogId(isExpanded ? null : log.key)}
+                              className={`cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50 hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30 hover:bg-slate-100 dark:hover:bg-slate-700/50'}`}
+                            >
+                              <td className="whitespace-nowrap px-6 py-4 sm:px-6">
+                                <div>
+                                  <div className="font-medium text-slate-900 dark:text-slate-100">{log.userName}</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">{log.userEmail}</div>
                                 </div>
                               </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600 dark:text-slate-400 sm:px-6">
+                                {log.userRole}
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100 sm:px-6">
+                                {format(new Date(log.date), 'MMM d, yyyy')}
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600 dark:text-slate-400 sm:px-6">
+                                {log.sessionCount || 0}
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 sm:px-6">
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">{durationStr}</span>
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 sm:px-6">
+                                {log.isActive ? (
+                                  <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                                    Active Now
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                    Completed
+                                  </span>
+                                )}
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-600 dark:text-slate-400 sm:px-6">
+                                {log.firstLogin ? format(new Date(log.firstLogin), 'h:mm a') : '—'}
+                              </td>
+                              <td className="whitespace-nowrap px-6 py-4 text-right sm:px-6">
+                                <span className="text-slate-400">
+                                  {isExpanded ? (
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  )}
+                                </span>
+                              </td>
                             </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {activityLogsPagination && activityLogsPagination.pages > 1 && (
-                <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Page {activityLogsPagination.page} of {activityLogsPagination.pages} · {activityLogsPagination.total} records
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setActivityLogPage((p) => Math.max(1, p - 1))}
-                      disabled={activityLogPage <= 1}
-                      className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() =>
-                        setActivityLogPage((p) => Math.min(activityLogsPagination.pages, p + 1))
-                      }
-                      disabled={activityLogPage >= activityLogsPagination.pages}
-                      className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600"
-                    >
-                      Next
-                    </button>
-                  </div>
+                            {isExpanded && (
+                              <tr className="bg-[#f8fafc] dark:bg-[#1e293b]/80">
+                                <td colSpan={8} className="px-6 py-4 sm:px-6">
+                                  <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                                    <h4 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Detailed Sessions</h4>
+                                    <div className="space-y-2">
+                                      {log.sessions && log.sessions.length > 0 ? (
+                                        log.sessions.map((session: any, sIdx: number) => {
+                                          const sDuration = session.duration || 0;
+                                          const sHours = Math.floor(sDuration / (1000 * 60 * 60));
+                                          const sMinutes = Math.floor((sDuration % (1000 * 60 * 60)) / (1000 * 60));
+                                          return (
+                                            <div key={sIdx} className="flex items-center text-sm text-slate-600 dark:text-slate-400">
+                                              <div className="w-2 h-2 rounded-full bg-orange-400 mr-3"></div>
+                                              <span className="font-medium mr-2">Session {sIdx + 1}:</span>
+                                              <span className="mr-2">
+                                                {format(new Date(session.startTime), 'h:mm a')}
+                                              </span>
+                                              <span className="mr-2 text-slate-400">→</span>
+                                              <span className="mr-4">
+                                                {session.endTime ? format(new Date(session.endTime), 'h:mm a') : 'Active Now'}
+                                              </span>
+                                              <span className="ml-auto font-medium text-slate-700 dark:text-slate-300">
+                                                ({sHours}h {sMinutes}m)
+                                              </span>
+                                            </div>
+                                          );
+                                        })
+                                      ) : (
+                                        <p className="text-sm text-slate-500">No detailed sessions recorded.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+                {activityLogsPagination && activityLogsPagination.pages > 1 && (
+                  <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Page {activityLogsPagination.page} of {activityLogsPagination.pages} · {activityLogsPagination.total} records
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setActivityLogPage((p) => Math.max(1, p - 1))}
+                        disabled={activityLogPage <= 1}
+                        className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() =>
+                          setActivityLogPage((p) => Math.min(activityLogsPagination.pages, p + 1))
+                        }
+                        disabled={activityLogPage >= activityLogsPagination.pages}
+                        className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )
+      }
 
       {/* Leads Abstract Tab – State → Districts → Mandals filters; 4-column Kanban */}
-      {activeTab === 'abstract' && (
-        <div className="space-y-4">
-          {/* Filters: State → District; Academic Year; Student Group */}
-          {isLoadingAbstract && !leadsAbstract ? (
-            <LeadsAbstractSkeleton />
-          ) : leadsAbstract ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]">
-              {/* Districts table – always shown first */}
-              <Card className="flex flex-col overflow-hidden h-full">
-                <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Lead count by district · Select a district to see mandal-wise stats</p>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  {isFetchingAbstract ? (
-                    <div className="p-4 space-y-4">
-                      {[...Array(20)].map((_, i) => (
-                        <div key={i} className="flex items-center">
-                          <Skeleton className="h-8 w-full rounded" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (leadsAbstract.districtBreakdown || []).length === 0 ? (
-                    <p className="p-4 text-sm text-slate-500">No districts</p>
-                  ) : (
-                    <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                      {(leadsAbstract.districtBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
-                        <li
-                          key={row.id ?? `district-${idx}`}
-                          onClick={() => {
-                            if (row.id) {
-                              setFilters({ ...filters, abstractDistrictId: row.id });
-                            }
-                          }}
-                          className={`flex items-center justify-between px-4 py-3 text-sm cursor-pointer transition-colors ${filters.abstractDistrictId === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
-                        >
-                          <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
-                            {row.name}
-                            {row.name === leadsAbstract.maxDistrict && (
-                              <span className="ml-1 text-amber-600 dark:text-amber-400">(Highest)</span>
-                            )}
-                          </span>
-                          <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </Card>
-
-              {/* Mandals table – only when a district is selected */}
-              {filters.abstractDistrictId ? (
+      {
+        activeTab === 'abstract' && (
+          <div className="space-y-4">
+            {/* Filters: State → District; Academic Year; Student Group */}
+            {isLoadingAbstract && !leadsAbstract ? (
+              <LeadsAbstractSkeleton />
+            ) : leadsAbstract ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]">
+                {/* Districts table – always shown first */}
                 <Card className="flex flex-col overflow-hidden h-full">
                   <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Lead count by mandal for selected district</p>
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Lead count by district · Select a district to see mandal-wise stats</p>
                   </div>
                   <div className="flex-1 overflow-y-auto">
                     {isFetchingAbstract ? (
@@ -1810,21 +1792,23 @@ export default function ReportsPage() {
                           </div>
                         ))}
                       </div>
-                    ) : (leadsAbstract.mandalBreakdown || []).length === 0 ? (
-                      <div className="flex items-center justify-center h-full p-4 text-sm text-slate-500">
-                        No mandals found for this district
-                      </div>
+                    ) : (leadsAbstract.districtBreakdown || []).length === 0 ? (
+                      <p className="p-4 text-sm text-slate-500">No districts</p>
                     ) : (
                       <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                        {(leadsAbstract.mandalBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
+                        {(leadsAbstract.districtBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
                           <li
-                            key={row.id ?? `mandal-${idx}`}
-                            className={`flex items-center justify-between px-4 py-3 text-sm ${row.name === leadsAbstract.maxMandal ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                              }`}
+                            key={row.id ?? `district-${idx}`}
+                            onClick={() => {
+                              if (row.id) {
+                                setFilters({ ...filters, abstractDistrictId: row.id });
+                              }
+                            }}
+                            className={`flex items-center justify-between px-4 py-3 text-sm cursor-pointer transition-colors ${filters.abstractDistrictId === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
                           >
                             <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
                               {row.name}
-                              {row.name === leadsAbstract.maxMandal && (
+                              {row.name === leadsAbstract.maxDistrict && (
                                 <span className="ml-1 text-amber-600 dark:text-amber-400">(Highest)</span>
                               )}
                             </span>
@@ -1835,20 +1819,63 @@ export default function ReportsPage() {
                     )}
                   </div>
                 </Card>
-              ) : (
-                <div className="hidden md:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cbd5e1] dark:border-[#475569] dark:bg-[#334155]/50 text-slate-400 p-8 text-center">
-                  <p>Select a district to view mandal breakdown</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <Card className="p-8 text-center">
-              <p className="text-slate-500 dark:text-slate-400">No abstract data. Select Academic Year and try again.</p>
-            </Card>
-          )}
-        </div>
-      )}
 
-    </div>
+                {/* Mandals table – only when a district is selected */}
+                {filters.abstractDistrictId ? (
+                  <Card className="flex flex-col overflow-hidden h-full">
+                    <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Lead count by mandal for selected district</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                      {isFetchingAbstract ? (
+                        <div className="p-4 space-y-4">
+                          {[...Array(20)].map((_, i) => (
+                            <div key={i} className="flex items-center">
+                              <Skeleton className="h-8 w-full rounded" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (leadsAbstract.mandalBreakdown || []).length === 0 ? (
+                        <div className="flex items-center justify-center h-full p-4 text-sm text-slate-500">
+                          No mandals found for this district
+                        </div>
+                      ) : (
+                        <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                          {(leadsAbstract.mandalBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
+                            <li
+                              key={row.id ?? `mandal-${idx}`}
+                              className={`flex items-center justify-between px-4 py-3 text-sm ${row.name === leadsAbstract.maxMandal ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                                }`}
+                            >
+                              <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
+                                {row.name}
+                                {row.name === leadsAbstract.maxMandal && (
+                                  <span className="ml-1 text-amber-600 dark:text-amber-400">(Highest)</span>
+                                )}
+                              </span>
+                              <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </Card>
+                ) : (
+                  <div className="hidden md:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cbd5e1] dark:border-[#475569] dark:bg-[#334155]/50 text-slate-400 p-8 text-center">
+                    <p>Select a district to view mandal breakdown</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Card className="p-8 text-center">
+                <p className="text-slate-500 dark:text-slate-400">No abstract data. Select Academic Year and try again.</p>
+              </Card>
+            )}
+          </div>
+        )
+      }
+
+    </div >
   );
 }
