@@ -312,6 +312,7 @@ export default function UserLeadsPage() {
       case 'lost':
         return 'bg-gray-100 text-gray-800 dark:bg-slate-800/60 dark:text-slate-200';
       case 'new':
+      case 'cet applied':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-slate-800/60 dark:text-slate-200';
@@ -665,8 +666,8 @@ export default function UserLeadsPage() {
                       disabled={isLoading}
                       size="sm"
                       className={`h-9 min-w-[36px] px-2 transition-colors ${page === pageNum
-                          ? '!bg-orange-400 !border-orange-400 hover:!bg-orange-500'
-                          : 'hover:border-orange-400 hover:text-orange-400'
+                        ? '!bg-orange-400 !border-orange-400 hover:!bg-orange-500'
+                        : 'hover:border-orange-400 hover:text-orange-400'
                         }`}
                     >
                       {pageNum}

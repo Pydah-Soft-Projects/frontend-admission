@@ -118,7 +118,7 @@ export default function UserLeadDetailPage() {
   // Status options (lead pipeline stage – only these allowed for status update)
   const statusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested', 'Confirmed', 'Visited', 'Admitted'];
+      return ['Interested', 'Not Interested', 'Confirmed', 'Visited', 'Admitted', 'CET Applied'];
     }
     if (user?.roleName === 'PRO') {
       return ['Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'];
@@ -196,7 +196,7 @@ export default function UserLeadDetailPage() {
   // Combined Status Options (Filtered for Call Logs)
   const combinedStatusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested', 'Not Answered', 'Wrong Data', 'Call Back', 'Confirmed'].sort();
+      return ['Interested', 'Not Interested', 'Not Answered', 'Wrong Data', 'Call Back', 'Confirmed', 'CET Applied'].sort();
     }
 
     // Default/Other roles
