@@ -42,11 +42,11 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: '/(.*)',
+        source: '/:path*',
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "frame-ancestors 'self' https://pydah.edu.in https://*.pydah.edu.in https://admissions.pydah.edu.in;",
+            value: "frame-ancestors 'self' https://pydah.edu.in https://*.pydah.edu.in https://admissions.pydah.edu.in https://*.wix.com https://*.wixsite.com;",
           },
         ],
       },
