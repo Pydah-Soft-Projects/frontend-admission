@@ -58,19 +58,28 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
+      - name: Prepare Server Permissions
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh "$SSH_USER@$SSH_HOST" "sudo chown -R $SSH_USER:$SSH_USER $DEPLOY_PATH || true"
+
       - name: Deploy artifacts via Rsync
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          # Push only the finalized build files. Exclude node_modules (will be re-installed on server if needed)
-          # and .git (to keep it clean).
-          rsync -avz --delete \
+          # Push only the finalized build files. 
+          # --omit-dir-times prevents permission errors on directory timestamps.
+          rsync -avz --delete --omit-dir-times \
             --exclude '.git/' \
             --exclude '.env' \
             --exclude 'node_modules/' \
-            ./.next ./public ./package.json ./package-lock.json ./next.config.ts ./ecosystem.config.cjs ./ \
+            --exclude '.next/cache' \
+            ./.next ./public ./package.json ./package-lock.json ./next.config.ts ./ecosystem.config.cjs \
             "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
 
       - name: Finalize Deployment on Server
