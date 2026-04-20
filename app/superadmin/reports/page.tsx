@@ -412,7 +412,8 @@ export default function ReportsPage() {
         const usersArr = Array.isArray(data?.users) ? data.users : [];
         const map: Record<string, any> = {};
         usersArr.forEach((u: any) => {
-          if (u.id) map[u.id] = u;
+          const uid = u.id || u.userId;
+          if (uid) map[uid] = u;
         });
         return map;
       } catch (error) {
@@ -421,6 +422,7 @@ export default function ReportsPage() {
       }
     },
     enabled: activeTab === 'calls' && callSubTab === 'performance' && expandedPerformanceUserIds.length > 0,
+    placeholderData: (previousData) => previousData,
     retry: 1,
     staleTime: 60000,
   });
