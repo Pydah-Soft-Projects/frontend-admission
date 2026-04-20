@@ -399,23 +399,26 @@ export default function ReportsPage() {
   } = useQuery({
     queryKey: ['userAnalyticsPerformanceExpanded', filters.startDate, filters.endDate, filters.academicYear, expandedPerformanceUserIds.join(',')],
     queryFn: async () => {
-      const map: Record<string, any> = {};
-      for (const userId of expandedPerformanceUserIds) {
-        try {
-          const data = await leadAPI.getUserAnalytics({
-            startDate: filters.startDate,
-            endDate: filters.endDate,
-            academicYear: filters.academicYear != null ? filters.academicYear : undefined,
-            userId,
-            includeAssignmentDetails: true,
-          });
-          const usersArr = Array.isArray(data?.users) ? data.users : [];
-          if (usersArr.length > 0) map[userId] = usersArr[0];
-        } catch {
-          // Keep UI functional even if one user detail request fails.
-        }
+      if (expandedPerformanceUserIds.length === 0) return {};
+      const batchUserIds = expandedPerformanceUserIds.join(',');
+      try {
+        const data = await leadAPI.getUserAnalytics({
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+          userId: batchUserIds,
+          includeAssignmentDetails: true,
+        });
+        const usersArr = Array.isArray(data?.users) ? data.users : [];
+        const map: Record<string, any> = {};
+        usersArr.forEach((u: any) => {
+          if (u.id) map[u.id] = u;
+        });
+        return map;
+      } catch (error) {
+        console.error('Batch analytics fetch failed:', error);
+        return {};
       }
-      return map;
     },
     enabled: activeTab === 'calls' && callSubTab === 'performance' && expandedPerformanceUserIds.length > 0,
     retry: 1,
