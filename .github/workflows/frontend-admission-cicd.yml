@@ -58,13 +58,16 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Prepare Server Permissions
+      - name: Prepare Server for Update
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
+          # 1. Reset ownership just in case
           ssh "$SSH_USER@$SSH_HOST" "sudo chown -R $SSH_USER:$SSH_USER $DEPLOY_PATH || true"
+          # 2. Stop any processes holding file locks on the deploy directory
+          ssh "$SSH_USER@$SSH_HOST" "sudo fuser -k 3000/tcp || true"
 
       - name: Deploy artifacts via Rsync
         env:
@@ -73,8 +76,8 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           # Push only the finalized build files. 
-          # --omit-dir-times prevents permission errors on directory timestamps.
-          rsync -avz --delete --omit-dir-times \
+          # --no-owner --no-group prevents errors when the builder IDs don't match the server.
+          rsync -avz --delete --omit-dir-times --no-owner --no-group \
             --exclude '.git/' \
             --exclude '.env' \
             --exclude 'node_modules/' \
@@ -94,7 +97,6 @@ jobs:
             npm install --production && \
             sudo chown -R ec2-user:ec2-user $DEPLOY_PATH && \
             sudo chmod -R 755 $DEPLOY_PATH && \
-            sudo fuser -k 3000/tcp || true && \
             if [ -f ecosystem.config.cjs ]; then
               pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
             else
