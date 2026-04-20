@@ -41,6 +41,15 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://pydah.edu.in https://*.pydah.edu.in https://admissions.pydah.edu.in;",
+          },
+        ],
+      },
     ];
   },
 };
