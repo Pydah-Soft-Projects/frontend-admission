@@ -58,34 +58,22 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Prepare Server for Update
+      - name: Create Deployment Bundle
+        run: |
+          # Bundle only the production-required files
+          # Note: ecosystem.config.cjs is included only if it exists
+          FILES=".next public package.json package-lock.json next.config.ts"
+          [ -f ecosystem.config.cjs ] && FILES="$FILES ecosystem.config.cjs"
+          tar -czf deploy.tar.gz $FILES
+
+      - name: Upload Bundle to Server
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          # 1. Reset ownership just in case
-          ssh "$SSH_USER@$SSH_HOST" "sudo chown -R $SSH_USER:$SSH_USER $DEPLOY_PATH || true"
-          # 2. Stop any processes holding file locks on the deploy directory
-          ssh "$SSH_USER@$SSH_HOST" "sudo fuser -k 3000/tcp || true"
+          scp deploy.tar.gz "$SSH_USER@$SSH_HOST:/tmp/deploy.tar.gz"
 
-      - name: Deploy artifacts via Rsync
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          # Push only the finalized build files. 
-          # --no-owner --no-group prevents errors when the builder IDs don't match the server.
-          rsync -avz --delete --omit-dir-times --no-owner --no-group \
-            --exclude '.git/' \
-            --exclude '.env' \
-            --exclude 'node_modules/' \
-            --exclude '.next/cache' \
-            ./.next ./public ./package.json ./package-lock.json ./next.config.ts ./ecosystem.config.cjs \
-            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
-
-      - name: Finalize Deployment on Server
+      - name: Deploy and Extract Bundle
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -93,10 +81,18 @@ jobs:
           PM2_APP_NAME: ${{ secrets.PM2_APP_NAME }}
         run: |
           ssh "$SSH_USER@$SSH_HOST" "set -e; \
+            # 1. Stop app to release locks
+            sudo fuser -k 3000/tcp || true; \
+            # 2. Ensure target path exists and clean it up partially (excluding .env)
+            sudo mkdir -p $DEPLOY_PATH; \
+            sudo chown $SSH_USER:$SSH_USER $DEPLOY_PATH; \
+            # 3. Extract bundle using sudo (overwrites everything)
+            sudo tar -xzf /tmp/deploy.tar.gz -C $DEPLOY_PATH; \
+            # 4. Correct ownership
+            sudo chown -R $SSH_USER:$SSH_USER $DEPLOY_PATH; \
+            # 5. Production setup
             cd $DEPLOY_PATH && \
             npm install --production && \
-            sudo chown -R ec2-user:ec2-user $DEPLOY_PATH && \
-            sudo chmod -R 755 $DEPLOY_PATH && \
             if [ -f ecosystem.config.cjs ]; then
               pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
             else
@@ -104,6 +100,7 @@ jobs:
             fi && \
             sudo systemctl reload nginx && \
             pm2 save && \
+            rm /tmp/deploy.tar.gz && \
             echo 'Deployment finalized successfully.'"
 
       - name: Verify deployment (smoke test)
