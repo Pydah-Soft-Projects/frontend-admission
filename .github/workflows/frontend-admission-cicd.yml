@@ -15,10 +15,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
-  build-and-lint:
-    name: Lint & Pre-build Check
+  build-and-deploy:
+    name: Build & Deploy
     runs-on: ubuntu-latest
-
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,25 +31,22 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Lint
-        run: npm run lint
-        continue-on-error: true # Next.js linting can be strict, we might want to just warn
-
-      - name: Build Check (Dry Run)
+      - name: Build application
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
         run: npm run build
-
-  deploy:
-    name: Deploy to Server
-    runs-on: ubuntu-latest
-    needs: build-and-lint
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -60,34 +58,42 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy via SSH
+      - name: Deploy artifacts via Rsync
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          # Push only the finalized build files. Exclude node_modules (will be re-installed on server if needed)
+          # and .git (to keep it clean).
+          rsync -avz --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'node_modules/' \
+            ./.next ./public ./package.json ./package-lock.json ./next.config.ts ./ecosystem.config.cjs ./ \
+            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+
+      - name: Finalize Deployment on Server
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           PM2_APP_NAME: ${{ secrets.PM2_APP_NAME }}
-          BRANCH: ${{ github.ref == 'refs/heads/main' && 'main' || 'master' }}
-          # Build-time environment variables
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
-          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
         run: |
-          DP="${DEPLOY_PATH:-/opt/frontend-admission}"
-          PM2="${PM2_APP_NAME:-frontend-admission}"
-          
           ssh "$SSH_USER@$SSH_HOST" "set -e; \
-            cd $DP && \
-            git fetch origin && \
-            git reset --hard origin/$BRANCH && \
-            npm install && \
-            rm -rf .next && \
-            npm run build && \
-            sudo chown -R ec2-user:ec2-user /opt/frontend-admission && \
-            sudo chmod -R 755 /opt/frontend-admission && \
+            cd $DEPLOY_PATH && \
+            npm ci --omit=dev && \
+            sudo chown -R ec2-user:ec2-user $DEPLOY_PATH && \
+            sudo chmod -R 755 $DEPLOY_PATH && \
             sudo fuser -k 3000/tcp || true && \
-            (pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs) && \
+            if [ -f ecosystem.config.cjs ]; then
+              pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
+            else
+              pm2 restart '$PM2_APP_NAME' --update-env || pm2 start npm --name '$PM2_APP_NAME' -- start
+            fi && \
             sudo systemctl reload nginx && \
             pm2 save && \
-            echo 'Frontend Deploy complete.'"
+            echo 'Deployment finalized successfully.'"
 
       - name: Verify deployment (smoke test)
         env:
