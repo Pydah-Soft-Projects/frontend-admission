@@ -165,6 +165,7 @@ export default function ReportsPage() {
   const [exportSelectedDivision, setExportSelectedDivision] = useState<string[]>([]);
   const [exportSelectedDepartment, setExportSelectedDepartment] = useState<string[]>([]);
   const [exportSelectedGroup, setExportSelectedGroup] = useState<string[]>([]);
+  const [exportSelectedRole, setExportSelectedRole] = useState<string[]>([]);
   const isPrintingPerformanceRef = useRef(false);
 
   // Unified filters for all tabs (default to today)
@@ -209,17 +210,20 @@ export default function ReportsPage() {
     const divs = new Set<string>();
     const depts = new Set<string>();
     const groups = new Set<string>();
+    const roles = new Set<string>();
 
     users.forEach((u: any) => {
       if (u.division && u.division !== '-') divs.add(u.division);
       if (u.department && u.department !== '-') depts.add(u.department);
       if (u.group && u.group !== '-') groups.add(u.group);
+      if (u.roleName && u.roleName !== '-') roles.add(u.roleName);
     });
 
     return {
       divisions: Array.from(divs).sort(),
       departments: Array.from(depts).sort(),
-      groups: Array.from(groups).sort()
+      groups: Array.from(groups).sort(),
+      roles: Array.from(roles).sort()
     };
   }, [users]);
 
@@ -685,7 +689,7 @@ export default function ReportsPage() {
   // Call reports: build merged data for Excel (User Performance + Daily Report)
   // Dedicated queries for Export Preview to support specific date filtering
   const { data: previewCallReports, isLoading: isPreviewCallsLoading, isFetching: isPreviewCallsFetching } = useQuery({
-    queryKey: ['previewCallReports', exportPreviewStartDate, exportPreviewEndDate, filters.userId, exportSelectedDivision, exportSelectedDepartment, exportSelectedGroup],
+    queryKey: ['previewCallReports', exportPreviewStartDate, exportPreviewEndDate, filters.userId, exportSelectedDivision, exportSelectedDepartment, exportSelectedGroup, exportSelectedRole],
     queryFn: () => reportAPI.getDailyCallReports({
       startDate: exportPreviewStartDate,
       endDate: exportPreviewEndDate,
@@ -699,7 +703,7 @@ export default function ReportsPage() {
   });
 
   const { data: previewUserAnalytics, isLoading: isPreviewUserLoading, isFetching: isPreviewUserFetching } = useQuery({
-    queryKey: ['previewUserAnalytics', exportPreviewStartDate, exportPreviewEndDate, filters.academicYear, filters.userId, exportSelectedDivision, exportSelectedDepartment, exportSelectedGroup],
+    queryKey: ['previewUserAnalytics', exportPreviewStartDate, exportPreviewEndDate, filters.academicYear, filters.userId, exportSelectedDivision, exportSelectedDepartment, exportSelectedGroup, exportSelectedRole],
     queryFn: () => leadAPI.getUserAnalytics({
       startDate: exportPreviewStartDate,
       endDate: exportPreviewEndDate,
@@ -727,34 +731,34 @@ export default function ReportsPage() {
 
     // Filter analytic users by organizational filters (if multiple selected, we still filter on client)
     const finalUsersToExport = rawAnalyticUsers.filter((u: any) => {
-      if (exportSelectedDivision.length === 0 && exportSelectedDepartment.length === 0 && exportSelectedGroup.length === 0 && !filters.userId) return true;
+      if (exportSelectedDivision.length === 0 && exportSelectedDepartment.length === 0 && exportSelectedGroup.length === 0 && exportSelectedRole.length === 0 && !filters.userId) return true;
       
       const fullUser = userMetaMap.get(u.userId) || userMetaMap.get(u.name || u.userName);
       
       const matchesDivision = exportSelectedDivision.length === 0 || (fullUser?.division && exportSelectedDivision.includes(fullUser.division));
       const matchesDepartment = exportSelectedDepartment.length === 0 || (fullUser?.department && exportSelectedDepartment.includes(fullUser.department));
       const matchesGroup = exportSelectedGroup.length === 0 || (fullUser?.group && exportSelectedGroup.includes(fullUser.group));
+      const matchesRole = exportSelectedRole.length === 0 || (fullUser?.roleName && exportSelectedRole.includes(fullUser.roleName));
       const matchesSpecificUser = filters.userId === '' || u.userId === filters.userId;
 
-      return matchesDivision && matchesDepartment && matchesGroup && matchesSpecificUser;
+      return matchesDivision && matchesDepartment && matchesGroup && matchesRole && matchesSpecificUser;
     });
 
     const filteredPerformanceUserNames = new Set(finalUsersToExport.map((u: any) => u.name || u.userName));
     const filteredPerformanceUserIds = new Set(finalUsersToExport.map((u: any) => u.userId));
 
     const performanceRows = finalUsersToExport.map((u: any) => {
-      const fullUser = userMetaMap.get(u.userId) || userMetaMap.get(u.name || u.userName);
+      const balance = u.pendingBalance ?? Math.max((u.totalAssigned || 0) - (u.callsOnCurrentPortfolio ?? u.calls?.total ?? 0), 0);
+      const admitted = u.admittedLeads ?? u.statusBreakdown?.Admitted ?? 0;
+      
       return {
-        User: u.name || u.userName || '—',
-        Division: fullUser?.division || '—',
-        Department: fullUser?.department || '—',
-        Group: fullUser?.group || '—',
+        User: (u.name || u.userName || '—'),
         'Total Leads': u.totalAssigned ?? 0,
-        Calls: u.calls?.total ?? 0,
-        'Avg Call': formatSecondsToMMSS(u.calls?.averageDuration ?? 0),
-        SMS: u.sms?.total ?? 0,
-        'Interested': u.interested ?? 0,
+        'Calls/Visits Done': u.calls?.total ?? 0,
+        Balance: balance,
+        'Interested Leads': u.interested ?? 0,
         Confirmed: u.convertedLeads ?? 0,
+        Admitted: admitted,
       };
     });
 
@@ -783,8 +787,9 @@ export default function ReportsPage() {
         Division: g.fullUser?.division || '—',
         Department: g.fullUser?.department || '—',
         Group: g.fullUser?.group || '—',
+        Role: g.fullUser?.roleName || '—',
         Date: format(new Date(r.date), 'dd MMM yyyy'),
-        Calls: r.callCount ?? 0,
+        'Calls/Visits Done': r.callCount ?? 0,
         'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
         'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
       }))
@@ -799,7 +804,7 @@ export default function ReportsPage() {
     if (performanceRows.length === 0 && dailyRows.length === 0) return;
     const workbook = XLSX.utils.book_new();
 
-    if (performanceRows.length > 0) {
+    if (performanceRows.length > 0 && callSubTab === 'performance') {
       const ws1 = XLSX.utils.json_to_sheet(performanceRows);
       const perfCols = Object.keys(performanceRows[0]).map(key => {
         const maxLen = Math.max(key.length, ...performanceRows.map((r: any) => String(r[key] ?? '').length));
@@ -809,7 +814,7 @@ export default function ReportsPage() {
       XLSX.utils.book_append_sheet(workbook, ws1, 'User Performance');
     }
 
-    if (dailyRows.length > 0) {
+    if (dailyRows.length > 0 && callSubTab === 'daily') {
       // Clear redundant values first to ensure clean look even if merges are finicky
       const displayData = dailyRows.map((row: any, idx: number) => {
         const newRow = { ...row };
@@ -1059,7 +1064,7 @@ export default function ReportsPage() {
             disabled={!(userAnalytics?.users?.length || callReports?.reports?.length)}
             className="ml-2"
           >
-            Export Comprehensive Report (Excel)
+            {callSubTab === 'daily' ? 'Export Daily Call Report (Excel)' : 'Export User Performance Summary (Excel)'}
           </Button>
         )}
       </div>
@@ -1231,7 +1236,7 @@ export default function ReportsPage() {
                     <tr className="bg-[#475569] dark:bg-[#334155]">
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Leads</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls/Visits Done</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">SMS</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Conversion</th>
                       <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-white">Actions</th>
@@ -1340,7 +1345,7 @@ export default function ReportsPage() {
                   {[
                     { label: 'Total Users', value: userAnalytics.users.length, style: CALL_REPORT_CARD_STYLES[0] },
                     { label: 'Total Assigned Leads', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.totalAssigned || 0), 0), style: CALL_REPORT_CARD_STYLES[1] },
-                    { label: 'Total Calls', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[2] },
+                    { label: 'Total Calls/Visits Done', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[2] },
                     { label: 'Total SMS', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.sms?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[3] },
                   ].map((item, i) => (
                     <div key={i} className={`overflow-hidden rounded-xl border-0 ${item.style} p-4 shadow-lg`}>
@@ -1465,8 +1470,9 @@ export default function ReportsPage() {
                               Division: g.fullUser?.division || '—',
                               Department: g.fullUser?.department || '—',
                               Group: g.fullUser?.group || '—',
+                              Role: g.fullUser?.roleName || '—',
                               Date: format(new Date(r.date), 'dd MMM yyyy'),
-                              Calls: r.callCount ?? 0,
+                              'Calls/Visits Done': r.callCount ?? 0,
                               'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
                               'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
                             }))
@@ -1581,7 +1587,7 @@ export default function ReportsPage() {
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Department</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Group</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Date</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls/Visits Done</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Duration</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Avg Duration</th>
                             </tr>
@@ -1727,7 +1733,7 @@ export default function ReportsPage() {
                     </div>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                       <Card className="p-4"><p className="text-xs text-slate-500">Users Covered</p><p className="text-xl font-bold">{dailyCallSummary.usersCovered}</p></Card>
-                      <Card className="p-4"><p className="text-xs text-slate-500">Total Calls</p><p className="text-xl font-bold">{dailyCallSummary.totalCalls}</p></Card>
+                      <Card className="p-4"><p className="text-xs text-slate-500">Total Calls/Visits Done</p><p className="text-xl font-bold">{dailyCallSummary.totalCalls}</p></Card>
                       <Card className="p-4"><p className="text-xs text-slate-500">Total Duration</p><p className="text-xl font-bold">{formatSecondsToMMSS(dailyCallSummary.totalDuration)}</p></Card>
                       <Card className="p-4"><p className="text-xs text-slate-500">Avg Calls / User</p><p className="text-xl font-bold">{dailyCallSummary.usersCovered > 0 ? (dailyCallSummary.totalCalls / dailyCallSummary.usersCovered).toFixed(1) : '0.0'}</p></Card>
                     </div>
@@ -2029,9 +2035,12 @@ export default function ReportsPage() {
                     <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 space-y-4">
                       <div className="flex justify-between items-center">
                         <div>
-                          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Excel export preview</h3>
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                            Excel Export: {callSubTab === 'daily' ? 'Daily Call Report' : 'User Performance Summary'}
+                          </h3>
                           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                            Report will contain two sheets: <strong>User Performance</strong> and <strong>Daily Call Report</strong>.
+                            Report will contain the <strong>{callSubTab === 'daily' ? 'Daily Call Report' : 'User Performance'}</strong> sheet.
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -2077,6 +2086,13 @@ export default function ReportsPage() {
                           selected={exportSelectedGroup}
                           onChange={setExportSelectedGroup}
                         />
+
+                        <MultiSelectDropdown 
+                          label="Role"
+                          options={exportFilterOptions.roles}
+                          selected={exportSelectedRole}
+                          onChange={setExportSelectedRole}
+                        />
                       </div>
                     </div>
                     <div className="flex-1 overflow-auto p-6 space-y-6">
@@ -2087,7 +2103,7 @@ export default function ReportsPage() {
                         </div>
                       ) : (
                         <>
-                          {callReportMergedData.performanceRows.length > 0 && (
+                          {callReportMergedData.performanceRows.length > 0 && callSubTab === 'performance' && (
                             <div>
                               <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: User Performance</h4>
                               <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
@@ -2096,11 +2112,11 @@ export default function ReportsPage() {
                                     <tr className="bg-slate-100 dark:bg-slate-800">
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Leads</th>
-                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
-                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Call</th>
-                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">SMS</th>
-                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Interested</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls/Visits Done</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Balance</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Interested Leads</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Confirmed</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Admitted</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#475569] bg-[#ffffff] dark:bg-[#1e293b]/50">
@@ -2108,11 +2124,11 @@ export default function ReportsPage() {
                                       <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100 font-medium">{row.User}</td>
                                         <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{row['Total Leads']}</td>
-                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Calls}</td>
-                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Avg Call']}</td>
-                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.SMS}</td>
-                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Interested}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Calls/Visits Done']}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Balance}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Interested Leads']}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Confirmed}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Admitted}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -2120,7 +2136,7 @@ export default function ReportsPage() {
                               </div>
                             </div>
                           )}
-                          {callReportMergedData.dailyRows.length > 0 && (
+                          {callReportMergedData.dailyRows.length > 0 && callSubTab === 'daily' && (
                             <div>
                               <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sheet: Daily Call Report</h4>
                               <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
@@ -2128,11 +2144,12 @@ export default function ReportsPage() {
                                   <thead>
                                     <tr className="bg-slate-100 dark:bg-slate-800">
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">User</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Role</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Division</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Department</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Group</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Date</th>
-                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls/Visits Done</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Total Duration</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Avg Duration</th>
                                     </tr>
@@ -2141,6 +2158,7 @@ export default function ReportsPage() {
                                     {callReportMergedData.dailyRows.map((row: any, idx: number) => (
                                       <tr key={idx} className={idx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-slate-50 dark:bg-slate-700/30'}>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100 font-medium">{row.User}</td>
+                                        <td className="px-4 py-2 text-slate-500 dark:text-slate-400 text-xs">{row.Role}</td>
                                         <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{row.Division}</td>
                                         <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{row.Department}</td>
                                         <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{row.Group}</td>
@@ -2162,11 +2180,19 @@ export default function ReportsPage() {
                       )}
                     </div>
                     <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { setCallReportExportPreviewOpen(false); setExportPreviewStartDate(''); setExportPreviewEndDate(''); }}>
+                      <Button variant="outline" size="sm" onClick={() => { 
+                        setCallReportExportPreviewOpen(false); 
+                        setExportPreviewStartDate(''); 
+                        setExportPreviewEndDate(''); 
+                        setExportSelectedDivision([]);
+                        setExportSelectedDepartment([]);
+                        setExportSelectedGroup([]);
+                        setExportSelectedRole([]);
+                      }}>
                         Cancel
                       </Button>
-                      <Button size="sm" onClick={downloadCallReportExcel} disabled={callReportMergedData.performanceRows.length === 0 && callReportMergedData.dailyRows.length === 0}>
-                        Proceed & download
+                      <Button size="sm" onClick={downloadCallReportExcel} disabled={(callSubTab === 'performance' && callReportMergedData.performanceRows.length === 0) || (callSubTab === 'daily' && callReportMergedData.dailyRows.length === 0)}>
+                        Download {callSubTab === 'daily' ? 'Daily Report' : 'Performance Report'}
                       </Button>
                     </div>
                   </div>

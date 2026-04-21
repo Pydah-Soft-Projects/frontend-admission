@@ -760,12 +760,16 @@ function SendToLeadsTab() {
 function UserLeadsTab() {
   const { canWrite } = useModulePermission('communications');
   const queryClient = useQueryClient();
-  const [selectedUserId, setSelectedUserId] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 25;
-  const [selectedById, setSelectedById] = useState<Record<string, Lead>>({});
+
+  const [divisionFilter, setDivisionFilter] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+  
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState('');
   const [sendPrimary, setSendPrimary] = useState(true);
   const [sendFather, setSendFather] = useState(false);
@@ -777,16 +781,64 @@ function UserLeadsTab() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, selectedUserId]);
+  }, [debouncedSearch, divisionFilter, deptFilter, groupFilter]);
 
-  const { data: usersData, isLoading: loadingUsers } = useQuery({
-    queryKey: ['allUsers', 'communications'],
+  const { data: analyticsData, isLoading: loadingUsers } = useQuery({
+    queryKey: ['userAnalytics', 'communications', divisionFilter, deptFilter, groupFilter],
     queryFn: async () => {
-      const resp = await userAPI.getAll();
-      return resp?.data || resp;
+      const resp = await leadAPI.getUserAnalytics({
+        division: divisionFilter || undefined,
+        department: deptFilter || undefined,
+        group: groupFilter || undefined,
+      });
+      return resp?.users ?? [];
     },
   });
-  const users: any[] = Array.isArray(usersData) ? usersData : [];
+  const users: any[] = useMemo(() => {
+    let list = analyticsData ?? [];
+    if (debouncedSearch) {
+      const s = debouncedSearch.toLowerCase();
+      list = list.filter((u: any) => 
+        u.userName?.toLowerCase().includes(s) || 
+        u.name?.toLowerCase().includes(s) ||
+        u.designation?.toLowerCase().includes(s) ||
+        u.department?.toLowerCase().includes(s)
+      );
+    }
+    return list;
+  }, [analyticsData, debouncedSearch]);
+
+  // Derive filter options from the full user dataset
+  const { divisionOptions, deptOptions, groupOptions } = useMemo(() => {
+    const divs = new Set<string>();
+    const depts = new Set<string>();
+    const groups = new Set<string>();
+    
+    // We fetch without filters once to get all options, OR we just use what we have.
+    // For simplicity, let's assume the user wants filters for what is available.
+    users.forEach(u => {
+      if (u.division && u.division !== '-') divs.add(u.division);
+      if (u.department && u.department !== '-') depts.add(u.department);
+      if (u.group && u.group !== '-') groups.add(u.group);
+    });
+
+    return {
+      divisionOptions: Array.from(divs).sort(),
+      deptOptions: Array.from(depts).sort(),
+      groupOptions: Array.from(groups).sort()
+    };
+  }, [users]);
+
+  // Fetch a sample lead for preview when users are selected
+  const { data: previewLead } = useQuery({
+    queryKey: ['userLeadPreview', selectedUserIds[0]],
+    queryFn: async () => {
+      if (selectedUserIds.length === 0) return null;
+      const resp = await leadAPI.getAll({ assignedTo: selectedUserIds[0], limit: 1 });
+      return resp?.leads?.[0] || null;
+    },
+    enabled: selectedUserIds.length > 0,
+  });
 
   const { data: templatesData, isLoading: loadingTemplates } = useQuery({
     queryKey: ['activeTemplates', 'communications-user-bulk'],
@@ -803,25 +855,6 @@ function UserLeadsTab() {
     [activeTemplates, templateId]
   );
 
-  const { data: leadsPayload, isLoading: loadingLeads } = useQuery({
-    queryKey: ['userLeadsSpecific', selectedUserId, page, limit, debouncedSearch],
-    queryFn: async () => {
-      if (!selectedUserId) return { leads: [], pagination: { total: 0, pages: 1, page: 1, limit } };
-      return await leadAPI.getAll({ 
-        assignedTo: selectedUserId, 
-        page, 
-        limit, 
-        search: debouncedSearch || undefined 
-      });
-    },
-    enabled: Boolean(selectedUserId),
-  });
-
-  const leads: Lead[] = leadsPayload?.leads ?? [];
-  const pagination = leadsPayload?.pagination ?? { page: 1, limit, total: 0, pages: 1 };
-
-  const selectedCount = Object.keys(selectedById).length;
-
   const leadHasRecipient = useCallback(
     (lead: Lead) =>
       Boolean(
@@ -831,53 +864,37 @@ function UserLeadsTab() {
     [sendFather, sendPrimary]
   );
 
-  const toggleLead = useCallback((lead: Lead) => {
-    if (!leadHasRecipient(lead)) {
-      showToast.error('This lead has no phone for the recipient types.');
-      return;
-    }
-    setSelectedById((prev) => {
-      const next = { ...prev };
-      if (next[lead._id]) delete next[lead._id];
-      else {
-        if (Object.keys(next).length >= MAX_BULK_LEADS) {
-          showToast.error(`Max ${MAX_BULK_LEADS} per batch.`);
-          return prev;
-        }
-        next[lead._id] = lead;
-      }
-      return next;
-    });
-  }, [leadHasRecipient]);
-
-  const selectEligibleOnPage = useCallback(() => {
-    setSelectedById((prev) => {
-      const next = { ...prev };
-      let count = Object.keys(next).length;
-      for (const l of leads) {
-        if (!leadHasRecipient(l)) continue;
-        if (next[l._id]) continue;
-        if (count >= MAX_BULK_LEADS) break;
-        next[l._id] = l;
-        count += 1;
-      }
-      return next;
-    });
-  }, [leadHasRecipient, leads]);
-
-  const clearSelection = useCallback(() => setSelectedById({}), []);
-
   const sendMutation = useMutation({
     mutationFn: async () => {
       if (!selectedTemplate) throw new Error('Select a template.');
-      const list = Object.values(selectedById);
-      if (list.length === 0) throw new Error('Select leads.');
+      if (selectedUserIds.length === 0) throw new Error('Select at least one user.');
+      
       let ok = 0; let fail = 0;
-      for (const lead of list) {
+      
+      // Fetch leads for all selected users (active leads only)
+      const allLeads: Lead[] = [];
+      for (const uid of selectedUserIds) {
+        const resp = await leadAPI.getAll({ 
+          assignedTo: uid, 
+          limit: 100, // Reasonable limit per user to avoid too much data
+          leadStatus: 'New,Assigned,In Progress,Interested' // Active statuses
+        });
+        if (resp?.leads) allLeads.push(...resp.leads);
+      }
+
+      if (allLeads.length === 0) throw new Error('No active leads found for selected users.');
+      
+      // Filter to leads with recipients and within MAX_BULK_LEADS
+      const targetLeads = allLeads
+        .filter(leadHasRecipient)
+        .slice(0, MAX_BULK_LEADS);
+
+      for (const lead of targetLeads) {
         const numbers: string[] = [];
         if (sendPrimary && lead.phone) numbers.push(lead.phone);
         if (sendFather && lead.fatherPhone) numbers.push(lead.fatherPhone);
         if (numbers.length === 0) { fail++; continue; }
+        
         try {
           const variables = buildSmsVariablesForLead(lead, selectedTemplate);
           await communicationAPI.sendSms(lead._id, {
@@ -887,36 +904,52 @@ function UserLeadsTab() {
           ok++;
         } catch { fail++; }
       }
-      return { ok, fail };
+      return { ok, fail, totalPlanned: targetLeads.length };
     },
-    onSuccess: ({ ok, fail }) => {
+    onSuccess: ({ ok, fail, totalPlanned }) => {
       showToast.success(`Sent to ${ok} lead(s). ${fail > 0 ? `${fail} failed.` : ''}`);
-      clearSelection();
+      if (totalPlanned < selectedUserIds.length * 10) { // arbitrary hint
+         // maybe show warning if some leads were skipped?
+      }
+      setSelectedUserIds([]);
       queryClient.invalidateQueries({ queryKey: ['leads'] });
     },
     onError: (e: Error) => showToast.error(e.message),
   });
 
-  const canSend = canWrite && !!templateId && selectedCount > 0 && !!selectedUserId && (sendPrimary || sendFather);
+  const canSend = canWrite && !!templateId && selectedUserIds.length > 0 && (sendPrimary || sendFather);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="p-4 space-y-3">
-          <h2 className="text-lg font-semibold">Step 1: Select User</h2>
-          <p className="text-sm text-slate-500">Find the Counsellor/PRO whose leads you want to message.</p>
-          {loadingUsers ? <Skeleton className="h-10 w-full" /> : (
+          <h2 className="text-lg font-semibold">Step 1: Filters</h2>
+          <div className="grid grid-cols-1 gap-2">
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+              value={divisionFilter}
+              onChange={(e) => setDivisionFilter(e.target.value)}
             >
-              <option value="">Select User…</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.name} ({u.role_name})</option>
-              ))}
+              <option value="">All Divisions</option>
+              {divisionOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
-          )}
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+            >
+              <option value="">All Departments</option>
+              {deptOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+            >
+              <option value="">All Groupings</option>
+              {groupOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </div>
         </Card>
         <Card className="p-4 space-y-3">
           <h2 className="text-lg font-semibold">Step 2: Template</h2>
@@ -949,8 +982,8 @@ function UserLeadsTab() {
         <div className="lg:col-span-3">
            <MessagePreviewCard 
               template={selectedTemplate} 
-              lead={Object.values(selectedById)[0]}
-              isBulk={selectedCount > 1}
+              lead={previewLead}
+              isBulk={selectedUserIds.length > 0}
            />
         </div>
       </div>
@@ -958,69 +991,91 @@ function UserLeadsTab() {
       <Card className="p-4 space-y-4">
         <div className="flex flex-col lg:flex-row gap-4 justify-between lg:items-end">
           <div className="flex-1 min-w-0">
-            <label className="text-sm font-medium">Search leads assigned to user</label>
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." />
+            <label className="text-sm font-medium">Search Users</label>
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or designation..." />
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={selectEligibleOnPage} disabled={!selectedUserId}>Select Page</Button>
-            <Button variant="secondary" size="sm" onClick={clearSelection} disabled={selectedCount === 0}>Clear ({selectedCount})</Button>
+            <Button variant="secondary" size="sm" 
+              onClick={() => {
+                const allIds = users.map(u => u.id);
+                setSelectedUserIds(prev => prev.length === allIds.length ? [] : allIds);
+              }}
+            >
+              {selectedUserIds.length === users.length ? 'Deselect All' : 'Select All'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setSelectedUserIds([])} disabled={selectedUserIds.length === 0}>
+              Clear ({selectedUserIds.length})
+            </Button>
           </div>
         </div>
 
-        {!selectedUserId ? (
-          <div className="p-12 text-center border-2 border-dashed rounded-lg bg-slate-50">
-            <p className="text-slate-500">Please select a user above to see their assigned leads.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="min-w-full divide-y text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="w-10 px-3 py-2" />
-                  <th className="px-3 py-2 text-left">Lead Info</th>
-                  <th className="px-3 py-2 text-left">District</th>
-                  <th className="px-3 py-2 text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {loadingLeads ? (
-                  <tr><td colSpan={4} className="p-4"><TemplatesSkeleton /></td></tr>
-                ) : leads.length === 0 ? (
-                  <tr><td colSpan={4} className="p-8 text-center text-slate-500">No leads found.</td></tr>
-                ) : (
-                  leads.map(lead => {
-                    const eligible = leadHasRecipient(lead);
-                    const checked = !!selectedById[lead._id];
-                    return (
-                      <tr key={lead._id} className={!eligible ? 'opacity-40' : undefined}>
-                        <td className="px-3 py-2">
-                          <input type="checkbox" checked={checked} disabled={!eligible} onChange={() => toggleLead(lead)} />
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{lead.name}</div>
-                          <div className="text-xs text-slate-500">{lead.phone}</div>
-                        </td>
-                        <td className="px-3 py-2">{lead.district || '—'}</td>
-                        <td className="px-3 py-2">{lead.leadStatus || '—'}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {pagination.pages > 1 && (
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
-            <Button size="sm" variant="secondary" disabled={page >= pagination.pages} onClick={() => setPage(p => p + 1)}>Next</Button>
-          </div>
-        )}
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="min-w-full divide-y text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="w-10 px-3 py-2">
+                  <input 
+                    type="checkbox" 
+                    checked={users.length > 0 && selectedUserIds.length === users.length}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedUserIds(users.map(u => u.id));
+                      else setSelectedUserIds([]);
+                    }}
+                  />
+                </th>
+                <th className="w-12 px-3 py-2 text-left">S.No</th>
+                <th className="px-3 py-2 text-left">User Name</th>
+                <th className="px-3 py-2 text-left">Student Group</th>
+                <th className="px-3 py-2 text-left text-orange-600">Leads Count Available</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y bg-white">
+              {loadingUsers ? (
+                <tr><td colSpan={5} className="p-4 text-center"><TemplatesSkeleton /></td></tr>
+              ) : users.length === 0 ? (
+                <tr><td colSpan={5} className="p-8 text-center text-slate-500">No users found.</td></tr>
+              ) : (
+                users.map((u, idx) => {
+                  const isChecked = selectedUserIds.includes(u.id);
+                  return (
+                    <tr key={u.id} className={isChecked ? 'bg-orange-50/30' : undefined}>
+                      <td className="px-3 py-2">
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked} 
+                          onChange={() => {
+                            setSelectedUserIds(prev => 
+                              prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                            );
+                          }} 
+                        />
+                      </td>
+                      <td className="px-3 py-2">{idx + 1}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-semibold text-slate-900">{u.name}</div>
+                        <div className="text-xs text-slate-500 uppercase tracking-tight">
+                          {u.designation || 'Staff'} • {u.department || 'General'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-0.5 bg-slate-100 rounded text-xs">
+                          {u.group || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-mono font-bold text-orange-700">
+                        {u.totalAssigned || 0}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="flex justify-end pt-4 border-t">
           <Button variant="primary" disabled={!canSend || sendMutation.isPending} onClick={() => sendMutation.mutate()}>
-            {sendMutation.isPending ? 'Sending...' : `Send to ${selectedCount} Lead(s)`}
+            {sendMutation.isPending ? 'Sending...' : `Send to Leads of ${selectedUserIds.length} User(s)`}
           </Button>
         </div>
       </Card>
