@@ -167,6 +167,8 @@ export default function ReportsPage() {
   const [exportSelectedGroup, setExportSelectedGroup] = useState<string[]>([]);
   const [exportSelectedRole, setExportSelectedRole] = useState<string[]>([]);
   const isPrintingPerformanceRef = useRef(false);
+  /** Full-screen message while print report is fetched/built (toasts cannot repaint during long sync work). */
+  const [performancePrintOverlay, setPerformancePrintOverlay] = useState<string | null>(null);
 
   // Unified filters for all tabs (default to today)
   const [filters, setFilters] = useState({
@@ -506,25 +508,68 @@ export default function ReportsPage() {
     return entries.map((x) => `${x.mandal} (${x.count})`).join(', ');
   };
 
-  const handlePrintPerformanceDetails = () => {
+  const handlePrintPerformanceDetails = async () => {
     if (isPrintingPerformanceRef.current) return;
     if (!filteredPerformanceUsers.length) {
       showToast.error('No performance rows to print.');
       return;
     }
     isPrintingPerformanceRef.current = true;
-    const printWindow = window.open('', 'user-performance-detail-report', 'width=1200,height=800');
-    if (!printWindow) {
+    setPerformancePrintOverlay('Preparing detailed report for print…');
+
+    const escapeHtml = (s: unknown) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const userIds = filteredPerformanceUsers
+      .map((u: any) => u.userId || u.id)
+      .filter(Boolean);
+    if (!userIds.length) {
+      setPerformancePrintOverlay(null);
       isPrintingPerformanceRef.current = false;
-      showToast.error('Please allow pop-ups to print.');
+      showToast.error('No users to print.');
       return;
     }
 
+    let detailsMap: Record<string, any> = {};
+    try {
+      const data = await leadAPI.getUserAnalytics({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+        userId: userIds.join(','),
+        includeAssignmentDetails: true,
+      });
+      const usersArr = Array.isArray(data?.users) ? data.users : [];
+      usersArr.forEach((u: any) => {
+        const uid = u.id || u.userId;
+        if (uid) detailsMap[uid] = u;
+      });
+    } catch (e) {
+      console.error(e);
+      setPerformancePrintOverlay(null);
+      showToast.error('Could not load assignment details for printing.');
+      isPrintingPerformanceRef.current = false;
+      return;
+    }
+
+    setPerformancePrintOverlay('Building print layout…');
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+
     const generatedAt = new Date().toLocaleString();
     const sections = filteredPerformanceUsers.map((user: any) => {
-      const detailUser = expandedPerformanceDetailsMap?.[user.userId];
+      const uid = user.userId || user.id;
+      const detailUser = detailsMap[uid];
+      const fullUser = users.find((x: any) => x._id === uid || x.id === uid);
       const rows = Array.isArray(detailUser?.assignmentsByDate) ? detailUser.assignmentsByDate : [];
-      const userName = user.name || user.userName || 'Unknown';
+      const userName = escapeHtml(user.name || user.userName || 'Unknown');
+      const roleRaw = user.roleName || detailUser?.roleName || fullUser?.roleName || '';
+      const roleName = escapeHtml(String(roleRaw).trim() || '—');
       const statusLabel = user.isActive ? 'Active' : 'Inactive';
       const rowHtml = rows.length
         ? rows.map((day: any) => {
@@ -535,10 +580,10 @@ export default function ReportsPage() {
               : '—';
             return `
               <tr>
-                <td>${day.date ? format(new Date(day.date), 'dd MMM yyyy') : 'Unknown'}</td>
-                <td>${targetDateText}</td>
-                <td>${formatAssignedStudentGroups(day)}</td>
-                <td>${formatAssignedMandals(day)}</td>
+                <td>${escapeHtml(day.date ? format(new Date(day.date), 'dd MMM yyyy') : 'Unknown')}</td>
+                <td>${escapeHtml(targetDateText)}</td>
+                <td>${escapeHtml(formatAssignedStudentGroups(day))}</td>
+                <td>${escapeHtml(formatAssignedMandals(day))}</td>
                 <td>${Number(day?.totalAssigned || 0)}</td>
                 <td>${getLeadStatusCount(day, 'Interested')}</td>
                 <td>${getLeadStatusCount(day, 'Not Interested')}</td>
@@ -552,9 +597,9 @@ export default function ReportsPage() {
         : `<tr><td colspan="11">No date-wise assignment history found.</td></tr>`;
 
       return `
-        <section style="margin-bottom:20px; break-inside: avoid;">
-          <h3 style="margin:0 0 6px 0;">${userName} (${statusLabel})</h3>
-          <table style="width:100%; border-collapse: collapse; font-size:12px;">
+        <section style="margin-bottom:10px; break-inside: avoid;">
+          <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> · ${statusLabel}</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
             <thead>
               <tr>
                 <th>Allotted Date</th>
@@ -576,35 +621,91 @@ export default function ReportsPage() {
       `;
     }).join('');
 
-    printWindow.document.open();
-    printWindow.document.write(`
+    const fullHtml = `
       <!doctype html>
       <html>
         <head>
           <title>User Performance Detailed Report</title>
           <style>
-            body { font-family: Arial, sans-serif; color: #0f172a; padding: 16px; }
-            h1 { margin: 0 0 8px 0; font-size: 20px; }
-            p.meta { margin: 0 0 14px 0; font-size: 12px; color: #475569; }
+            body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; padding: 6px 8px; font-size: 9px; }
+            h1 { margin: 0 0 4px 0; font-size: 13px; line-height: 1.2; }
+            p.meta { margin: 0 0 6px 0; font-size: 8px; color: #475569; }
             table, th, td { border: 1px solid #cbd5e1; }
-            th, td { padding: 6px 8px; text-align: left; vertical-align: top; }
-            th { background: #f1f5f9; font-weight: 600; }
-            @media print { body { padding: 8px; } }
+            th, td { padding: 3px 4px; text-align: left; vertical-align: top; }
+            th { background: #f1f5f9; font-weight: 600; font-size: 8px; }
+            td { font-size: 8.5px; }
+            @media print {
+              body { padding: 4px 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              h1 { font-size: 12px; }
+            }
           </style>
         </head>
         <body>
           <h1>User Performance Detailed Report</h1>
-          <p class="meta">Generated: ${generatedAt}</p>
+          <p class="meta">Generated: ${escapeHtml(generatedAt)}</p>
           ${sections}
         </body>
       </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
+    `;
+
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.title = 'Print: User performance detailed report';
+    iframe.style.cssText =
+      'position:fixed;left:0;top:0;width:0;height:0;border:0;margin:0;padding:0;opacity:0;pointer-events:none;visibility:hidden;';
+    document.body.appendChild(iframe);
+    const w = iframe.contentWindow;
+    if (!w) {
+      iframe.remove();
+      setPerformancePrintOverlay(null);
+      showToast.error('Print could not start in this browser.');
       isPrintingPerformanceRef.current = false;
-    }, 250);
+      return;
+    }
+    const doc = w.document;
+    doc.open();
+    doc.write(fullHtml);
+    doc.close();
+
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      try {
+        iframe.remove();
+      } catch {
+        /* ignore */
+      }
+      setPerformancePrintOverlay(null);
+      isPrintingPerformanceRef.current = false;
+    };
+
+    w.addEventListener('afterprint', cleanup);
+    const runPrint = () => {
+      try {
+        // Hide overlay before the system print dialog so it is not covered.
+        setPerformancePrintOverlay(null);
+        requestAnimationFrame(() => {
+          try {
+            w.focus();
+            w.print();
+          } catch (err) {
+            console.error(err);
+            showToast.error('Print failed.');
+            cleanup();
+          }
+        });
+      } catch (err) {
+        console.error(err);
+        showToast.error('Print failed.');
+        cleanup();
+        return;
+      }
+      setTimeout(cleanup, 4000);
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(runPrint);
+    });
   };
 
   // States for Abstract tab (state → districts → mandals)
@@ -879,6 +980,23 @@ export default function ReportsPage() {
   }, [conversionReports]);
 
   return (
+    <>
+      {performancePrintOverlay && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-[1px]"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white px-8 py-6 shadow-xl dark:border-slate-600 dark:bg-slate-800">
+            <div
+              className="h-9 w-9 shrink-0 animate-spin rounded-full border-2 border-orange-500 border-t-transparent"
+              aria-hidden
+            />
+            <p className="text-center text-sm font-medium text-slate-800 dark:text-slate-100">{performancePrintOverlay}</p>
+          </div>
+        </div>
+      )}
     <div className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-center md:justify-between dark:border-slate-700">
         {/* Page Header */}
@@ -1563,9 +1681,10 @@ export default function ReportsPage() {
                         ))}
                       </select>
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
-                        onClick={handlePrintPerformanceDetails}
+                        onClick={() => void handlePrintPerformanceDetails()}
                       >
                         Print Detailed Report
                       </Button>
@@ -1918,7 +2037,8 @@ export default function ReportsPage() {
                                             Date-wise simplified assignment summary
                                           </h4>
                                           <span className="text-xs text-slate-500 dark:text-slate-400">
-                                            {assignmentsByDate.length} day{assignmentsByDate.length !== 1 ? 's' : ''}
+                                            {assignmentsByDate.length} row{assignmentsByDate.length !== 1 ? 's' : ''}
+                                            <span className="text-slate-400 dark:text-slate-500"> — one row per allotted date and target date</span>
                                           </span>
                                         </div>
                                         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60">
@@ -1948,7 +2068,7 @@ export default function ReportsPage() {
                                                     .join(', ')
                                                   : '—';
                                                 return (
-                                                  <tr key={`${user.userId}-${day.date}`}>
+                                                  <tr key={`${user.userId}-${day.detailRowKey || day.date}`}>
                                                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{day.date ? format(new Date(day.date), 'dd MMM yyyy') : 'Unknown'}</td>
                                                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{targetDateText}</td>
                                                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{formatAssignedStudentGroups(day)}</td>
@@ -2956,6 +3076,7 @@ export default function ReportsPage() {
         )
       }
 
-    </div >
+    </div>
+    </>
   );
 }
