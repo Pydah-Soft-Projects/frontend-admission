@@ -113,8 +113,9 @@ export default function AssignLeadsPage() {
   const [institutionAcademicYear, setInstitutionAcademicYear] = useState<number | ''>(2026);
   const [institutionUserId, setInstitutionUserId] = useState<string>('');
   const [institutionCount, setInstitutionCount] = useState(1000);
-  const [schoolsList, setSchoolsList] = useState<{ id: string; name: string }[]>([]);
-  const [collegesList, setCollegesList] = useState<{ id: string; name: string }[]>([]);
+  const [institutionTargetDate, setInstitutionTargetDate] = useState('');
+  const [singleAssignTargetDate, setSingleAssignTargetDate] = useState('');
+  const [institutionCycleNumber, setInstitutionCycleNumber] = useState<number | ''>('');
 
   // Export Confirmation State
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -385,7 +386,7 @@ export default function AssignLeadsPage() {
     return () => { cancelled = true; };
   }, [statsState, statsDistrict]);
 
-  // Location context: "Unassigned by Location" tab uses its own dropdowns; bulk/single/remove use bulk form; institution has no geo on cards
+  // Location context: Stats tab uses its own dropdowns; bulk/remove use bulk/remove forms; institution tab has no geo (summary uses year / group / cycle only).
   useEffect(() => {
     if (mode !== 'stats') return;
     const t = setTimeout(() => {
@@ -403,13 +404,13 @@ export default function AssignLeadsPage() {
   const statsQueryDistrict = mode === 'stats' ? debouncedStatsDistrict : mode === 'institution' ? '' : district;
   const statsQueryMandal = mode === 'stats' ? debouncedStatsMandal : mode === 'institution' ? '' : mandal;
 
-  // Top stats: bulk tab uses the bulk form filters; other tabs use the header (except institution).
+  // Top stats: bulk tab uses the bulk form filters; stats tab uses debounced stats filters; institution tab uses year / student group / cycle only (no state/district/mandal).
   const statsQueryAcademicYear =
     mode === 'institution' ? institutionAcademicYear : mode === 'bulk' ? academicYear : debouncedStatsAcademicYear;
   const statsQueryStudentGroup =
     mode === 'institution' ? institutionStudentGroup : mode === 'bulk' ? studentGroup : debouncedStatsStudentGroup;
   const statsQueryCycleNumber =
-    mode === 'institution' ? '' : mode === 'bulk' ? cycleNumber : debouncedStatsCycleNumber;
+    mode === 'institution' ? institutionCycleNumber : mode === 'bulk' ? cycleNumber : debouncedStatsCycleNumber;
 
   // Fetch assignment statistics (scoped by academic year, student group, and location)
   const activeUserId = mode === 'institution' ? institutionUserId : selectedUserId;
@@ -443,7 +444,8 @@ export default function AssignLeadsPage() {
       isReady &&
       !!currentUser &&
       mode !== 'remove' &&
-      !(mode === 'bulk' && academicYear === ''),
+      !(mode === 'bulk' && academicYear === '') &&
+      !(mode === 'institution' && institutionAcademicYear === ''),
     staleTime: 20_000,
     refetchOnWindowFocus: false,
   });
@@ -613,44 +615,58 @@ export default function AssignLeadsPage() {
   const institutionForBreakdown = institutionUseSchools ? 'school' : 'college';
 
   // Fetch institution breakdown (school or college wise unassigned counts) when in institution mode
-  const { data: institutionStatsData, refetch: refetchInstitutionStats } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStatsInstitution', institutionAcademicYear, institutionStudentGroup, institutionForBreakdown, targetRole],
-    queryFn: async () => {
-      const response = await leadAPI.getAssignmentStats({
-        academicYear: institutionAcademicYear !== '' ? institutionAcademicYear : undefined,
-        studentGroup: institutionStudentGroup || undefined,
-        forBreakdown: institutionForBreakdown,
-        targetRole: targetRole || undefined,
-        includeBreakdowns: false,
-      });
-      const payload = response?.data ?? response ?? {};
-      return { data: payload };
-    },
-    enabled: isReady && !!currentUser && mode === 'institution' && !!institutionStudentGroup,
-    staleTime: 20_000,
-    refetchOnWindowFocus: false,
-  });
+  const { data: institutionStatsData, refetch: refetchInstitutionStats, isFetching: isInstitutionStatsFetching } =
+    useQuery<{ data: AssignmentStats }>({
+      queryKey: [
+        'assignmentStatsInstitution',
+        institutionAcademicYear,
+        institutionStudentGroup,
+        institutionForBreakdown,
+        institutionCycleNumber,
+        targetRole,
+      ],
+      queryFn: async () => {
+        const response = await leadAPI.getAssignmentStats({
+          academicYear: institutionAcademicYear !== '' ? institutionAcademicYear : undefined,
+          studentGroup: institutionStudentGroup || undefined,
+          forBreakdown: institutionForBreakdown,
+          targetRole: targetRole || undefined,
+          includeBreakdowns: false,
+          cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
+        });
+        const payload = response?.data ?? response ?? {};
+        return { data: payload };
+      },
+      enabled:
+        isReady &&
+        !!currentUser &&
+        mode === 'institution' &&
+        !!institutionStudentGroup &&
+        institutionAcademicYear !== '',
+      staleTime: 20_000,
+      refetchOnWindowFocus: false,
+    });
   const institutionStats = institutionStatsData?.data;
 
-  // Load schools and colleges for institution dropdowns (when assign page is ready)
-  useEffect(() => {
-    if (!currentUser) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [schools, colleges] = await Promise.all([
-          locationsAPI.listSchools(),
-          locationsAPI.listColleges(),
-        ]);
-        if (cancelled) return;
-        setSchoolsList(Array.isArray(schools) ? schools.map((s: { id?: string; name: string }) => ({ id: s.id || '', name: s.name || String(s) })) : []);
-        setCollegesList(Array.isArray(colleges) ? colleges.map((c: { id?: string; name: string }) => ({ id: c.id || '', name: c.name || String(c) })) : []);
-      } catch (e) {
-        if (!cancelled) console.error('Failed to load schools/colleges', e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [currentUser]);
+  const institutionDropdownOptions = useMemo(() => {
+    const rows = institutionStats?.institutionBreakdown || [];
+    return [...rows].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [institutionStats?.institutionBreakdown]);
+
+  const institutionUnassignedByNameNorm = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const row of institutionStats?.institutionBreakdown || []) {
+      const k = String(row.name || '').trim().toLowerCase();
+      if (k) m.set(k, Number(row.count) || 0);
+    }
+    return m;
+  }, [institutionStats?.institutionBreakdown]);
+
+  const selectedInstitutionUnassigned = useMemo(() => {
+    const k = String(institutionName || '').trim().toLowerCase();
+    if (!k) return 0;
+    return institutionUnassignedByNameNorm.get(k) ?? 0;
+  }, [institutionName, institutionUnassignedByNameNorm]);
 
   // Assigned count for selected user (remove tab only — drives top cards there)
   const {
@@ -744,6 +760,7 @@ export default function AssignLeadsPage() {
       queryClient.invalidateQueries({ queryKey: ['assignmentStats'] });
       queryClient.invalidateQueries({ queryKey: ['assignmentStatsGeo'] });
       queryClient.invalidateQueries({ queryKey: ['assignmentStatsInstitution'] });
+      queryClient.invalidateQueries({ queryKey: ['assignmentStatsBreakdowns'] });
       refetchStats();
       refetchInstitutionStats();
       const assignedCount = response.data?.assigned || response.assigned || 0;
@@ -838,6 +855,10 @@ export default function AssignLeadsPage() {
       showToast.error('Count must be greater than zero.');
       return;
     }
+    if (!targetDate || !String(targetDate).trim()) {
+      showToast.error('Target date is required (used for automated reclaim).');
+      return;
+    }
 
     assignMutation.mutate({
       userId: selectedUserId,
@@ -846,7 +867,7 @@ export default function AssignLeadsPage() {
       state: state || undefined,
       academicYear,
       studentGroup: studentGroup || undefined,
-      targetDate: targetDate || undefined,
+      targetDate: targetDate.trim(),
       cycleNumber: cycleNumber !== '' ? cycleNumber : undefined,
       count,
     });
@@ -862,10 +883,15 @@ export default function AssignLeadsPage() {
       showToast.error('Please select a lead to assign.');
       return;
     }
+    if (!singleAssignTargetDate || !String(singleAssignTargetDate).trim()) {
+      showToast.error('Target date is required (used for automated reclaim).');
+      return;
+    }
 
     assignMutation.mutate({
       userId: selectedUserId,
       leadIds: [selectedLeadId],
+      targetDate: singleAssignTargetDate.trim(),
     });
   };
 
@@ -891,6 +917,10 @@ export default function AssignLeadsPage() {
       showToast.error('Count must be greater than zero.');
       return;
     }
+    if (!institutionTargetDate || !String(institutionTargetDate).trim()) {
+      showToast.error('Target date is required (used for automated reclaim).');
+      return;
+    }
 
     assignMutation.mutate({
       userId: institutionUserId,
@@ -898,6 +928,8 @@ export default function AssignLeadsPage() {
       studentGroup: institutionStudentGroup,
       institutionName: institutionName.trim(),
       count: institutionCount,
+      targetDate: institutionTargetDate.trim(),
+      cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
     });
   };
 
@@ -1410,7 +1442,9 @@ export default function AssignLeadsPage() {
           ) : mode === 'institution' ? (
             <form onSubmit={handleInstitutionAssign} className="space-y-6">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                Assign unassigned leads by <strong>school</strong> (10th) or <strong>college</strong> (Inter, Degree, etc.). Select student group first to show the correct list.
+                Filter by academic year, student group, and cycle, then pick a <strong>{institutionUseSchools ? 'school' : 'college'}</strong> with{' '}
+                {targetRole === 'PRO' ? 'available' : 'unassigned'} leads in that scope (10th = schools; other groups = colleges). The list comes from the
+                server for those filters, not the full master catalog.
               </p>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
@@ -1432,9 +1466,60 @@ export default function AssignLeadsPage() {
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    {institutionStudentGroup === '10th' ? 'Shows schools.' : institutionStudentGroup ? 'Shows colleges.' : '10th = schools, others = colleges.'}
+                    {institutionStudentGroup === '10th' ? 'School list.' : institutionStudentGroup ? 'College list.' : 'Choose a group to load institutions.'}
                   </p>
                 </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Academic year *</label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={institutionAcademicYear === '' ? '' : institutionAcademicYear}
+                    onChange={(e) => {
+                      setInstitutionAcademicYear(e.target.value === '' ? '' : Number(e.target.value));
+                      setInstitutionName('');
+                    }}
+                    required
+                  >
+                    <option value="">Select year…</option>
+                    {academicYearOptions.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Cycle (filter leads)
+                  </label>
+                  <select
+                    className="w-full min-w-0 rounded-lg border border-gray-300 bg-white/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={institutionCycleNumber}
+                    onChange={(e) => {
+                      setInstitutionCycleNumber(e.target.value === '' ? '' : Number(e.target.value));
+                      setInstitutionName('');
+                    }}
+                  >
+                    <option value="">All cycles</option>
+                    {[1, 2, 3, 4, 5].map((c) => (
+                      <option key={c} value={c}>
+                        Cycle {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-0">
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Target date (auto-reclaim) *</label>
+                  <Input
+                    type="date"
+                    value={institutionTargetDate}
+                    onChange={(e) => setInstitutionTargetDate(e.target.value)}
+                    className="w-full min-w-0 px-3 py-2 text-sm"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                     {institutionUseSchools ? 'School' : 'College'} *
@@ -1443,35 +1528,22 @@ export default function AssignLeadsPage() {
                     className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
                     value={institutionName}
                     onChange={(e) => setInstitutionName(e.target.value)}
-                    disabled={!institutionStudentGroup}
+                    disabled={!institutionStudentGroup || institutionAcademicYear === ''}
                     required
                   >
                     <option value="">
-                      {!institutionStudentGroup ? `Select student group first` : `Select ${institutionUseSchools ? 'school' : 'college'}…`}
+                      {!institutionStudentGroup || institutionAcademicYear === ''
+                        ? 'Select student group and academic year first…'
+                        : isInstitutionStatsFetching
+                          ? 'Loading institutions…'
+                          : institutionDropdownOptions.length === 0
+                            ? `No ${institutionUseSchools ? 'schools' : 'colleges'} with matching ${targetRole === 'PRO' ? 'available' : 'unassigned'} leads`
+                            : `Select ${institutionUseSchools ? 'school' : 'college'}…`}
                     </option>
-                    {(institutionUseSchools ? schoolsList : collegesList).map((item) => (
+                    {institutionDropdownOptions.map((item) => (
                       <option key={item.id || item.name} value={item.name}>
-                        {item.name}
-                        {institutionStats?.institutionBreakdown?.find((b) => b.name === item.name)
-                          ? ` (${institutionStats.institutionBreakdown.find((b) => b.name === item.name)?.count ?? 0} unassigned)`
-                          : ''}
+                        {item.name} ({Number(item.count) || 0} {targetRole === 'PRO' ? 'available' : 'unassigned'})
                       </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Academic year *</label>
-                  <select
-                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
-                    value={institutionAcademicYear === '' ? '' : institutionAcademicYear}
-                    onChange={(e) => setInstitutionAcademicYear(e.target.value === '' ? '' : Number(e.target.value))}
-                    required
-                  >
-                    <option value="">Select year…</option>
-                    {academicYearOptions.map((y) => (
-                      <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
                 </div>
@@ -1509,7 +1581,7 @@ export default function AssignLeadsPage() {
                   required
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  {targetRole === 'PRO' ? 'Available' : 'Unassigned'} for this {institutionUseSchools ? 'school' : 'college'}: {(institutionName && institutionStats?.institutionBreakdown?.find((b) => b.name === institutionName)?.count) ?? 0}
+                  {targetRole === 'PRO' ? 'Available' : 'Unassigned'} for this {institutionUseSchools ? 'school' : 'college'}: {selectedInstitutionUnassigned.toLocaleString()}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -1520,7 +1592,8 @@ export default function AssignLeadsPage() {
                     !institutionUserId ||
                     !institutionStudentGroup ||
                     !institutionName ||
-                    institutionAcademicYear === ''
+                    institutionAcademicYear === '' ||
+                    !String(institutionTargetDate).trim()
                   }
                 >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign by ' + (institutionUseSchools ? 'school' : 'college')}
@@ -1532,6 +1605,8 @@ export default function AssignLeadsPage() {
                     setInstitutionUserId('');
                     setInstitutionName('');
                     setInstitutionCount(1000);
+                    setInstitutionTargetDate('');
+                    setInstitutionCycleNumber('');
                   }}
                   disabled={assignMutation.isPending}
                 >
@@ -1868,13 +1943,14 @@ export default function AssignLeadsPage() {
                 </div>
                 <div className="min-w-0">
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Target Date (Auto Reclaim)
+                    Target date (auto-reclaim) *
                   </label>
                   <Input
                     type="date"
                     value={targetDate}
                     onChange={(e) => setTargetDate(e.target.value)}
                     className="w-full min-w-0 px-3 py-2 text-sm"
+                    required
                   />
                 </div>
               </div>
@@ -1882,8 +1958,7 @@ export default function AssignLeadsPage() {
                 {targetRole === 'PRO'
                   ? 'Available leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'
                   : 'Only unassigned leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'}{' '}
-                &quot;Not Interested&quot; reclaim uses Target date when set. Reclaim behavior by status at target date:
-                &nbsp;&quot;Assigned&quot; keeps the same cycle, while &quot;Not Interested&quot; and &quot;Wrong Data&quot; move to the next cycle.
+                Target date is required: automated reclaim only runs for assigned leads once this date is on or before today (status rules apply). &quot;Assigned&quot; keeps the same cycle; &quot;Not Interested&quot; and &quot;Wrong Data&quot; advance cycle on reclaim.
               </p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1976,7 +2051,15 @@ export default function AssignLeadsPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                <Button type="submit" disabled={assignMutation.isPending || !selectedUserId || academicYear === ''}>
+                <Button
+                  type="submit"
+                  disabled={
+                    assignMutation.isPending ||
+                    !selectedUserId ||
+                    academicYear === '' ||
+                    !String(targetDate).trim()
+                  }
+                >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Leads'}
                 </Button>
                 <Button
@@ -2111,8 +2194,29 @@ export default function AssignLeadsPage() {
                 </p>
               </div>
 
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Target date (auto-reclaim) *
+                </label>
+                <Input
+                  type="date"
+                  value={singleAssignTargetDate}
+                  onChange={(e) => setSingleAssignTargetDate(e.target.value)}
+                  className="w-full max-w-xs px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+
               <div className="flex items-center gap-3">
-                <Button type="submit" disabled={assignMutation.isPending || !selectedUserId || !selectedLeadId}>
+                <Button
+                  type="submit"
+                  disabled={
+                    assignMutation.isPending ||
+                    !selectedUserId ||
+                    !selectedLeadId ||
+                    !String(singleAssignTargetDate).trim()
+                  }
+                >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Lead'}
                 </Button>
                 <Button
@@ -2124,6 +2228,7 @@ export default function AssignLeadsPage() {
                     setLeadSearch('');
                     setSearchResults([]);
                     setShowSearchResults(false);
+                    setSingleAssignTargetDate('');
                   }}
                   disabled={assignMutation.isPending}
                 >
