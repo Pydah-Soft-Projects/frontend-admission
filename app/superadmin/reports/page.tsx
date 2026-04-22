@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Fragment, useRef } from 'react';
+import React, { useState, useEffect, useMemo, Fragment, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { reportAPI, userAPI, leadAPI, locationsAPI } from '@/lib/api';
 import { format, subDays, startOfWeek, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
 import { exportToExcel, exportToCSV } from '@/lib/export';
@@ -134,6 +134,7 @@ function MultiSelectDropdown({
 }
 
 export default function ReportsPage() {
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('calls');
   const [callSubTab, setCallSubTab] = useState<'daily' | 'performance'>('daily');
@@ -379,20 +380,40 @@ export default function ReportsPage() {
   }>;
   const activityLogsPagination = activityLogsData?.pagination;
 
-  // User Analytics summary (light query for quick page load)
+  /**
+   * Heavy endpoint (many SQL + HRMS). Only needed for Users tab and Call reports → Performance sub-tab.
+   * Daily Call Report uses `/reports/calls/daily` only — do not block that UI on this query.
+   */
   const { data: userAnalytics, isLoading: isLoadingUserAnalytics, isFetching: isFetchingUserAnalytics, error: userAnalyticsError } = useQuery({
-    queryKey: ['userAnalyticsSummary', filters.startDate, filters.endDate, filters.academicYear, activeTab],
+    queryKey: ['userAnalyticsSummary', filters.startDate, filters.endDate, filters.academicYear, activeTab, callSubTab],
     queryFn: () => leadAPI.getUserAnalytics({
       startDate: filters.startDate,
       endDate: filters.endDate,
       academicYear: filters.academicYear != null ? filters.academicYear : undefined,
       includeAssignmentDetails: false,
     }),
-    enabled: activeTab === 'calls' || activeTab === 'users',
+    enabled: activeTab === 'users' || (activeTab === 'calls' && callSubTab === 'performance'),
     retry: 2,
-    /** Matches backend ANALYTICS_CACHE_MS default; avoids refetch churn when switching Daily ↔ Performance or refocusing the tab. */
-    staleTime: 60_000,
+    /** Align with backend ANALYTICS_CACHE_MS (default 180s). */
+    staleTime: 180_000,
+    placeholderData: keepPreviousData,
   });
+
+  /** Warm cache before click — hover/focus “User Performance Summary” while still on Daily. */
+  const prefetchUserPerformanceSummary = useCallback(() => {
+    if (activeTab !== 'calls') return;
+    void queryClient.prefetchQuery({
+      queryKey: ['userAnalyticsSummary', filters.startDate, filters.endDate, filters.academicYear, activeTab, 'performance'],
+      queryFn: () =>
+        leadAPI.getUserAnalytics({
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+          includeAssignmentDetails: false,
+        }),
+      staleTime: 180_000,
+    });
+  }, [queryClient, activeTab, filters.startDate, filters.endDate, filters.academicYear]);
 
   const expandedPerformanceUserIds = useMemo(
     () => Array.from(expandedPerformanceUsers).sort(),
@@ -1644,14 +1665,55 @@ export default function ReportsPage() {
             </Card>
           ) : (
             <>
-              {/* Stats Cards – always visible */}
-              {isLoadingUserAnalytics ? (
+              {/* Stats Cards: Daily uses same fast API as the table (`callReports.summary`). Performance uses full user analytics. */}
+              {callSubTab === 'daily' ? (
+                isLoadingCalls ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={`calls-daily-stats-skeleton-${i}`} className="h-20 rounded-xl" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    {[
+                      {
+                        label: 'Users covered',
+                        value: dailyCallSummary.usersCovered,
+                        style: CALL_REPORT_CARD_STYLES[0],
+                      },
+                      {
+                        label: 'Total Calls/Visits Done',
+                        value: dailyCallSummary.totalCalls,
+                        style: CALL_REPORT_CARD_STYLES[1],
+                      },
+                      {
+                        label: 'Total duration',
+                        value: formatSecondsToMMSS(dailyCallSummary.totalDuration),
+                        style: CALL_REPORT_CARD_STYLES[2],
+                      },
+                      {
+                        label: 'Avg calls / user',
+                        value:
+                          dailyCallSummary.usersCovered > 0
+                            ? (dailyCallSummary.totalCalls / dailyCallSummary.usersCovered).toFixed(1)
+                            : '0.0',
+                        style: CALL_REPORT_CARD_STYLES[3],
+                      },
+                    ].map((item, i) => (
+                      <div key={i} className={`overflow-hidden rounded-xl border-0 ${item.style} p-4 shadow-lg`}>
+                        <p className="text-sm font-semibold uppercase tracking-wider text-white/90">{item.label}</p>
+                        <p className="mt-2 text-2xl font-bold text-white drop-shadow-sm">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : isLoadingUserAnalytics ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <Skeleton key={`calls-stats-skeleton-${i}`} className="h-20 rounded-xl" />
                   ))}
                 </div>
-              ) : userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 && (
+              ) : userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   {[
                     { label: 'Total Users', value: userAnalytics.users.length, style: CALL_REPORT_CARD_STYLES[0] },
@@ -1665,8 +1727,8 @@ export default function ReportsPage() {
                     </div>
                   ))}
                 </div>
-              )}
-              {!isLoadingUserAnalytics && userAnalyticsError && (
+              ) : null}
+              {callSubTab === 'performance' && !isLoadingUserAnalytics && userAnalyticsError && (
                 <Card className="p-3">
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     User performance stats are still loading. Please refresh if this persists.
@@ -1692,10 +1754,13 @@ export default function ReportsPage() {
                       Daily Call Report
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setCallSubTab('performance');
                         handleDatePreset('overall');
                       }}
+                      onMouseEnter={prefetchUserPerformanceSummary}
+                      onFocus={prefetchUserPerformanceSummary}
                       className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
                         callSubTab === 'performance'
                           ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
@@ -2042,12 +2107,6 @@ export default function ReportsPage() {
                           Next
                         </Button>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                      <Card className="p-4"><p className="text-xs text-slate-500">Users Covered</p><p className="text-xl font-bold">{dailyCallSummary.usersCovered}</p></Card>
-                      <Card className="p-4"><p className="text-xs text-slate-500">Total Calls/Visits Done</p><p className="text-xl font-bold">{dailyCallSummary.totalCalls}</p></Card>
-                      <Card className="p-4"><p className="text-xs text-slate-500">Total Duration</p><p className="text-xl font-bold">{formatSecondsToMMSS(dailyCallSummary.totalDuration)}</p></Card>
-                      <Card className="p-4"><p className="text-xs text-slate-500">Avg Calls / User</p><p className="text-xl font-bold">{dailyCallSummary.usersCovered > 0 ? (dailyCallSummary.totalCalls / dailyCallSummary.usersCovered).toFixed(1) : '0.0'}</p></Card>
                     </div>
                     <Card className="p-4 border-slate-200 dark:border-slate-700">
                       <div className="flex items-center justify-between mb-3">
