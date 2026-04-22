@@ -399,7 +399,7 @@ export default function ReportsPage() {
     placeholderData: keepPreviousData,
   });
 
-  /** Warm cache before click — hover/focus “User Performance Summary” while still on Daily. */
+  /** Warm cache before opening Performance — same payload as User Performance Summary (heavy cohort SQL). */
   const prefetchUserPerformanceSummary = useCallback(() => {
     if (activeTab !== 'calls') return;
     void queryClient.prefetchQuery({
@@ -414,6 +414,12 @@ export default function ReportsPage() {
       staleTime: 180_000,
     });
   }, [queryClient, activeTab, filters.startDate, filters.endDate, filters.academicYear]);
+
+  /** Start prefetch as soon as Call Reports is open (even on Daily) so first switch to Performance is faster. */
+  useEffect(() => {
+    if (activeTab !== 'calls') return;
+    prefetchUserPerformanceSummary();
+  }, [activeTab, prefetchUserPerformanceSummary]);
 
   const expandedPerformanceUserIds = useMemo(
     () => Array.from(expandedPerformanceUsers).sort(),
@@ -471,6 +477,34 @@ export default function ReportsPage() {
     });
   }, [userAnalytics?.users, users, performanceSearch, performanceDepartment, performanceGroup]);
 
+  /** Performance “Total Leads”: Student Counselors show sum of date-wise bucket totals (matches expanded rows); others use portfolio total_assigned. */
+  const getPerformanceTotalLeadsDisplay = useCallback((u: any): number => {
+    if (String(u?.roleName || '').trim() === 'Student Counselor') {
+      const b = u?.allottedBucketSumTotal;
+      if (b != null && !Number.isNaN(Number(b))) return Number(b);
+    }
+    return Number(u?.totalAssigned ?? 0);
+  }, []);
+
+  /**
+   * Student Counselor: always Total Leads (bucket sum) − Calls/Visits Done so the row matches the two columns (ignores stale cached pendingBalance).
+   * Other roles: API pendingBalance, then portfolio fallback.
+   */
+  const getPerformanceBalanceDisplay = useCallback(
+    (u: any): number => {
+      if (String(u?.roleName || '').trim() === 'Student Counselor') {
+        const allotted = getPerformanceTotalLeadsDisplay(u);
+        const done = Number(u?.calls?.total ?? 0);
+        return Math.max(0, allotted - done);
+      }
+      if (u.pendingBalance != null && !Number.isNaN(Number(u.pendingBalance))) {
+        return Number(u.pendingBalance);
+      }
+      return Math.max(0, Number(u.totalAssigned || 0) - Number(u.callsOnCurrentPortfolio ?? u.calls?.total ?? 0));
+    },
+    [getPerformanceTotalLeadsDisplay]
+  );
+
   const dailyCallSummary = useMemo(() => {
     const summaryRows = Array.isArray(callReports?.summary) ? callReports.summary : [];
     const ranking = summaryRows
@@ -499,12 +533,12 @@ export default function ReportsPage() {
         || String(a?.name || a?.userName || '').localeCompare(String(b?.name || b?.userName || '')));
     return {
       usersCovered: rows.length,
-      totalAssigned: rows.reduce((s: number, u: any) => s + Number(u.totalAssigned || 0), 0),
+      totalAssigned: rows.reduce((s: number, u: any) => s + getPerformanceTotalLeadsDisplay(u), 0),
       totalDone: rows.reduce((s: number, u: any) => s + Number(u?.calls?.total || 0), 0),
-      totalBalance: rows.reduce((s: number, u: any) => s + Number(u.pendingBalance || 0), 0),
+      totalBalance: rows.reduce((s: number, u: any) => s + getPerformanceBalanceDisplay(u), 0),
       ranking,
     };
-  }, [filteredPerformanceUsers]);
+  }, [filteredPerformanceUsers, getPerformanceTotalLeadsDisplay, getPerformanceBalanceDisplay]);
 
   useEffect(() => {
     setDailyPage(1);
@@ -538,7 +572,7 @@ export default function ReportsPage() {
   const getCallStatusCount = (day: any, status: string) =>
     Number(day?.callStatusCounts?.[status] ?? 0) || 0;
 
-  /** Portfolio balance rule per date bucket (API); legacy payloads fall back to Assigned call_status count. */
+  /** Balance = distinct students in bucket with call_status Assigned (API `balanceByPortfolioRule`); legacy payloads fall back to Assigned count. */
   const getCounsellorAssignmentBalanceForDay = (day: any) => {
     const raw = day?.balanceByPortfolioRule;
     if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
@@ -748,17 +782,12 @@ export default function ReportsPage() {
           : `<tr><td colspan="${printColSpanCounsellor}">No date-wise assignment history found.</td></tr>`;
 
 
-        const mainRowBalance =
-          user.pendingBalance != null
-            ? user.pendingBalance
-            : Math.max(
-                (user.totalAssigned || 0) - (user.callsOnCurrentPortfolio ?? user.calls?.total ?? 0),
-                0
-              );
+        const mergedPrintUser = { ...user, ...(detailUser || {}) };
+        const mainRowBalance = getPerformanceBalanceDisplay(mergedPrintUser);
         return `
         <section style="margin-bottom:10px; break-inside: avoid;">
           <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> · ${statusLabel}</h3>
-          <p style="margin:0 0 4px 0;font-size:8px;color:#475569;">Student Counselor — Balance column = allotted in row minus leads with an outcome call (portfolio rule); footer = period total. Main row balance (portfolio): <strong>${mainRowBalance}</strong>.</p>
+          <p style="margin:0 0 4px 0;font-size:8px;color:#475569;">Student Counselor — Main row Balance = Total Leads (bucket sum) − Calls/Visits Done. Main row: <strong>${mainRowBalance}</strong>.</p>
           <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
             <thead>
               <tr>
@@ -1063,12 +1092,12 @@ export default function ReportsPage() {
     const filteredPerformanceUserIds = new Set(finalUsersToExport.map((u: any) => u.userId));
 
     const performanceRows = finalUsersToExport.map((u: any) => {
-      const balance = u.pendingBalance ?? Math.max((u.totalAssigned || 0) - (u.callsOnCurrentPortfolio ?? u.calls?.total ?? 0), 0);
+      const balance = getPerformanceBalanceDisplay(u);
       const admitted = u.admittedLeads ?? u.statusBreakdown?.Admitted ?? 0;
       
       return {
         User: (u.name || u.userName || '—'),
-        'Total Leads': u.totalAssigned ?? 0,
+        'Total Leads': getPerformanceTotalLeadsDisplay(u),
         'Calls/Visits Done': u.calls?.total ?? 0,
         Balance: balance,
         'Interested Leads': u.interested ?? 0,
@@ -1111,7 +1140,17 @@ export default function ReportsPage() {
     );
 
     return { performanceRows, dailyRows };
-  }, [previewUserAnalytics?.users, previewCallReports?.reports, exportSelectedDivision, exportSelectedDepartment, exportSelectedGroup, filters.userId, users]);
+  }, [
+    previewUserAnalytics?.users,
+    previewCallReports?.reports,
+    exportSelectedDivision,
+    exportSelectedDepartment,
+    exportSelectedGroup,
+    filters.userId,
+    users,
+    getPerformanceBalanceDisplay,
+    getPerformanceTotalLeadsDisplay,
+  ]);
 
   const downloadCallReportExcel = () => {
     console.log("Running Enhanced Excel Export with Merges...");
@@ -1717,7 +1756,11 @@ export default function ReportsPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   {[
                     { label: 'Total Users', value: userAnalytics.users.length, style: CALL_REPORT_CARD_STYLES[0] },
-                    { label: 'Total Assigned Leads', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.totalAssigned || 0), 0), style: CALL_REPORT_CARD_STYLES[1] },
+                    {
+                      label: 'Total Assigned Leads',
+                      value: userAnalytics.users.reduce((sum: number, u: any) => sum + getPerformanceTotalLeadsDisplay(u), 0),
+                      style: CALL_REPORT_CARD_STYLES[1],
+                    },
                     { label: 'Total Calls/Visits Done', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[2] },
                     { label: 'Total SMS', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.sms?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[3] },
                   ].map((item, i) => (
@@ -2167,7 +2210,12 @@ export default function ReportsPage() {
                         <thead>
                           <tr className="bg-[#475569] dark:bg-[#334155]">
                             <th className="w-52 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Leads</th>
+                            <th
+                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
+                              title="Student Counselors: sum of date-wise Total Allotted (same lead may appear in multiple buckets). Others: portfolio leads handled."
+                            >
+                              Total Leads
+                            </th>
                             <th
                               className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
                               title="Student Counselors: same as the expanded footer — sum of Leads allotted (period) across call_status columns, excluding Assigned. Other roles: distinct leads with any outcome call in the activity window."
@@ -2184,7 +2232,7 @@ export default function ReportsPage() {
                             </th>
                             <th
                               className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                              title="Pending leads from current portfolio only: Total Leads - Calls on currently assigned leads (minimum 0). Reclaimed shown below is distinct reclaimed leads."
+                              title="Student Counselors: Total Leads (bucket sum) − Calls/Visits Done, minimum 0. Other roles: portfolio-style pending balance."
                             >
                               Balance
                             </th>
@@ -2257,12 +2305,14 @@ export default function ReportsPage() {
                                       </div>
                                     </div>
                                   </td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.totalAssigned || 0}</td>
+                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
+                                    {getPerformanceTotalLeadsDisplay(user)}
+                                  </td>
                                   <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.calls?.total ?? 0}</td>
                                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                                     <div className="flex flex-col items-start gap-1">
                                       <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
-                                        {user.pendingBalance ?? Math.max((user.totalAssigned || 0) - (user.callsOnCurrentPortfolio ?? user.calls?.total ?? 0), 0)}
+                                        {getPerformanceBalanceDisplay(user)}
                                       </span>
                                       {reclaimedTotal > 0 && (
                                         <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
@@ -2297,6 +2347,11 @@ export default function ReportsPage() {
                                               const allottedMap = foldOutcomeCallMapToCanonical(pc?.allottedByCallStatus);
                                               const knownCols = COUNSELLOR_CALL_STATUS_COLUMNS as unknown as string[];
                                               const allottedTotal = Number(pc?.allottedDistinctLeads ?? 0);
+                                              /** Sum of per–date/target row totals; can exceed allottedTotal when the same lead appears in multiple buckets. */
+                                              const sumBucketTotalAllotted = assignmentsByDate.reduce(
+                                                (s: number, day: any) => s + Number(day?.totalAssigned ?? 0),
+                                                0
+                                              );
                                               const otherAllotted = sumDistinctOutcomeCallOutsideKnown(allottedMap, knownCols);
                                               const sumAllottedCols =
                                                 COUNSELLOR_CALL_STATUS_COLUMNS.reduce(
@@ -2326,27 +2381,18 @@ export default function ReportsPage() {
                                                   <div className="mb-3 rounded-md border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40">
                                                     <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">
                                                       <span className="font-semibold text-slate-800 dark:text-slate-200">Main row Balance</span> (above):{' '}
+                                                      <strong className="text-slate-700 dark:text-slate-300">
+                                                        Total Leads (bucket sum) − Calls/Visits Done
+                                                      </strong>
+                                                      , minimum 0 —{' '}
                                                       <span className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                        {user.pendingBalance ??
-                                                          Math.max(
-                                                            (user.totalAssigned || 0) -
-                                                              (user.callsOnCurrentPortfolio ?? user.calls?.total ?? 0),
-                                                            0
-                                                          )}
+                                                        {getPerformanceBalanceDisplay(user)}
                                                       </span>
-                                                      {' — '}
-                                                      uses your <strong className="text-slate-700 dark:text-slate-300">current portfolio</strong> (total
-                                                      assigned leads minus distinct leads with outcome calls on leads currently assigned to you, when the API
-                                                      provides that count).
-                                                    </p>
-                                                    <p className="mt-2 text-[11px] leading-snug text-slate-600 dark:text-slate-400">
-                                                      <span className="font-semibold text-slate-800 dark:text-slate-200">Assignment Balance column</span>{' '}
-                                                      (below): same <strong className="text-slate-700 dark:text-slate-300">portfolio balance</strong> idea as the
-                                                      main row — for each date bucket,{' '}
-                                                      <span className="tabular-nums">allotted distinct students − those with an outcome call</span> (while still
-                                                      assigned to you) in the selected activity window. The footer shows the period total (
-                                                      <span className="font-semibold">Leads allotted (period)</span> cohort), not the sum of Assigned status
-                                                      counts.
+                                                      .{' '}
+                                                      <span className="font-semibold text-slate-800 dark:text-slate-200">Assignment Balance</span> (below) remains{' '}
+                                                      <strong className="text-slate-700 dark:text-slate-300">call_status Assigned</strong> per bucket. The footer
+                                                      “Leads allotted (period)” <strong className="text-slate-700 dark:text-slate-300">Balance</strong> cell matches
+                                                      the main row (bucket-sum allotted − Calls/Visits Done).
                                                     </p>
                                                   </div>
                                                   {!pc ? (
@@ -2385,7 +2431,7 @@ export default function ReportsPage() {
                                                           ))}
                                                           <th
                                                             className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap"
-                                                            title="Portfolio balance for this bucket: total allotted − leads with an outcome call (assigned to you) in the activity period — not the same as the Assigned column"
+                                                            title="Distinct students in this bucket with call_status Assigned (matches the Assigned column total for this row)"
                                                           >
                                                             Balance
                                                           </th>
@@ -2465,6 +2511,13 @@ export default function ReportsPage() {
                                                                     (status sum {sumAllottedCols} ≠ distinct total {allottedTotal})
                                                                   </span>
                                                                 )}
+                                                                {sumBucketTotalAllotted > allottedTotal && allottedTotal > 0 && (
+                                                                  <span className="mt-1 block text-slate-600 dark:text-slate-400">
+                                                                    Sum of row “Total Allotted” ({sumBucketTotalAllotted}) is higher than {allottedTotal}{' '}
+                                                                    because rows are per allotted/target bucket — the same student can be counted in more than
+                                                                    one row if they have multiple allotments in the period.
+                                                                  </span>
+                                                                )}
                                                               </div>
                                                             </td>
                                                             <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
@@ -2478,7 +2531,10 @@ export default function ReportsPage() {
                                                                 {countDistinctOutcomeCallByStatus(allottedMap, col)}
                                                               </td>
                                                             ))}
-                                                            <td className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100">
+                                                            <td
+                                                              className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100"
+                                                              title="Same formula as main row Balance: bucket-sum allotted − Calls/Visits Done (sum of non-Assigned call_status on distinct cohort)"
+                                                            >
                                                               {typeof pc?.periodBalanceByPortfolioRule === 'number' &&
                                                               !Number.isNaN(pc.periodBalanceByPortfolioRule)
                                                                 ? pc.periodBalanceByPortfolioRule
@@ -2647,7 +2703,7 @@ export default function ReportsPage() {
                                 <td className="py-2">{u.name || u.userName}</td>
                                 <td className="py-2 font-semibold">{u.calls?.total ?? 0}</td>
                                 <td className="py-2">{u.interested ?? 0}</td>
-                                <td className="py-2">{u.pendingBalance ?? 0}</td>
+                                <td className="py-2">{getPerformanceBalanceDisplay(u)}</td>
                               </tr>
                             ))}
                           </tbody>
