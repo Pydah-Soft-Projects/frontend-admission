@@ -192,11 +192,16 @@ export default function UserCallActivityPage() {
             {user?.roleName !== 'PRO' && (
               <>
                 <div className={`overflow-hidden rounded-xl border-0 bg-gradient-to-br ${STATS_CARD_STYLES[0]} p-3 sm:p-4 shadow-md flex flex-col justify-center min-h-[72px] sm:min-h-[80px]`}>
-                  <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Total calls</p>
+                  <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/85">Leads called (with outcome)</p>
                   <p className="mt-0.5 sm:mt-1 text-lg sm:text-2xl font-bold text-white drop-shadow-sm">{report.calls?.total ?? 0}</p>
+                  {typeof report.calls?.totalAttempts === 'number' && report.calls.totalAttempts > (report.calls?.total ?? 0) && (
+                    <p className="mt-0.5 text-[10px] sm:text-xs text-white/75">
+                      {report.calls.totalAttempts} logged call{report.calls.totalAttempts !== 1 ? 's' : ''}
+                    </p>
+                  )}
                   {report.calls?.averageDuration > 0 && (
                     <p className="mt-0.5 text-[10px] sm:text-xs text-white/75">
-                      Avg {formatSecondsToMMSS(report.calls.averageDuration)}
+                      Avg / attempt {formatSecondsToMMSS(report.calls.averageDuration)}
                     </p>
                   )}
                 </div>
@@ -223,14 +228,25 @@ export default function UserCallActivityPage() {
               <div className="space-y-3 sm:space-y-4">
                 {[...report.calls.dailyCallActivity]
                   .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-                  .map((day: { date: string; callCount: number; leads?: { leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[] }) => {
+                  .map((day: {
+                    date: string;
+                    callCount?: number;
+                    distinctLeads?: number;
+                    attempts?: number;
+                    leads?: { leadName: string; leadPhone?: string; enquiryNumber?: string; callCount: number }[];
+                  }) => {
                     const dateLabel = day.date ? format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy') : day.date;
+                    const distinct = day.distinctLeads ?? day.leads?.length ?? day.callCount ?? 0;
+                    const attempts = day.attempts ?? day.callCount ?? 0;
                     return (
                       <div key={day.date || dateLabel} className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                         <div className="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 border-b border-slate-200 dark:border-slate-600">
                           <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">{dateLabel}</span>
-                          <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-                            {day.callCount} call{day.callCount !== 1 ? 's' : ''}
+                          <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 text-right">
+                            <span className="block">{distinct} lead{distinct !== 1 ? 's' : ''}</span>
+                            {attempts > distinct ? (
+                              <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400">{attempts} logged calls</span>
+                            ) : null}
                           </span>
                         </div>
                         {day.leads && day.leads.length > 0 && (
