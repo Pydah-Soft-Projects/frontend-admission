@@ -121,7 +121,7 @@ export default function UserLeadDetailPage() {
   /** Counsellor edits call_status; PRO edits visit_status; admins edit lead_status (pipeline) */
   const statusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested', 'Not Answered', 'Wrong Data', 'Call Back', 'Confirmed', 'CET Applied'];
+      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed', 'CET Applied'];
     }
     if (user?.roleName === 'PRO') {
       return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'];
@@ -198,7 +198,7 @@ export default function UserLeadDetailPage() {
   // Combined Status Options (Filtered for Call Logs)
   const combinedStatusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested', 'Not Answered', 'Wrong Data', 'Call Back', 'Confirmed', 'CET Applied'].sort();
+      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed', 'CET Applied'].sort();
     }
     if (user?.roleName === 'PRO') {
       return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'].sort();
@@ -241,14 +241,17 @@ export default function UserLeadDetailPage() {
   const statusButtonLabel =
     user?.roleName === 'PRO' ? 'Visit status' : user?.roleName === 'Student Counselor' ? 'Call status' : 'Status';
 
-  /** Primary badge text: visit / call / pipeline by role */
+  /** Primary badge text: visit / call / pipeline by role (counsellor: Not Answered shown as Call Back). */
   const displayPrimaryStatusText = useCallback(
     (l: Lead | undefined) => {
       const v = getCurrentChannelStatus(l);
-      const t = v != null ? String(v).trim() : '';
+      let t = v != null ? String(v).trim() : '';
+      if (user?.roleName === 'Student Counselor' && t.toLowerCase() === 'not answered') {
+        t = 'Call Back';
+      }
       return t !== '' ? t : '—';
     },
-    [getCurrentChannelStatus],
+    [getCurrentChannelStatus, user?.roleName],
   );
 
   const showPipelineLeadStatus =

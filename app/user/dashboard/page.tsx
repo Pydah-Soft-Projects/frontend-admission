@@ -57,12 +57,11 @@ const currentYear = new Date().getFullYear();
 const DEFAULT_ACADEMIC_YEARS = [currentYear, currentYear - 1, currentYear - 2];
 const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
 
-/** Call-status labels shown on counsellor dashboard (matches lead detail / filters). */
+/** Call-status labels shown on counsellor dashboard (matches lead detail / filters). Not Answered is rolled into Call Back. */
 const STUDENT_COUNSELLOR_CALL_STATUS_LABELS = [
   'Assigned',
   'Interested',
   'Not Interested',
-  'Not Answered',
   'Wrong Data',
   'Call Back',
   'Confirmed',
@@ -332,9 +331,13 @@ export default function UserDashboard() {
     let other = 0;
 
     for (const e of entries) {
-      const lower = e.name.toLowerCase();
+      let name = e.name;
+      if (isCounsellor && name.toLowerCase() === 'not answered') {
+        name = 'Call Back';
+      }
+      const lower = name.toLowerCase();
       if (lower === 'not set' || allowedLower.has(lower)) {
-        const canonical = allowed.find((a) => a.toLowerCase() === lower) ?? e.name;
+        const canonical = allowed.find((a) => a.toLowerCase() === lower) ?? name;
         byKey.set(canonical, (byKey.get(canonical) || 0) + e.value);
       } else {
         other += e.value;
@@ -525,10 +528,14 @@ export default function UserDashboard() {
                     : user?.roleName === 'Student Counselor'
                       ? lead.callStatus
                       : lead.leadStatus;
-                const channelDisplay =
+                const rawChannel =
                   channelStatusValue != null && String(channelStatusValue).trim() !== ''
                     ? String(channelStatusValue).trim()
-                    : '—';
+                    : '';
+                const channelDisplay =
+                  user?.roleName === 'Student Counselor' && rawChannel.toLowerCase() === 'not answered'
+                    ? 'Call Back'
+                    : rawChannel || '—';
                 const cycleNum = Number(lead.cycleNumber ?? lead.cycle_number ?? 1);
                 const hasReclaimed = Number.isFinite(cycleNum) && cycleNum > 1;
                 return (

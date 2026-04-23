@@ -654,6 +654,9 @@ export default function ReportsPage() {
     'CET Applied',
   ] as const;
 
+  /** Expanded counsellor table + print: no Not Answered column (those counts are merged into Call Back for display). */
+  const COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED = COUNSELLOR_CALL_STATUS_COLUMNS.filter((c) => c !== 'Not Answered');
+
   /** PRO field-visit workflow (`app/user/dashboard`) */
   const PRO_VISIT_STATUS_COLUMNS = [
     'Assigned',
@@ -708,6 +711,28 @@ export default function ReportsPage() {
       out[key] = (out[key] || 0) + n;
     });
     return out;
+  };
+
+  /**
+   * User Performance (Student Counselor): roll Not Answered into Call Back for display (Not Answered column hidden).
+   * Display-only — API/DB unchanged; column totals still sum to the same cohort.
+   */
+  const mergeNotAnsweredIntoCallBackForCounsellorDisplay = (
+    map: Record<string, number> | Record<string, unknown> | undefined
+  ): Record<string, number> => {
+    const base =
+      map && typeof map === 'object' ? { ...(map as Record<string, number>) } : ({} as Record<string, number>);
+    const na = Number(base['Not Answered'] ?? 0) || 0;
+    const cb = Number(base['Call Back'] ?? 0) || 0;
+    base['Call Back'] = cb + na;
+    delete base['Not Answered'];
+    return base;
+  };
+
+  const getCounsellorCallStatusCountForDisplay = (day: any, status: string) => {
+    const folded = foldOutcomeCallMapToCanonical(day?.callStatusCounts as Record<string, unknown> | undefined);
+    const merged = mergeNotAnsweredIntoCallBackForCounsellorDisplay(folded);
+    return Number(merged[status] ?? 0) || 0;
   };
 
   /** DISTINCT outcome-call leads by current call_status (sums to Calls/Visits Done). */
@@ -859,9 +884,10 @@ export default function ReportsPage() {
       if (printMode === 'counsellor') {
         const pc = detailUser?.expandedAssignmentDiagnostics?.performanceCohort;
         const allottedMap = foldOutcomeCallMapToCanonical(pc?.allottedByCallStatus as Record<string, unknown> | undefined);
+        const allottedDisplayMap = mergeNotAnsweredIntoCallBackForCounsellorDisplay(allottedMap);
         const allottedTotal = Number(pc?.allottedDistinctLeads ?? 0);
-        const allottedFooterCells = COUNSELLOR_CALL_STATUS_COLUMNS.map(
-          (c) => `<td>${countDistinctOutcomeCallByStatus(allottedMap, c)}</td>`
+        const allottedFooterCells = COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map(
+          (c) => `<td>${countDistinctOutcomeCallByStatus(allottedDisplayMap, c)}</td>`
         ).join('');
         const periodBalanceFoot =
           typeof pc?.periodBalanceByPortfolioRule === 'number' && !Number.isNaN(pc.periodBalanceByPortfolioRule)
@@ -869,7 +895,7 @@ export default function ReportsPage() {
             : '—';
         const footerRowCounsellor = pc
           ? `<tr style="font-weight:700;background:#f1f5f9;">
-              <td colspan="4">Leads allotted (period) — distinct leads by current call_status</td>
+              <td colspan="4">Leads allotted (period) — distinct leads by current call_status (Not Answered merged into Call Back)</td>
               <td>${allottedTotal}</td>
               ${allottedFooterCells}
               <td>${periodBalanceFoot}</td>
@@ -877,8 +903,8 @@ export default function ReportsPage() {
             </tr>`
           : '';
 
-        const headerStatusCounsellor = `${COUNSELLOR_CALL_STATUS_COLUMNS.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
-        const printColSpanCounsellor = 15;
+        const headerStatusCounsellor = `${COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
+        const printColSpanCounsellor = 14;
         const rowHtmlCounsellor = rows.length
           ? rows.map((day: any) => {
               const targetDateEntries = Object.entries(day.targetDateCounts || {})
@@ -889,7 +915,7 @@ export default function ReportsPage() {
                     .join(', ')
                 : '—';
               const statusCells =
-                COUNSELLOR_CALL_STATUS_COLUMNS.map((c) => `<td>${getCallStatusCount(day, c)}</td>`).join('') +
+                COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<td>${getCounsellorCallStatusCountForDisplay(day, c)}</td>`).join('') +
                 `<td>${getCounsellorAssignmentBalanceForDay(day)}</td>`;
               return `
               <tr>
@@ -2517,7 +2543,9 @@ export default function ReportsPage() {
                                                   }
                                                 | undefined;
                                               const allottedMap = foldOutcomeCallMapToCanonical(pc?.allottedByCallStatus);
+                                              const allottedDisplayMap = mergeNotAnsweredIntoCallBackForCounsellorDisplay(allottedMap);
                                               const knownCols = COUNSELLOR_CALL_STATUS_COLUMNS as unknown as string[];
+                                              const expandedCols = COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED as unknown as string[];
                                               const allottedTotal = Number(pc?.allottedDistinctLeads ?? 0);
                                               /** Sum of per–date/target row totals; can exceed allottedTotal when the same lead appears in multiple buckets. */
                                               const sumBucketTotalAllotted = assignmentsByDate.reduce(
@@ -2526,8 +2554,8 @@ export default function ReportsPage() {
                                               );
                                               const otherAllotted = sumDistinctOutcomeCallOutsideKnown(allottedMap, knownCols);
                                               const sumAllottedCols =
-                                                COUNSELLOR_CALL_STATUS_COLUMNS.reduce(
-                                                  (s, col) => s + countDistinctOutcomeCallByStatus(allottedMap, col),
+                                                expandedCols.reduce(
+                                                  (s, col) => s + countDistinctOutcomeCallByStatus(allottedDisplayMap, col),
                                                   0
                                                 ) + otherAllotted;
                                               const allottedOk = allottedTotal <= 0 || sumAllottedCols === allottedTotal;
@@ -2592,7 +2620,7 @@ export default function ReportsPage() {
                                                           <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
                                                             Total Allotted
                                                           </th>
-                                                          {COUNSELLOR_CALL_STATUS_COLUMNS.map((col) => (
+                                                          {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
                                                             <th
                                                               key={col}
                                                               className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap"
@@ -2641,12 +2669,12 @@ export default function ReportsPage() {
                                                                 <td className="px-3 py-2 text-slate-900 dark:text-slate-100">
                                                                   {Number(day?.totalAssigned || 0)}
                                                                 </td>
-                                                                {COUNSELLOR_CALL_STATUS_COLUMNS.map((col) => (
+                                                                {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
                                                                   <td
                                                                     key={col}
                                                                     className="px-3 py-2 text-slate-900 dark:text-slate-100 tabular-nums"
                                                                   >
-                                                                    {getCallStatusCount(day, col)}
+                                                                    {getCounsellorCallStatusCountForDisplay(day, col)}
                                                                   </td>
                                                                 ))}
                                                                 <td className="bg-slate-50/90 px-3 py-2 text-slate-900 tabular-nums dark:bg-slate-900/50 dark:text-slate-100">
@@ -2661,7 +2689,7 @@ export default function ReportsPage() {
                                                         ) : (
                                                           <tr>
                                                             <td
-                                                              colSpan={15}
+                                                              colSpan={14}
                                                               className="px-3 py-3 text-center text-slate-500 dark:text-slate-400"
                                                             >
                                                               No date-wise assignment history found for the selected filters.
@@ -2676,7 +2704,9 @@ export default function ReportsPage() {
                                                               <div className="font-semibold text-slate-900 dark:text-slate-100">Leads allotted (period)</div>
                                                               <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">
                                                                 Distinct leads with an assignment to you in the selected period; cells use current
-                                                                call_status (Assigned, Interested, …).
+                                                                call_status. <strong className="font-medium text-slate-700 dark:text-slate-300">Not Answered</strong> is
+                                                                merged into <strong className="font-medium text-slate-700 dark:text-slate-300">Call Back</strong> (no separate
+                                                                column).
                                                                 {!allottedOk && allottedTotal > 0 && (
                                                                   <span className="text-amber-700 dark:text-amber-300">
                                                                     {' '}
@@ -2695,12 +2725,12 @@ export default function ReportsPage() {
                                                             <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
                                                               {allottedTotal}
                                                             </td>
-                                                            {COUNSELLOR_CALL_STATUS_COLUMNS.map((col) => (
+                                                            {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
                                                               <td
                                                                 key={`foot-${col}`}
                                                                 className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100"
                                                               >
-                                                                {countDistinctOutcomeCallByStatus(allottedMap, col)}
+                                                                {countDistinctOutcomeCallByStatus(allottedDisplayMap, col)}
                                                               </td>
                                                             ))}
                                                             <td

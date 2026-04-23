@@ -2236,7 +2236,6 @@ export default function LeadDetailPage() {
                   <option value="callback_requested">Call back</option>
                   <option value="switch_off">Switch off</option>
                   <option value="answered">Answered</option>
-                  <option value="Not Answered">Not Answered</option>
                   <option value="busy">Busy</option>
                   <option value="voicemail">Voicemail</option>
                   <option value="interested">Interested</option>

@@ -240,7 +240,6 @@ export default function UserLeadsPage() {
       'Assigned',
       'Interested',
       'Not Interested',
-      'Not Answered',
       'Wrong Data',
       'Call Back',
       'Confirmed',
@@ -258,10 +257,13 @@ export default function UserLeadsPage() {
       return Array.from(new Set([...visitFromDb, ...visitDefaults])).filter(Boolean).sort();
     }
     if (user?.roleName === 'Student Counselor') {
-      return Array.from(new Set([...callFromDb, ...callDefaults])).filter(Boolean).sort();
+      return Array.from(new Set([...callFromDb, ...callDefaults]))
+        .filter(Boolean)
+        .filter((s) => s !== 'Not Answered')
+        .sort();
     }
     const backendStatuses = filterOptions?.leadStatuses || [];
-    const callOutcomes = ['Interested', 'Not Interested', 'Not Answered', 'Confirmed', 'CET Applied', 'Wrong Data', 'Call Back'];
+    const callOutcomes = ['Interested', 'Not Interested', 'Confirmed', 'CET Applied', 'Wrong Data', 'Call Back'];
     return Array.from(new Set([...backendStatuses, ...callOutcomes, 'Assigned']))
       .filter((s) => s !== 'Answered' && s !== 'New')
       .sort();
@@ -415,7 +417,11 @@ export default function UserLeadsPage() {
   /** Table column: counsellor/PRO → call or visit only (else "—"); others → pipeline */
   const displayStatusForLead = (lead: Lead) => {
     const raw = getCurrentChannelStatus(lead);
-    if (raw && String(raw).trim()) return String(raw).trim();
+    if (raw && String(raw).trim()) {
+      const s = String(raw).trim();
+      if (user?.roleName === 'Student Counselor' && s.toLowerCase() === 'not answered') return 'Call Back';
+      return s;
+    }
     if (user?.roleName === 'PRO' || user?.roleName === 'Student Counselor') return '—';
     return lead.leadStatus || 'New';
   };
