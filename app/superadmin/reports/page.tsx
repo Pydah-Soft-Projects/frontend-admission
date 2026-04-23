@@ -147,6 +147,8 @@ export default function ReportsPage() {
   const [dailyGroup, setDailyGroup] = useState('');
   const [dailyPage, setDailyPage] = useState(1);
   const [dailyLimit, setDailyLimit] = useState(50);
+  const [performancePage, setPerformancePage] = useState(1);
+  const [performanceLimit, setPerformanceLimit] = useState(25);
 
   useEffect(() => {
     const tabFromUrl = searchParams?.get('tab');
@@ -381,39 +383,109 @@ export default function ReportsPage() {
   const activityLogsPagination = activityLogsData?.pagination;
 
   /**
-   * Heavy endpoint (many SQL + HRMS). Only needed for Users tab and Call reports → Performance sub-tab.
-   * Daily Call Report uses `/reports/calls/daily` only — do not block that UI on this query.
+   * Heavy endpoint — full user list for User Analytics tab only.
+   * Call Reports → Performance uses a separate paginated query so the table loads quickly.
    */
-  const { data: userAnalytics, isLoading: isLoadingUserAnalytics, isFetching: isFetchingUserAnalytics, error: userAnalyticsError } = useQuery({
-    queryKey: ['userAnalyticsSummary', filters.startDate, filters.endDate, filters.academicYear, activeTab, callSubTab],
-    queryFn: () => leadAPI.getUserAnalytics({
-      startDate: filters.startDate,
-      endDate: filters.endDate,
-      academicYear: filters.academicYear != null ? filters.academicYear : undefined,
-      includeAssignmentDetails: false,
-    }),
-    enabled: activeTab === 'users' || (activeTab === 'calls' && callSubTab === 'performance'),
+  const { data: userAnalyticsForUsersTab, isLoading: isLoadingUserAnalyticsTab, error: userAnalyticsTabError } = useQuery({
+    queryKey: ['userAnalyticsSummary', 'usersTab', filters.startDate, filters.endDate, filters.academicYear],
+    queryFn: () =>
+      leadAPI.getUserAnalytics({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+        includeAssignmentDetails: false,
+      }),
+    enabled: activeTab === 'users',
     retry: 2,
-    /** Align with backend ANALYTICS_CACHE_MS (default 180s). */
     staleTime: 180_000,
     placeholderData: keepPreviousData,
   });
 
-  /** Warm cache before opening Performance — same payload as User Performance Summary (heavy cohort SQL). */
+  const {
+    data: performanceUserAnalyticsData,
+    isLoading: isLoadingPerformanceUserList,
+    isFetching: isFetchingPerformanceUserList,
+    error: performanceUserListError,
+  } = useQuery({
+    queryKey: [
+      'userAnalyticsSummary',
+      'performancePaged',
+      filters.startDate,
+      filters.endDate,
+      filters.academicYear,
+      performancePage,
+      performanceLimit,
+      performanceSearch,
+      performanceDepartment,
+      performanceGroup,
+    ],
+    queryFn: () =>
+      leadAPI.getUserAnalytics({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+        includeAssignmentDetails: false,
+        page: performancePage,
+        limit: performanceLimit,
+        perfSearch: performanceSearch.trim() || undefined,
+        perfDepartment: performanceDepartment || undefined,
+        perfGroup: performanceGroup || undefined,
+      }),
+    enabled: activeTab === 'calls' && callSubTab === 'performance',
+    retry: 2,
+    staleTime: 180_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const performanceTableUsers = useMemo(
+    () => (Array.isArray(performanceUserAnalyticsData?.users) ? performanceUserAnalyticsData.users : []) as any[],
+    [performanceUserAnalyticsData?.users]
+  );
+
+  useEffect(() => {
+    setPerformancePage(1);
+  }, [
+    filters.startDate,
+    filters.endDate,
+    filters.academicYear,
+    performanceSearch,
+    performanceDepartment,
+    performanceGroup,
+    performanceLimit,
+  ]);
+
+  useEffect(() => {
+    setExpandedPerformanceUsers(new Set());
+  }, [performancePage]);
+
+  /** Warm first page before opening Performance (paginated — smaller cohort SQL). */
   const prefetchUserPerformanceSummary = useCallback(() => {
     if (activeTab !== 'calls') return;
     void queryClient.prefetchQuery({
-      queryKey: ['userAnalyticsSummary', filters.startDate, filters.endDate, filters.academicYear, activeTab, 'performance'],
+      queryKey: [
+        'userAnalyticsSummary',
+        'performancePaged',
+        filters.startDate,
+        filters.endDate,
+        filters.academicYear,
+        1,
+        performanceLimit,
+        '',
+        '',
+        '',
+      ],
       queryFn: () =>
         leadAPI.getUserAnalytics({
           startDate: filters.startDate,
           endDate: filters.endDate,
           academicYear: filters.academicYear != null ? filters.academicYear : undefined,
           includeAssignmentDetails: false,
+          page: 1,
+          limit: performanceLimit,
         }),
       staleTime: 180_000,
     });
-  }, [queryClient, activeTab, filters.startDate, filters.endDate, filters.academicYear]);
+  }, [queryClient, activeTab, filters.startDate, filters.endDate, filters.academicYear, performanceLimit]);
 
   /** Start prefetch as soon as Call Reports is open (even on Daily) so first switch to Performance is faster. */
   useEffect(() => {
@@ -462,20 +534,14 @@ export default function ReportsPage() {
     staleTime: 60000,
   });
 
-  const filteredPerformanceUsers = useMemo(() => {
-    const rawUsers = Array.isArray(userAnalytics?.users) ? userAnalytics.users : [];
-    const searchTerm = performanceSearch.trim().toLowerCase();
-    return rawUsers.filter((u: any) => {
-      const name = String(u?.name || u?.userName || '').toLowerCase();
-      const fullUser = users.find((fu: any) => fu._id === u.userId || fu.name === (u.name || u.userName));
-      const department = String(fullUser?.department || '');
-      const group = String(fullUser?.group || '');
-      const matchesSearch = !searchTerm || name.includes(searchTerm);
-      const matchesDepartment = !performanceDepartment || department === performanceDepartment;
-      const matchesGroup = !performanceGroup || group === performanceGroup;
-      return matchesSearch && matchesDepartment && matchesGroup;
-    });
-  }, [userAnalytics?.users, users, performanceSearch, performanceDepartment, performanceGroup]);
+  const performanceSummaryTotals = performanceUserAnalyticsData?.summaryTotals as
+    | {
+        userCount: number;
+        totalAssignedLeads: number;
+        totalCallsDone: number;
+        totalSms: number;
+      }
+    | undefined;
 
   /** Performance “Total Leads”: Student Counselors show sum of date-wise bucket totals (matches expanded rows); others use portfolio total_assigned. */
   const getPerformanceTotalLeadsDisplay = useCallback((u: any): number => {
@@ -526,7 +592,7 @@ export default function ReportsPage() {
   }, [callReports?.summary]);
 
   const performanceSummary = useMemo(() => {
-    const rows = Array.isArray(filteredPerformanceUsers) ? filteredPerformanceUsers : [];
+    const rows = performanceTableUsers;
     const ranking = [...rows]
       .sort((a: any, b: any) => (Number(b?.calls?.total || 0) - Number(a?.calls?.total || 0))
         || (Number(b?.interested || 0) - Number(a?.interested || 0))
@@ -538,7 +604,7 @@ export default function ReportsPage() {
       totalBalance: rows.reduce((s: number, u: any) => s + getPerformanceBalanceDisplay(u), 0),
       ranking,
     };
-  }, [filteredPerformanceUsers, getPerformanceTotalLeadsDisplay, getPerformanceBalanceDisplay]);
+  }, [performanceTableUsers, getPerformanceTotalLeadsDisplay, getPerformanceBalanceDisplay]);
 
   useEffect(() => {
     setDailyPage(1);
@@ -665,12 +731,13 @@ export default function ReportsPage() {
 
   const handlePrintPerformanceDetails = async () => {
     if (isPrintingPerformanceRef.current) return;
-    if (!filteredPerformanceUsers.length) {
-      showToast.error('No performance rows to print.');
+    const totalMatching = performanceUserAnalyticsData?.pagination?.total ?? performanceTableUsers.length;
+    if (!totalMatching) {
+      showToast.error('No performance rows match the current filters.');
       return;
     }
     isPrintingPerformanceRef.current = true;
-    setPerformancePrintOverlay('Preparing detailed report for print…');
+    setPerformancePrintOverlay('Loading all matching users for print…');
 
     const escapeHtml = (s: unknown) =>
       String(s ?? '')
@@ -679,9 +746,36 @@ export default function ReportsPage() {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
-    const userIds = filteredPerformanceUsers
-      .map((u: any) => u.userId || u.id)
-      .filter(Boolean);
+    let rowsToPrint: any[] = [];
+    try {
+      const full = await leadAPI.getUserAnalytics({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+        includeAssignmentDetails: false,
+        perfSearch: performanceSearch.trim() || undefined,
+        perfDepartment: performanceDepartment || undefined,
+        perfGroup: performanceGroup || undefined,
+      });
+      rowsToPrint = Array.isArray(full?.users) ? full.users : [];
+    } catch (e) {
+      console.error(e);
+      setPerformancePrintOverlay(null);
+      isPrintingPerformanceRef.current = false;
+      showToast.error('Could not load users for printing.');
+      return;
+    }
+
+    if (!rowsToPrint.length) {
+      setPerformancePrintOverlay(null);
+      isPrintingPerformanceRef.current = false;
+      showToast.error('No users to print.');
+      return;
+    }
+
+    setPerformancePrintOverlay('Preparing detailed report for print…');
+
+    const userIds = rowsToPrint.map((u: any) => u.userId || u.id).filter(Boolean);
     if (!userIds.length) {
       setPerformancePrintOverlay(null);
       isPrintingPerformanceRef.current = false;
@@ -717,7 +811,7 @@ export default function ReportsPage() {
     });
 
     const generatedAt = new Date().toLocaleString();
-    const sections = filteredPerformanceUsers.map((user: any) => {
+    const sections = rowsToPrint.map((user: any) => {
       const uid = user.userId || user.id;
       const detailUser = detailsMap[uid];
       const fullUser = users.find((x: any) => x._id === uid || x.id === uid);
@@ -1432,7 +1526,13 @@ export default function ReportsPage() {
               setExportPreviewEndDate(filters.endDate);
               setCallReportExportPreviewOpen(true);
             }}
-            disabled={!(userAnalytics?.users?.length || callReports?.reports?.length)}
+            disabled={
+              !(
+                userAnalyticsForUsersTab?.users?.length ||
+                performanceTableUsers.length ||
+                callReports?.reports?.length
+              )
+            }
             className="ml-2"
           >
             {callSubTab === 'daily' ? 'Export Daily Call Report (Excel)' : 'Export User Performance Summary (Excel)'}
@@ -1597,7 +1697,7 @@ export default function ReportsPage() {
       {/* User Analytics Tab */}
       {activeTab === 'users' && (
         <div className="space-y-6">
-          {isLoadingUserAnalytics ? (
+          {isLoadingUserAnalyticsTab ? (
             <ReportDashboardSkeleton />
           ) : (
             <div className="space-y-4">
@@ -1614,7 +1714,7 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
-                    {userAnalytics?.users?.map((user: any, rowIdx: number) => (
+                    {userAnalyticsForUsersTab?.users?.map((user: any, rowIdx: number) => (
                       <tr key={user.userId} className={`${rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30'} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
                           <div className="flex flex-col">
@@ -1746,23 +1846,47 @@ export default function ReportsPage() {
                     ))}
                   </div>
                 )
-              ) : isLoadingUserAnalytics ? (
+              ) : isLoadingPerformanceUserList ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <Skeleton key={`calls-stats-skeleton-${i}`} className="h-20 rounded-xl" />
                   ))}
                 </div>
-              ) : userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 ? (
+              ) : performanceTableUsers.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   {[
-                    { label: 'Total Users', value: userAnalytics.users.length, style: CALL_REPORT_CARD_STYLES[0] },
+                    {
+                      label: 'Total Users',
+                      value:
+                        performanceSummaryTotals?.userCount ??
+                        performanceUserAnalyticsData?.pagination?.total ??
+                        performanceTableUsers.length,
+                      style: CALL_REPORT_CARD_STYLES[0],
+                    },
                     {
                       label: 'Total Assigned Leads',
-                      value: userAnalytics.users.reduce((sum: number, u: any) => sum + getPerformanceTotalLeadsDisplay(u), 0),
+                      value:
+                        performanceSummaryTotals != null
+                          ? performanceSummaryTotals.totalAssignedLeads
+                          : performanceTableUsers.reduce((sum: number, u: any) => sum + getPerformanceTotalLeadsDisplay(u), 0),
                       style: CALL_REPORT_CARD_STYLES[1],
                     },
-                    { label: 'Total Calls/Visits Done', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[2] },
-                    { label: 'Total SMS', value: userAnalytics.users.reduce((sum: number, u: any) => sum + (u.sms?.total ?? 0), 0), style: CALL_REPORT_CARD_STYLES[3] },
+                    {
+                      label: 'Total Calls/Visits Done',
+                      value:
+                        performanceSummaryTotals != null
+                          ? performanceSummaryTotals.totalCallsDone
+                          : performanceTableUsers.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0),
+                      style: CALL_REPORT_CARD_STYLES[2],
+                    },
+                    {
+                      label: 'Total SMS',
+                      value:
+                        performanceSummaryTotals != null
+                          ? performanceSummaryTotals.totalSms
+                          : performanceTableUsers.reduce((sum: number, u: any) => sum + (u.sms?.total ?? 0), 0),
+                      style: CALL_REPORT_CARD_STYLES[3],
+                    },
                   ].map((item, i) => (
                     <div key={i} className={`overflow-hidden rounded-xl border-0 ${item.style} p-4 shadow-lg`}>
                       <p className="text-sm font-semibold uppercase tracking-wider text-white/90">{item.label}</p>
@@ -1771,7 +1895,7 @@ export default function ReportsPage() {
                   ))}
                 </div>
               ) : null}
-              {callSubTab === 'performance' && !isLoadingUserAnalytics && userAnalyticsError && (
+              {callSubTab === 'performance' && !isLoadingPerformanceUserList && performanceUserListError && (
                 <Card className="p-3">
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     User performance stats are still loading. Please refresh if this persists.
@@ -2189,14 +2313,14 @@ export default function ReportsPage() {
 
               {/* User Performance Summary Sub-Tab */}
               {callSubTab === 'performance' && (
-                (isLoadingUserAnalytics || isFetchingUserAnalytics) ? (
+                isLoadingPerformanceUserList || isFetchingPerformanceUserList ? (
                   <Card className="p-10">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
                       <p className="text-sm text-slate-500 dark:text-slate-400">Loading user performance summary...</p>
                     </div>
                   </Card>
-                ) : filteredPerformanceUsers.length > 0 ? (
+                ) : performanceTableUsers.length > 0 ? (
                   <div className="space-y-4">
                     {performanceAnalyticsError && (
                       <Card className="p-3">
@@ -2242,7 +2366,7 @@ export default function ReportsPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
-                          {filteredPerformanceUsers.map((user: any, rowIdx: number) => {
+                          {performanceTableUsers.map((user: any, rowIdx: number) => {
                             const fu = users.find((fu: any) => fu._id === user.userId || fu.name === (user.name || user.userName));
                             const baseRowBg = rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30';
                             const userLabel = user.name || user.userName;
@@ -2674,6 +2798,58 @@ export default function ReportsPage() {
                         </tbody>
                       </table>
                     </div>
+                    {performanceUserAnalyticsData?.pagination &&
+                      performanceUserAnalyticsData.pagination.total > 0 && (
+                        <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs text-slate-600 dark:text-slate-400">
+                            Page {performanceUserAnalyticsData.pagination.page} of{' '}
+                            {performanceUserAnalyticsData.pagination.pages} —{' '}
+                            {performanceUserAnalyticsData.pagination.total} user
+                            {performanceUserAnalyticsData.pagination.total === 1 ? '' : 's'} (showing{' '}
+                            {performanceTableUsers.length} on this page)
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                              Rows per page
+                              <select
+                                value={performanceLimit}
+                                onChange={(e) => {
+                                  setPerformanceLimit(Number(e.target.value));
+                                  setPerformancePage(1);
+                                }}
+                                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                              >
+                                {[10, 25, 50, 100].map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              type="button"
+                              disabled={performanceUserAnalyticsData.pagination.page <= 1}
+                              onClick={() => setPerformancePage((p) => Math.max(1, p - 1))}
+                            >
+                              Previous
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              type="button"
+                              disabled={
+                                performanceUserAnalyticsData.pagination.page >=
+                                performanceUserAnalyticsData.pagination.pages
+                              }
+                              onClick={() => setPerformancePage((p) => p + 1)}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                       <Card className="p-4"><p className="text-xs text-slate-500">Users Covered</p><p className="text-xl font-bold">{performanceSummary.usersCovered}</p></Card>
                       <Card className="p-4"><p className="text-xs text-slate-500">Total Leads</p><p className="text-xl font-bold">{performanceSummary.totalAssigned}</p></Card>
@@ -3075,25 +3251,39 @@ export default function ReportsPage() {
                 Full call activity (day-wise calls, SMS, status changes) per user below.
               </span>
             </div>
-            {isLoadingUserAnalytics ? (
+            {isLoadingUserAnalyticsTab ? (
               <Skeleton className="h-64" />
-            ) : userAnalytics?.users && Array.isArray(userAnalytics.users) && userAnalytics.users.length > 0 ? (
+            ) : userAnalyticsForUsersTab?.users &&
+              Array.isArray(userAnalyticsForUsersTab.users) &&
+              userAnalyticsForUsersTab.users.length > 0 ? (
               <>
                 {/* Export */}
                 <div className="flex justify-end gap-2 mb-4">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleExport('excel', userAnalytics.users || [], `user-analytics-${filters.startDate}-${filters.endDate}`)}
-                    disabled={!userAnalytics?.users?.length}
+                    onClick={() =>
+                      handleExport(
+                        'excel',
+                        userAnalyticsForUsersTab.users || [],
+                        `user-analytics-${filters.startDate}-${filters.endDate}`
+                      )
+                    }
+                    disabled={!userAnalyticsForUsersTab?.users?.length}
                   >
                     Export Excel
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleExport('csv', userAnalytics.users || [], `user-analytics-${filters.startDate}-${filters.endDate}`)}
-                    disabled={!userAnalytics?.users?.length}
+                    onClick={() =>
+                      handleExport(
+                        'csv',
+                        userAnalyticsForUsersTab.users || [],
+                        `user-analytics-${filters.startDate}-${filters.endDate}`
+                      )
+                    }
+                    disabled={!userAnalyticsForUsersTab?.users?.length}
                   >
                     Export CSV
                   </Button>
@@ -3101,7 +3291,7 @@ export default function ReportsPage() {
 
                 {/* Per-user call activity (same structure as user/call-activity page) */}
                 <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200 mt-2 mb-2">Call activity by user</h3>
-                {userAnalytics.users.map((user: any) => (
+                {userAnalyticsForUsersTab.users.map((user: any) => (
                   <Card key={user.userId} className="p-6">
                     <div className="mb-4 flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{user.name || user.userName}</h3>

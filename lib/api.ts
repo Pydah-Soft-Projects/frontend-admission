@@ -606,6 +606,13 @@ export const leadAPI = {
     department?: string;
     group?: string;
     includeAssignmentDetails?: boolean;
+    /** Server-side pagination for heavy user list (e.g. Call Reports → User Performance). */
+    page?: number;
+    limit?: number;
+    /** Matches reports performance filters (name/email contains). */
+    perfSearch?: string;
+    perfDepartment?: string;
+    perfGroup?: string;
   }) => {
     const queryParams = new URLSearchParams();
     if (params?.startDate) queryParams.append('startDate', params.startDate);
@@ -616,6 +623,11 @@ export const leadAPI = {
     if (params?.department) queryParams.append('department', params.department);
     if (params?.group) queryParams.append('group', params.group);
     if (params?.includeAssignmentDetails) queryParams.append('includeAssignmentDetails', 'true');
+    if (params?.page != null) queryParams.append('page', String(params.page));
+    if (params?.limit != null) queryParams.append('limit', String(params.limit));
+    if (params?.perfSearch != null && params.perfSearch !== '') queryParams.append('perfSearch', params.perfSearch);
+    if (params?.perfDepartment != null && params.perfDepartment !== '') queryParams.append('perfDepartment', params.perfDepartment);
+    if (params?.perfGroup != null && params.perfGroup !== '') queryParams.append('perfGroup', params.perfGroup);
     const query = queryParams.toString();
     const response = await api.get(`/leads/analytics/users${query ? `?${query}` : ''}`);
     // Backend returns { success: true, data: { users: [...] }, message: "..." }
