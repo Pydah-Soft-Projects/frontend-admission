@@ -921,7 +921,7 @@ export default function ReportsPage() {
                 <th>Mandal Assigned</th>
                 <th>Total Allotted</th>
                 ${headerStatusCounsellor}
-                <th>Reclaimed</th>
+                <th>Not attended</th>
               </tr>
             </thead>
             <tbody>${rowHtmlCounsellor}</tbody>
@@ -979,7 +979,7 @@ export default function ReportsPage() {
                 <th>Mandal Assigned</th>
                 <th>Total Allotted</th>
                 ${theadStatusRow}
-                <th>Reclaimed</th>
+                <th>Not attended</th>
               </tr>
             </thead>
             <tbody>${rowHtml}</tbody>
@@ -2403,7 +2403,12 @@ export default function ReportsPage() {
                             >
                               Balance
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Interested Leads</th>
+                            <th
+                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
+                              title="Student Counselor: Interested + CET Applied (distinct leads on period-allotted cohort, current call_status — matches expanded footer for those two columns). Other roles: Interested + CET Applied from pipeline status-change counts in the period."
+                            >
+                              Interested Leads
+                            </th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Confirmed</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Admitted</th>
                           </tr>
@@ -2483,7 +2488,7 @@ export default function ReportsPage() {
                                       </span>
                                       {reclaimedTotal > 0 && (
                                         <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                                          Reclaimed: {reclaimedTotal}
+                                          Not attended: {reclaimedTotal}
                                         </span>
                                       )}
                                     </div>
@@ -2603,7 +2608,7 @@ export default function ReportsPage() {
                                                             Balance
                                                           </th>
                                                           <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                            Reclaimed
+                                                            Not attended
                                                           </th>
                                                         </tr>
                                                       </thead>
@@ -2771,7 +2776,7 @@ export default function ReportsPage() {
                                                     <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Confirmed</th>
                                                   </>
                                                 )}
-                                                <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Reclaimed</th>
+                                                <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Not attended</th>
                                               </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
