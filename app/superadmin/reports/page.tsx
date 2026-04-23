@@ -141,6 +141,8 @@ export default function ReportsPage() {
   const [expandedDailyUsers, setExpandedDailyUsers] = useState<Set<string>>(new Set());
   const [expandedPerformanceUsers, setExpandedPerformanceUsers] = useState<Set<string>>(new Set());
   const [performanceSearch, setPerformanceSearch] = useState('');
+  /** Default to Student Counselor so the heavy summary loads a smaller cohort first. */
+  const [performanceRole, setPerformanceRole] = useState('Student Counselor');
   const [performanceDepartment, setPerformanceDepartment] = useState('');
   const [performanceGroup, setPerformanceGroup] = useState('');
   const [dailyDepartment, setDailyDepartment] = useState('');
@@ -247,7 +249,14 @@ export default function ReportsPage() {
           .filter((g: any) => g && g !== '-')
       )
     ).sort();
-    return { departments, groups };
+    const roles = Array.from(
+      new Set(
+        users
+          .map((u: any) => u?.roleName)
+          .filter((r: any) => r && r !== '-')
+      )
+    ).sort();
+    return { departments, groups, roles };
   }, [users]);
 
   const activityLogUsers = useMemo(
@@ -397,7 +406,7 @@ export default function ReportsPage() {
       }),
     enabled: activeTab === 'users',
     retry: 2,
-    staleTime: 180_000,
+    staleTime: 600_000,
     placeholderData: keepPreviousData,
   });
 
@@ -416,6 +425,7 @@ export default function ReportsPage() {
       performancePage,
       performanceLimit,
       performanceSearch,
+      performanceRole,
       performanceDepartment,
       performanceGroup,
     ],
@@ -428,12 +438,14 @@ export default function ReportsPage() {
         page: performancePage,
         limit: performanceLimit,
         perfSearch: performanceSearch.trim() || undefined,
+        perfRole: performanceRole || undefined,
         perfDepartment: performanceDepartment || undefined,
         perfGroup: performanceGroup || undefined,
       }),
     enabled: activeTab === 'calls' && callSubTab === 'performance',
     retry: 2,
-    staleTime: 180_000,
+    /** Align with server USER_ANALYTICS_CACHE_MS (default 10m). */
+    staleTime: 600_000,
     placeholderData: keepPreviousData,
   });
 
@@ -449,6 +461,7 @@ export default function ReportsPage() {
     filters.endDate,
     filters.academicYear,
     performanceSearch,
+    performanceRole,
     performanceDepartment,
     performanceGroup,
     performanceLimit,
@@ -470,9 +483,10 @@ export default function ReportsPage() {
         filters.academicYear,
         1,
         performanceLimit,
-        '',
-        '',
-        '',
+        performanceSearch,
+        performanceRole,
+        performanceDepartment,
+        performanceGroup,
       ],
       queryFn: () =>
         leadAPI.getUserAnalytics({
@@ -482,10 +496,25 @@ export default function ReportsPage() {
           includeAssignmentDetails: false,
           page: 1,
           limit: performanceLimit,
+          perfSearch: performanceSearch.trim() || undefined,
+          perfRole: performanceRole || undefined,
+          perfDepartment: performanceDepartment || undefined,
+          perfGroup: performanceGroup || undefined,
         }),
-      staleTime: 180_000,
+      staleTime: 600_000,
     });
-  }, [queryClient, activeTab, filters.startDate, filters.endDate, filters.academicYear, performanceLimit]);
+  }, [
+    queryClient,
+    activeTab,
+    filters.startDate,
+    filters.endDate,
+    filters.academicYear,
+    performanceLimit,
+    performanceSearch,
+    performanceRole,
+    performanceDepartment,
+    performanceGroup,
+  ]);
 
   /** Start prefetch as soon as Call Reports is open (even on Daily) so first switch to Performance is faster. */
   useEffect(() => {
@@ -754,6 +783,7 @@ export default function ReportsPage() {
         academicYear: filters.academicYear != null ? filters.academicYear : undefined,
         includeAssignmentDetails: false,
         perfSearch: performanceSearch.trim() || undefined,
+        perfRole: performanceRole || undefined,
         perfDepartment: performanceDepartment || undefined,
         perfGroup: performanceGroup || undefined,
       });
@@ -2085,6 +2115,19 @@ export default function ReportsPage() {
                           className="h-8 w-40 rounded-md border border-slate-300 bg-white pl-7 pr-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                         />
                       </div>
+                      <select
+                        value={performanceRole}
+                        onChange={(e) => setPerformanceRole(e.target.value)}
+                        className="h-8 min-w-[9.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        aria-label="Filter by role"
+                      >
+                        <option value="">All roles</option>
+                        {performanceFilterOptions.roles.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
                       <select
                         value={performanceDepartment}
                         onChange={(e) => setPerformanceDepartment(e.target.value)}
