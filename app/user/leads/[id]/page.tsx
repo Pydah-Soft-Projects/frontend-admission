@@ -548,12 +548,18 @@ export default function UserLeadDetailPage() {
       const assignedUserName = assignmentLog.metadata?.assignment?.assignedTo
         ? 'Counsellor'
         : 'Unknown';
+      const metaTd = assignmentLog.metadata?.assignment?.targetDate;
+      const fromLead = lead?.targetDate ?? (lead as { target_date?: string })?.target_date;
+      const assignmentTargetYmd =
+        (typeof metaTd === 'string' && /^\d{4}-\d{2}-\d{2}/.test(metaTd.trim()) ? metaTd.trim().slice(0, 10) : '') ||
+        (typeof fromLead === 'string' && /^\d{4}-\d{2}-\d{2}/.test(fromLead.trim()) ? fromLead.trim().slice(0, 10) : '');
+      const targetDateClause = assignmentTargetYmd ? ` · Target date: ${assignmentTargetYmd}` : '';
       items.push({
         id: `assigned-${assignmentLog._id}`,
         type: 'assigned',
         date: assignmentLog.createdAt,
         title: 'Assigned to Counsellor',
-        description: assignmentLog.comment || `Assigned to counsellor`,
+        description: `${assignmentLog.comment || `Assigned to counsellor`}${targetDateClause}`,
         performedBy: (assignmentLog.performedBy && typeof assignmentLog.performedBy === 'object') ? assignmentLog.performedBy.name : undefined,
         metadata: assignmentLog.metadata,
       });
@@ -561,12 +567,18 @@ export default function UserLeadDetailPage() {
       const assignedUserName = typeof lead.assignedTo === 'object'
         ? lead.assignedTo.name
         : 'Unknown';
+      const fromLeadOnly = lead?.targetDate ?? (lead as { target_date?: string })?.target_date;
+      const ymd =
+        typeof fromLeadOnly === 'string' && /^\d{4}-\d{2}-\d{2}/.test(fromLeadOnly.trim())
+          ? fromLeadOnly.trim().slice(0, 10)
+          : '';
+      const targetDateClause = ymd ? ` · Target date: ${ymd}` : '';
       items.push({
         id: `assigned-${lead._id}`,
         type: 'assigned',
         date: lead.assignedAt,
         title: 'Assigned to Counsellor',
-        description: `Assigned to ${assignedUserName}`,
+        description: `Assigned to ${assignedUserName}${targetDateClause}`,
         performedBy: (lead.assignedBy && typeof lead.assignedBy === 'object') ? lead.assignedBy.name : undefined,
       });
     }
