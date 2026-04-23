@@ -1359,22 +1359,25 @@ export default function UserLeadDetailPage() {
               </button>
             )}
 
-            {user.roleName !== 'Student Counselor' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setNewStatus(getCurrentChannelStatus(lead));
-                  setStatusComment('');
-                  setShowStatusModal(true);
-                }}
-                className="flex items-center justify-center size-10 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white shadow-sm"
-                aria-label={`Update ${statusButtonLabel}`}
-              >
-                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                const cur = getCurrentChannelStatus(lead);
+                const normalized =
+                  user.roleName === 'Student Counselor' && cur && cur.toLowerCase() === 'not answered'
+                    ? 'Call Back'
+                    : cur;
+                setNewStatus(normalized);
+                setStatusComment('');
+                setShowStatusModal(true);
+              }}
+              className="flex items-center justify-center size-10 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white shadow-sm"
+              aria-label={`Update ${statusButtonLabel}`}
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
 
             <button
               type="button"
@@ -1398,8 +1401,8 @@ export default function UserLeadDetailPage() {
               </svg>
             </button>
 
-            {/* Visitor Code Button - Only for Student Counsellor */}
-            {user.roleName === 'Student Counselor' && (
+            {/* Visitor code: Student Counselor + PRO (same API as desk verification) */}
+            {(user.roleName === 'Student Counselor' || user.roleName === 'PRO') && (
               <button
                 type="button"
                 onClick={() => visitorCodeMutation.mutate(leadId)}
@@ -1625,18 +1628,25 @@ export default function UserLeadDetailPage() {
                   SMS
                 </button>
               )}
-              {user.roleName !== 'Student Counselor' && (
-                <button
-                  type="button"
-                  onClick={() => { setNewStatus(getCurrentChannelStatus(lead)); setStatusComment(''); setShowStatusModal(true); }}
-                  className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-orange-900/20 dark:border-orange-800 dark:hover:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs sm:text-sm font-medium"
-                >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  {statusButtonLabel}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const cur = getCurrentChannelStatus(lead);
+                  const normalized =
+                    user.roleName === 'Student Counselor' && cur && cur.toLowerCase() === 'not answered'
+                      ? 'Call Back'
+                      : cur;
+                  setNewStatus(normalized);
+                  setStatusComment('');
+                  setShowStatusModal(true);
+                }}
+                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-orange-900/20 dark:border-orange-800 dark:hover:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs sm:text-sm font-medium"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {statusButtonLabel}
+              </button>
               <button
                 type="button"
                 onClick={() => setShowEditModal(true)}
@@ -1658,8 +1668,8 @@ export default function UserLeadDetailPage() {
                 Next Lead
               </button>
 
-              {/* Visitor Code Button - Desktop */}
-              {user.roleName === 'Student Counselor' && (
+              {/* Visitor code - Desktop: Student Counselor + PRO */}
+              {(user.roleName === 'Student Counselor' || user.roleName === 'PRO') && (
                 <button
                   type="button"
                   onClick={() => visitorCodeMutation.mutate(leadId)}
@@ -2215,7 +2225,7 @@ export default function UserLeadDetailPage() {
           </div>
         )}
 
-        {showStatusModal && user.roleName !== 'Student Counselor' && (
+        {showStatusModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
             <Card className="max-w-md w-full">
               <h2 className="text-xl font-semibold mb-4">Update {channelFieldLabel}</h2>
@@ -2228,7 +2238,11 @@ export default function UserLeadDetailPage() {
                   )}
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Current {channelFieldLabel}:{' '}
-                    <span className="font-semibold">{getCurrentChannelStatus(lead) || '—'}</span>
+                    <span className="font-semibold">
+                      {user.roleName === 'Student Counselor' || user.roleName === 'PRO'
+                        ? displayPrimaryStatusText(lead)
+                        : getCurrentChannelStatus(lead) || '—'}
+                    </span>
                   </label>
                   <label className="block text-sm font-medium text-gray-700 mb-1 mt-3">
                     New {channelFieldLabel}
