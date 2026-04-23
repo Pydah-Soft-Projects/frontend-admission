@@ -994,7 +994,7 @@ export default function ReportsPage() {
                 <th>Mandal Assigned</th>
                 <th>Total Allotted</th>
                 ${headerStatusCounsellor}
-                <th>Not attended</th>
+                <th>Reclaimed (batch)</th>
               </tr>
             </thead>
             <tbody>${rowHtmlCounsellor}</tbody>
@@ -1087,7 +1087,7 @@ export default function ReportsPage() {
                 <th>Mandal Assigned</th>
                 <th>Total Allotted</th>
                 ${theadStatusRow}
-                <th>Not attended</th>
+                <th>Reclaimed (batch)</th>
               </tr>
             </thead>
             <tbody>${rowHtml}</tbody>
@@ -2597,7 +2597,7 @@ export default function ReportsPage() {
                                       </span>
                                       {reclaimedTotal > 0 && (
                                         <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                                          Not attended: {reclaimedTotal}
+                                          Date rows with reclaim: {reclaimedTotal}
                                         </span>
                                       )}
                                     </div>
@@ -2673,9 +2673,11 @@ export default function ReportsPage() {
                                                       </span>
                                                       .{' '}
                                                       <span className="font-semibold text-slate-800 dark:text-slate-200">Assignment Balance</span> (below) remains{' '}
-                                                      <strong className="text-slate-700 dark:text-slate-300">call_status Assigned</strong> per bucket. The footer
+                                                      <strong className="text-slate-700 dark:text-slate-300">call_status Assigned</strong> per bucket.                                                       The footer
                                                       “Leads allotted (period)” <strong className="text-slate-700 dark:text-slate-300">Balance</strong> cell matches
-                                                      the main row (bucket-sum allotted − Calls/Visits Done).
+                                                      the main row (bucket-sum allotted − Calls/Visits Done).{' '}
+                                                      <strong className="text-slate-800 dark:text-slate-200">Reclaimed</strong> counts leads in that allotment row
+                                                      that were later reclaimed from this user (reclaim may occur after the selected date range).
                                                     </p>
                                                   </div>
                                                   {!pc ? (
@@ -2718,8 +2720,11 @@ export default function ReportsPage() {
                                                           >
                                                             Balance
                                                           </th>
-                                                          <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                            Not attended
+                                                          <th
+                                                            className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
+                                                            title="Distinct leads in this allotment row that were later reclaimed from this user; reclaim date may be outside the report period."
+                                                          >
+                                                            Reclaimed
                                                           </th>
                                                         </tr>
                                                       </thead>
@@ -2918,7 +2923,12 @@ export default function ReportsPage() {
                                                     <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Confirmed</th>
                                                   </>
                                                 )}
-                                                <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Not attended</th>
+                                                <th
+                                                  className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
+                                                  title="Distinct leads in this allotment row that were later reclaimed from this user; reclaim date may be outside the report period."
+                                                >
+                                                  Reclaimed
+                                                </th>
                                               </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">

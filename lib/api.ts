@@ -488,6 +488,8 @@ export const leadAPI = {
     includeBreakdowns?: boolean;
     /** Return only summary counts; skip grouped breakdown queries. */
     summaryOnly?: boolean;
+    /** With `forBreakdown`: run only school/college grouped query (no summary COUNT on leads). */
+    institutionBreakdownOnly?: boolean;
   }) => {
     const queryParams = new URLSearchParams();
     if (params?.mandal) queryParams.append('mandal', params.mandal);
@@ -502,6 +504,7 @@ export const leadAPI = {
     if (params?.geoBreakdown) queryParams.append('geoBreakdown', params.geoBreakdown);
     if (params?.includeBreakdowns === false) queryParams.append('includeBreakdowns', 'false');
     if (params?.summaryOnly === true) queryParams.append('summaryOnly', 'true');
+    if (params?.institutionBreakdownOnly === true) queryParams.append('institutionBreakdownOnly', 'true');
     const query = queryParams.toString();
     const response = await api.get(`/leads/assign/stats${query ? `?${query}` : ''}`);
     return response.data;

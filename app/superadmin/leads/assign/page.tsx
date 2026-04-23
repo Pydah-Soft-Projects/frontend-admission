@@ -25,7 +25,7 @@ interface AssignmentStats {
   unassignedCount: number;
   mandalBreakdown: Array<{ mandal: string; count: number }>;
   stateBreakdown: Array<{ state: string; count: number }>;
-  institutionBreakdown?: Array<{ id: string; name: string; count: number }>;
+  institutionBreakdown?: Array<{ id: string; name: string; count: number; assignedCount?: number }>;
   /** Present when requesting geoBreakdown=district (scoped by state + form filters). */
   districtAssignmentBreakdown?: Array<{ district: string; unassignedCount: number; assignedCount: number }>;
   /** Present when requesting geoBreakdown=mandal (scoped by state + district + form filters). */
@@ -444,8 +444,8 @@ export default function AssignLeadsPage() {
       isReady &&
       !!currentUser &&
       mode !== 'remove' &&
-      !(mode === 'bulk' && academicYear === '') &&
-      !(mode === 'institution' && institutionAcademicYear === ''),
+      mode !== 'institution' &&
+      !(mode === 'bulk' && academicYear === ''),
     staleTime: 20_000,
     refetchOnWindowFocus: false,
   });
@@ -614,50 +614,123 @@ export default function AssignLeadsPage() {
   const institutionUseSchools = institutionStudentGroup === '10th';
   const institutionForBreakdown = institutionUseSchools ? 'school' : 'college';
 
-  // Fetch institution breakdown (school or college wise unassigned counts) when in institution mode
-  const { data: institutionStatsData, refetch: refetchInstitutionStats, isFetching: isInstitutionStatsFetching } =
-    useQuery<{ data: AssignmentStats }>({
-      queryKey: [
-        'assignmentStatsInstitution',
-        institutionAcademicYear,
-        institutionStudentGroup,
-        institutionForBreakdown,
-        institutionCycleNumber,
-        targetRole,
-      ],
-      queryFn: async () => {
-        const response = await leadAPI.getAssignmentStats({
-          academicYear: institutionAcademicYear !== '' ? institutionAcademicYear : undefined,
-          studentGroup: institutionStudentGroup || undefined,
-          forBreakdown: institutionForBreakdown,
-          targetRole: targetRole || undefined,
-          includeBreakdowns: false,
-          cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
-        });
-        const payload = response?.data ?? response ?? {};
-        return { data: payload };
-      },
-      enabled:
-        isReady &&
-        !!currentUser &&
-        mode === 'institution' &&
-        !!institutionStudentGroup &&
-        institutionAcademicYear !== '',
-      staleTime: 20_000,
-      refetchOnWindowFocus: false,
-    });
-  const institutionStats = institutionStatsData?.data;
+  /** Institution tab: fast summary for top cards (no school/college GROUP BY). */
+  const {
+    data: institutionSummaryData,
+    refetch: refetchInstitutionSummary,
+    isFetching: isInstitutionSummaryFetching,
+    isLoading: isInstitutionSummaryLoading,
+  } = useQuery<{ data: AssignmentStats }>({
+    queryKey: [
+      'assignmentStatsInstitutionSummary',
+      institutionAcademicYear,
+      institutionStudentGroup,
+      institutionCycleNumber,
+      targetRole,
+    ],
+    queryFn: async () => {
+      const response = await leadAPI.getAssignmentStats({
+        academicYear: institutionAcademicYear !== '' ? institutionAcademicYear : undefined,
+        studentGroup: institutionStudentGroup || undefined,
+        targetRole: targetRole || undefined,
+        includeBreakdowns: false,
+        summaryOnly: true,
+        cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
+      });
+      const payload = response?.data ?? response ?? {};
+      return { data: payload };
+    },
+    enabled:
+      isReady &&
+      !!currentUser &&
+      mode === 'institution' &&
+      !!institutionStudentGroup &&
+      institutionAcademicYear !== '',
+    staleTime: 20_000,
+    refetchOnWindowFocus: false,
+  });
+
+  /** Institution tab: heavy school/college list only (backend skips duplicate summary scan). */
+  const {
+    data: institutionBreakdownData,
+    refetch: refetchInstitutionBreakdown,
+    isFetching: isInstitutionBreakdownFetching,
+    isLoading: isInstitutionBreakdownLoading,
+  } = useQuery<{ data: AssignmentStats }>({
+    queryKey: [
+      'assignmentStatsInstitutionBreakdown',
+      institutionAcademicYear,
+      institutionStudentGroup,
+      institutionForBreakdown,
+      institutionCycleNumber,
+      targetRole,
+    ],
+    queryFn: async () => {
+      const response = await leadAPI.getAssignmentStats({
+        academicYear: institutionAcademicYear !== '' ? institutionAcademicYear : undefined,
+        studentGroup: institutionStudentGroup || undefined,
+        forBreakdown: institutionForBreakdown,
+        institutionBreakdownOnly: true,
+        targetRole: targetRole || undefined,
+        includeBreakdowns: false,
+        cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
+      });
+      const payload = response?.data ?? response ?? {};
+      return { data: payload };
+    },
+    enabled:
+      isReady &&
+      !!currentUser &&
+      mode === 'institution' &&
+      !!institutionStudentGroup &&
+      institutionAcademicYear !== '',
+    staleTime: 20_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const institutionStats = useMemo(() => {
+    const summary = institutionSummaryData?.data;
+    const br = institutionBreakdownData?.data;
+    if (!summary && !br) return undefined;
+    return {
+      totalLeads: summary?.totalLeads ?? 0,
+      assignedCount: summary?.assignedCount ?? 0,
+      unassignedCount: summary?.unassignedCount ?? 0,
+      mandalBreakdown: summary?.mandalBreakdown ?? [],
+      stateBreakdown: summary?.stateBreakdown ?? [],
+      institutionBreakdown: br?.institutionBreakdown ?? [],
+    } as AssignmentStats;
+  }, [institutionSummaryData?.data, institutionBreakdownData?.data]);
+
+  const refetchInstitutionStats = () => {
+    void refetchInstitutionSummary();
+    void refetchInstitutionBreakdown();
+  };
+
+  /** Header cards: institution tab resolves when summary query finishes (dropdown may still load). */
+  const dashboardStats = mode === 'institution' ? institutionStats : mergedStats;
+  const dashboardStatsLoading =
+    mode === 'institution'
+      ? !institutionStudentGroup || institutionAcademicYear === ''
+        ? true
+        : isInstitutionSummaryLoading || isInstitutionSummaryFetching
+      : isStatsLoading || isStatsFetching;
 
   const institutionDropdownOptions = useMemo(() => {
     const rows = institutionStats?.institutionBreakdown || [];
     return [...rows].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   }, [institutionStats?.institutionBreakdown]);
 
-  const institutionUnassignedByNameNorm = useMemo(() => {
-    const m = new Map<string, number>();
+  const institutionCountsByNameNorm = useMemo(() => {
+    const m = new Map<string, { u: number; a: number }>();
     for (const row of institutionStats?.institutionBreakdown || []) {
       const k = String(row.name || '').trim().toLowerCase();
-      if (k) m.set(k, Number(row.count) || 0);
+      if (k) {
+        m.set(k, {
+          u: Number(row.count) || 0,
+          a: Number(row.assignedCount) || 0,
+        });
+      }
     }
     return m;
   }, [institutionStats?.institutionBreakdown]);
@@ -665,8 +738,14 @@ export default function AssignLeadsPage() {
   const selectedInstitutionUnassigned = useMemo(() => {
     const k = String(institutionName || '').trim().toLowerCase();
     if (!k) return 0;
-    return institutionUnassignedByNameNorm.get(k) ?? 0;
-  }, [institutionName, institutionUnassignedByNameNorm]);
+    return institutionCountsByNameNorm.get(k)?.u ?? 0;
+  }, [institutionName, institutionCountsByNameNorm]);
+
+  const selectedInstitutionAssigned = useMemo(() => {
+    const k = String(institutionName || '').trim().toLowerCase();
+    if (!k) return 0;
+    return institutionCountsByNameNorm.get(k)?.a ?? 0;
+  }, [institutionName, institutionCountsByNameNorm]);
 
   // Assigned count for selected user (remove tab only — drives top cards there)
   const {
@@ -759,7 +838,8 @@ export default function AssignLeadsPage() {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['assignmentStats'] });
       queryClient.invalidateQueries({ queryKey: ['assignmentStatsGeo'] });
-      queryClient.invalidateQueries({ queryKey: ['assignmentStatsInstitution'] });
+      queryClient.invalidateQueries({ queryKey: ['assignmentStatsInstitutionSummary'] });
+      queryClient.invalidateQueries({ queryKey: ['assignmentStatsInstitutionBreakdown'] });
       queryClient.invalidateQueries({ queryKey: ['assignmentStatsBreakdowns'] });
       refetchStats();
       refetchInstitutionStats();
@@ -1147,7 +1227,7 @@ export default function AssignLeadsPage() {
             </Card>
           </div>
         )
-      ) : (isStatsLoading || isStatsFetching) ? (
+      ) : dashboardStatsLoading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="p-4 space-y-2">
@@ -1156,19 +1236,19 @@ export default function AssignLeadsPage() {
             </Card>
           ))}
         </div>
-      ) : mergedStats ? (
+      ) : dashboardStats ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Card className="p-3 bg-[#3b82f6] text-[#ffffff] border-none shadow-md dark:bg-[#2563eb]">
             <div className="text-sm font-medium text-[#f1f5f9]">Total Leads</div>
-            <div className="mt-1 text-xl font-bold text-[#ffffff]">{mergedStats.totalLeads.toLocaleString()}</div>
+            <div className="mt-1 text-xl font-bold text-[#ffffff]">{dashboardStats.totalLeads.toLocaleString()}</div>
           </Card>
           <Card className="p-3 bg-[#10b981] text-[#ffffff] border-none shadow-md dark:bg-[#059669]">
             <div className="text-sm font-medium text-[#f1f5f9]">{targetRole === 'PRO' ? 'Assigned to PROs' : 'Assigned Leads'}</div>
-            <div className="mt-1 text-xl font-bold text-[#ffffff]">{mergedStats.assignedCount.toLocaleString()}</div>
+            <div className="mt-1 text-xl font-bold text-[#ffffff]">{dashboardStats.assignedCount.toLocaleString()}</div>
           </Card>
           <Card className="p-3 bg-[#f97316] text-[#ffffff] border-none shadow-md dark:bg-[#ea580c]">
             <div className="text-sm font-medium text-[#f1f5f9]">{targetRole === 'PRO' ? 'Available for Assignment' : 'Unassigned Leads'}</div>
-            <div className="mt-1 text-xl font-bold text-[#ffffff]">{mergedStats.unassignedCount.toLocaleString()}</div>
+            <div className="mt-1 text-xl font-bold text-[#ffffff]">{dashboardStats.unassignedCount.toLocaleString()}</div>
           </Card>
         </div>
       ) : null}
@@ -1442,17 +1522,37 @@ export default function AssignLeadsPage() {
           ) : mode === 'institution' ? (
             <form onSubmit={handleInstitutionAssign} className="space-y-6">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                Filter by academic year, student group, and cycle, then pick a <strong>{institutionUseSchools ? 'school' : 'college'}</strong> with{' '}
-                {targetRole === 'PRO' ? 'available' : 'unassigned'} leads in that scope (10th = schools; other groups = colleges). The list comes from the
-                server for those filters, not the full master catalog.
+                First choose assignee, student group, and academic year, then cycle and target date, then pick a <strong>{institutionUseSchools ? 'school' : 'college'}</strong> and how many leads to assign. The institution list comes from the server for those filters.
               </p>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="min-w-0">
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Assign to user *</label>
+                  <select
+                    className="w-full min-w-0 rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={institutionUserId}
+                    onChange={(e) => setInstitutionUserId(e.target.value)}
+                    required
+                  >
+                    <option value="">Choose user…</option>
+                    {Object.entries(usersByRole).map(([role, roleUsers]) => (
+                      roleUsers.length > 0 && (
+                        <optgroup key={role} label={role === 'Sub Super Admin' ? 'Sub Super Admins' : role + 's'}>
+                          {roleUsers.map((user) => (
+                            <option key={user.id || user._id} value={user.id || user._id}>
+                              {user.name} ({user.email})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-0">
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                     Student group *
                   </label>
                   <select
-                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    className="w-full min-w-0 rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
                     value={institutionStudentGroup}
                     onChange={(e) => {
                       setInstitutionStudentGroup(e.target.value);
@@ -1469,10 +1569,10 @@ export default function AssignLeadsPage() {
                     {institutionStudentGroup === '10th' ? 'School list.' : institutionStudentGroup ? 'College list.' : 'Choose a group to load institutions.'}
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Academic year *</label>
                   <select
-                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    className="w-full min-w-0 rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
                     value={institutionAcademicYear === '' ? '' : institutionAcademicYear}
                     onChange={(e) => {
                       setInstitutionAcademicYear(e.target.value === '' ? '' : Number(e.target.value));
@@ -1519,13 +1619,14 @@ export default function AssignLeadsPage() {
                   />
                 </div>
               </div>
+
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
+                <div className="min-w-0">
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                     {institutionUseSchools ? 'School' : 'College'} *
                   </label>
                   <select
-                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    className="w-full min-w-0 rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
                     value={institutionName}
                     onChange={(e) => setInstitutionName(e.target.value)}
                     disabled={!institutionStudentGroup || institutionAcademicYear === ''}
@@ -1534,7 +1635,7 @@ export default function AssignLeadsPage() {
                     <option value="">
                       {!institutionStudentGroup || institutionAcademicYear === ''
                         ? 'Select student group and academic year first…'
-                        : isInstitutionStatsFetching
+                        : isInstitutionBreakdownLoading || isInstitutionBreakdownFetching
                           ? 'Loading institutions…'
                           : institutionDropdownOptions.length === 0
                             ? `No ${institutionUseSchools ? 'schools' : 'colleges'} with matching ${targetRole === 'PRO' ? 'available' : 'unassigned'} leads`
@@ -1542,47 +1643,29 @@ export default function AssignLeadsPage() {
                     </option>
                     {institutionDropdownOptions.map((item) => (
                       <option key={item.id || item.name} value={item.name}>
-                        {item.name} ({Number(item.count) || 0} {targetRole === 'PRO' ? 'available' : 'unassigned'})
+                        {item.name} (U: {(Number(item.count) || 0).toLocaleString()} | A:{' '}
+                        {(Number(item.assignedCount) || 0).toLocaleString()})
                       </option>
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Assign to user *</label>
-                  <select
-                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
-                    value={institutionUserId}
-                    onChange={(e) => setInstitutionUserId(e.target.value)}
+                <div className="min-w-0">
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Number of leads *</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10000}
+                    value={institutionCount}
+                    onChange={(e) => setInstitutionCount(Number(e.target.value))}
                     required
-                  >
-                    <option value="">Choose user…</option>
-                    {Object.entries(usersByRole).map(([role, roleUsers]) => (
-                      roleUsers.length > 0 && (
-                        <optgroup key={role} label={role === 'Sub Super Admin' ? 'Sub Super Admins' : role + 's'}>
-                          {roleUsers.map((user) => (
-                            <option key={user.id || user._id} value={user.id || user._id}>
-                              {user.name} ({user.email})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )
-                    ))}
-                  </select>
+                    className="w-full min-w-0 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    This {institutionUseSchools ? 'school' : 'college'}: U{' '}
+                    {selectedInstitutionUnassigned.toLocaleString()} ({targetRole === 'PRO' ? 'available' : 'unassigned'}) · A{' '}
+                    {selectedInstitutionAssigned.toLocaleString()} (assigned in scope).
+                  </p>
                 </div>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Number of leads *</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10000}
-                  value={institutionCount}
-                  onChange={(e) => setInstitutionCount(Number(e.target.value))}
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  {targetRole === 'PRO' ? 'Available' : 'Unassigned'} for this {institutionUseSchools ? 'school' : 'college'}: {selectedInstitutionUnassigned.toLocaleString()}
-                </p>
               </div>
               <div className="flex items-center gap-3">
                 <Button
