@@ -572,9 +572,10 @@ export default function ReportsPage() {
       }
     | undefined;
 
-  /** Performance “Total Leads”: Student Counselors show sum of date-wise bucket totals (matches expanded rows); others use portfolio total_assigned. */
+  /** Performance “Total Leads”: Student Counselor / PRO show sum of date-wise bucket totals (matches expanded rows); others use portfolio total_assigned. */
   const getPerformanceTotalLeadsDisplay = useCallback((u: any): number => {
-    if (String(u?.roleName || '').trim() === 'Student Counselor') {
+    const role = String(u?.roleName || '').trim();
+    if (role === 'Student Counselor' || role === 'PRO') {
       const b = u?.allottedBucketSumTotal;
       if (b != null && !Number.isNaN(Number(b))) return Number(b);
     }
@@ -582,12 +583,13 @@ export default function ReportsPage() {
   }, []);
 
   /**
-   * Student Counselor: always Total Leads (bucket sum) − Calls/Visits Done so the row matches the two columns (ignores stale cached pendingBalance).
+   * Student Counselor / PRO: Total Leads (bucket sum) − Calls/Visits Done (cohort status sum excluding Assigned).
    * Other roles: API pendingBalance, then portfolio fallback.
    */
   const getPerformanceBalanceDisplay = useCallback(
     (u: any): number => {
-      if (String(u?.roleName || '').trim() === 'Student Counselor') {
+      const role = String(u?.roleName || '').trim();
+      if (role === 'Student Counselor' || role === 'PRO') {
         const allotted = getPerformanceTotalLeadsDisplay(u);
         const done = Number(u?.calls?.total ?? 0);
         return Math.max(0, allotted - done);
@@ -690,6 +692,51 @@ export default function ReportsPage() {
       if (!set.has(k)) sum += Number(v) || 0;
     });
     return sum;
+  };
+
+  /**
+   * PRO visit_status keys → same labels as `PRO_VISIT_STATUS_COLUMNS`, then merge blank / Not set / unknown into Assigned
+   * (matches backend canonical + assignment default visit_status).
+   */
+  const foldOutcomeVisitMapToCanonical = (raw: Record<string, unknown> | undefined): Record<string, number> => {
+    if (!raw || typeof raw !== 'object') return {};
+    const known = PRO_VISIT_STATUS_COLUMNS as unknown as readonly string[];
+    const knownSet = new Set(known);
+    const out: Record<string, number> = {};
+    Object.entries(raw).forEach(([k, v]) => {
+      const t = String(k).trim();
+      const n = Number(v) || 0;
+      if (!t && n === 0) return;
+      const lower = t.toLowerCase();
+      if (!t || /^not\s*set$/i.test(t)) {
+        out['Assigned'] = (out['Assigned'] || 0) + n;
+        return;
+      }
+      const hit = known.find((s) => s.toLowerCase() === lower);
+      const key = hit || t;
+      out[key] = (out[key] || 0) + n;
+    });
+    let extraAssigned = 0;
+    Object.keys(out).forEach((k) => {
+      if (!knownSet.has(k)) {
+        extraAssigned += Number(out[k]) || 0;
+        delete out[k];
+      }
+    });
+    out['Assigned'] = (Number(out['Assigned']) || 0) + extraAssigned;
+    return out;
+  };
+
+  const getProVisitStatusCountForDisplay = (day: any, status: string) =>
+    Number(foldOutcomeVisitMapToCanonical(day?.visitStatusCounts as Record<string, unknown> | undefined)[status] ?? 0) ||
+    0;
+
+  /** PRO: API `balanceByPortfolioRule` = visit_status Assigned (distinct) for the bucket row. */
+  const getProAssignmentBalanceForDay = (day: any) => {
+    const raw = day?.balanceByPortfolioRule;
+    if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
+    if (raw != null && raw !== '' && !Number.isNaN(Number(raw))) return Number(raw);
+    return getProVisitStatusCountForDisplay(day, 'Assigned');
   };
 
   /** Merge API map keys onto same labels as table columns (case/spelling variants). */
@@ -878,7 +925,7 @@ export default function ReportsPage() {
       const statusLabel = user.isActive ? 'Active' : 'Inactive';
       const printMode = getPerformanceExpandedMode(user.roleName, fullUser?.roleName, detailUser?.roleName);
       const printColSpan = printMode === 'pro' ? 13 : 12;
-      const headerStatusPro = `${PRO_VISIT_STATUS_COLUMNS.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Other</th>`;
+      const headerStatusPro = `${PRO_VISIT_STATUS_COLUMNS.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
       const headerStatusPipeline = `<th>Assigned</th><th>Interested</th><th>Not Interested</th><th>Wrong Data</th><th>Call Back</th><th>Confirmed</th>`;
 
       if (printMode === 'counsellor') {
@@ -969,8 +1016,8 @@ export default function ReportsPage() {
             let statusCells = '';
             if (printMode === 'pro') {
               statusCells =
-                PRO_VISIT_STATUS_COLUMNS.map((c) => `<td>${getVisitStatusCount(day, c)}</td>`).join('') +
-                `<td>${sumOtherChannelStatuses(day, PRO_VISIT_STATUS_COLUMNS as unknown as string[], 'visit')}</td>`;
+                PRO_VISIT_STATUS_COLUMNS.map((c) => `<td>${getProVisitStatusCountForDisplay(day, c)}</td>`).join('') +
+                `<td>${getProAssignmentBalanceForDay(day)}</td>`;
             } else {
               statusCells = `<td>${getLeadStatusCount(day, 'Assigned')}</td>
                 <td>${getLeadStatusCount(day, 'Interested')}</td>
@@ -993,9 +1040,44 @@ export default function ReportsPage() {
           }).join('')
         : `<tr><td colspan="${printColSpan}">No date-wise assignment history found.</td></tr>`;
 
+      let footerRowPro = '';
+      if (printMode === 'pro' && detailUser?.expandedAssignmentDiagnostics?.performanceCohort) {
+        const pc = detailUser.expandedAssignmentDiagnostics.performanceCohort as {
+          allottedDistinctLeads?: number;
+          allottedByVisitStatus?: Record<string, unknown>;
+          periodBalanceByPortfolioRule?: number;
+        };
+        if (pc.allottedByVisitStatus) {
+          const visitMap = foldOutcomeVisitMapToCanonical(pc.allottedByVisitStatus);
+          const allottedTotal = Number(pc.allottedDistinctLeads ?? 0);
+          const visitCells = PRO_VISIT_STATUS_COLUMNS.map(
+            (c) => `<td>${countDistinctOutcomeCallByStatus(visitMap, c)}</td>`
+          ).join('');
+          const bal =
+            typeof pc.periodBalanceByPortfolioRule === 'number' && !Number.isNaN(pc.periodBalanceByPortfolioRule)
+              ? pc.periodBalanceByPortfolioRule
+              : '—';
+          footerRowPro = `<tfoot><tr style="font-weight:700;background:#f1f5f9;">
+            <td colspan="4">Leads allotted (period) — distinct by current visit_status</td>
+            <td>${allottedTotal}</td>
+            ${visitCells}
+            <td>${bal}</td>
+            <td>—</td>
+          </tr></tfoot>`;
+        }
+      }
+
+      const mergedPrintUserOther = { ...user, ...(detailUser || {}) };
+      const printMainBalanceOther = getPerformanceBalanceDisplay(mergedPrintUserOther);
+
       return `
         <section style="margin-bottom:10px; break-inside: avoid;">
           <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> · ${statusLabel}</h3>
+          ${
+            printMode === 'pro'
+              ? `<p style="margin:0 0 4px 0;font-size:8px;color:#475569;">PRO — Main row Balance = Total Leads (bucket sum) − visit-status totals excluding Assigned. Main row: <strong>${printMainBalanceOther}</strong>.</p>`
+              : ''
+          }
           <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
             <thead>
               <tr>
@@ -1009,6 +1091,7 @@ export default function ReportsPage() {
               </tr>
             </thead>
             <tbody>${rowHtml}</tbody>
+            ${footerRowPro}
           </table>
         </section>
       `;
@@ -2405,13 +2488,13 @@ export default function ReportsPage() {
                             <th className="w-52 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
                             <th
                               className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                              title="Student Counselors: sum of date-wise Total Allotted (same lead may appear in multiple buckets). Others: portfolio leads handled."
+                              title="Student Counselor / PRO: sum of date-wise Total Allotted (same lead may appear in multiple buckets). Other roles: portfolio leads handled."
                             >
                               Total Leads
                             </th>
                             <th
                               className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                              title="Student Counselors: same as the expanded footer — sum of Leads allotted (period) across call_status columns, excluding Assigned. Other roles: distinct leads with any outcome call in the activity window."
+                              title="Student Counselor / PRO: sum of period-allotted cohort by current call/visit status, excluding Assigned (matches expanded footer). Other roles: distinct leads with any outcome call in the activity window."
                             >
                               {datePreset === 'today' ? 'Today Calls/Visits Done' :
                                 datePreset === 'yesterday' ? 'Yesterday Calls/Visits Done' :
@@ -2425,13 +2508,13 @@ export default function ReportsPage() {
                             </th>
                             <th
                               className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                              title="Student Counselors: Total Leads (bucket sum) − Calls/Visits Done, minimum 0. Other roles: portfolio-style pending balance."
+                              title="Student Counselor / PRO: Total Leads (bucket sum) − Calls/Visits Done, minimum 0. Other roles: portfolio-style pending balance."
                             >
                               Balance
                             </th>
                             <th
                               className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                              title="Student Counselor: Interested + CET Applied (distinct leads on period-allotted cohort, current call_status — matches expanded footer for those two columns). Other roles: Interested + CET Applied from pipeline status-change counts in the period."
+                              title="Student Counselor: Interested + CET Applied on period-allotted cohort (current call_status). PRO: Interested on cohort (current visit_status). Other roles: Interested + CET Applied from pipeline status-change counts in the period."
                             >
                               Interested Leads
                             </th>
@@ -2771,9 +2854,35 @@ export default function ReportsPage() {
                                         </div>
                                         <p className="mb-3 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
                                           {expandedMode === 'pro'
-                                            ? 'Visit status columns (PRO): distinct students per group (unique leads) by current visit_status — same as counsellor logic. PRO users do not use call logs — Calls/Visits Done may differ.'
+                                            ? 'Visit status columns (PRO): distinct students per group by current visit_status. Main row Calls/Visits Done and Balance match the period footer (bucket-sum allotted minus non-Assigned visit_status counts).'
                                             : 'Pipeline columns: distinct students per group by lead_status. Calls/Visits Done = distinct leads with logged call outcomes in the period (non-counsellor/PRO staff).'}
                                         </p>
+                                        {expandedMode === 'pro' ? (
+                                          <div className="mb-3 rounded-md border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40">
+                                            <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">
+                                              <span className="font-semibold text-slate-800 dark:text-slate-200">Main row Balance</span> (above):{' '}
+                                              <strong className="text-slate-700 dark:text-slate-300">
+                                                Total Leads (bucket sum) − Calls/Visits Done
+                                              </strong>
+                                              , minimum 0 —{' '}
+                                              <span className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                                                {getPerformanceBalanceDisplay(user)}
+                                              </span>
+                                              .{' '}
+                                              <span className="font-semibold text-slate-800 dark:text-slate-200">Per-row Balance</span> is{' '}
+                                              <strong className="text-slate-700 dark:text-slate-300">visit_status Assigned</strong> for that bucket. The footer
+                                              “Leads allotted (period)” <strong className="text-slate-700 dark:text-slate-300">Balance</strong> cell matches the
+                                              main row.
+                                            </p>
+                                          </div>
+                                        ) : null}
+                                        {expandedMode === 'pro' &&
+                                        !detailUser?.expandedAssignmentDiagnostics?.performanceCohort?.allottedByVisitStatus ? (
+                                          <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
+                                            Period totals unavailable — collapse and expand again, or refresh. PRO analytics require assignment details with
+                                            visit_status cohort.
+                                          </p>
+                                        ) : null}
                                         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60">
                                           <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-xs">
                                             <thead className="bg-slate-100 dark:bg-slate-800">
@@ -2790,8 +2899,11 @@ export default function ReportsPage() {
                                                         {col}
                                                       </th>
                                                     ))}
-                                                    <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200" title="Statuses outside the standard PRO list">
-                                                      Other
+                                                    <th
+                                                      className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap"
+                                                      title="visit_status Assigned (distinct) in this bucket row"
+                                                    >
+                                                      Balance
                                                     </th>
                                                   </>
                                                 ) : (
@@ -2829,11 +2941,11 @@ export default function ReportsPage() {
                                                       <>
                                                         {PRO_VISIT_STATUS_COLUMNS.map((col) => (
                                                           <td key={col} className="px-3 py-2 text-slate-900 dark:text-slate-100 tabular-nums">
-                                                            {getVisitStatusCount(day, col)}
+                                                            {getProVisitStatusCountForDisplay(day, col)}
                                                           </td>
                                                         ))}
-                                                        <td className="px-3 py-2 text-slate-900 dark:text-slate-100 tabular-nums">
-                                                          {sumOtherChannelStatuses(day, PRO_VISIT_STATUS_COLUMNS as unknown as string[], 'visit')}
+                                                        <td className="bg-slate-50/90 px-3 py-2 text-slate-900 tabular-nums dark:bg-slate-900/50 dark:text-slate-100">
+                                                          {getProAssignmentBalanceForDay(day)}
                                                         </td>
                                                       </>
                                                     ) : (
@@ -2860,6 +2972,78 @@ export default function ReportsPage() {
                                                 </tr>
                                               )}
                                             </tbody>
+                                            {expandedMode === 'pro' &&
+                                              (() => {
+                                                const pc = detailUser?.expandedAssignmentDiagnostics?.performanceCohort as
+                                                  | {
+                                                      allottedDistinctLeads?: number;
+                                                      allottedByVisitStatus?: Record<string, unknown>;
+                                                      periodBalanceByPortfolioRule?: number;
+                                                    }
+                                                  | undefined;
+                                                if (!pc?.allottedByVisitStatus) return null;
+                                                const visitMap = foldOutcomeVisitMapToCanonical(pc.allottedByVisitStatus);
+                                                const allottedTotal = Number(pc.allottedDistinctLeads ?? 0);
+                                                const knownVisit = PRO_VISIT_STATUS_COLUMNS as unknown as string[];
+                                                const sumAllottedCols = knownVisit.reduce(
+                                                  (s, col) => s + countDistinctOutcomeCallByStatus(visitMap, col),
+                                                  0
+                                                );
+                                                const allottedOk = allottedTotal <= 0 || sumAllottedCols === allottedTotal;
+                                                const sumBucketTotalAllotted = assignmentsByDate.reduce(
+                                                  (s: number, day: any) => s + Number(day?.totalAssigned ?? 0),
+                                                  0
+                                                );
+                                                const periodBalanceFoot =
+                                                  typeof pc.periodBalanceByPortfolioRule === 'number' &&
+                                                  !Number.isNaN(pc.periodBalanceByPortfolioRule)
+                                                    ? pc.periodBalanceByPortfolioRule
+                                                    : '—';
+                                                return (
+                                                  <tfoot>
+                                                    <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
+                                                      <td colSpan={4} className="px-3 py-2 align-top">
+                                                        <div className="font-semibold text-slate-900 dark:text-slate-100">
+                                                          Leads allotted (period)
+                                                        </div>
+                                                        <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                                                          Distinct leads with an assignment in the period; cells use current visit_status.
+                                                          {!allottedOk && allottedTotal > 0 && (
+                                                            <span className="text-amber-700 dark:text-amber-300">
+                                                              {' '}
+                                                              (status sum {sumAllottedCols} ≠ distinct total {allottedTotal})
+                                                            </span>
+                                                          )}
+                                                          {sumBucketTotalAllotted > allottedTotal && allottedTotal > 0 && (
+                                                            <span className="mt-1 block text-slate-600 dark:text-slate-400">
+                                                              Sum of row “Total Allotted” ({sumBucketTotalAllotted}) can exceed {allottedTotal} when the same
+                                                              student appears in more than one allotted/target row.
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </td>
+                                                      <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                                                        {allottedTotal}
+                                                      </td>
+                                                      {PRO_VISIT_STATUS_COLUMNS.map((col) => (
+                                                        <td
+                                                          key={`pro-foot-${col}`}
+                                                          className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100"
+                                                        >
+                                                          {countDistinctOutcomeCallByStatus(visitMap, col)}
+                                                        </td>
+                                                      ))}
+                                                      <td
+                                                        className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100"
+                                                        title="Same as main row Balance"
+                                                      >
+                                                        {periodBalanceFoot}
+                                                      </td>
+                                                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
+                                                    </tr>
+                                                  </tfoot>
+                                                );
+                                              })()}
                                           </table>
                                         </div>
                                             </>
