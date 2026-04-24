@@ -190,7 +190,12 @@ export const userAPI = {
     return response.data;
   },
   getHrmsEmployeeByEmpNo: async (empNo: string) => {
-    const response = await api.get(`/users/hrms/${empNo}`);
+    const response = await api.get(`/users/hrms/${encodeURIComponent(empNo)}`);
+    return response.data;
+  },
+  /** When user has hrms_id but no emp_no (e.g. some Student Counselors), resolve org from HRMS employee _id */
+  getHrmsEmployeeByMongoId: async (mongoId: string) => {
+    const response = await api.get(`/users/hrms/id/${encodeURIComponent(mongoId)}`);
     return response.data;
   },
 };
