@@ -48,7 +48,7 @@ export default function ManagerLeadsPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   // Debounce search inputs
-  const debouncedSearch = useDebounce(search, 500);
+  const debouncedSearch = useDebounce(search, 700);
   const debouncedEnquiryNumber = useDebounce(enquiryNumber, 500);
 
   // Check authentication
@@ -92,7 +92,8 @@ export default function ManagerLeadsPage() {
       page,
       limit,
     };
-    if (debouncedSearch) filters.search = debouncedSearch;
+    const searchTrimmed = debouncedSearch?.trim() ?? '';
+    if (searchTrimmed.length >= 2) filters.search = searchTrimmed;
     if (debouncedEnquiryNumber) filters.enquiryNumber = debouncedEnquiryNumber;
     if (leadStatus) filters.leadStatus = leadStatus;
     if (assignedTo) filters.assignedTo = assignedTo;
@@ -232,13 +233,13 @@ export default function ManagerLeadsPage() {
       {/* Search and Filters */}
       <Card className="p-4">
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Search by Name/Phone/Email */}
+          {/* Search by name or enquiry number (enquiry # also has its own field below) */}
           <div className="flex-1">
             <div className="relative">
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
               <Input
                 type="text"
-                placeholder="Search by Name/Phone/Email"
+                placeholder="Search by name or enquiry #"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);

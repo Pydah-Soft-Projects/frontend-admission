@@ -404,22 +404,33 @@ const UserManagementPage = () => {
     setSelectedUserDetail(user);
     setShowUserDetail(true);
 
-    // Fetch additional HRMS details if linked to provide division/dept/group
-    if (user.emp_no) {
-      try {
-        const response = await userAPI.getHrmsEmployeeByEmpNo(user.emp_no);
-        const hrmsData = response.data || response;
-        if (hrmsData) {
-          setSelectedUserDetail(prev => prev ? ({
-            ...prev,
-            division: hrmsData.division,
-            department: hrmsData.department,
-            group: hrmsData.group
-          }) : null);
-        }
-      } catch (error) {
-        console.error('Failed to fetch HRMS details:', error);
+    // Fetch HRMS org fields: emp_no link (teaching staff) or hrms_id only (common for Student Counselors)
+    const unwrapHrms = (apiBody: unknown) => {
+      if (apiBody && typeof apiBody === 'object' && 'data' in apiBody) {
+        return (apiBody as { data?: unknown }).data ?? apiBody;
       }
+      return apiBody;
+    };
+
+    try {
+      let response: unknown;
+      if (user.emp_no != null && String(user.emp_no).trim() !== '') {
+        response = await userAPI.getHrmsEmployeeByEmpNo(String(user.emp_no).trim());
+      } else if (user.hrms_id != null && String(user.hrms_id).trim() !== '') {
+        response = await userAPI.getHrmsEmployeeByMongoId(String(user.hrms_id).trim());
+      }
+      const hrmsData = response != null ? unwrapHrms(response) : null;
+      if (hrmsData && typeof hrmsData === 'object' && hrmsData !== null) {
+        const d = hrmsData as { division?: string; department?: string; group?: string };
+        setSelectedUserDetail(prev => prev ? ({
+          ...prev,
+          division: d.division,
+          department: d.department,
+          group: d.group
+        }) : null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch HRMS details:', error);
     }
   };
 
@@ -590,12 +601,10 @@ const UserManagementPage = () => {
     }));
   };
 
+  /** CRM role only — division/dept/group come from HRMS separately; do not substitute HRMS job titles here */
   const displayRole = (user: User) => {
     if (user.isManager) {
       return `${user.roleName} (Manager)`;
-    }
-    if (user.roleName === 'Student Counselor' || user.roleName === 'Data Entry User') {
-      return user.designation || user.roleName;
     }
     return user.roleName;
   };
@@ -780,8 +789,8 @@ const UserManagementPage = () => {
                         <td className="px-3 py-2.5 align-middle text-sm font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <span>{user.name}</span>
-                            {user.emp_no && (
-                              <span title={`HRMS Linked: ${user.emp_no}`} className="shrink-0">
+                            {(user.emp_no || user.hrms_id) && (
+                              <span title={user.emp_no ? `HRMS Linked: ${user.emp_no}` : 'Linked to HRMS (profile id)'} className="shrink-0">
                                 <svg className="w-3.5 h-3.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                 </svg>
@@ -868,8 +877,8 @@ const UserManagementPage = () => {
                       <div className="min-w-0">
                         <div className="truncate font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                           {user.name}
-                          {user.emp_no && (
-                            <span title={`HRMS Linked: ${user.emp_no}`}>
+                          {(user.emp_no || user.hrms_id) && (
+                            <span title={user.emp_no ? `HRMS Linked: ${user.emp_no}` : 'Linked to HRMS (profile id)'}>
                               <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
@@ -904,10 +913,10 @@ const UserManagementPage = () => {
                       <span className="truncate">{user.email}</span>
                     </div>
 
-                    {user.emp_no && (
+                    {(user.emp_no || user.hrms_id) && (
                       <div className="flex items-center justify-between text-[10px] font-bold text-blue-500 dark:text-blue-400 font-mono uppercase tracking-widest mb-1.5 pb-1.5 border-b border-slate-100 dark:border-slate-800">
-                        <span>Emp ID</span>
-                        <span>{user.emp_no}</span>
+                        <span>{user.emp_no ? 'Emp ID' : 'HRMS'}</span>
+                        <span>{user.emp_no || 'Linked'}</span>
                       </div>
                     )}
 
@@ -1005,9 +1014,9 @@ const UserManagementPage = () => {
                     <p className="text-sm text-slate-500 dark:text-slate-400">
                       {selectedUserDetail.email}
                     </p>
-                    {selectedUserDetail.emp_no && (
+                    {(selectedUserDetail.emp_no || selectedUserDetail.hrms_id) && (
                       <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 ring-1 ring-blue-100 dark:ring-blue-800/50">
-                        {selectedUserDetail.emp_no}
+                        {selectedUserDetail.emp_no || 'HRMS'}
                       </span>
                     )}
                   </div>
@@ -1055,7 +1064,7 @@ const UserManagementPage = () => {
                 </div>
               </div>
 
-              {selectedUserDetail.emp_no && (
+              {(selectedUserDetail.emp_no || selectedUserDetail.hrms_id) && (
                 <div className="space-y-3 pt-2">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <IconBadge className="w-3.5 h-3.5" />

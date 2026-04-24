@@ -458,7 +458,12 @@ function SendToLeadsTab() {
   const { data: leadsPayload, isLoading: loadingLeads } = useQuery({
     queryKey: ['broadcastLeads', page, limit, debouncedSearch],
     queryFn: async () => {
-      return await leadAPI.getAll({ page, limit, search: debouncedSearch || undefined });
+      const s = debouncedSearch.trim();
+      return await leadAPI.getAll({
+        page,
+        limit,
+        search: s.length >= 2 ? s : undefined,
+      });
     },
   });
 
@@ -637,7 +642,7 @@ function SendToLeadsTab() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name, phone, enquiry number…"
+              placeholder="Name or enquiry number…"
             />
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">

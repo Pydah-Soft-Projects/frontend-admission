@@ -791,7 +791,8 @@ export default function AssignLeadsPage() {
 
   // Search leads for single assignment
   useEffect(() => {
-    if (!leadSearch || leadSearch.length < 2) {
+    const q = leadSearch.trim();
+    if (!q || q.length < 2) {
       setSearchResults([]);
       setShowSearchResults(false);
       return;
@@ -800,7 +801,7 @@ export default function AssignLeadsPage() {
     const searchLeads = async () => {
       try {
         const response = await leadAPI.getAll({
-          search: leadSearch,
+          search: q,
           limit: 10,
           page: 1,
         });
@@ -812,7 +813,7 @@ export default function AssignLeadsPage() {
       }
     };
 
-    const timeoutId = setTimeout(searchLeads, 300);
+    const timeoutId = setTimeout(searchLeads, 600);
     return () => clearTimeout(timeoutId);
   }, [leadSearch]);
 
@@ -2238,7 +2239,7 @@ export default function AssignLeadsPage() {
                 </label>
                 <Input
                   type="text"
-                  placeholder="Search by name, phone, email, or enquiry number..."
+                  placeholder="Search by name or enquiry number..."
                   value={leadSearch}
                   onChange={(event) => {
                     setLeadSearch(event.target.value);
@@ -2283,7 +2284,7 @@ export default function AssignLeadsPage() {
                   <p className="mt-1 text-xs text-green-600 dark:text-green-400">✓ Lead selected</p>
                 )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Search for a lead by name, phone number, email, or enquiry number.
+                  Search for a lead by name or enquiry number.
                 </p>
               </div>
 

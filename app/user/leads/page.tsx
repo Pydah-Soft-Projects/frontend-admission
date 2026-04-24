@@ -136,7 +136,7 @@ export default function UserLeadsPage() {
   }, [setMobileTopBar, clearMobileTopBar]);
 
   // Debounce search input
-  const debouncedSearch = useDebounce(search, 500);
+  const debouncedSearch = useDebounce(search, 700);
 
   useEffect(() => {
     if (isRestored) {
@@ -187,14 +187,19 @@ export default function UserLeadsPage() {
     }
   }, [user, filters.district, filters.mandal]);
 
+<<<<<<< HEAD
   useEffect(() => {
     setVillageListSearch('');
   }, [filters.district, filters.mandal]);
 
   // Single search suggestions (name, phone, email, enquiry number)
+=======
+  // Search suggestions (name or enquiry number only)
+>>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
   useEffect(() => {
     let active = true;
     const fetchSuggestions = async () => {
+      const t = debouncedSearch.trim();
       try {
         const suggestionFilters: LeadFilters = { ...filters };
         if (user?.roleName === 'Student Counselor') delete suggestionFilters.quota;
@@ -202,8 +207,13 @@ export default function UserLeadsPage() {
           suggestionFilters.villageInAddress = true;
         }
         const response = await leadAPI.getAll({
+<<<<<<< HEAD
           ...suggestionFilters,
           search: debouncedSearch,
+=======
+          ...filters,
+          search: t,
+>>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
           page: 1,
           limit: 8,
         });
@@ -215,7 +225,7 @@ export default function UserLeadsPage() {
         setSearchSuggestions([]);
       }
     };
-    if (debouncedSearch && debouncedSearch.length >= 2) {
+    if (debouncedSearch.trim().length >= 2) {
       fetchSuggestions();
     } else {
       setSearchSuggestions([]);
@@ -223,6 +233,7 @@ export default function UserLeadsPage() {
     return () => { active = false; };
   }, [debouncedSearch, filters, user?.roleName]);
 
+<<<<<<< HEAD
   // Build query filters (single search for name, phone, email, enquiry number)
   // Use only 'search' - backend search covers all fields. Sending both search + enquiryNumber
   // causes AND logic and breaks name/phone/email searches (enquiry_number rarely matches).
@@ -233,17 +244,26 @@ export default function UserLeadsPage() {
     return list.filter((v) => String(v).toLowerCase().includes(q));
   }, [filterOptions?.villages, user?.roleName, villageListSearch]);
 
+=======
+  // Build query filters — `search` matches name and enquiry number only on the backend.
+>>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
   const queryFilters = useMemo(() => {
     const query: LeadFilters = {
       page,
       limit,
       ...filters,
     };
+<<<<<<< HEAD
     if (user?.roleName === 'Student Counselor') {
       delete query.quota;
     }
     if (debouncedSearch) {
       query.search = debouncedSearch;
+=======
+    const searchTrimmed = debouncedSearch?.trim() ?? '';
+    if (searchTrimmed.length >= 2) {
+      query.search = searchTrimmed;
+>>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
     }
     if (activeTab === 'touched') {
       query.touchedToday = true;
@@ -557,7 +577,7 @@ export default function UserLeadsPage() {
           <div className="relative min-w-0 flex-1">
             <Input
               type="text"
-              placeholder="Name, phone, email or enquiry number..."
+              placeholder="Name or enquiry number..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowSearchSuggestions(true)}

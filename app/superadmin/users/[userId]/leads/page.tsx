@@ -82,7 +82,7 @@ export default function UserLeadsViewPage() {
   const queryClient = useQueryClient();
 
   // Debounce search inputs
-  const debouncedSearch = useDebounce(search, 500);
+  const debouncedSearch = useDebounce(search, 700);
   const debouncedEnquiryNumber = useDebounce(enquiryNumber, 500);
 
   // Track previous search values to detect actual changes
@@ -249,8 +249,9 @@ export default function UserLeadsViewPage() {
       assignedTo: userId, // Filter by the user we're viewing
       ...filters,
     };
-    if (debouncedSearch) {
-      query.search = debouncedSearch;
+    const searchTrimmed = debouncedSearch?.trim() ?? '';
+    if (searchTrimmed.length >= 2) {
+      query.search = searchTrimmed;
     }
     if (debouncedEnquiryNumber) {
       query.enquiryNumber = debouncedEnquiryNumber;
@@ -675,7 +676,7 @@ export default function UserLeadsViewPage() {
                       </label>
                       <Input
                         type="text"
-                        placeholder="Search leads..."
+                        placeholder="Search by name or enquiry number..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="w-full"
