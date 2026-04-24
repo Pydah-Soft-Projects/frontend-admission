@@ -187,15 +187,11 @@ export default function UserLeadsPage() {
     }
   }, [user, filters.district, filters.mandal]);
 
-<<<<<<< HEAD
   useEffect(() => {
     setVillageListSearch('');
   }, [filters.district, filters.mandal]);
 
-  // Single search suggestions (name, phone, email, enquiry number)
-=======
-  // Search suggestions (name or enquiry number only)
->>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
+  // Search suggestions (same backend `search` as main list); only fetch when 2+ chars to limit traffic
   useEffect(() => {
     let active = true;
     const fetchSuggestions = async () => {
@@ -207,13 +203,8 @@ export default function UserLeadsPage() {
           suggestionFilters.villageInAddress = true;
         }
         const response = await leadAPI.getAll({
-<<<<<<< HEAD
           ...suggestionFilters,
-          search: debouncedSearch,
-=======
-          ...filters,
           search: t,
->>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
           page: 1,
           limit: 8,
         });
@@ -233,10 +224,6 @@ export default function UserLeadsPage() {
     return () => { active = false; };
   }, [debouncedSearch, filters, user?.roleName]);
 
-<<<<<<< HEAD
-  // Build query filters (single search for name, phone, email, enquiry number)
-  // Use only 'search' - backend search covers all fields. Sending both search + enquiryNumber
-  // causes AND logic and breaks name/phone/email searches (enquiry_number rarely matches).
   const villageOptionsForSelect = useMemo(() => {
     const list = filterOptions?.villages || [];
     if (user?.roleName !== 'PRO' || !villageListSearch.trim()) return list;
@@ -244,26 +231,19 @@ export default function UserLeadsPage() {
     return list.filter((v) => String(v).toLowerCase().includes(q));
   }, [filterOptions?.villages, user?.roleName, villageListSearch]);
 
-=======
-  // Build query filters — `search` matches name and enquiry number only on the backend.
->>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
+  // Main list: single `search` param — backend matches name, phone, email, enquiry, etc. (no enquiryNumber AND)
   const queryFilters = useMemo(() => {
     const query: LeadFilters = {
       page,
       limit,
       ...filters,
     };
-<<<<<<< HEAD
     if (user?.roleName === 'Student Counselor') {
       delete query.quota;
     }
-    if (debouncedSearch) {
-      query.search = debouncedSearch;
-=======
     const searchTrimmed = debouncedSearch?.trim() ?? '';
-    if (searchTrimmed.length >= 2) {
+    if (searchTrimmed) {
       query.search = searchTrimmed;
->>>>>>> 49ded49d59b296c0dbb10e129a6fb46af99a226a
     }
     if (activeTab === 'touched') {
       query.touchedToday = true;
