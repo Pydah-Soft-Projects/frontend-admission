@@ -231,7 +231,7 @@ export default function UserLeadsPage() {
     return list.filter((v) => String(v).toLowerCase().includes(q));
   }, [filterOptions?.villages, user?.roleName, villageListSearch]);
 
-  // Main list: single `search` param — backend matches name, phone, email, enquiry, etc. (no enquiryNumber AND)
+  // Main list: single `search` param — backend matches fuzzy name, enquiry number, student/father phone (raw + normalized digits)
   const queryFilters = useMemo(() => {
     const query: LeadFilters = {
       page,
@@ -557,7 +557,7 @@ export default function UserLeadsPage() {
           <div className="relative min-w-0 flex-1">
             <Input
               type="text"
-              placeholder="Name or enquiry number..."
+              placeholder="Name, enquiry, or mobile number…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowSearchSuggestions(true)}
