@@ -652,12 +652,16 @@ export default function ReportsPage() {
     'Not Answered',
     'Wrong Data',
     'Call Back',
+    'Visited',
     'Confirmed',
     'CET Applied',
   ] as const;
 
   /** Expanded counsellor table + print: no Not Answered column (those counts are merged into Call Back for display). */
   const COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED = COUNSELLOR_CALL_STATUS_COLUMNS.filter((c) => c !== 'Not Answered');
+
+  const counsellorExpandedAssignmentColSpan =
+    5 + COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.length + 2;
 
   /** PRO field-visit workflow (`app/user/dashboard`) */
   const PRO_VISIT_STATUS_COLUMNS = [
@@ -951,7 +955,7 @@ export default function ReportsPage() {
           : '';
 
         const headerStatusCounsellor = `${COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
-        const printColSpanCounsellor = 14;
+        const printColSpanCounsellor = counsellorExpandedAssignmentColSpan;
         const rowHtmlCounsellor = rows.length
           ? rows.map((day: any) => {
               const targetDateEntries = Object.entries(day.targetDateCounts || {})
@@ -2777,7 +2781,7 @@ export default function ReportsPage() {
                                                         ) : (
                                                           <tr>
                                                             <td
-                                                              colSpan={14}
+                                                              colSpan={counsellorExpandedAssignmentColSpan}
                                                               className="px-3 py-3 text-center text-slate-500 dark:text-slate-400"
                                                             >
                                                               No date-wise assignment history found for the selected filters.

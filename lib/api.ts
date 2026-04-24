@@ -227,6 +227,8 @@ export const leadAPI = {
     mandal?: string;
     district?: string;
     village?: string;
+    /** PRO: substring match across address + location fields (see backend GET /leads) */
+    villageInAddress?: boolean;
     state?: string;
     source?: string;
     quota?: string;
@@ -248,6 +250,10 @@ export const leadAPI = {
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
         if (key === 'touchedToday') {
+          if (value === true) params.append(key, 'true');
+          return;
+        }
+        if (key === 'villageInAddress') {
           if (value === true) params.append(key, 'true');
           return;
         }

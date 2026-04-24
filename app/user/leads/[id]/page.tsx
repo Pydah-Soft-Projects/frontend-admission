@@ -121,7 +121,7 @@ export default function UserLeadDetailPage() {
   /** Counsellor edits call_status; PRO edits visit_status; admins edit lead_status (pipeline) */
   const statusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed', 'CET Applied'];
+      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Visited', 'Confirmed', 'CET Applied'];
     }
     if (user?.roleName === 'PRO') {
       return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'];
@@ -198,7 +198,7 @@ export default function UserLeadDetailPage() {
   // Combined Status Options (Filtered for Call Logs)
   const combinedStatusOptions = useMemo(() => {
     if (user?.roleName === 'Student Counselor') {
-      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed', 'CET Applied'].sort();
+      return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Visited', 'Confirmed', 'CET Applied'].sort();
     }
     if (user?.roleName === 'PRO') {
       return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'].sort();
@@ -1162,6 +1162,10 @@ export default function UserLeadDetailPage() {
     // Warning / No Action
     if (s === 'not answered') {
       return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+    }
+
+    if (s === 'visited') {
+      return 'bg-cyan-100 text-cyan-900 dark:bg-cyan-900/40 dark:text-cyan-100';
     }
 
     return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';

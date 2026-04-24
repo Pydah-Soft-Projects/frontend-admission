@@ -97,13 +97,24 @@ export default function SuperAdminDashboard() {
     isLoading: isLoadingUserAnalytics,
     error: userAnalyticsError,
   } = useQuery({
-    queryKey: ['user-analytics'],
+    queryKey: ['user-analytics', 'overview-performance', getTodayDateString(), dashboardAcademicYear],
     queryFn: async () => {
-      const response = await leadAPI.getUserAnalytics();
-      return response.data || response;
+      const end = new Date();
+      const start = new Date(end);
+      start.setDate(end.getDate() - 29);
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return leadAPI.getUserAnalytics({
+        startDate: fmt(start),
+        endDate: fmt(end),
+        ...(dashboardAcademicYear !== '' && { academicYear: dashboardAcademicYear }),
+        page: 1,
+        limit: 72,
+      });
     },
     enabled: shouldLoadUserPerformance,
     staleTime: 120_000,
+    retry: 1,
   });
 
   const { data: usersDirectoryData } = useQuery({

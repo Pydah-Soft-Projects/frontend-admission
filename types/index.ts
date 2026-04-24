@@ -702,6 +702,8 @@ export interface LeadFilters {
   state?: string;
   district?: string;
   village?: string;
+  /** PRO My Leads: when true with `village`, backend matches text inside address + village + mandal + district + state */
+  villageInAddress?: boolean;
   source?: string;
   quota?: string;
   status?: string;

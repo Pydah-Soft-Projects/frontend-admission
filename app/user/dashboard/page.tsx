@@ -64,6 +64,7 @@ const STUDENT_COUNSELLOR_CALL_STATUS_LABELS = [
   'Not Interested',
   'Wrong Data',
   'Call Back',
+  'Visited',
   'Confirmed',
   'CET Applied',
 ] as const;

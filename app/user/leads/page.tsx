@@ -46,7 +46,11 @@ export default function UserLeadsPage() {
     const savedFilters = sessionStorage.getItem('leadFilters');
     if (savedFilters) {
       try {
-        const parsed = JSON.parse(savedFilters);
+        const parsed = JSON.parse(savedFilters) as LeadFilters;
+        const u = auth.getUser();
+        if (u?.roleName === 'Student Counselor' && parsed.quota != null) {
+          delete parsed.quota;
+        }
         setFilters(parsed);
       } catch (e) {
         console.error('Failed to parse saved filters', e);
@@ -80,6 +84,8 @@ export default function UserLeadsPage() {
   }, [isRestored]);
 
   const [showFilters, setShowFilters] = useState(false);
+  /** PRO: narrows village dropdown options (server filter uses full address match). */
+  const [villageListSearch, setVillageListSearch] = useState('');
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -181,13 +187,22 @@ export default function UserLeadsPage() {
     }
   }, [user, filters.district, filters.mandal]);
 
+  useEffect(() => {
+    setVillageListSearch('');
+  }, [filters.district, filters.mandal]);
+
   // Single search suggestions (name, phone, email, enquiry number)
   useEffect(() => {
     let active = true;
     const fetchSuggestions = async () => {
       try {
+        const suggestionFilters: LeadFilters = { ...filters };
+        if (user?.roleName === 'Student Counselor') delete suggestionFilters.quota;
+        if (user?.roleName === 'PRO' && suggestionFilters.village) {
+          suggestionFilters.villageInAddress = true;
+        }
         const response = await leadAPI.getAll({
-          ...filters,
+          ...suggestionFilters,
           search: debouncedSearch,
           page: 1,
           limit: 8,
@@ -206,25 +221,38 @@ export default function UserLeadsPage() {
       setSearchSuggestions([]);
     }
     return () => { active = false; };
-  }, [debouncedSearch, filters]);
+  }, [debouncedSearch, filters, user?.roleName]);
 
   // Build query filters (single search for name, phone, email, enquiry number)
   // Use only 'search' - backend search covers all fields. Sending both search + enquiryNumber
   // causes AND logic and breaks name/phone/email searches (enquiry_number rarely matches).
+  const villageOptionsForSelect = useMemo(() => {
+    const list = filterOptions?.villages || [];
+    if (user?.roleName !== 'PRO' || !villageListSearch.trim()) return list;
+    const q = villageListSearch.trim().toLowerCase();
+    return list.filter((v) => String(v).toLowerCase().includes(q));
+  }, [filterOptions?.villages, user?.roleName, villageListSearch]);
+
   const queryFilters = useMemo(() => {
     const query: LeadFilters = {
       page,
       limit,
       ...filters,
     };
+    if (user?.roleName === 'Student Counselor') {
+      delete query.quota;
+    }
     if (debouncedSearch) {
       query.search = debouncedSearch;
     }
     if (activeTab === 'touched') {
       query.touchedToday = true;
     }
+    if (user?.roleName === 'PRO' && query.village) {
+      query.villageInAddress = true;
+    }
     return query;
-  }, [page, limit, filters, debouncedSearch, activeTab]);
+  }, [page, limit, filters, debouncedSearch, activeTab, user?.roleName]);
 
   /** Pipeline filter dropdown (lead_status) */
   const pipelineStatusFilterOptions = useMemo(() => {
@@ -242,6 +270,7 @@ export default function UserLeadsPage() {
       'Not Interested',
       'Wrong Data',
       'Call Back',
+      'Visited',
       'Confirmed',
       'CET Applied',
     ];
@@ -380,6 +409,8 @@ export default function UserLeadsPage() {
         return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200';
       case 'converted':
         return 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200';
+      case 'visited':
+        return 'bg-cyan-100 text-cyan-900 dark:bg-cyan-900/50 dark:text-cyan-100';
       case 'confirmed':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-200';
       case 'admitted':
@@ -643,19 +674,40 @@ export default function UserLeadsPage() {
                 ))}
               </select>
             </div>
-            {/* Mobile row 2: village | student group */}
-            <div className="flex min-w-0 flex-col gap-1 col-span-1">
+            {/* Mobile row 2: village | student group — PRO: search box narrows list; API matches text in address + location */}
+            <div
+              className={`flex min-w-0 flex-col gap-1 ${user?.roleName === 'PRO' ? 'col-span-2' : 'col-span-1'}`}
+            >
               <label className="text-[10px] font-medium text-slate-500">Village</label>
+              {user?.roleName === 'PRO' && (
+                <Input
+                  type="search"
+                  className="!h-8 min-h-0 py-1 text-xs"
+                  placeholder="Search village name…"
+                  value={villageListSearch}
+                  onChange={(e) => setVillageListSearch(e.target.value)}
+                  disabled={!filters.district}
+                  title="Filter the dropdown; applied filter matches this text inside address, village, mandal, district, state"
+                />
+              )}
               <select
                 className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
                 value={filters.village || ''}
                 onChange={(e) => handleFilterChange('village', e.target.value)}
                 disabled={!filters.district}
-                title={!filters.district ? 'Select a district first to list villages' : undefined}
+                title={
+                  !filters.district
+                    ? 'Select a district first to list villages'
+                    : user?.roleName === 'PRO'
+                      ? 'Matches leads where this text appears in address / location fields'
+                      : undefined
+                }
               >
                 <option value="">{filters.district ? 'All villages' : 'Select district first'}</option>
-                {(filterOptions?.villages || []).map((v) => (
-                  <option key={v} value={v}>{v}</option>
+                {villageOptionsForSelect.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
                 ))}
               </select>
             </div>
@@ -685,19 +737,21 @@ export default function UserLeadsPage() {
                 ))}
               </select>
             </div>
-            <div className="hidden md:flex flex-col gap-1 min-w-0 col-span-1">
-              <label className="text-[10px] font-medium text-slate-500">Quota</label>
-              <select
-                className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
-                value={filters.quota || ''}
-                onChange={(e) => handleFilterChange('quota', e.target.value)}
-              >
-                <option value="">All quotas</option>
-                {filterOptions?.quotas?.map((quota) => (
-                  <option key={quota} value={quota}>{quota}</option>
-                ))}
-              </select>
-            </div>
+            {user?.roleName !== 'Student Counselor' && (
+              <div className="hidden md:flex flex-col gap-1 min-w-0 col-span-1">
+                <label className="text-[10px] font-medium text-slate-500">Quota</label>
+                <select
+                  className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  value={filters.quota || ''}
+                  onChange={(e) => handleFilterChange('quota', e.target.value)}
+                >
+                  <option value="">All quotas</option>
+                  {filterOptions?.quotas?.map((quota) => (
+                    <option key={quota} value={quota}>{quota}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {user?.roleName !== 'PRO' && user?.roleName !== 'Student Counselor' && (
               <div className="flex min-w-0 col-span-2 items-center gap-1.5 md:col-span-2 lg:col-span-2">
                 <label className="shrink-0 text-[10px] font-medium text-slate-500">Pipeline</label>
