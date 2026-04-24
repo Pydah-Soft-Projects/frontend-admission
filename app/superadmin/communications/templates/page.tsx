@@ -831,6 +831,9 @@ function TestTemplateSmsModal({
   );
 }
 
+const broadcastFilterSelectClass =
+  'h-9 min-w-0 max-w-full shrink rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 sm:max-w-[11rem]';
+
 function SendToLeadsTab() {
   const { canWrite } = useModulePermission('communications');
   const queryClient = useQueryClient();
@@ -843,6 +846,13 @@ function SendToLeadsTab() {
   const [sendPrimary, setSendPrimary] = useState(true);
   const [sendFather, setSendFather] = useState(false);
 
+  const [districtFilter, setDistrictFilter] = useState('');
+  const [mandalFilter, setMandalFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
+  const [studentGroupFilter, setStudentGroupFilter] = useState('');
+  const [leadStatusFilter, setLeadStatusFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
     return () => clearTimeout(t);
@@ -850,7 +860,49 @@ function SendToLeadsTab() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, districtFilter, mandalFilter, stateFilter, studentGroupFilter, leadStatusFilter, sourceFilter]);
+
+  useEffect(() => {
+    setMandalFilter('');
+  }, [districtFilter]);
+
+  const { data: broadcastFilterOptionsRes } = useQuery({
+    queryKey: ['filterOptions', 'communications-send-leads', districtFilter],
+    queryFn: async () => {
+      const res = await leadAPI.getFilterOptions(
+        districtFilter.trim() ? { district: districtFilter.trim() } : undefined
+      );
+      const payload = (res as { data?: Record<string, unknown> })?.data ?? res;
+      return payload && typeof payload === 'object' ? payload : {};
+    },
+    staleTime: 120_000,
+  });
+
+  const broadcastDistricts = useMemo(() => {
+    const raw = (broadcastFilterOptionsRes as { districts?: string[] })?.districts;
+    return Array.isArray(raw) ? raw : [];
+  }, [broadcastFilterOptionsRes]);
+  const broadcastMandals = useMemo(() => {
+    const raw = (broadcastFilterOptionsRes as { mandals?: string[] })?.mandals;
+    return Array.isArray(raw) ? raw : [];
+  }, [broadcastFilterOptionsRes]);
+  const broadcastStates = useMemo(() => {
+    const raw = (broadcastFilterOptionsRes as { states?: string[] })?.states;
+    return Array.isArray(raw) ? raw : [];
+  }, [broadcastFilterOptionsRes]);
+  const broadcastStudentGroups = useMemo(() => {
+    const raw = (broadcastFilterOptionsRes as { studentGroups?: string[] })?.studentGroups;
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
+  }, [broadcastFilterOptionsRes]);
+  const broadcastLeadStatuses = useMemo(() => {
+    const raw = (broadcastFilterOptionsRes as { leadStatuses?: string[] })?.leadStatuses;
+    return Array.isArray(raw) ? raw : [];
+  }, [broadcastFilterOptionsRes]);
+  const broadcastSources = useMemo(() => {
+    const raw = (broadcastFilterOptionsRes as { sources?: string[] })?.sources;
+    return Array.isArray(raw) ? raw : [];
+  }, [broadcastFilterOptionsRes]);
 
   const { data: templatesData, isLoading: loadingTemplates } = useQuery({
     queryKey: ['activeTemplates', 'communications-broadcast'],
@@ -868,13 +920,30 @@ function SendToLeadsTab() {
   );
 
   const { data: leadsPayload, isLoading: loadingLeads } = useQuery({
-    queryKey: ['broadcastLeads', page, limit, debouncedSearch],
+    queryKey: [
+      'broadcastLeads',
+      page,
+      limit,
+      debouncedSearch,
+      districtFilter,
+      mandalFilter,
+      stateFilter,
+      studentGroupFilter,
+      leadStatusFilter,
+      sourceFilter,
+    ],
     queryFn: async () => {
       const s = debouncedSearch.trim();
       return await leadAPI.getAll({
         page,
         limit,
         search: s.length >= 2 ? s : undefined,
+        district: districtFilter.trim() || undefined,
+        mandal: mandalFilter.trim() || undefined,
+        state: stateFilter.trim() || undefined,
+        studentGroup: studentGroupFilter.trim() || undefined,
+        leadStatus: leadStatusFilter.trim() || undefined,
+        source: sourceFilter.trim() || undefined,
       });
     },
   });
@@ -1071,13 +1140,14 @@ function SendToLeadsTab() {
       </div>
 
       <div className="space-y-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-        <div className="flex flex-col lg:flex-row lg:items-end gap-4 justify-between">
-          <div className="flex-1 min-w-0 space-y-1">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Search leads</label>
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Search leads</label>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Name or enquiry number…"
+              className="h-9 max-w-xl"
             />
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
@@ -1086,6 +1156,120 @@ function SendToLeadsTab() {
             </Button>
             <Button variant="secondary" size="sm" type="button" onClick={clearSelection} disabled={selectedCount === 0}>
               Clear selection ({selectedCount})
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Filters
+          </p>
+          <div className="flex flex-wrap items-end gap-2 gap-y-3">
+            <label className="flex min-w-[8rem] flex-col gap-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              State
+              <select
+                className={broadcastFilterSelectClass}
+                value={stateFilter}
+                onChange={(e) => setStateFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {broadcastStates.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[8rem] flex-col gap-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              District
+              <select
+                className={broadcastFilterSelectClass}
+                value={districtFilter}
+                onChange={(e) => setDistrictFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {broadcastDistricts.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[8rem] flex-col gap-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              Mandal
+              <select
+                className={broadcastFilterSelectClass}
+                value={mandalFilter}
+                onChange={(e) => setMandalFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {broadcastMandals.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[8rem] flex-col gap-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              Student group
+              <select
+                className={broadcastFilterSelectClass}
+                value={studentGroupFilter}
+                onChange={(e) => setStudentGroupFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {broadcastStudentGroups.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[9rem] flex-col gap-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              Lead status
+              <select
+                className={broadcastFilterSelectClass}
+                value={leadStatusFilter}
+                onChange={(e) => setLeadStatusFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {broadcastLeadStatuses.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[9rem] flex-col gap-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              Source
+              <select
+                className={broadcastFilterSelectClass}
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {broadcastSources.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              className="shrink-0"
+              onClick={() => {
+                setDistrictFilter('');
+                setMandalFilter('');
+                setStateFilter('');
+                setStudentGroupFilter('');
+                setLeadStatusFilter('');
+                setSourceFilter('');
+              }}
+            >
+              Clear filters
             </Button>
           </div>
         </div>
@@ -1116,7 +1300,7 @@ function SendToLeadsTab() {
               ) : leads.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                    No leads match this search.
+                    No leads match your filters or search.
                   </td>
                 </tr>
               ) : (
