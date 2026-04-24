@@ -27,6 +27,7 @@ import {
   Legend,
   Cell,
 } from 'recharts';
+import { Loader2, Search } from 'lucide-react';
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-IN').format(value);
 
@@ -68,6 +69,9 @@ const summaryCardConfig = [
 
 const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
 
+/** User Performance card: small page size keeps overview load fast (server still scores full role cohort). */
+const USER_PERF_PAGE_SIZE = 12;
+
 export default function SuperAdminDashboard() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -79,6 +83,19 @@ export default function SuperAdminDashboard() {
   const [scheduledTab, setScheduledTab] = useState<'today' | 'yesterdayMissed'>('today');
   const [recentLeadsDays, setRecentLeadsDays] = useState<3 | 7 | 10>(3);
   const [shouldLoadUserPerformance, setShouldLoadUserPerformance] = useState(false);
+  const [userPerfSearchInput, setUserPerfSearchInput] = useState('');
+  const [debouncedUserPerfSearch, setDebouncedUserPerfSearch] = useState('');
+  const [userPerfRole, setUserPerfRole] = useState('Student Counselor');
+  const [userPerfPage, setUserPerfPage] = useState(1);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedUserPerfSearch(userPerfSearchInput.trim()), 400);
+    return () => window.clearTimeout(t);
+  }, [userPerfSearchInput]);
+
+  useEffect(() => {
+    setUserPerfPage(1);
+  }, [debouncedUserPerfSearch, userPerfRole, dashboardAcademicYear]);
 
   useEffect(() => {
     const currentUser = auth.getUser();
@@ -91,24 +108,6 @@ export default function SuperAdminDashboard() {
       return;
     }
   }, [router]);
-
-  const {
-    data: userAnalyticsData,
-    isLoading: isLoadingUserAnalytics,
-    error: userAnalyticsError,
-  } = useQuery({
-    queryKey: ['user-analytics', 'overview-performance', 'current-portfolio', dashboardAcademicYear],
-    queryFn: async () =>
-      leadAPI.getUserAnalytics({
-        currentPortfolioOnly: true,
-        ...(dashboardAcademicYear !== '' && { academicYear: dashboardAcademicYear }),
-        page: 1,
-        limit: 72,
-      }),
-    enabled: shouldLoadUserPerformance,
-    staleTime: 120_000,
-    retry: 1,
-  });
 
   const { data: usersDirectoryData } = useQuery({
     queryKey: ['users-directory'],
@@ -132,6 +131,47 @@ export default function SuperAdminDashboard() {
   });
   const scheduledLeads = Array.isArray(scheduledLeadsData) ? scheduledLeadsData : [];
   const usersDirectory = Array.isArray(usersDirectoryData) ? usersDirectoryData : [];
+
+  const userPerfRoleOptions = useMemo(() => {
+    const roles = new Set<string>();
+    usersDirectory.forEach((u: any) => {
+      const r = String(u?.roleName ?? u?.role_name ?? '').trim();
+      if (r && r !== 'Super Admin' && r !== 'Sub Super Admin') roles.add(r);
+    });
+    return Array.from(roles).sort((a, b) => a.localeCompare(b));
+  }, [usersDirectory]);
+
+  const {
+    data: userAnalyticsData,
+    isLoading: isLoadingUserAnalytics,
+    isFetching: isFetchingUserAnalytics,
+    error: userAnalyticsError,
+  } = useQuery({
+    queryKey: [
+      'user-analytics',
+      'overview-performance',
+      'current-portfolio',
+      dashboardAcademicYear,
+      debouncedUserPerfSearch,
+      userPerfRole,
+      userPerfPage,
+      USER_PERF_PAGE_SIZE,
+    ],
+    queryFn: async () =>
+      leadAPI.getUserAnalytics({
+        currentPortfolioOnly: true,
+        ...(dashboardAcademicYear !== '' && { academicYear: dashboardAcademicYear }),
+        ...(debouncedUserPerfSearch !== '' && { perfSearch: debouncedUserPerfSearch }),
+        ...(userPerfRole !== '' && { perfRole: userPerfRole }),
+        page: userPerfPage,
+        limit: USER_PERF_PAGE_SIZE,
+      }),
+    enabled: shouldLoadUserPerformance,
+    staleTime: 120_000,
+    retry: 1,
+    placeholderData: (previousData) => previousData,
+  });
+
   const todayScheduledLeads = useMemo(
     () => scheduledLeads.filter((lead: any) => !lead?.isYesterdayMissedCall),
     [scheduledLeads]
@@ -373,6 +413,15 @@ export default function SuperAdminDashboard() {
   ]), [overviewAnalytics]);
 
   const userAnalytics = userAnalyticsData?.users || [];
+  const userPerfPagination = userAnalyticsData?.pagination as
+    | { page: number; limit: number; total: number; pages: number }
+    | undefined;
+  const userPerfSearchDebouncing =
+    userPerfSearchInput.trim() !== debouncedUserPerfSearch;
+  const userPerfListRefetching =
+    Boolean(userAnalyticsData) && isFetchingUserAnalytics;
+  const userPerfFiltersBusy = userPerfSearchDebouncing || userPerfListRefetching;
+
   const { data: recentLeadsData } = useQuery({
     queryKey: ['recent-leads-source', recentLeadsDays],
     queryFn: async () => {
@@ -845,19 +894,67 @@ export default function SuperAdminDashboard() {
 
       {/* User Performance */}
       <Card className="overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50 px-5 py-4 dark:border-slate-800 dark:bg-slate-800/30 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">User Performance Analytics</h2>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-              Assigned leads and status breakdown per team member.
-            </p>
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 px-5 py-4 dark:border-slate-800 dark:bg-slate-800/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <h2 className="shrink-0 text-base font-semibold text-slate-900 dark:text-slate-100">
+            User Performance Analytics
+          </h2>
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
+            <div className="relative w-full min-w-0 sm:max-w-[14rem]">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+              <input
+                type="search"
+                value={userPerfSearchInput}
+                onChange={(e) => setUserPerfSearchInput(e.target.value)}
+                placeholder="Search name or email"
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
+                aria-label="Search users in performance list"
+              />
+            </div>
+            <label className="flex w-full min-w-0 items-center gap-2 text-sm text-slate-600 dark:text-slate-400 sm:w-auto">
+              <span className="shrink-0">Role</span>
+              <select
+                value={userPerfRole}
+                onChange={(e) => setUserPerfRole(e.target.value)}
+                className="min-w-0 flex-1 cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 sm:min-w-[11rem]"
+                aria-label="Filter by role"
+              >
+                <option value="">All roles</option>
+                {userPerfRoleOptions.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {userPerfFiltersBusy ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-md border border-orange-200/80 bg-orange-50/90 px-2 py-1.5 text-xs font-medium text-orange-800 dark:border-orange-800/60 dark:bg-orange-950/50 dark:text-orange-200"
+                role="status"
+                aria-live="polite"
+                aria-label={userPerfListRefetching ? 'Updating list' : 'Applying search'}
+              >
+                <Loader2
+                  className={`h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-300 ${
+                    userPerfListRefetching ? 'animate-spin' : 'animate-pulse'
+                  }`}
+                  aria-hidden
+                />
+                {userPerfListRefetching ? 'Updating list…' : 'Applying search…'}
+              </span>
+            ) : null}
+            <Link href="/superadmin/users" className="shrink-0">
+              <Button size="sm" variant="outline">Manage Users</Button>
+            </Link>
           </div>
-          <Link href="/superadmin/users" className="shrink-0">
-            <Button size="sm" variant="outline">Manage Users</Button>
-          </Link>
         </div>
-        <div className="p-5">
-          {!shouldLoadUserPerformance || isLoadingUserAnalytics ? (
+        {userPerfFiltersBusy && userAnalyticsData ? (
+          <div
+            className="h-0.5 w-full animate-pulse bg-orange-400 dark:bg-orange-500"
+            aria-hidden
+          />
+        ) : null}
+        <div className="p-5" aria-busy={userPerfFiltersBusy}>
+          {!shouldLoadUserPerformance || (isLoadingUserAnalytics && !userAnalyticsData) ? (
             <div className="space-y-3">
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 Loading user performance analytics in background...
@@ -878,6 +975,7 @@ export default function SuperAdminDashboard() {
               </p>
             </div>
           ) : userAnalytics.length > 0 ? (
+            <div className={`space-y-4 ${isFetchingUserAnalytics ? 'opacity-70' : ''} transition-opacity`}>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {userAnalytics.map((user: any) => {
                 const statusEntries = Object.entries(user.statusBreakdown || {}).filter(([_, count]) => (count as number) > 0);
@@ -930,10 +1028,43 @@ export default function SuperAdminDashboard() {
                 );
               })}
             </div>
+            {userPerfPagination && userPerfPagination.total > 0 && (
+              <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Showing {(userPerfPagination.page - 1) * userPerfPagination.limit + 1}–
+                  {Math.min(userPerfPagination.page * userPerfPagination.limit, userPerfPagination.total)} of{' '}
+                  {formatNumber(userPerfPagination.total)} users
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={userPerfPagination.page <= 1 || isFetchingUserAnalytics}
+                    onClick={() => setUserPerfPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                    Page {userPerfPagination.page} / {userPerfPagination.pages}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={userPerfPagination.page >= userPerfPagination.pages || isFetchingUserAnalytics}
+                    onClick={() => setUserPerfPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+            </div>
           ) : (
             <div className="py-8 text-center">
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                No users found. Use User Management to onboard your counselling team.
+                No users found. Try another role or clear the search filter.
               </p>
             </div>
           )}
