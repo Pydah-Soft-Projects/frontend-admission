@@ -619,6 +619,8 @@ export const leadAPI = {
     perfRole?: string;
     /** Skip server in-memory analytics cache (use after bulk DB fixes e.g. call_status scripts). */
     bypassCache?: boolean;
+    /** Heavy reports path skips when true — communications user-leads uses this for a fast roster + lead counts only. */
+    rosterOnly?: boolean;
   }) => {
     const queryParams = new URLSearchParams();
     if (params?.startDate) queryParams.append('startDate', params.startDate);
@@ -636,6 +638,7 @@ export const leadAPI = {
     if (params?.perfGroup != null && params.perfGroup !== '') queryParams.append('perfGroup', params.perfGroup);
     if (params?.perfRole != null && params.perfRole !== '') queryParams.append('perfRole', params.perfRole);
     if (params?.bypassCache) queryParams.append('bypassCache', 'true');
+    if (params?.rosterOnly) queryParams.append('rosterOnly', 'true');
     const query = queryParams.toString();
     const response = await api.get(`/leads/analytics/users${query ? `?${query}` : ''}`);
     // Backend returns { success: true, data: { users: [...] }, message: "..." }

@@ -784,12 +784,13 @@ function UserLeadsTab() {
   }, [debouncedSearch, divisionFilter, deptFilter, groupFilter]);
 
   const { data: analyticsData, isLoading: loadingUsers } = useQuery({
-    queryKey: ['userAnalytics', 'communications', divisionFilter, deptFilter, groupFilter],
+    queryKey: ['userAnalytics', 'communications', 'roster', divisionFilter, deptFilter, groupFilter],
     queryFn: async () => {
       const resp = await leadAPI.getUserAnalytics({
         division: divisionFilter || undefined,
         department: deptFilter || undefined,
         group: groupFilter || undefined,
+        rosterOnly: true,
       });
       return resp?.users ?? [];
     },
