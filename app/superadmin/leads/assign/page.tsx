@@ -184,42 +184,52 @@ export default function AssignLeadsPage() {
     if (!currentUser) return;
 
     const load = async () => {
-      try {
-        const [usersResponse, filtersResponse] = await Promise.all([
-          userAPI.getAssignable(),
-          leadAPI.getFilterOptions(),
-        ]);
-        setUsers(usersResponse.data || usersResponse);
+      // Load independently: filter-options can be slow/time out; assignable users must still appear.
+      const loadUsers = userAPI
+        .getAssignable()
+        .then((usersResponse) => {
+          setUsers(usersResponse.data || usersResponse);
+        })
+        .catch((error) => {
+          console.error('Failed to load assignable users:', error);
+          showToast.error('Unable to load assignable users.');
+        });
 
-        // Normalize filter options: API returns { success, data: { mandals, states, ... }, message }
-        const raw = filtersResponse?.data ?? filtersResponse ?? {};
-        const options: FilterOptions = {
-          mandals: Array.isArray(raw.mandals) ? raw.mandals : [],
-          districts: Array.isArray(raw.districts) ? raw.districts : [],
-          states: Array.isArray(raw.states) ? raw.states : [],
-          quotas: Array.isArray(raw.quotas) ? raw.quotas : [],
-          leadStatuses: Array.isArray(raw.leadStatuses) ? raw.leadStatuses : [],
-          applicationStatuses: Array.isArray(raw.applicationStatuses) ? raw.applicationStatuses : [],
-          academicYears: Array.isArray(raw.academicYears) ? raw.academicYears : [],
-          studentGroups: Array.isArray(raw.studentGroups) ? raw.studentGroups : [],
-        };
+      const loadFilters = leadAPI
+        .getFilterOptions()
+        .then(async (filtersResponse) => {
+          const raw = filtersResponse?.data ?? filtersResponse ?? {};
+          const options: FilterOptions = {
+            mandals: Array.isArray(raw.mandals) ? raw.mandals : [],
+            districts: Array.isArray(raw.districts) ? raw.districts : [],
+            states: Array.isArray(raw.states) ? raw.states : [],
+            quotas: Array.isArray(raw.quotas) ? raw.quotas : [],
+            leadStatuses: Array.isArray(raw.leadStatuses) ? raw.leadStatuses : [],
+            applicationStatuses: Array.isArray(raw.applicationStatuses) ? raw.applicationStatuses : [],
+            academicYears: Array.isArray(raw.academicYears) ? raw.academicYears : [],
+            studentGroups: Array.isArray(raw.studentGroups) ? raw.studentGroups : [],
+          };
 
-        // Fallback: if no states/mandals from leads (e.g. empty DB), use locations master data
-        if (options.states.length === 0 || options.mandals.length === 0) {
-          try {
-            const statesList = await locationsAPI.listStates();
-            const stateNames = Array.isArray(statesList) ? statesList.map((s: { id?: string; name: string }) => s.name) : [];
-            if (stateNames.length > 0 && options.states.length === 0) options.states = stateNames;
-          } catch {
-            // ignore
+          if (options.states.length === 0 || options.mandals.length === 0) {
+            try {
+              const statesList = await locationsAPI.listStates();
+              const stateNames = Array.isArray(statesList)
+                ? statesList.map((s: { id?: string; name: string }) => s.name)
+                : [];
+              if (stateNames.length > 0 && options.states.length === 0) options.states = stateNames;
+            } catch {
+              // ignore
+            }
           }
-        }
 
-        setFilters(options);
-      } catch (error) {
-        console.error('Failed to load assign-leads data:', error);
-        showToast.error('Unable to load users or filters.');
-      }
+          setFilters(options);
+        })
+        .catch((error) => {
+          console.error('Failed to load lead filter options:', error);
+          showToast.error('Unable to load lead filter options. You can still assign if user list loaded.');
+        });
+
+      await Promise.all([loadUsers, loadFilters]);
     };
 
     load();
