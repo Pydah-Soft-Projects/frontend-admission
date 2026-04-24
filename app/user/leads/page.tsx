@@ -130,7 +130,7 @@ export default function UserLeadsPage() {
   }, [setMobileTopBar, clearMobileTopBar]);
 
   // Debounce search input
-  const debouncedSearch = useDebounce(search, 500);
+  const debouncedSearch = useDebounce(search, 700);
 
   useEffect(() => {
     if (isRestored) {
@@ -181,14 +181,15 @@ export default function UserLeadsPage() {
     }
   }, [user, filters.district, filters.mandal]);
 
-  // Single search suggestions (name, phone, email, enquiry number)
+  // Search suggestions (name or enquiry number only)
   useEffect(() => {
     let active = true;
     const fetchSuggestions = async () => {
+      const t = debouncedSearch.trim();
       try {
         const response = await leadAPI.getAll({
           ...filters,
-          search: debouncedSearch,
+          search: t,
           page: 1,
           limit: 8,
         });
@@ -200,7 +201,7 @@ export default function UserLeadsPage() {
         setSearchSuggestions([]);
       }
     };
-    if (debouncedSearch && debouncedSearch.length >= 2) {
+    if (debouncedSearch.trim().length >= 2) {
       fetchSuggestions();
     } else {
       setSearchSuggestions([]);
@@ -208,17 +209,16 @@ export default function UserLeadsPage() {
     return () => { active = false; };
   }, [debouncedSearch, filters]);
 
-  // Build query filters (single search for name, phone, email, enquiry number)
-  // Use only 'search' - backend search covers all fields. Sending both search + enquiryNumber
-  // causes AND logic and breaks name/phone/email searches (enquiry_number rarely matches).
+  // Build query filters — `search` matches name and enquiry number only on the backend.
   const queryFilters = useMemo(() => {
     const query: LeadFilters = {
       page,
       limit,
       ...filters,
     };
-    if (debouncedSearch) {
-      query.search = debouncedSearch;
+    const searchTrimmed = debouncedSearch?.trim() ?? '';
+    if (searchTrimmed.length >= 2) {
+      query.search = searchTrimmed;
     }
     if (activeTab === 'touched') {
       query.touchedToday = true;
@@ -526,7 +526,7 @@ export default function UserLeadsPage() {
           <div className="relative min-w-0 flex-1">
             <Input
               type="text"
-              placeholder="Name, phone, email or enquiry number..."
+              placeholder="Name or enquiry number..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowSearchSuggestions(true)}

@@ -132,7 +132,7 @@ export default function LeadsPage() {
   }, [page, limit, search, filters, showFilters, sortField, sortOrder, isMounted]);
 
   // Debounce search inputs
-  const debouncedSearch = useDebounce(search, 500);
+  const debouncedSearch = useDebounce(search, 700);
 
   // Track previous values to detect actual changes and prevent resets on mount
   const prevSearchRef = useRef<string>(persistedState?.search || '');
@@ -221,15 +221,16 @@ export default function LeadsPage() {
     }
   }, [user]);
 
-  // Consolidated search suggestions (Name, Phone, Email, or Enquiry Number)
+  // Search suggestions (name or enquiry number only; matches backend)
   useEffect(() => {
     let active = true;
 
     const fetchSuggestions = async () => {
+      const t = debouncedSearch.trim();
       try {
         const response = await leadAPI.getAll({
           ...filters,
-          search: debouncedSearch,
+          search: t,
           page: 1,
           limit: 10,
         });
@@ -242,7 +243,7 @@ export default function LeadsPage() {
       }
     };
 
-    if (debouncedSearch && debouncedSearch.length >= 2) {
+    if (debouncedSearch.trim().length >= 2) {
       fetchSuggestions();
     } else {
       setSearchSuggestions([]);
@@ -260,8 +261,9 @@ export default function LeadsPage() {
       limit,
       ...filters,
     };
-    if (debouncedSearch) {
-      query.search = debouncedSearch;
+    const searchTrimmed = debouncedSearch?.trim() ?? '';
+    if (searchTrimmed.length >= 2) {
+      query.search = searchTrimmed;
     }
     return query;
   }, [page, limit, filters, debouncedSearch]);
@@ -722,8 +724,9 @@ export default function LeadsPage() {
       const filtersForIds: LeadFilters = {
         ...filters,
       };
-      if (debouncedSearch) {
-        filtersForIds.search = debouncedSearch;
+      const searchTrimmed = debouncedSearch?.trim() ?? '';
+      if (searchTrimmed.length >= 2) {
+        filtersForIds.search = searchTrimmed;
       }
 
       // Fetch all lead IDs matching current filters
@@ -749,8 +752,9 @@ export default function LeadsPage() {
       const exportFilters: any = {
         ...filters,
       };
-      if (debouncedSearch) {
-        exportFilters.search = debouncedSearch;
+      const searchTrimmed = debouncedSearch?.trim() ?? '';
+      if (searchTrimmed.length >= 2) {
+        exportFilters.search = searchTrimmed;
       }
 
       const blob = await leadAPI.exportLeads(exportFilters);
@@ -804,11 +808,11 @@ export default function LeadsPage() {
       <div className="mb-2">
         {/* Search, Filters, and Action Bar - All in One Row */}
         <div className="flex flex-wrap gap-3">
-          {/* Global Search box (Name, Phone, Email, or Enquiry Number) */}
+          {/* Global search: name or enquiry number only */}
           <div className="relative flex-[2] min-w-[300px]">
             <Input
               type="text"
-              placeholder="Search by Name, Phone, Email, or Enquiry # (e.g. ENQ24...)"
+              placeholder="Search by name or enquiry # (e.g. ENQ24...)"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowSearchSuggestions(true)}
