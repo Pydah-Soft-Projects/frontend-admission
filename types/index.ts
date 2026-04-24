@@ -272,6 +272,8 @@ export interface MessageTemplateVariable {
   key: string;
   label: string;
   defaultValue?: string;
+  /** Bulk SMS: one shared value for all recipients. Unchecked = per-recipient in the review grid. */
+  isGlobal?: boolean;
   value?: string;
 }
 

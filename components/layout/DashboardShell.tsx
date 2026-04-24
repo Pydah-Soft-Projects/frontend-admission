@@ -204,8 +204,10 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     ['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/leads/assign'].includes(pathname) ||
     isSuperadminLeadDetail;
 
-  // Pages where we want full width (no max-width constraint)
-  const isFullWidthPage = ['/superadmin/leads/assign'].includes(pathname) || isSuperadminLeadDetail;
+  // Pages where we want full width (no max-width constraint on main content wrapper)
+  const isFullWidthPage =
+    ['/superadmin/leads/assign', '/superadmin/communications/templates'].includes(pathname) ||
+    isSuperadminLeadDetail;
 
   // Pages where we want reduced vertical spacing but keep header visible
   const isReducedSpacingPage = ['/superadmin/users'].includes(pathname);

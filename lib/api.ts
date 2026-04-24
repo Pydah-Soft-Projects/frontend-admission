@@ -619,6 +619,8 @@ export const leadAPI = {
     division?: string;
     department?: string;
     group?: string;
+    /** Roster / analytics: filter by `leads.student_group` (communications user-leads). */
+    studentGroup?: string;
     includeAssignmentDetails?: boolean;
     /** Server-side pagination for heavy user list (e.g. Call Reports → User Performance). */
     page?: number;
@@ -643,6 +645,9 @@ export const leadAPI = {
     if (params?.division) queryParams.append('division', params.division);
     if (params?.department) queryParams.append('department', params.department);
     if (params?.group) queryParams.append('group', params.group);
+    if (params?.studentGroup != null && params.studentGroup !== '') {
+      queryParams.append('studentGroup', String(params.studentGroup));
+    }
     if (params?.includeAssignmentDetails) queryParams.append('includeAssignmentDetails', 'true');
     if (params?.page != null) queryParams.append('page', String(params.page));
     if (params?.limit != null) queryParams.append('limit', String(params.limit));
@@ -883,6 +888,14 @@ export const communicationAPI = {
   hardDeleteTemplate: async (id: string) => {
     const response = await api.delete(`/communications/templates/${id}/hard`);
     return response.data;
+  },
+  /** Super Admin: send rendered template to one number (no lead / no communications log row). */
+  testTemplateSms: async (
+    templateId: string,
+    data: { phone: string; variables?: Array<{ key: string; value: string }> }
+  ) => {
+    const response = await api.post(`/communications/templates/${templateId}/test-sms`, data);
+    return response.data?.data ?? response.data;
   },
   logCall: async (
     leadId: string,

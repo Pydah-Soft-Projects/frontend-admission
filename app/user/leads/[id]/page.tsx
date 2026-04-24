@@ -1013,28 +1013,21 @@ export default function UserLeadDetailPage() {
     return templates.filter((t) => t.language === smsData.languageFilter);
   }, [templates, smsData.languageFilter]);
 
-  // Build default template values
+  // Build default template values (template defaults only; no auto lead name)
   const buildDefaultTemplateValues = useCallback((template: MessageTemplate) => {
     const values: Record<string, string> = {};
     if (template.variables && template.variables.length > 0) {
       template.variables.forEach((variable, index) => {
         const key = variable.key || `var${index + 1}`;
-        if (index === 0 && lead?.name) {
-          values[key] = lead.name;
-        } else if (variable.defaultValue) {
-          values[key] = variable.defaultValue;
-        } else {
-          values[key] = '';
-        }
+        values[key] = (variable.defaultValue || '').trim();
       });
     } else if (template.variableCount > 0) {
       for (let i = 0; i < template.variableCount; i++) {
-        const key = `var${i + 1}`;
-        values[key] = i === 0 && lead?.name ? lead.name : '';
+        values[`var${i + 1}`] = '';
       }
     }
     return values;
-  }, [lead?.name]);
+  }, []);
 
   // Render template preview
   const renderTemplatePreview = useCallback((template: MessageTemplate, values: Record<string, string>) => {
