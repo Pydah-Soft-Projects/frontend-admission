@@ -107,8 +107,8 @@ export default function AssignLeadsPage() {
   const printStatsRef = useRef<HTMLDivElement>(null);
   const isPrintingRef = useRef(false);
 
-  // Institution-wise (school/college) allocation state
-  const [institutionStudentGroup, setInstitutionStudentGroup] = useState<string>('');
+  // Institution-wise (school/college) allocation state — default group loads college list first
+  const [institutionStudentGroup, setInstitutionStudentGroup] = useState<string>('Inter-MPC');
   const [institutionName, setInstitutionName] = useState<string>('');
   const [institutionAcademicYear, setInstitutionAcademicYear] = useState<number | ''>(2026);
   const [institutionUserId, setInstitutionUserId] = useState<string>('');
