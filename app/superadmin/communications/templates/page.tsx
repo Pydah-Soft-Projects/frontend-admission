@@ -534,6 +534,17 @@ function BulkSmsReviewModal({
   const samplePreview =
     template && draft.length > 0 ? hydrateTemplateContent(template.content, draft[0].variables) : '';
 
+  const previewVariableStats = useMemo(() => {
+    const total = variableScopeList.length;
+    if (total === 0) return { total: 0, filled: 0 };
+    const vals = draft[0]?.variables ?? [];
+    const filled = variableScopeList.reduce((acc, meta) => {
+      const raw = (vals[meta.index]?.value ?? '').trim();
+      return acc + (raw ? 1 : 0);
+    }, 0);
+    return { total, filled };
+  }, [variableScopeList, draft]);
+
   if (!open) return null;
 
   return (
@@ -571,12 +582,26 @@ function BulkSmsReviewModal({
         ) : (
           <>
             <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/50">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Message preview (first lead)
-              </p>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Message preview (first lead)
+                </p>
+                {previewVariableStats.total > 0 ? (
+                  <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
+                    {previewVariableStats.filled}/{previewVariableStats.total} variables filled
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">No template variables</p>
+                )}
+              </div>
               <p className="mt-2 whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-3 text-sm italic text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                 {samplePreview || '—'}
               </p>
+              {samplePreview ? (
+                <p className="mt-2 text-[11px] text-slate-500 tabular-nums dark:text-slate-400">
+                  {samplePreview.length} character{samplePreview.length === 1 ? '' : 's'} in preview
+                </p>
+              ) : null}
             </div>
 
             {globalVars.length > 0 ? (
