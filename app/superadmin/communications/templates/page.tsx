@@ -1692,6 +1692,12 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     return list;
   }, [rosterSource, debouncedSearch, roleNameFilter]);
 
+  /** Sum of `totalAssigned` for the current table rows (roster + district/team filters from API; search/role in UI). */
+  const cumulativePortfolioLeads = useMemo(
+    () => users.reduce((sum, u) => sum + (Number(u.totalAssigned) || 0), 0),
+    [users]
+  );
+
   /** Org filter option lists from full roster response (not client search subset). */
   const { divisionOptions, deptOptions, groupOptions } = useMemo(() => {
     const divs = new Set<string>();
@@ -2023,7 +2029,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
               </select>
             </label>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-end justify-end gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -2112,6 +2118,18 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
                 })
               )}
             </tbody>
+            {!loadingUsers && users.length > 0 ? (
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-semibold dark:border-slate-600 dark:bg-slate-800/50">
+                  <td colSpan={5} className="px-3 py-2.5 text-right text-slate-700 dark:text-slate-200">
+                    Cumulative (filters applied) · {users.length} user{users.length === 1 ? '' : 's'}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-orange-700 dark:text-orange-300">
+                    {cumulativePortfolioLeads.toLocaleString()}
+                  </td>
+                </tr>
+              </tfoot>
+            ) : null}
           </table>
         </div>
 
