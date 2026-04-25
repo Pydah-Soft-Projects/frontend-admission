@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
@@ -40,28 +40,6 @@ const SUPPORTED_LANGUAGES = [
   { value: 'te', label: 'Telugu' },
   { value: 'hi', label: 'Hindi' },
 ];
-
-/** Renders the audience line for SMS job list + tooltip long form. */
-function formatSmsJobAudience(
-  source: string | undefined,
-  rc: SmsBulkJobReportContext | null | undefined
-): { oneLine: string; title: string } {
-  if (source === 'user_specific_leads' && rc && (rc.selectedUsers || []).length > 0) {
-    const su = rc.selectedUsers || [];
-    const namePart = su.map((u) => u.name || u.id).join(', ');
-    const g = rc.studentGroup?.trim() ? `Student group: ${rc.studentGroup}` : 'Student group: (all portfolio)';
-    const d = rc.district?.trim() ? ` · District: ${rc.district}` : '';
-    const oneLine = `${namePart} · ${g}${d}`.replace(/\s+·\s*$/i, '');
-    return {
-      oneLine: oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine,
-      title: `Users (${su.length}): ${namePart}\n${g}${d}`,
-    };
-  }
-  if (source === 'user_specific_leads') {
-    return { oneLine: '—', title: 'No audience snapshot' };
-  }
-  return { oneLine: '—', title: 'Send to leads: grid selection' };
-}
 
 const ensureVariableArray = (content: string, existing?: MessageTemplateVariable[]) => {
   const matches = content.match(VAR_REGEX);
@@ -880,7 +858,7 @@ function TestTemplateSmsModal({
 }
 
 function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobId?: string | null; onClearHighlight?: () => void }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const { data: listData, isLoading, isFetching } = useQuery({
     queryKey: ['smsBulkJobs', 1],
     queryFn: () => communicationAPI.listBulkSmsJobs({ page: 1, limit: 40 }),
@@ -893,17 +871,22 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
   );
   useEffect(() => {
     if (highlightJobId) {
-      setSelectedId(highlightJobId);
+      setExpandedId(highlightJobId);
       onClearHighlight?.();
     }
   }, [highlightJobId, onClearHighlight]);
-  const activeId = selectedId || polledJobs[0]?.id || null;
-  const { data: jobDetail, isLoading: jobDetailLoading } = useQuery({
-    queryKey: ['smsBulkJob', activeId],
-    queryFn: () => communicationAPI.getBulkSmsJob(activeId!),
-    enabled: Boolean(activeId),
+  const {
+    data: jobDetail,
+    isLoading: jobDetailLoading,
+    isError: jobDetailError,
+  } = useQuery({
+    queryKey: ['smsBulkJob', expandedId],
+    queryFn: () => communicationAPI.getBulkSmsJob(expandedId!),
+    enabled: Boolean(expandedId),
     refetchInterval: 2000,
   });
+  const detailMatchesExpanded =
+    Boolean(jobDetail) && jobDetail?.job.id === expandedId;
 
   if (isLoading) {
     return (
@@ -929,11 +912,9 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/70">
             <tr>
+              <th className="w-9 px-2 py-2 text-left text-xs font-semibold text-slate-500" scope="col" aria-label="Expand" />
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Time</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Source</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 min-w-[14rem] max-w-[20rem]">
-                Selected users &amp; group
-              </th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Template</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
               <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Progress</th>
@@ -949,137 +930,160 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
             ) : (
               polledJobs.map((j) => {
                 const pct = j.totalItems > 0 ? Math.round((j.doneCount / j.totalItems) * 100) : 0;
-                const isSel = j.id === activeId;
-                const aud = formatSmsJobAudience(j.source, (j as { reportContext?: SmsBulkJobReportContext | null }).reportContext);
+                const isOpen = j.id === expandedId;
+                const jRc = (j as { reportContext?: SmsBulkJobReportContext | null }).reportContext;
                 return (
-                  <tr
-                    key={j.id}
-                    className={isSel ? 'bg-orange-50/80 dark:bg-orange-950/30' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50'}
-                    onClick={() => setSelectedId(j.id)}
-                  >
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
-                      {j.createdAt ? new Date(j.createdAt).toLocaleString() : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-200">
-                      {j.source === 'user_specific_leads' ? 'User-specific leads' : 'Send to leads'}
-                    </td>
-                    <td
-                      className="max-w-[20rem] cursor-pointer align-top px-3 py-2 text-[11px] leading-snug text-slate-600 dark:text-slate-300"
-                      title={aud.title}
-                    >
-                      {j.source === 'user_specific_leads' ? (
-                        <span className="line-clamp-3 break-words">{aud.oneLine}</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="max-w-[10rem] truncate px-3 py-2 text-xs" title={j.templateName || ''}>
-                      {j.templateName || '—'}
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      <span
-                        className={
-                          j.status === 'completed'
-                            ? 'text-emerald-700 dark:text-emerald-400'
-                            : j.status === 'failed'
-                              ? 'text-red-600'
-                              : 'text-amber-700 dark:text-amber-300'
+                  <Fragment key={j.id}>
+                    <tr
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      className={
+                        isOpen
+                          ? 'bg-orange-50/90 dark:bg-orange-950/35'
+                          : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                      }
+                      onClick={() => setExpandedId((prev) => (prev === j.id ? null : j.id))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setExpandedId((prev) => (prev === j.id ? null : j.id));
                         }
-                      >
-                        {j.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700 dark:text-slate-200">
-                      {j.doneCount}/{j.totalItems} ({pct}%) · ✓{j.successCount} ✗{j.failCount}
-                    </td>
-                  </tr>
+                      }}
+                    >
+                      <td className="w-9 align-middle px-2 py-2 text-slate-500" aria-hidden>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{isOpen ? '▾' : '▸'}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                        {j.createdAt ? new Date(j.createdAt).toLocaleString() : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-200">
+                        {j.source === 'user_specific_leads' ? 'User-specific leads' : 'Send to leads'}
+                      </td>
+                      <td className="max-w-[10rem] truncate px-3 py-2 text-xs" title={j.templateName || ''}>
+                        {j.templateName || '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <span
+                          className={
+                            j.status === 'completed'
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : j.status === 'failed'
+                                ? 'text-red-600'
+                                : 'text-amber-700 dark:text-amber-300'
+                          }
+                        >
+                          {j.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700 dark:text-slate-200">
+                        {j.doneCount}/{j.totalItems} ({pct}%) · ✓{j.successCount} ✗{j.failCount}
+                      </td>
+                    </tr>
+                    {isOpen ? (
+                      <tr className="bg-slate-50/70 dark:bg-slate-900/30">
+                        <td colSpan={6} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
+                          <div className="space-y-3 px-3 py-3 sm:px-4 sm:py-3.5">
+                            {j.source === 'user_specific_leads' && jRc && (jRc.selectedUsers || []).length > 0 ? (
+                              <div className="rounded-lg border border-slate-200 bg-white/90 px-3 py-2.5 dark:border-slate-600 dark:bg-slate-900/50">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Roster &amp; filters (when this job was queued)
+                                </p>
+                                <p className="mt-1.5 text-xs font-medium text-slate-900 dark:text-slate-100">
+                                  Selected users ({(jRc.selectedUsers || []).length}):
+                                </p>
+                                <ul className="mt-0.5 list-inside list-disc text-xs text-slate-800 dark:text-slate-200">
+                                  {(jRc.selectedUsers || []).map((u) => (
+                                    <li key={u.id}>
+                                      {u.name || u.id} <span className="font-mono text-slate-500">({u.id})</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                                <p className="mt-1.5 text-xs text-slate-700 dark:text-slate-300">
+                                  <span className="font-medium text-slate-800 dark:text-slate-100">Student group:</span>{' '}
+                                  {jRc.studentGroup?.trim() ? jRc.studentGroup : 'All (no filter)'}
+                                </p>
+                                {jRc.district?.trim() ? (
+                                  <p className="text-xs text-slate-700 dark:text-slate-300">
+                                    <span className="font-medium text-slate-800 dark:text-slate-100">Portfolio district:</span>{' '}
+                                    {jRc.district}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : j.source === 'user_specific_leads' ? (
+                              <p className="text-xs text-slate-500 dark:text-slate-400">No audience snapshot for this job.</p>
+                            ) : (
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Recipients for this run were selected in the grid on the <span className="font-medium">Send to
+                                leads</span> tab. The line table below lists each number and the provider response.
+                              </p>
+                            )}
+                            {j.lastError ? (
+                              <p className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+                                Last error: {j.lastError}
+                              </p>
+                            ) : null}
+                            <div>
+                              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                                Line items (numbers &amp; live response)
+                              </h3>
+                              {jobDetailLoading && isOpen && !detailMatchesExpanded ? (
+                                <Skeleton className="mt-2 h-32 w-full" />
+                              ) : null}
+                              {isOpen && detailMatchesExpanded && jobDetail ? (
+                                <div className="mt-2 max-h-[min(50vh,28rem)] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                                  <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-slate-800">
+                                    <thead className="sticky top-0 z-[1] bg-slate-100 dark:bg-slate-800">
+                                      <tr>
+                                        <th className="px-2 py-1.5 text-left font-semibold">Lead</th>
+                                        <th className="px-2 py-1.5 text-left font-semibold">Numbers</th>
+                                        <th className="px-2 py-1.5 text-left font-semibold">Status</th>
+                                        <th className="px-2 py-1.5 text-left font-semibold min-w-48">Provider response / error</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {jobDetail.items.map((it) => (
+                                        <tr key={it.id} className="border-t border-slate-100 dark:border-slate-800">
+                                          <td className="px-2 py-1.5 align-top text-slate-800 dark:text-slate-200">
+                                            {it.leadName || '—'}
+                                          </td>
+                                          <td className="px-2 py-1.5 align-top font-mono text-[11px] text-slate-600">
+                                            {Array.isArray(it.contactNumbers) ? it.contactNumbers.join(', ') : '—'}
+                                          </td>
+                                          <td className="px-2 py-1.5 align-top">{it.status}</td>
+                                          <td className="px-2 py-1.5 align-top text-slate-600">
+                                            {it.errorMessage ? (
+                                              <span className="text-red-700 dark:text-red-300">{it.errorMessage}</span>
+                                            ) : null}
+                                            {it.responseText ? (
+                                              <span className="line-clamp-3 break-words whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                                                {it.errorMessage ? ' ' : null}
+                                                {it.responseText.replace(/<[^>]+>/g, '').slice(0, 500)}
+                                              </span>
+                                            ) : !it.errorMessage ? (
+                                              '—'
+                                            ) : null}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : isOpen && !jobDetailLoading && jobDetailError ? (
+                                <p className="mt-2 text-xs text-slate-500">Could not load line items. Try again or refresh the page.</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 );
               })
             )}
           </tbody>
         </table>
       </div>
-      {activeId && (
-        <div className="space-y-2">
-          {jobDetail?.job?.source === 'user_specific_leads' && (() => {
-            const rc = (jobDetail.job as { reportContext?: SmsBulkJobReportContext | null }).reportContext;
-            if (!rc) return null;
-            const su = rc.selectedUsers || [];
-            if (su.length === 0) return null;
-            return (
-              <div className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Roster &amp; filters (when this job was queued)
-                </p>
-                <p className="mt-1 text-xs font-medium text-slate-900 dark:text-slate-100">
-                  Selected users ({su.length}):
-                </p>
-                <ul className="mt-0.5 list-inside list-disc text-xs text-slate-800 dark:text-slate-200">
-                  {su.map((u) => (
-                    <li key={u.id}>
-                      {u.name || u.id} <span className="font-mono text-slate-500">({u.id})</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-1.5 text-xs text-slate-700 dark:text-slate-300">
-                  <span className="font-medium text-slate-800 dark:text-slate-100">Student group:</span>{' '}
-                  {rc.studentGroup?.trim() ? rc.studentGroup : 'All (no filter)'}
-                </p>
-                {rc.district?.trim() ? (
-                  <p className="text-xs text-slate-700 dark:text-slate-300">
-                    <span className="font-medium text-slate-800 dark:text-slate-100">Portfolio district:</span> {rc.district}
-                  </p>
-                ) : null}
-              </div>
-            );
-          })()}
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Line items (numbers &amp; live response)</h3>
-          {jobDetail?.job?.lastError ? (
-            <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
-              Last error: {jobDetail.job.lastError}
-            </p>
-          ) : null}
-          {jobDetailLoading && !jobDetail ? <Skeleton className="h-24 w-full" /> : null}
-          {jobDetail ? (
-            <div className="max-h-[min(50vh,28rem)] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
-              <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-slate-800">
-                <thead className="sticky top-0 z-[1] bg-slate-100 dark:bg-slate-800">
-                  <tr>
-                    <th className="px-2 py-1.5 text-left font-semibold">Lead</th>
-                    <th className="px-2 py-1.5 text-left font-semibold">Numbers</th>
-                    <th className="px-2 py-1.5 text-left font-semibold">Status</th>
-                    <th className="px-2 py-1.5 text-left font-semibold min-w-[12rem]">Provider response / error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {jobDetail.items.map((it) => (
-                    <tr key={it.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="align-top px-2 py-1.5 text-slate-800 dark:text-slate-200">{it.leadName || '—'}</td>
-                      <td className="align-top px-2 py-1.5 font-mono text-[11px] text-slate-600">
-                        {Array.isArray(it.contactNumbers) ? it.contactNumbers.join(', ') : '—'}
-                      </td>
-                      <td className="align-top px-2 py-1.5">{it.status}</td>
-                      <td className="align-top px-2 py-1.5 text-slate-600">
-                        {it.errorMessage ? (
-                          <span className="text-red-700 dark:text-red-300">{it.errorMessage}</span>
-                        ) : null}
-                        {it.responseText ? (
-                          <span className="line-clamp-3 whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                            {it.errorMessage ? ' ' : null}
-                            {it.responseText.replace(/<[^>]+>/g, '').slice(0, 500)}
-                          </span>
-                        ) : !it.errorMessage ? (
-                          '—'
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </div>
-      )}
     </div>
   );
 }
