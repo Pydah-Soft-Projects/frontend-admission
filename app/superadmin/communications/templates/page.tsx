@@ -857,18 +857,55 @@ function TestTemplateSmsModal({
   );
 }
 
+type SmsBulkListJob = {
+  id: string;
+  source: string;
+  reportContext?: SmsBulkJobReportContext | null;
+  templateName: string | null;
+  status: string;
+  displayStatus?: string;
+  workRemaining?: number;
+  totalItems: number;
+  doneCount: number;
+  successCount: number;
+  failCount: number;
+  lastError: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+};
+
 function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobId?: string | null; onClearHighlight?: () => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { data: listData, isLoading, isFetching } = useQuery({
     queryKey: ['smsBulkJobs', 1],
     queryFn: () => communicationAPI.listBulkSmsJobs({ page: 1, limit: 40 }),
     refetchInterval: 2000,
   });
-  const polledJobs = listData?.items ?? [];
+  const polledJobs: SmsBulkListJob[] = (listData?.items ?? []) as SmsBulkListJob[];
   const hasListActive = useMemo(
-    () => polledJobs.some((j) => j.status === 'running' || j.status === 'queued'),
+    () =>
+      polledJobs.some(
+        (j) =>
+          j.status === 'running' ||
+          j.status === 'queued' ||
+          (j.workRemaining ?? 0) > 0 ||
+          (j.displayStatus === 'incomplete' && (j.status === 'completed' || j.status === 'running' || j.status === 'queued'))
+      ),
     [polledJobs]
   );
+  const resumeMutation = useMutation({
+    mutationFn: (jobId: string) => communicationAPI.resumeBulkSmsJob(jobId),
+    onSuccess: (out) => {
+      const msg = out.reopened
+        ? 'The job was re-opened; sending will continue in the background.'
+        : 'Worker re-queued. Watch progress for updates.';
+      showToast.success(msg);
+      queryClient.invalidateQueries({ queryKey: ['smsBulkJobs'] });
+      if (expandedId) queryClient.invalidateQueries({ queryKey: ['smsBulkJob', expandedId] });
+    },
+    onError: (e: Error) => showToast.error(e?.message || 'Failed to resume job'),
+  });
   useEffect(() => {
     if (highlightJobId) {
       setExpandedId(highlightJobId);
@@ -918,12 +955,13 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Template</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
               <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Progress</th>
+              <th className="w-0 whitespace-nowrap px-2 py-2 text-right text-xs font-semibold text-slate-500"> </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {polledJobs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                   No jobs yet. Send a bulk SMS from the other tabs to see activity here.
                 </td>
               </tr>
@@ -931,7 +969,9 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
               polledJobs.map((j) => {
                 const pct = j.totalItems > 0 ? Math.round((j.doneCount / j.totalItems) * 100) : 0;
                 const isOpen = j.id === expandedId;
-                const jRc = (j as { reportContext?: SmsBulkJobReportContext | null }).reportContext;
+                const disp = j.displayStatus || j.status;
+                const canResume = (j.workRemaining ?? 0) > 0 || j.displayStatus === 'incomplete';
+                const jRc = j.reportContext;
                 const userRosterChips = (jRc?.selectedUsers || []) as { id: string; name: string }[];
                 const hasUserSnapshot =
                   j.source === 'user_specific_leads' &&
@@ -972,24 +1012,76 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                       <td className="px-3 py-2 text-xs">
                         <span
                           className={
-                            j.status === 'completed'
-                              ? 'text-emerald-700 dark:text-emerald-400'
-                              : j.status === 'failed'
-                                ? 'text-red-600'
-                                : 'text-amber-700 dark:text-amber-300'
+                            disp === 'incomplete'
+                              ? 'text-amber-800 dark:text-amber-200'
+                              : j.status === 'completed'
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : j.status === 'failed'
+                                  ? 'text-red-600'
+                                  : 'text-amber-700 dark:text-amber-300'
                           }
                         >
-                          {j.status}
+                          {disp === 'incomplete' ? 'incomplete' : j.status}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700 dark:text-slate-200">
                         {j.doneCount}/{j.totalItems} ({pct}%) · ✓{j.successCount} ✗{j.failCount}
                       </td>
+                      <td
+                        className="whitespace-nowrap px-2 py-1.5 text-right align-middle"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {canResume ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="shrink-0 px-2.5 text-[10px] font-semibold"
+                            disabled={resumeMutation.isPending}
+                            onClick={() => resumeMutation.mutate(j.id)}
+                            title="Re-run the background worker; use if the job was marked complete but is not finished"
+                          >
+                            {resumeMutation.isPending ? '…' : 'Resume'}
+                          </Button>
+                        ) : null}
+                      </td>
                     </tr>
                     {isOpen ? (
                       <tr className="bg-slate-50/70 dark:bg-slate-900/30">
-                        <td colSpan={6} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
+                        <td colSpan={7} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
                           <div className="space-y-3 px-3 py-3 sm:px-4 sm:py-3.5">
+                            {canResume ? (
+                              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                                <span>
+                                  {disp === 'incomplete' && j.status === 'completed' ? (
+                                    <span>
+                                      This job is still marked <span className="font-medium">completed</span> in the
+                                      database but progress is below 100% ({j.doneCount}/{j.totalItems}).
+                                      {(j.workRemaining ?? 0) > 0
+                                        ? ` There are still ${j.workRemaining} line item(s) waiting.`
+                                        : ' Use Resume: we will re-check line items, repair counters, or set the job to an explicit error if data is missing.'}
+                                    </span>
+                                  ) : (j.workRemaining ?? 0) > 0 ? (
+                                    <span>
+                                      {j.workRemaining} line item(s) still in queue. Click Resume if the worker
+                                      has stalled.
+                                    </span>
+                                  ) : (
+                                    <span>Progress and status may be inconsistent. Try Resume to repair.</span>
+                                  )}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  size="sm"
+                                  className="shrink-0 text-xs"
+                                  disabled={resumeMutation.isPending}
+                                  onClick={() => resumeMutation.mutate(j.id)}
+                                >
+                                  {resumeMutation.isPending ? 'Resuming…' : 'Resume sending'}
+                                </Button>
+                              </div>
+                            ) : null}
                             {hasUserSnapshot ? (
                               <div className="rounded-lg border border-slate-200 bg-white/90 px-3 py-2.5 dark:border-slate-600 dark:bg-slate-900/50">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

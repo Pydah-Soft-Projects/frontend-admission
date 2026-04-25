@@ -985,6 +985,8 @@ export const communicationAPI = {
         reportContext?: SmsBulkJobReportContext | null;
         templateName: string | null;
         status: string;
+        displayStatus?: string;
+        workRemaining?: number;
         totalItems: number;
         doneCount: number;
         successCount: number;
@@ -996,6 +998,11 @@ export const communicationAPI = {
       pagination: { page: number; limit: number; total: number; pages: number };
     };
   },
+  /** Re-queue the worker (re-opens a wrongly “completed” job that still has pending line items). */
+  resumeBulkSmsJob: async (id: string) => {
+    const response = await api.post(`/communications/sms-bulk/jobs/${id}/resume`);
+    return (response.data?.data ?? response.data) as { requeued: boolean; jobId: string; reopened?: boolean };
+  },
   getBulkSmsJob: async (id: string) => {
     const response = await api.get(`/communications/sms-bulk/jobs/${id}`);
     return (response.data?.data ?? response.data) as {
@@ -1005,6 +1012,8 @@ export const communicationAPI = {
         reportContext?: SmsBulkJobReportContext | null;
         templateName: string | null;
         status: string;
+        displayStatus?: string;
+        workRemaining?: number;
         totalItems: number;
         doneCount: number;
         successCount: number;
