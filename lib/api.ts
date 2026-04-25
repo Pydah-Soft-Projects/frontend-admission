@@ -935,6 +935,75 @@ export const communicationAPI = {
     const response = await api.get(`/communications/lead/${leadId}/stats`);
     return response.data;
   },
+  /** Super Admin: queue large batch SMS; processes in background (see Communications → SMS job reports). */
+  createBulkSmsJob: async (body: {
+    source: 'send_to_leads' | 'user_specific_leads';
+    templateId: string;
+    items: Array<{
+      leadId: string;
+      leadName?: string;
+      contactNumbers: string[];
+      variables?: { key: string; value: string; defaultValue?: string }[];
+    }>;
+  }) => {
+    const response = await api.post('/communications/sms-bulk/jobs', body);
+    return (response.data?.data ?? response.data) as {
+      jobId: string;
+      totalItems: number;
+      templateName: string;
+      message?: string;
+    };
+  },
+  listBulkSmsJobs: async (params?: { page?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.limit) q.set('limit', String(params.limit));
+    const response = await api.get(`/communications/sms-bulk/jobs?${q.toString()}`);
+    return (response.data?.data ?? response.data) as {
+      items: Array<{
+        id: string;
+        source: string;
+        templateName: string | null;
+        status: string;
+        totalItems: number;
+        doneCount: number;
+        successCount: number;
+        failCount: number;
+        lastError: string | null;
+        createdAt: string;
+        completedAt: string | null;
+      }>;
+      pagination: { page: number; limit: number; total: number; pages: number };
+    };
+  },
+  getBulkSmsJob: async (id: string) => {
+    const response = await api.get(`/communications/sms-bulk/jobs/${id}`);
+    return (response.data?.data ?? response.data) as {
+      job: {
+        id: string;
+        source: string;
+        templateName: string | null;
+        status: string;
+        totalItems: number;
+        doneCount: number;
+        successCount: number;
+        failCount: number;
+        lastError: string | null;
+        createdAt: string;
+        completedAt: string | null;
+      };
+      items: Array<{
+        id: string;
+        leadName: string | null;
+        contactNumbers: string[];
+        status: string;
+        responseText: string | null;
+        errorMessage: string | null;
+        providerMessageIds?: string[];
+        communicationIds: string[];
+      }>;
+    };
+  },
 };
 
 // Joining API

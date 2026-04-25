@@ -402,7 +402,8 @@ function MessagePreviewCard({
   );
 }
 
-const MAX_BULK_LEADS = 80;
+/** Aligned with backend `MAX_SMS_BULK_JOB_ITEMS` — large sends run as background jobs. */
+const MAX_SMS_BULK_LEADS = 2000;
 
 /** Initial SMS variable values from template only (no auto lead name). */
 function buildSmsVariablesFromTemplate(template: MessageTemplate): { key: string; value: string }[] {
@@ -684,7 +685,7 @@ function BulkSmsReviewModal({
 
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/90 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/80">
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                {draft.length} SMS · up to {SMS_SEND_CONCURRENCY} sends at a time
+                {draft.length} SMS in this job · server runs up to {SMS_SEND_CONCURRENCY} in parallel
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSending}>
@@ -697,7 +698,7 @@ function BulkSmsReviewModal({
                   disabled={isSending || draft.length === 0}
                   onClick={() => void onConfirmSend(draft)}
                 >
-                  {isSending ? 'Sending…' : `Send ${draft.length} SMS`}
+                  {isSending ? 'Queuing…' : `Queue ${draft.length} SMS`}
                 </Button>
               </div>
             </div>
@@ -856,10 +857,169 @@ function TestTemplateSmsModal({
   );
 }
 
+function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobId?: string | null; onClearHighlight?: () => void }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { data: listData, isLoading, isFetching } = useQuery({
+    queryKey: ['smsBulkJobs', 1],
+    queryFn: () => communicationAPI.listBulkSmsJobs({ page: 1, limit: 40 }),
+    refetchInterval: 2000,
+  });
+  const polledJobs = listData?.items ?? [];
+  const hasListActive = useMemo(
+    () => polledJobs.some((j) => j.status === 'running' || j.status === 'queued'),
+    [polledJobs]
+  );
+  useEffect(() => {
+    if (highlightJobId) {
+      setSelectedId(highlightJobId);
+      onClearHighlight?.();
+    }
+  }, [highlightJobId, onClearHighlight]);
+  const activeId = selectedId || polledJobs[0]?.id || null;
+  const { data: jobDetail, isLoading: jobDetailLoading } = useQuery({
+    queryKey: ['smsBulkJob', activeId],
+    queryFn: () => communicationAPI.getBulkSmsJob(activeId!),
+    enabled: Boolean(activeId),
+    refetchInterval: 2000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Every bulk send from <span className="font-medium">Send to leads</span> and{' '}
+        <span className="font-medium">User Specific Leads</span> is queued as a job. The table below refreshes
+        {hasListActive ? ' every few seconds' : ' periodically'} while a job is running, so you can see counts and
+        per-number provider responses.
+      </p>
+      {isFetching && hasListActive ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300">Updating…</p>
+      ) : null}
+      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+        <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+          <thead className="bg-slate-50 dark:bg-slate-900/70">
+            <tr>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Time</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Source</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Template</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Progress</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {polledJobs.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                  No jobs yet. Send a bulk SMS from the other tabs to see activity here.
+                </td>
+              </tr>
+            ) : (
+              polledJobs.map((j) => {
+                const pct = j.totalItems > 0 ? Math.round((j.doneCount / j.totalItems) * 100) : 0;
+                const isSel = j.id === activeId;
+                return (
+                  <tr
+                    key={j.id}
+                    className={isSel ? 'bg-orange-50/80 dark:bg-orange-950/30' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50'}
+                    onClick={() => setSelectedId(j.id)}
+                  >
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                      {j.createdAt ? new Date(j.createdAt).toLocaleString() : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-200">
+                      {j.source === 'user_specific_leads' ? 'User-specific leads' : 'Send to leads'}
+                    </td>
+                    <td className="max-w-[10rem] truncate px-3 py-2 text-xs" title={j.templateName || ''}>
+                      {j.templateName || '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <span
+                        className={
+                          j.status === 'completed'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : j.status === 'failed'
+                              ? 'text-red-600'
+                              : 'text-amber-700 dark:text-amber-300'
+                        }
+                      >
+                        {j.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700 dark:text-slate-200">
+                      {j.doneCount}/{j.totalItems} ({pct}%) · ✓{j.successCount} ✗{j.failCount}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+      {activeId && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Line items (numbers &amp; live response)</h3>
+          {jobDetail?.job?.lastError ? (
+            <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+              Last error: {jobDetail.job.lastError}
+            </p>
+          ) : null}
+          {jobDetailLoading && !jobDetail ? <Skeleton className="h-24 w-full" /> : null}
+          {jobDetail ? (
+            <div className="max-h-[min(50vh,28rem)] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-slate-800">
+                <thead className="sticky top-0 z-[1] bg-slate-100 dark:bg-slate-800">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-semibold">Lead</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">Numbers</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">Status</th>
+                    <th className="px-2 py-1.5 text-left font-semibold min-w-[12rem]">Provider response / error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobDetail.items.map((it) => (
+                    <tr key={it.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="align-top px-2 py-1.5 text-slate-800 dark:text-slate-200">{it.leadName || '—'}</td>
+                      <td className="align-top px-2 py-1.5 font-mono text-[11px] text-slate-600">
+                        {Array.isArray(it.contactNumbers) ? it.contactNumbers.join(', ') : '—'}
+                      </td>
+                      <td className="align-top px-2 py-1.5">{it.status}</td>
+                      <td className="align-top px-2 py-1.5 text-slate-600">
+                        {it.errorMessage ? (
+                          <span className="text-red-700 dark:text-red-300">{it.errorMessage}</span>
+                        ) : null}
+                        {it.responseText ? (
+                          <span className="line-clamp-3 whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                            {it.errorMessage ? ' ' : null}
+                            {it.responseText.replace(/<[^>]+>/g, '').slice(0, 500)}
+                          </span>
+                        ) : !it.errorMessage ? (
+                          '—'
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const broadcastFilterSelectClass =
   'h-9 min-w-0 max-w-full shrink rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 sm:max-w-[11rem]';
 
-function SendToLeadsTab() {
+function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) => void }) {
   const { canWrite } = useModulePermission('communications');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -1002,8 +1162,8 @@ function SendToLeadsTab() {
       if (next[lead._id]) {
         delete next[lead._id];
       } else {
-        if (Object.keys(next).length >= MAX_BULK_LEADS) {
-          showToast.error(`You can select at most ${MAX_BULK_LEADS} leads per batch.`);
+        if (Object.keys(next).length >= MAX_SMS_BULK_LEADS) {
+          showToast.error(`You can select at most ${MAX_SMS_BULK_LEADS} leads per batch.`);
           return prev;
         }
         next[lead._id] = lead;
@@ -1019,8 +1179,8 @@ function SendToLeadsTab() {
       for (const l of leads) {
         if (!leadHasRecipient(l)) continue;
         if (next[l._id]) continue;
-        if (count >= MAX_BULK_LEADS) {
-          showToast.error(`Maximum ${MAX_BULK_LEADS} leads per batch.`);
+        if (count >= MAX_SMS_BULK_LEADS) {
+          showToast.error(`Maximum ${MAX_SMS_BULK_LEADS} leads per batch.`);
           break;
         }
         next[l._id] = l;
@@ -1069,34 +1229,33 @@ function SendToLeadsTab() {
     mutationFn: async (rows: SmsReviewRow[]) => {
       const tpl = selectedTemplate;
       if (!tpl) throw new Error('Select a message template.');
-      let ok = 0;
-      let fail = 0;
-      await runWithConcurrency(rows, SMS_SEND_CONCURRENCY, async (row) => {
-        try {
-          await communicationAPI.sendSms(row.leadId, {
-            contactNumbers: row.numbers,
-            templates: [{ templateId: tpl._id, variables: row.variables }],
-          });
-          ok += 1;
-        } catch {
-          fail += 1;
-        }
-      });
-      return { ok, fail };
-    },
-    onSuccess: ({ ok, fail }) => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      if (fail === 0) {
-        showToast.success(`SMS sent for ${ok} lead(s).`);
-      } else {
-        showToast.success(`Sent for ${ok} lead(s); ${fail} failed.`);
+      if (rows.length > MAX_SMS_BULK_LEADS) {
+        throw new Error(`At most ${MAX_SMS_BULK_LEADS} leads per job.`);
       }
+      return communicationAPI.createBulkSmsJob({
+        source: 'send_to_leads',
+        templateId: tpl._id,
+        items: rows.map((row) => ({
+          leadId: row.leadId,
+          leadName: row.leadName,
+          contactNumbers: row.numbers,
+          variables: row.variables,
+        })),
+      });
+    },
+    onSuccess: (out) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['smsBulkJobs'] });
+      showToast.success(
+        `SMS job queued: ${out.totalItems} lead row(s) for template «${out.templateName}». Track status in SMS job reports.`
+      );
+      onBulkJobQueued?.(out.jobId);
       clearSelection();
       setSmsReviewOpen(false);
       setSmsReviewRows([]);
     },
     onError: (e: Error) => {
-      showToast.error(e?.message || 'Failed to send');
+      showToast.error(e?.message || 'Failed to queue job');
     },
   });
 
@@ -1300,7 +1459,8 @@ function SendToLeadsTab() {
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {selectedCount} selected (max {MAX_BULK_LEADS} per batch). Showing page {pagination.page} of{' '}
+          {selectedCount} selected (max {MAX_SMS_BULK_LEADS} per batch; sends as a background job). Showing page{' '}
+          {pagination.page} of{' '}
           {pagination.pages} — {pagination.total} leads total.
         </p>
 
@@ -1395,7 +1555,7 @@ function SendToLeadsTab() {
             disabled={!canSend || confirmSendMutation.isPending}
             onClick={openSmsReview}
           >
-            {confirmSendMutation.isPending ? 'Sending…' : `Send SMS to ${selectedCount} lead(s)`}
+            {confirmSendMutation.isPending ? 'Queuing…' : `Queue SMS for ${selectedCount} lead(s)`}
           </Button>
         </div>
       </div>
@@ -1417,7 +1577,7 @@ function SendToLeadsTab() {
   );
 }
 
-function UserLeadsTab() {
+function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) => void }) {
   const { canWrite } = useModulePermission('communications');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -1554,31 +1714,32 @@ function UserLeadsTab() {
     mutationFn: async (rows: SmsReviewRow[]) => {
       const tpl = selectedTemplate;
       if (!tpl) throw new Error('Select a template.');
-      let ok = 0;
-      let fail = 0;
-      await runWithConcurrency(rows, SMS_SEND_CONCURRENCY, async (row) => {
-        try {
-          await communicationAPI.sendSms(row.leadId, {
-            contactNumbers: row.numbers,
-            templates: [{ templateId: tpl._id, variables: row.variables }],
-          });
-          ok += 1;
-        } catch {
-          fail += 1;
-        }
+      if (rows.length > MAX_SMS_BULK_LEADS) {
+        throw new Error(`At most ${MAX_SMS_BULK_LEADS} leads per job.`);
+      }
+      return communicationAPI.createBulkSmsJob({
+        source: 'user_specific_leads',
+        templateId: tpl._id,
+        items: rows.map((row) => ({
+          leadId: row.leadId,
+          leadName: row.leadName,
+          contactNumbers: row.numbers,
+          variables: row.variables,
+        })),
       });
-      return { ok, fail };
     },
-    onSuccess: ({ ok, fail }) => {
+    onSuccess: (out) => {
       showToast.success(
-        fail === 0 ? `SMS sent for ${ok} lead(s).` : `Sent for ${ok} lead(s); ${fail} failed.`
+        `SMS job queued: ${out.totalItems} lead row(s) for «${out.templateName}». Open SMS job reports to watch live.`
       );
+      onBulkJobQueued?.(out.jobId);
       setSelectedUserIds([]);
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['smsBulkJobs'] });
       setSmsReviewOpen(false);
       setSmsReviewRows([]);
     },
-    onError: (e: Error) => showToast.error(e?.message || 'Failed to send'),
+    onError: (e: Error) => showToast.error(e?.message || 'Failed to queue job'),
   });
 
   const canSend =
@@ -1596,13 +1757,24 @@ function UserLeadsTab() {
     setSmsReviewRows([]);
     try {
       const allLeads: Lead[] = [];
+      const pageSize = 500;
       for (const uid of selectedUserIds) {
-        const resp = await leadAPI.getAll({
-          assignedTo: uid,
-          limit: 500,
-          ...(studentGroupFilter.trim() ? { studentGroup: studentGroupFilter.trim() } : {}),
-        });
-        if (resp?.leads) allLeads.push(...resp.leads);
+        let page = 1;
+        for (;;) {
+          const resp = await leadAPI.getAll({
+            assignedTo: uid,
+            limit: pageSize,
+            page,
+            ...(studentGroupFilter.trim() ? { studentGroup: studentGroupFilter.trim() } : {}),
+          });
+          const batch = resp?.leads || [];
+          if (batch.length === 0) break;
+          allLeads.push(...batch);
+          if (allLeads.length >= MAX_SMS_BULK_LEADS) break;
+          if (batch.length < pageSize) break;
+          page += 1;
+        }
+        if (allLeads.length >= MAX_SMS_BULK_LEADS) break;
       }
       if (gen !== smsPrepareGenRef.current) return;
       if (allLeads.length === 0) {
@@ -1610,7 +1782,7 @@ function UserLeadsTab() {
         setSmsReviewOpen(false);
         return;
       }
-      const targetLeads = allLeads.filter(leadHasRecipient).slice(0, MAX_BULK_LEADS);
+      const targetLeads = allLeads.filter(leadHasRecipient).slice(0, MAX_SMS_BULK_LEADS);
       const rows: SmsReviewRow[] = [];
       for (const lead of targetLeads) {
         const numbers = buildRecipientNumbersForLead(lead, sendPrimary, sendFather);
@@ -1869,8 +2041,8 @@ function UserLeadsTab() {
             {isPreparingSmsReview
               ? 'Loading leads…'
               : confirmSendMutation.isPending
-                ? 'Sending…'
-                : `Send to leads of ${selectedUserIds.length} user(s)`}
+                ? 'Queuing…'
+                : `Queue SMS for leads of ${selectedUserIds.length} user(s)`}
           </Button>
         </div>
       </div>
@@ -1883,13 +2055,13 @@ function UserLeadsTab() {
         isPreparing={isPreparingSmsReview}
         isSending={confirmSendMutation.isPending}
         onConfirmSend={(rows) => confirmSendMutation.mutate(rows)}
-        subtitle={`Edit variables per lead, then send (up to ${MAX_BULK_LEADS} SMS per batch).`}
+        subtitle={`Edit variables per lead, then queue a background job (up to ${MAX_SMS_BULK_LEADS} SMS).`}
       />
     </div>
   );
 }
 
-type CommunicationsTab = 'templates' | 'send' | 'user-leads';
+type CommunicationsTab = 'templates' | 'send' | 'user-leads' | 'sms-reports';
 
 export default function TemplatesPage() {
   const router = useRouter();
@@ -1903,6 +2075,7 @@ export default function TemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | undefined>();
   const [testSmsTemplate, setTestSmsTemplate] = useState<MessageTemplate | null>(null);
   const [activeTab, setActiveTab] = useState<CommunicationsTab>('templates');
+  const [highlightSmsJobId, setHighlightSmsJobId] = useState<string | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -2078,15 +2251,43 @@ export default function TemplatesPage() {
           >
             User Specific Leads
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('sms-reports')}
+            className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors sm:px-3 sm:text-sm ${
+              activeTab === 'sms-reports'
+                ? 'bg-white text-[#c2410c] shadow-sm dark:bg-slate-900 dark:text-[#fb923c]'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            SMS job reports
+          </button>
         </nav>
       </header>
 
       {activeTab === 'send' && (
-        <SendToLeadsTab />
+        <SendToLeadsTab
+          onBulkJobQueued={(id) => {
+            setHighlightSmsJobId(id);
+            setActiveTab('sms-reports');
+          }}
+        />
       )}
 
       {activeTab === 'user-leads' && (
-        <UserLeadsTab />
+        <UserLeadsTab
+          onBulkJobQueued={(id) => {
+            setHighlightSmsJobId(id);
+            setActiveTab('sms-reports');
+          }}
+        />
+      )}
+
+      {activeTab === 'sms-reports' && (
+        <SmsBulkReportsTab
+          highlightJobId={highlightSmsJobId}
+          onClearHighlight={() => setHighlightSmsJobId(null)}
+        />
       )}
 
       {activeTab === 'templates' ? (
