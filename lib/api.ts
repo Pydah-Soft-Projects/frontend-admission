@@ -621,6 +621,8 @@ export const leadAPI = {
     group?: string;
     /** Roster / analytics: filter by `leads.student_group` (communications user-leads). */
     studentGroup?: string;
+    /** Roster: only users with current portfolio leads in this `leads.district` (exact). */
+    district?: string;
     includeAssignmentDetails?: boolean;
     /** Server-side pagination for heavy user list (e.g. Call Reports → User Performance). */
     page?: number;
@@ -647,6 +649,9 @@ export const leadAPI = {
     if (params?.group) queryParams.append('group', params.group);
     if (params?.studentGroup != null && params.studentGroup !== '') {
       queryParams.append('studentGroup', String(params.studentGroup));
+    }
+    if (params?.district != null && params.district !== '') {
+      queryParams.append('district', String(params.district));
     }
     if (params?.includeAssignmentDetails) queryParams.append('includeAssignmentDetails', 'true');
     if (params?.page != null) queryParams.append('page', String(params.page));

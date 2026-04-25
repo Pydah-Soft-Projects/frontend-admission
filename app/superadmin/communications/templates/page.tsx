@@ -1587,6 +1587,9 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
   const [deptFilter, setDeptFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [studentGroupFilter, setStudentGroupFilter] = useState('');
+  /** Roster: show only users with at least one assigned lead in this `leads.district`. */
+  const [userRosterDistrict, setUserRosterDistrict] = useState('');
+  const [roleNameFilter, setRoleNameFilter] = useState('');
 
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState('');
@@ -1614,6 +1617,12 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     return ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
   }, [leadFilterOptionsRes]);
 
+  const userRosterDistrictOptions = useMemo(() => {
+    const raw = (leadFilterOptionsRes as { districts?: string[] })?.districts;
+    if (Array.isArray(raw) && raw.length > 0) return [...raw].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    return [] as string[];
+  }, [leadFilterOptionsRes]);
+
   const { data: analyticsData, isLoading: loadingUsers } = useQuery({
     queryKey: [
       'userAnalytics',
@@ -1623,6 +1632,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       deptFilter,
       groupFilter,
       studentGroupFilter,
+      userRosterDistrict,
     ],
     queryFn: async () => {
       const resp = await leadAPI.getUserAnalytics({
@@ -1630,16 +1640,42 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
         department: deptFilter || undefined,
         group: groupFilter || undefined,
         studentGroup: studentGroupFilter || undefined,
+        district: userRosterDistrict.trim() || undefined,
         rosterOnly: true,
       });
       return resp?.users ?? [];
     },
+    /** Roster is heavy (HRMS + lead counts); avoid refetching on every tab focus. */
+    staleTime: 90_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const rosterSource: any[] = analyticsData ?? [];
 
+  const roleNameOptions = useMemo(() => {
+    const set = new Set<string>();
+    rosterSource.forEach((u: any) => {
+      const r = String(u.roleName ?? u.role_name ?? '').trim();
+      if (r) set.add(r);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [rosterSource]);
+
+  useEffect(() => {
+    if (roleNameFilter && !roleNameOptions.includes(roleNameFilter)) {
+      setRoleNameFilter('');
+    }
+  }, [roleNameOptions, roleNameFilter]);
+
   const users: any[] = useMemo(() => {
     let list = rosterSource;
+    if (roleNameFilter.trim()) {
+      const r = roleNameFilter.trim();
+      list = list.filter(
+        (u: any) => String(u.roleName ?? u.role_name ?? '').trim() === r
+      );
+    }
     if (debouncedSearch) {
       const s = debouncedSearch.toLowerCase();
       list = list.filter(
@@ -1647,11 +1683,14 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
           u.userName?.toLowerCase().includes(s) ||
           u.name?.toLowerCase().includes(s) ||
           u.designation?.toLowerCase().includes(s) ||
-          u.department?.toLowerCase().includes(s)
+          u.department?.toLowerCase().includes(s) ||
+          String(u.roleName ?? u.role_name ?? '')
+            .toLowerCase()
+            .includes(s)
       );
     }
     return list;
-  }, [rosterSource, debouncedSearch]);
+  }, [rosterSource, debouncedSearch, roleNameFilter]);
 
   /** Org filter option lists from full roster response (not client search subset). */
   const { divisionOptions, deptOptions, groupOptions } = useMemo(() => {
@@ -1766,6 +1805,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
             limit: pageSize,
             page,
             ...(studentGroupFilter.trim() ? { studentGroup: studentGroupFilter.trim() } : {}),
+            ...(userRosterDistrict.trim() ? { district: userRosterDistrict.trim() } : {}),
           });
           const batch = resp?.leads || [];
           if (batch.length === 0) break;
@@ -1778,7 +1818,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       }
       if (gen !== smsPrepareGenRef.current) return;
       if (allLeads.length === 0) {
-        showToast.error('No leads found for the selected users (check student group filter if applied).');
+        showToast.error('No leads found for the selected users (check student group or district filter if applied).');
         setSmsReviewOpen(false);
         return;
       }
@@ -1818,6 +1858,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     sendFather,
     sendPrimary,
     studentGroupFilter,
+    userRosterDistrict,
   ]);
 
   const closeSmsReview = useCallback(() => {
@@ -1896,6 +1937,21 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
                 ))}
               </select>
             </label>
+            <label className="flex min-w-[8rem] flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+              User role
+              <select
+                className={filterSelectClass}
+                value={roleNameFilter}
+                onChange={(e) => setRoleNameFilter(e.target.value)}
+              >
+                <option value="">All roles</option>
+                {roleNameOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 xl:border-0 xl:pt-0 xl:pl-4">
             <label className="flex min-w-[12rem] flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -1941,9 +1997,31 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
 
       <div className="space-y-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
         <div className="flex flex-col lg:flex-row gap-4 justify-between lg:items-end">
-          <div className="flex-1 min-w-0">
-            <label className="text-sm font-medium">Search Users</label>
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or designation..." />
+          <div className="flex flex-1 min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <label className="text-sm font-medium">Search users</label>
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, designation, department, or role…"
+              />
+            </div>
+            <label className="flex w-full min-w-[10rem] max-w-sm shrink-0 flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400 sm:max-w-[14rem]">
+              District
+              <select
+                className={filterSelectClass + ' w-full max-w-none'}
+                value={userRosterDistrict}
+                onChange={(e) => setUserRosterDistrict(e.target.value)}
+                title="Show only users who have at least one assigned lead in this district (portfolio + optional student group match)."
+              >
+                <option value="">All districts</option>
+                {userRosterDistrictOptions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="flex gap-2">
             <Button
@@ -1981,19 +2059,21 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
                 </th>
                 <th className="w-12 px-3 py-2 text-left">S.No</th>
                 <th className="px-3 py-2 text-left">User Name</th>
+                <th className="px-3 py-2 text-left min-w-[8rem]">Role</th>
                 <th className="max-w-[14rem] px-3 py-2 text-left">Student groups (leads)</th>
                 <th className="px-3 py-2 text-left text-orange-600">Portfolio leads</th>
               </tr>
             </thead>
             <tbody className="divide-y bg-white">
               {loadingUsers ? (
-                <tr><td colSpan={5} className="p-4 text-center"><TemplatesSkeleton /></td></tr>
+                <tr><td colSpan={6} className="p-4 text-center"><TemplatesSkeleton /></td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={5} className="p-8 text-center text-slate-500">No users found.</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center text-slate-500">No users found.</td></tr>
               ) : (
                 users.map((u, idx) => {
                   const rowId = String(u.id ?? u.userId ?? '');
                   const isChecked = selectedUserIds.includes(rowId);
+                  const roleLabel = String(u.roleName ?? u.role_name ?? '').trim() || '—';
                   const groupsLabel =
                     typeof u.portfolioStudentGroups === 'string' && u.portfolioStudentGroups.trim()
                       ? u.portfolioStudentGroups.trim()
@@ -2017,6 +2097,9 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
                         <div className="text-xs text-slate-500 uppercase tracking-tight">
                           {u.designation || 'Staff'} • {u.department || 'General'}
                         </div>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-slate-800 dark:text-slate-200">
+                        {roleLabel}
                       </td>
                       <td className="max-w-[14rem] px-3 py-2 text-xs leading-snug text-slate-700 dark:text-slate-300">
                         <span className="break-words">{groupsLabel}</span>
