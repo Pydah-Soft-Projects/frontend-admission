@@ -897,9 +897,17 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
   const resumeMutation = useMutation({
     mutationFn: (jobId: string) => communicationAPI.resumeBulkSmsJob(jobId),
     onSuccess: (out) => {
-      const msg = out.reopened
-        ? 'The job was re-opened; sending will continue in the background.'
-        : 'Worker re-queued. Watch progress for updates.';
+      let msg: string;
+      if (out.completed) {
+        msg =
+          'The job is now complete. The batch size was updated to the number of line items actually in the system ' +
+          '(if the plan was larger, those extra lines were never saved, so you cannot re-send them from this same job ' +
+          '— send a new batch to reach any additional leads).';
+      } else {
+        msg = out.reopened
+          ? 'The job was re-opened; sending will continue in the background.'
+          : 'Worker re-queued. Watch progress for updates.';
+      }
       showToast.success(msg);
       queryClient.invalidateQueries({ queryKey: ['smsBulkJobs'] });
       if (expandedId) queryClient.invalidateQueries({ queryKey: ['smsBulkJob', expandedId] });

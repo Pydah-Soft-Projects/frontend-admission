@@ -1001,7 +1001,13 @@ export const communicationAPI = {
   /** Re-queue the worker (re-opens a wrongly “completed” job that still has pending line items). */
   resumeBulkSmsJob: async (id: string) => {
     const response = await api.post(`/communications/sms-bulk/jobs/${id}/resume`);
-    return (response.data?.data ?? response.data) as { requeued: boolean; jobId: string; reopened?: boolean };
+    return (response.data?.data ?? response.data) as {
+      requeued: boolean;
+      jobId: string;
+      reopened?: boolean;
+      completed?: boolean;
+      message?: string;
+    };
   },
   getBulkSmsJob: async (id: string) => {
     const response = await api.get(`/communications/sms-bulk/jobs/${id}`);
