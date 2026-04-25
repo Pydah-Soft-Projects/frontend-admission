@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { communicationAPI, leadAPI } from '@/lib/api';
+import { communicationAPI, leadAPI, type SmsBulkJobReportContext } from '@/lib/api';
 import { Lead, MessageTemplate, MessageTemplateVariable } from '@/types';
 import { useModulePermission, TemplateIcon, UserIcon } from '@/components/layout/DashboardShell';
 import { Card } from '@/components/ui/Card';
@@ -40,6 +40,28 @@ const SUPPORTED_LANGUAGES = [
   { value: 'te', label: 'Telugu' },
   { value: 'hi', label: 'Hindi' },
 ];
+
+/** Renders the audience line for SMS job list + tooltip long form. */
+function formatSmsJobAudience(
+  source: string | undefined,
+  rc: SmsBulkJobReportContext | null | undefined
+): { oneLine: string; title: string } {
+  if (source === 'user_specific_leads' && rc && (rc.selectedUsers || []).length > 0) {
+    const su = rc.selectedUsers || [];
+    const namePart = su.map((u) => u.name || u.id).join(', ');
+    const g = rc.studentGroup?.trim() ? `Student group: ${rc.studentGroup}` : 'Student group: (all portfolio)';
+    const d = rc.district?.trim() ? ` · District: ${rc.district}` : '';
+    const oneLine = `${namePart} · ${g}${d}`.replace(/\s+·\s*$/i, '');
+    return {
+      oneLine: oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine,
+      title: `Users (${su.length}): ${namePart}\n${g}${d}`,
+    };
+  }
+  if (source === 'user_specific_leads') {
+    return { oneLine: '—', title: 'No audience snapshot' };
+  }
+  return { oneLine: '—', title: 'Send to leads: grid selection' };
+}
 
 const ensureVariableArray = (content: string, existing?: MessageTemplateVariable[]) => {
   const matches = content.match(VAR_REGEX);
@@ -909,6 +931,9 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
             <tr>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Time</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Source</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 min-w-[14rem] max-w-[20rem]">
+                Selected users &amp; group
+              </th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Template</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
               <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Progress</th>
@@ -917,7 +942,7 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {polledJobs.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                   No jobs yet. Send a bulk SMS from the other tabs to see activity here.
                 </td>
               </tr>
@@ -925,6 +950,7 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
               polledJobs.map((j) => {
                 const pct = j.totalItems > 0 ? Math.round((j.doneCount / j.totalItems) * 100) : 0;
                 const isSel = j.id === activeId;
+                const aud = formatSmsJobAudience(j.source, (j as { reportContext?: SmsBulkJobReportContext | null }).reportContext);
                 return (
                   <tr
                     key={j.id}
@@ -936,6 +962,16 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-200">
                       {j.source === 'user_specific_leads' ? 'User-specific leads' : 'Send to leads'}
+                    </td>
+                    <td
+                      className="max-w-[20rem] cursor-pointer align-top px-3 py-2 text-[11px] leading-snug text-slate-600 dark:text-slate-300"
+                      title={aud.title}
+                    >
+                      {j.source === 'user_specific_leads' ? (
+                        <span className="line-clamp-3 break-words">{aud.oneLine}</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="max-w-[10rem] truncate px-3 py-2 text-xs" title={j.templateName || ''}>
                       {j.templateName || '—'}
@@ -965,6 +1001,38 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
       </div>
       {activeId && (
         <div className="space-y-2">
+          {jobDetail?.job?.source === 'user_specific_leads' && (() => {
+            const rc = (jobDetail.job as { reportContext?: SmsBulkJobReportContext | null }).reportContext;
+            if (!rc) return null;
+            const su = rc.selectedUsers || [];
+            if (su.length === 0) return null;
+            return (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Roster &amp; filters (when this job was queued)
+                </p>
+                <p className="mt-1 text-xs font-medium text-slate-900 dark:text-slate-100">
+                  Selected users ({su.length}):
+                </p>
+                <ul className="mt-0.5 list-inside list-disc text-xs text-slate-800 dark:text-slate-200">
+                  {su.map((u) => (
+                    <li key={u.id}>
+                      {u.name || u.id} <span className="font-mono text-slate-500">({u.id})</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-xs text-slate-700 dark:text-slate-300">
+                  <span className="font-medium text-slate-800 dark:text-slate-100">Student group:</span>{' '}
+                  {rc.studentGroup?.trim() ? rc.studentGroup : 'All (no filter)'}
+                </p>
+                {rc.district?.trim() ? (
+                  <p className="text-xs text-slate-700 dark:text-slate-300">
+                    <span className="font-medium text-slate-800 dark:text-slate-100">Portfolio district:</span> {rc.district}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })()}
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Line items (numbers &amp; live response)</h3>
           {jobDetail?.job?.lastError ? (
             <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
@@ -1762,9 +1830,25 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       if (rows.length > MAX_SMS_BULK_LEADS) {
         throw new Error(`At most ${MAX_SMS_BULK_LEADS} leads per job.`);
       }
+      const reportContext: SmsBulkJobReportContext = {
+        version: 1,
+        studentGroup: studentGroupFilter.trim() || null,
+        district: userRosterDistrict.trim() || null,
+        selectedUsers: selectedUserIds.map((id) => {
+          const u = rosterSource.find((x: { id?: string; userId?: string; name?: string; userName?: string }) => {
+            const rowId = String(x.id ?? x.userId ?? '');
+            return rowId === id;
+          });
+          return {
+            id,
+            name: (u?.name || u?.userName || 'User').trim() || id,
+          };
+        }),
+      };
       return communicationAPI.createBulkSmsJob({
         source: 'user_specific_leads',
         templateId: tpl._id,
+        reportContext,
         items: rows.map((row) => ({
           leadId: row.leadId,
           leadName: row.leadName,

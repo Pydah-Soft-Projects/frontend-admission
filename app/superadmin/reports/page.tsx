@@ -35,12 +35,13 @@ type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisWeek
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
-// Call reports tab: gradient styles for stats cards (Total Users, Assigned Leads, Total Calls, Total SMS)
+// Call reports tab: gradient styles for stats cards (user performance & daily top-line metrics)
 const CALL_REPORT_CARD_STYLES = [
   'bg-[#3b82f6] shadow-[0_4px_14px_0_rgba(59,130,246,0.39)]',
   'bg-[#10b981] shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]',
   'bg-[#f97316] shadow-[0_4px_14px_0_rgba(249,115,22,0.39)]',
   'bg-[#8b5cf6] shadow-[0_4px_14px_0_rgba(139,92,246,0.39)]',
+  'bg-[#f43f5e] shadow-[0_4px_14px_0_rgba(244,63,94,0.35)]',
 ];
 
 /**
@@ -569,6 +570,9 @@ export default function ReportsPage() {
         totalAssignedLeads: number;
         totalCallsDone: number;
         totalSms: number;
+        totalInterested: number;
+        totalCallbacksRevisits: number;
+        totalUnattended: number;
       }
     | undefined;
 
@@ -633,6 +637,8 @@ export default function ReportsPage() {
       totalAssigned: rows.reduce((s: number, u: any) => s + getPerformanceTotalLeadsDisplay(u), 0),
       totalDone: rows.reduce((s: number, u: any) => s + Number(u?.calls?.total || 0), 0),
       totalBalance: rows.reduce((s: number, u: any) => s + getPerformanceBalanceDisplay(u), 0),
+      totalInterested: rows.reduce((s: number, u: any) => s + Number(u?.interested ?? 0), 0),
+      totalUnattended: rows.reduce((s: number, u: any) => s + Number(u?.reclaimedUniqueLeads ?? 0), 0),
       ranking,
     };
   }, [performanceTableUsers, getPerformanceTotalLeadsDisplay, getPerformanceBalanceDisplay]);
@@ -998,7 +1004,7 @@ export default function ReportsPage() {
                 <th>Mandal Assigned</th>
                 <th>Total Allotted</th>
                 ${headerStatusCounsellor}
-                <th>Reclaimed (batch)</th>
+                <th>Unattended (batch)</th>
               </tr>
             </thead>
             <tbody>${rowHtmlCounsellor}</tbody>
@@ -1091,7 +1097,7 @@ export default function ReportsPage() {
                 <th>Mandal Assigned</th>
                 <th>Total Allotted</th>
                 ${theadStatusRow}
-                <th>Reclaimed (batch)</th>
+                <th>Unattended (batch)</th>
               </tr>
             </thead>
             <tbody>${rowHtml}</tbody>
@@ -1990,16 +1996,16 @@ export default function ReportsPage() {
                   </div>
                 )
               ) : isLoadingPerformanceUserList ? (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  {Array.from({ length: 4 }).map((_, i) => (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                  {Array.from({ length: 5 }).map((_, i) => (
                     <Skeleton key={`calls-stats-skeleton-${i}`} className="h-20 rounded-xl" />
                   ))}
                 </div>
               ) : performanceTableUsers.length > 0 ? (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                   {[
                     {
-                      label: 'Total Users',
+                      label: 'Total users',
                       value:
                         performanceSummaryTotals?.userCount ??
                         performanceUserAnalyticsData?.pagination?.total ??
@@ -2007,7 +2013,7 @@ export default function ReportsPage() {
                       style: CALL_REPORT_CARD_STYLES[0],
                     },
                     {
-                      label: 'Total Assigned Leads',
+                      label: 'Total assigned leads',
                       value:
                         performanceSummaryTotals != null
                           ? performanceSummaryTotals.totalAssignedLeads
@@ -2015,20 +2021,22 @@ export default function ReportsPage() {
                       style: CALL_REPORT_CARD_STYLES[1],
                     },
                     {
-                      label: 'Total Calls/Visits Done',
+                      label: 'Total interested',
                       value:
                         performanceSummaryTotals != null
-                          ? performanceSummaryTotals.totalCallsDone
-                          : performanceTableUsers.reduce((sum: number, u: any) => sum + (u.calls?.total ?? 0), 0),
+                          ? performanceSummaryTotals.totalInterested
+                          : performanceTableUsers.reduce((sum: number, u: any) => sum + Number(u?.interested ?? 0), 0),
                       style: CALL_REPORT_CARD_STYLES[2],
                     },
                     {
-                      label: 'Total SMS',
-                      value:
-                        performanceSummaryTotals != null
-                          ? performanceSummaryTotals.totalSms
-                          : performanceTableUsers.reduce((sum: number, u: any) => sum + (u.sms?.total ?? 0), 0),
+                      label: 'Total callbacks / revisits',
+                      value: performanceSummaryTotals != null ? performanceSummaryTotals.totalCallbacksRevisits : 0,
                       style: CALL_REPORT_CARD_STYLES[3],
+                    },
+                    {
+                      label: 'Total unattended (reclaimed)',
+                      value: performanceSummaryTotals != null ? performanceSummaryTotals.totalUnattended : 0,
+                      style: CALL_REPORT_CARD_STYLES[4],
                     },
                   ].map((item, i) => (
                     <div key={i} className={`overflow-hidden rounded-xl border-0 ${item.style} p-4 shadow-lg`}>
@@ -2601,7 +2609,7 @@ export default function ReportsPage() {
                                       </span>
                                       {reclaimedTotal > 0 && (
                                         <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                                          Date rows with reclaim: {reclaimedTotal}
+                                          Date rows with unattended: {reclaimedTotal}
                                         </span>
                                       )}
                                     </div>
@@ -2665,25 +2673,6 @@ export default function ReportsPage() {
                                                       </span>
                                                     </span>
                                                   </div>
-                                                  <div className="mb-3 rounded-md border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40">
-                                                    <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">
-                                                      <span className="font-semibold text-slate-800 dark:text-slate-200">Main row Balance</span> (above):{' '}
-                                                      <strong className="text-slate-700 dark:text-slate-300">
-                                                        Total Leads (bucket sum) − Calls/Visits Done
-                                                      </strong>
-                                                      , minimum 0 —{' '}
-                                                      <span className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                        {getPerformanceBalanceDisplay(user)}
-                                                      </span>
-                                                      .{' '}
-                                                      <span className="font-semibold text-slate-800 dark:text-slate-200">Assignment Balance</span> (below) remains{' '}
-                                                      <strong className="text-slate-700 dark:text-slate-300">call_status Assigned</strong> per bucket.                                                       The footer
-                                                      “Leads allotted (period)” <strong className="text-slate-700 dark:text-slate-300">Balance</strong> cell matches
-                                                      the main row (bucket-sum allotted − Calls/Visits Done).{' '}
-                                                      <strong className="text-slate-800 dark:text-slate-200">Reclaimed</strong> counts leads in that allotment row
-                                                      that were later reclaimed from this user (reclaim may occur after the selected date range).
-                                                    </p>
-                                                  </div>
                                                   {!pc ? (
                                                     <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
                                                       Period totals unavailable — collapse and expand again, or refresh. Student Counselor analytics must load
@@ -2726,9 +2715,9 @@ export default function ReportsPage() {
                                                           </th>
                                                           <th
                                                             className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
-                                                            title="Distinct leads in this allotment row that were later reclaimed from this user; reclaim date may be outside the report period."
+                                                            title="Unattended (reclaimed) — distinct leads in this allotment row later taken back from this user; reclaim time may be outside the report range."
                                                           >
-                                                            Reclaimed
+                                                            Unattended
                                                           </th>
                                                         </tr>
                                                       </thead>
@@ -2866,25 +2855,6 @@ export default function ReportsPage() {
                                             ? 'Visit status columns (PRO): distinct students per group by current visit_status. Main row Calls/Visits Done and Balance match the period footer (bucket-sum allotted minus non-Assigned visit_status counts).'
                                             : 'Pipeline columns: distinct students per group by lead_status. Calls/Visits Done = distinct leads with logged call outcomes in the period (non-counsellor/PRO staff).'}
                                         </p>
-                                        {expandedMode === 'pro' ? (
-                                          <div className="mb-3 rounded-md border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40">
-                                            <p className="text-[11px] leading-snug text-slate-600 dark:text-slate-400">
-                                              <span className="font-semibold text-slate-800 dark:text-slate-200">Main row Balance</span> (above):{' '}
-                                              <strong className="text-slate-700 dark:text-slate-300">
-                                                Total Leads (bucket sum) − Calls/Visits Done
-                                              </strong>
-                                              , minimum 0 —{' '}
-                                              <span className="tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                {getPerformanceBalanceDisplay(user)}
-                                              </span>
-                                              .{' '}
-                                              <span className="font-semibold text-slate-800 dark:text-slate-200">Per-row Balance</span> is{' '}
-                                              <strong className="text-slate-700 dark:text-slate-300">visit_status Assigned</strong> for that bucket. The footer
-                                              “Leads allotted (period)” <strong className="text-slate-700 dark:text-slate-300">Balance</strong> cell matches the
-                                              main row.
-                                            </p>
-                                          </div>
-                                        ) : null}
                                         {expandedMode === 'pro' &&
                                         !detailUser?.expandedAssignmentDiagnostics?.performanceCohort?.allottedByVisitStatus ? (
                                           <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
@@ -2929,9 +2899,9 @@ export default function ReportsPage() {
                                                 )}
                                                 <th
                                                   className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
-                                                  title="Distinct leads in this allotment row that were later reclaimed from this user; reclaim date may be outside the report period."
+                                                  title="Unattended (reclaimed) — distinct leads in this row later taken back; reclaim time may be outside the report range."
                                                 >
-                                                  Reclaimed
+                                                  Unattended
                                                 </th>
                                               </tr>
                                             </thead>
@@ -3126,11 +3096,31 @@ export default function ReportsPage() {
                           </div>
                         </div>
                       )}
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                      <Card className="p-4"><p className="text-xs text-slate-500">Users Covered</p><p className="text-xl font-bold">{performanceSummary.usersCovered}</p></Card>
-                      <Card className="p-4"><p className="text-xs text-slate-500">Total Leads</p><p className="text-xl font-bold">{performanceSummary.totalAssigned}</p></Card>
-                      <Card className="p-4"><p className="text-xs text-slate-500">Calls/Visits Done</p><p className="text-xl font-bold">{performanceSummary.totalDone}</p></Card>
-                      <Card className="p-4"><p className="text-xs text-slate-500">Total Balance</p><p className="text-xl font-bold">{performanceSummary.totalBalance}</p></Card>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                      <Card className="p-4">
+                        <p className="text-xs text-slate-500">Users (this page)</p>
+                        <p className="text-xl font-bold">{performanceSummary.usersCovered}</p>
+                      </Card>
+                      <Card className="p-4">
+                        <p className="text-xs text-slate-500">Assigned leads (this page)</p>
+                        <p className="text-xl font-bold">{performanceSummary.totalAssigned}</p>
+                      </Card>
+                      <Card className="p-4">
+                        <p className="text-xs text-slate-500">Interested (this page)</p>
+                        <p className="text-xl font-bold">{performanceSummary.totalInterested}</p>
+                      </Card>
+                      <Card className="p-4">
+                        <p className="text-xs text-slate-500">Callbacks / revisits (report total)</p>
+                        <p className="text-xl font-bold">
+                          {Number(performanceSummaryTotals?.totalCallbacksRevisits ?? 0).toLocaleString()}
+                        </p>
+                      </Card>
+                      <Card className="p-4">
+                        <p className="text-xs text-slate-500">Unattended (reclaimed)</p>
+                        <p className="text-xl font-bold">
+                          {Number(performanceSummaryTotals?.totalUnattended ?? 0).toLocaleString()}
+                        </p>
+                      </Card>
                     </div>
                     <Card className="p-4 border-slate-200 dark:border-slate-700">
                       <div className="flex items-center justify-between mb-3">

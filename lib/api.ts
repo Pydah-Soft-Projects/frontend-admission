@@ -14,6 +14,14 @@ import type {
   DeleteJobStatusResponse,
 } from '@/types';
 
+export type SmsBulkJobReportContext = {
+  version?: number;
+  studentGroup: string | null;
+  district: string | null;
+  selectedUsers: { id: string; name: string }[];
+  _truncated?: boolean;
+};
+
 // API Base URL - MUST be set on the host (e.g. Vercel → Environment Variables).
 // If unset in production, the bundle defaults to localhost and API calls fail from real users' browsers.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -944,6 +952,12 @@ export const communicationAPI = {
   createBulkSmsJob: async (body: {
     source: 'send_to_leads' | 'user_specific_leads';
     templateId: string;
+    /** Shown in SMS job reports for user-specific jobs (selected roster users, student group, district). */
+    reportContext?: {
+      studentGroup?: string | null;
+      district?: string | null;
+      selectedUsers: Array<{ id: string; name: string }>;
+    };
     items: Array<{
       leadId: string;
       leadName?: string;
@@ -968,6 +982,7 @@ export const communicationAPI = {
       items: Array<{
         id: string;
         source: string;
+        reportContext?: SmsBulkJobReportContext | null;
         templateName: string | null;
         status: string;
         totalItems: number;
@@ -987,6 +1002,7 @@ export const communicationAPI = {
       job: {
         id: string;
         source: string;
+        reportContext?: SmsBulkJobReportContext | null;
         templateName: string | null;
         status: string;
         totalItems: number;
