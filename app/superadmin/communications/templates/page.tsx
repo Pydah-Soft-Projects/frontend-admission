@@ -932,6 +932,12 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                 const pct = j.totalItems > 0 ? Math.round((j.doneCount / j.totalItems) * 100) : 0;
                 const isOpen = j.id === expandedId;
                 const jRc = (j as { reportContext?: SmsBulkJobReportContext | null }).reportContext;
+                const userRosterChips = (jRc?.selectedUsers || []) as { id: string; name: string }[];
+                const hasUserSnapshot =
+                  j.source === 'user_specific_leads' &&
+                  jRc &&
+                  (userRosterChips.length > 0 ||
+                    Boolean((jRc.studentGroup && jRc.studentGroup.trim()) || (jRc.district && jRc.district.trim())));
                 return (
                   <Fragment key={j.id}>
                     <tr
@@ -984,26 +990,30 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                       <tr className="bg-slate-50/70 dark:bg-slate-900/30">
                         <td colSpan={6} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
                           <div className="space-y-3 px-3 py-3 sm:px-4 sm:py-3.5">
-                            {j.source === 'user_specific_leads' && jRc && (jRc.selectedUsers || []).length > 0 ? (
+                            {hasUserSnapshot ? (
                               <div className="rounded-lg border border-slate-200 bg-white/90 px-3 py-2.5 dark:border-slate-600 dark:bg-slate-900/50">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                   Roster &amp; filters (when this job was queued)
                                 </p>
-                                <p className="mt-1.5 text-xs font-medium text-slate-900 dark:text-slate-100">
-                                  Selected users ({(jRc.selectedUsers || []).length}):
-                                </p>
-                                <ul className="mt-0.5 list-inside list-disc text-xs text-slate-800 dark:text-slate-200">
-                                  {(jRc.selectedUsers || []).map((u) => (
-                                    <li key={u.id}>
-                                      {u.name || u.id} <span className="font-mono text-slate-500">({u.id})</span>
-                                    </li>
-                                  ))}
-                                </ul>
+                                {userRosterChips.length > 0 ? (
+                                  <>
+                                    <p className="mt-1.5 text-xs font-medium text-slate-900 dark:text-slate-100">
+                                      Selected users ({userRosterChips.length}):
+                                    </p>
+                                    <ul className="mt-0.5 list-inside list-disc text-xs text-slate-800 dark:text-slate-200">
+                                      {userRosterChips.map((u) => (
+                                        <li key={u.id}>
+                                          {u.name || u.id} <span className="font-mono text-slate-500">({u.id})</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </>
+                                ) : null}
                                 <p className="mt-1.5 text-xs text-slate-700 dark:text-slate-300">
                                   <span className="font-medium text-slate-800 dark:text-slate-100">Student group:</span>{' '}
-                                  {jRc.studentGroup?.trim() ? jRc.studentGroup : 'All (no filter)'}
+                                  {jRc && jRc.studentGroup?.trim() ? jRc.studentGroup : 'All (no filter)'}
                                 </p>
-                                {jRc.district?.trim() ? (
+                                {jRc?.district?.trim() ? (
                                   <p className="text-xs text-slate-700 dark:text-slate-300">
                                     <span className="font-medium text-slate-800 dark:text-slate-100">Portfolio district:</span>{' '}
                                     {jRc.district}
