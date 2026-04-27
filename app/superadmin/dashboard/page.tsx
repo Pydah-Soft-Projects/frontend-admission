@@ -433,7 +433,7 @@ export default function SuperAdminDashboard() {
 
       const response = await leadAPI.getAll({
         page: 1,
-        limit: 5000,
+        limit: 1500,
         startDate: fmt(start),
         endDate: fmt(now),
       } as any);
