@@ -1248,19 +1248,50 @@ export default function ReportsPage() {
     enabled: activeTab === 'abstract' && !!filters.abstractStateId,
   });
 
-  // Leads Abstract (district, mandal, school, college by academic year + student group + state/district filter)
-  const { data: leadsAbstract, isLoading: isLoadingAbstract, isFetching: isFetchingAbstract } = useQuery({
-    queryKey: ['leadsAbstract', filters.academicYear, filters.studentGroup, filters.abstractStateId, filters.abstractDistrictId],
-    queryFn: () => reportAPI.getLeadsAbstract({
-      academicYear: filters.academicYear ?? 2025,
-      studentGroup: filters.studentGroup || undefined,
-      stateId: filters.abstractStateId || undefined,
-      districtId: filters.abstractDistrictId || undefined,
-    }),
+  // Leads Abstract: district breakdown refetches only when year / group / state change (not when picking a district).
+  const abstractReportParams = {
+    academicYear: filters.academicYear ?? 2025,
+    studentGroup: filters.studentGroup || undefined,
+    stateId: filters.abstractStateId || undefined,
+  };
+  const {
+    data: leadsAbstractDistricts,
+    isLoading: isLoadingAbstractDistricts,
+    isFetching: isFetchingAbstractDistricts,
+  } = useQuery({
+    queryKey: ['leadsAbstract', 'districts', filters.academicYear, filters.studentGroup, filters.abstractStateId],
+    queryFn: () =>
+      reportAPI.getLeadsAbstract({
+        ...abstractReportParams,
+        districtId: undefined,
+      }),
     enabled: activeTab === 'abstract',
     staleTime: 60000,
     retry: 2,
-    placeholderData: (previousData: any) => previousData,
+    placeholderData: keepPreviousData,
+  });
+
+  const {
+    data: leadsAbstractMandals,
+    isLoading: isLoadingAbstractMandals,
+    isFetching: isFetchingAbstractMandals,
+  } = useQuery({
+    queryKey: [
+      'leadsAbstract',
+      'mandals',
+      filters.academicYear,
+      filters.studentGroup,
+      filters.abstractStateId,
+      filters.abstractDistrictId,
+    ],
+    queryFn: () =>
+      reportAPI.getLeadsAbstract({
+        ...abstractReportParams,
+        districtId: filters.abstractDistrictId || undefined,
+      }),
+    enabled: activeTab === 'abstract' && !!filters.abstractDistrictId,
+    staleTime: 60000,
+    retry: 2,
   });
 
   // Export handlers
@@ -1630,7 +1661,6 @@ export default function ReportsPage() {
               <option value="Degree">Degree</option>
               <option value="Diploma">Diploma</option>
             </select>
-            <span className="mx-1 text-slate-400 dark:text-slate-500">|</span>
           </>
         )}
 
@@ -1679,24 +1709,28 @@ export default function ReportsPage() {
           </>
         )}
 
-        <span className="text-sm font-medium text-[#334155] dark:text-[#cbd5e1]">Quick Filters:</span>
-        {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek', 'overall'] as DatePreset[]).map((preset) => (
-          <button
-            key={preset}
-            onClick={() => handleDatePreset(preset)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${datePreset === preset
-              ? 'bg-[#2563eb] text-[#ffffff] shadow-sm'
-              : 'bg-[#f1f5f9] text-[#334155] hover:bg-[#e2e8f0] dark:bg-[#334155] dark:text-[#cbd5e1] dark:hover:bg-[#475569]'
-              }`}
-          >
-            {preset === 'today' && 'Today'}
-            {preset === 'yesterday' && 'Yesterday'}
-            {preset === 'last7days' && 'Last 7 Days'}
-            {preset === 'last30days' && 'Last 30 Days'}
-            {preset === 'thisWeek' && 'This Week'}
-            {preset === 'overall' && 'Overall'}
-          </button>
-        ))}
+        {activeTab !== 'abstract' && (
+          <>
+            <span className="text-sm font-medium text-[#334155] dark:text-[#cbd5e1]">Quick Filters:</span>
+            {(['today', 'yesterday', 'last7days', 'last30days', 'thisWeek', 'overall'] as DatePreset[]).map((preset) => (
+              <button
+                key={preset}
+                onClick={() => handleDatePreset(preset)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${datePreset === preset
+                  ? 'bg-[#2563eb] text-[#ffffff] shadow-sm'
+                  : 'bg-[#f1f5f9] text-[#334155] hover:bg-[#e2e8f0] dark:bg-[#334155] dark:text-[#cbd5e1] dark:hover:bg-[#475569]'
+                  }`}
+              >
+                {preset === 'today' && 'Today'}
+                {preset === 'yesterday' && 'Yesterday'}
+                {preset === 'last7days' && 'Last 7 Days'}
+                {preset === 'last30days' && 'Last 30 Days'}
+                {preset === 'thisWeek' && 'This Week'}
+                {preset === 'overall' && 'Overall'}
+              </button>
+            ))}
+          </>
+        )}
 
         {activeTab === 'calls' && (
           <Button
@@ -4156,19 +4190,19 @@ export default function ReportsPage() {
       {
         activeTab === 'abstract' && (
           <div className="space-y-4">
-            {/* Filters: State → District; Academic Year; Student Group */}
-            {isLoadingAbstract && !leadsAbstract ? (
+            {isLoadingAbstractDistricts && !leadsAbstractDistricts ? (
               <LeadsAbstractSkeleton />
-            ) : leadsAbstract ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]">
+            ) : leadsAbstractDistricts ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]">
                 {/* Districts table – always shown first */}
                 <Card className="flex flex-col overflow-hidden h-full">
                   <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Lead count by district · Select a district to see mandal-wise stats</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Totals per district (counselor assigned vs unassigned) · Select a row for mandals</p>
                   </div>
                   <div className="flex-1 overflow-y-auto">
-                    {isFetchingAbstract ? (
+                    {isFetchingAbstractDistricts && !leadsAbstractDistricts ? (
                       <div className="p-4 space-y-4">
                         {[...Array(20)].map((_, i) => (
                           <div key={i} className="flex items-center">
@@ -4176,43 +4210,56 @@ export default function ReportsPage() {
                           </div>
                         ))}
                       </div>
-                    ) : (leadsAbstract.districtBreakdown || []).length === 0 ? (
+                    ) : (leadsAbstractDistricts.districtBreakdown || []).length === 0 ? (
                       <p className="p-4 text-sm text-slate-500">No districts</p>
                     ) : (
-                      <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                        {(leadsAbstract.districtBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
-                          <li
-                            key={row.id ?? `district-${idx}`}
-                            onClick={() => {
-                              if (row.id) {
-                                setFilters({ ...filters, abstractDistrictId: row.id });
-                              }
-                            }}
-                            className={`flex items-center justify-between px-4 py-3 text-sm cursor-pointer transition-colors ${filters.abstractDistrictId === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
-                          >
-                            <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
-                              {row.name}
-                              {row.name === leadsAbstract.maxDistrict && (
-                                <span className="ml-1 text-amber-600 dark:text-amber-400">(Highest)</span>
-                              )}
-                            </span>
-                            <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
-                          </li>
-                        ))}
-                      </ul>
+                      <>
+                        <div
+                          className="sticky top-0 z-[1] grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center border-b border-slate-200 bg-[#f1f5f9] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:bg-[#334155] dark:text-slate-300 sm:px-4 sm:text-[11px] md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem]"
+                          aria-hidden
+                        >
+                          <span>District</span>
+                          <span className="text-right tabular-nums">Total</span>
+                          <span className="text-right tabular-nums leading-tight">Assigned</span>
+                          <span className="text-right tabular-nums leading-tight">Unassigned</span>
+                        </div>
+                        <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                          {(leadsAbstractDistricts.districtBreakdown || []).map((row: { id?: string; name: string; count: number; assignedCount?: number; unassignedCount?: number }, idx: number) => (
+                            <li
+                              key={row.id ?? `district-${idx}`}
+                              onClick={() => {
+                                if (row.id) {
+                                  setFilters({ ...filters, abstractDistrictId: row.id });
+                                }
+                              }}
+                              className={`grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center px-3 py-2.5 text-sm cursor-pointer transition-colors sm:px-4 md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem] ${filters.abstractDistrictId === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                            >
+                              <span className="min-w-0 text-slate-900 dark:text-slate-100 truncate">
+                                {row.name}
+                                {row.name === leadsAbstractDistricts.maxDistrict && (
+                                  <span className="ml-1 shrink-0 text-amber-600 dark:text-amber-400">(Highest)</span>
+                                )}
+                              </span>
+                              <span className="text-right text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300 sm:text-sm">{Number(row.count)}</span>
+                              <span className="text-right text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 sm:text-sm">{Number(row.assignedCount ?? 0)}</span>
+                              <span className="text-right text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-400 sm:text-sm">{Number(row.unassignedCount ?? 0)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
                     )}
                   </div>
                 </Card>
 
-                {/* Mandals table – only when a district is selected */}
+                {/* Mandals table – only when a district is selected; loading state isolated here */}
                 {filters.abstractDistrictId ? (
                   <Card className="flex flex-col overflow-hidden h-full">
                     <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Lead count by mandal for selected district</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Assigned vs unassigned per mandal for the selected district</p>
                     </div>
                     <div className="flex-1 overflow-y-auto">
-                      {isFetchingAbstract ? (
+                      {(isLoadingAbstractMandals || isFetchingAbstractMandals) && !leadsAbstractMandals ? (
                         <div className="p-4 space-y-4">
                           {[...Array(20)].map((_, i) => (
                             <div key={i} className="flex items-center">
@@ -4220,28 +4267,41 @@ export default function ReportsPage() {
                             </div>
                           ))}
                         </div>
-                      ) : (leadsAbstract.mandalBreakdown || []).length === 0 ? (
+                      ) : (leadsAbstractMandals?.mandalBreakdown || []).length === 0 ? (
                         <div className="flex items-center justify-center h-full p-4 text-sm text-slate-500">
                           No mandals found for this district
                         </div>
                       ) : (
-                        <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
-                          {(leadsAbstract.mandalBreakdown || []).map((row: { id?: string; name: string; count: number }, idx: number) => (
-                            <li
-                              key={row.id ?? `mandal-${idx}`}
-                              className={`flex items-center justify-between px-4 py-3 text-sm ${row.name === leadsAbstract.maxMandal ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                                }`}
-                            >
-                              <span className="text-slate-900 dark:text-slate-100 truncate pr-2">
-                                {row.name}
-                                {row.name === leadsAbstract.maxMandal && (
-                                  <span className="ml-1 text-amber-600 dark:text-amber-400">(Highest)</span>
-                                )}
-                              </span>
-                              <span className="shrink-0 font-semibold tabular-nums text-slate-700 dark:text-slate-300">{Number(row.count)}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <>
+                          <div
+                            className="sticky top-0 z-[1] grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center border-b border-slate-200 bg-[#f1f5f9] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:bg-[#334155] dark:text-slate-300 sm:px-4 sm:text-[11px] md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem]"
+                            aria-hidden
+                          >
+                            <span>Mandal</span>
+                            <span className="text-right tabular-nums">Total</span>
+                            <span className="text-right tabular-nums leading-tight">Assigned</span>
+                            <span className="text-right tabular-nums leading-tight">Unassigned</span>
+                          </div>
+                          <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                            {(leadsAbstractMandals?.mandalBreakdown || []).map((row: { id?: string; name: string; count: number; assignedCount?: number; unassignedCount?: number }, idx: number) => (
+                              <li
+                                key={row.id ?? `mandal-${idx}`}
+                                className={`grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center px-3 py-2.5 text-sm sm:px-4 md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem] ${row.name === leadsAbstractMandals?.maxMandal ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                                  }`}
+                              >
+                                <span className="min-w-0 text-slate-900 dark:text-slate-100 truncate">
+                                  {row.name}
+                                  {row.name === leadsAbstractMandals?.maxMandal && (
+                                    <span className="ml-1 shrink-0 text-amber-600 dark:text-amber-400">(Highest)</span>
+                                  )}
+                                </span>
+                                <span className="text-right text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300 sm:text-sm">{Number(row.count)}</span>
+                                <span className="text-right text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 sm:text-sm">{Number(row.assignedCount ?? 0)}</span>
+                                <span className="text-right text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-400 sm:text-sm">{Number(row.unassignedCount ?? 0)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
                       )}
                     </div>
                   </Card>
@@ -4251,6 +4311,7 @@ export default function ReportsPage() {
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <Card className="p-8 text-center">
                 <p className="text-slate-500 dark:text-slate-400">No abstract data. Select Academic Year and try again.</p>
