@@ -434,6 +434,20 @@ export default function AssignLeadsPage() {
   const activeUserId = mode === 'institution' ? institutionUserId : selectedUserId;
   const targetUser = users.find(u => (u.id || u._id) === activeUserId);
   const targetRole = targetUser?.roleName?.trim().toUpperCase();
+  /** Matches backend: PRO assigns `pro_target_date`; other assignable roles use `counsellor_target_date`. */
+  const assignSlotIsPro =
+    targetRole === 'PRO' || (mode === 'bulk' && bulkSelectedRole === 'PRO');
+  const hasTargetDateRoleContext =
+    mode === 'institution'
+      ? !!institutionUserId
+      : mode === 'bulk'
+        ? !!bulkSelectedRole
+        : !!selectedUserId;
+  const targetDateFieldLabel = !hasTargetDateRoleContext
+    ? 'Target date (auto-reclaim)'
+    : assignSlotIsPro
+      ? 'PRO target date (field visit / auto-reclaim)'
+      : 'Counsellor target date (call workflow / auto-reclaim)';
 
   const {
     data: statsData,
@@ -898,6 +912,7 @@ export default function AssignLeadsPage() {
         setSelectedLeadId('');
         setLeadSearch('');
         setSearchResults([]);
+        setSingleAssignTargetDate('');
       }
     },
     onError: (error: any) => {
@@ -1628,7 +1643,9 @@ export default function AssignLeadsPage() {
                   </select>
                 </div>
                 <div className="min-w-0">
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Target date (auto-reclaim) *</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    {targetDateFieldLabel} *
+                  </label>
                   <Input
                     type="date"
                     value={institutionTargetDate}
@@ -1636,6 +1653,11 @@ export default function AssignLeadsPage() {
                     className="w-full min-w-0 px-3 py-2 text-sm"
                     required
                   />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    {assignSlotIsPro
+                      ? 'Applies to the PRO assignment slot only for the selected user.'
+                      : 'Applies to the counsellor assignment slot only for the selected user.'}
+                  </p>
                 </div>
               </div>
 
@@ -2045,7 +2067,7 @@ export default function AssignLeadsPage() {
                 </div>
                 <div className="min-w-0">
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Target date (auto-reclaim) *
+                    {targetDateFieldLabel} *
                   </label>
                   <Input
                     type="date"
@@ -2060,7 +2082,10 @@ export default function AssignLeadsPage() {
                 {targetRole === 'PRO'
                   ? 'Available leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'
                   : 'Only unassigned leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'}{' '}
-                Target date is required: automated reclaim only runs for assigned leads once this date is on or before today (status rules apply). &quot;Assigned&quot; keeps the same cycle; &quot;Not Interested&quot; and &quot;Wrong Data&quot; advance cycle on reclaim.
+                {assignSlotIsPro
+                  ? 'This date is saved on each lead as the PRO slot only (`pro_target_date`). It does not change an existing student counsellor target date.'
+                  : 'This date is saved on each lead as the counsellor slot only (`counsellor_target_date`). It does not change an existing PRO target date.'}{' '}
+                Reclaim runs when that slot&apos;s date is due (pipeline rules apply). &quot;Assigned&quot; keeps the same cycle; &quot;Not Interested&quot; and &quot;Wrong Data&quot; advance cycle on reclaim when the lead is fully unassigned.
               </p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -2298,7 +2323,7 @@ export default function AssignLeadsPage() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  Target date (auto-reclaim) *
+                  {targetDateFieldLabel} *
                 </label>
                 <Input
                   type="date"
@@ -2307,6 +2332,11 @@ export default function AssignLeadsPage() {
                   className="w-full max-w-xs px-3 py-2 text-sm"
                   required
                 />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  {assignSlotIsPro
+                    ? 'Saved as PRO slot only; counsellor slot dates are unchanged.'
+                    : 'Saved as counsellor slot only; PRO slot dates are unchanged.'}
+                </p>
               </div>
 
               <div className="flex items-center gap-3">

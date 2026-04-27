@@ -233,6 +233,8 @@ export interface Lead {
   cycleNumber?: number;
   target_date?: string;
   targetDate?: string;
+  counsellorTargetDate?: string;
+  proTargetDate?: string;
   createdAt: string;
   updatedAt: string;
 }
