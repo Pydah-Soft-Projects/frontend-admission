@@ -856,14 +856,41 @@ export const paymentSettingsAPI = {
 
 // Communications API
 export const communicationAPI = {
-  getTemplates: async (filters?: { language?: string; isActive?: boolean; search?: string }) => {
+  getTemplates: async (filters?: {
+    language?: string;
+    isActive?: boolean;
+    search?: string;
+    templateGroupId?: string;
+  }) => {
     const params = new URLSearchParams();
     if (filters?.language) params.append('language', filters.language);
     if (filters?.isActive !== undefined) params.append('isActive', String(filters.isActive));
     if (filters?.search) params.append('search', filters.search);
+    if (filters?.templateGroupId) params.append('templateGroupId', filters.templateGroupId);
     const query = params.toString();
     const response = await api.get(`/communications/templates${query ? `?${query}` : ''}`);
     return response.data;
+  },
+  listTemplateGroups: async () => {
+    const response = await api.get('/communications/templates/groups');
+    return (response.data?.data ?? response.data) as Array<{
+      id: string;
+      name: string;
+      createdAt?: string;
+      updatedAt?: string;
+    }>;
+  },
+  createTemplateGroup: async (body: { name: string }) => {
+    const response = await api.post('/communications/templates/groups', body);
+    return response.data?.data ?? response.data;
+  },
+  updateTemplateGroup: async (id: string, body: { name: string }) => {
+    const response = await api.put(`/communications/templates/groups/${encodeURIComponent(id)}`, body);
+    return response.data?.data ?? response.data;
+  },
+  deleteTemplateGroup: async (id: string) => {
+    const response = await api.delete(`/communications/templates/groups/${encodeURIComponent(id)}`);
+    return response.data?.data ?? response.data;
   },
   getActiveTemplates: async (language?: string) => {
     const params = new URLSearchParams();
@@ -882,6 +909,7 @@ export const communicationAPI = {
     description?: string;
     isUnicode?: boolean;
     variables?: { key?: string; label?: string; defaultValue?: string }[];
+    templateGroupId?: string | null;
   }) => {
     const response = await api.post('/communications/templates', data);
     return response.data;
@@ -897,6 +925,7 @@ export const communicationAPI = {
       isUnicode?: boolean;
       variables?: { key?: string; label?: string; defaultValue?: string }[];
       isActive?: boolean;
+      templateGroupId?: string | null;
     }
   ) => {
     const response = await api.put(`/communications/templates/${id}`, data);

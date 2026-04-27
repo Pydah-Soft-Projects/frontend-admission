@@ -277,9 +277,19 @@ export interface MessageTemplateVariable {
   value?: string;
 }
 
+export interface MessageTemplateGroup {
+  id: string;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface MessageTemplate {
   _id: string;
   name: string;
+  /** Optional folder-style group (admin UI + filtering). */
+  templateGroupId?: string | null;
+  templateGroupName?: string | null;
   dltTemplateId: string;
   language: string;
   content: string;

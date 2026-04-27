@@ -23,6 +23,8 @@ type TemplateFormState = {
   description: string;
   isUnicode: boolean;
   variables: MessageTemplateVariable[];
+  /** message_template_groups.id, or '' for ungrouped */
+  templateGroupId: string;
 };
 
 const DEFAULT_FORM_STATE: TemplateFormState = {
@@ -33,6 +35,7 @@ const DEFAULT_FORM_STATE: TemplateFormState = {
   description: '',
   isUnicode: false,
   variables: [],
+  templateGroupId: '',
 };
 
 const SUPPORTED_LANGUAGES = [
@@ -71,12 +74,14 @@ const TemplateModal = ({
   onSubmit,
   initialData,
   isProcessing,
+  templateGroups = [],
 }: {
   mode: 'create' | 'edit';
   onClose: () => void;
   onSubmit: (state: TemplateFormState) => void;
   initialData?: MessageTemplate;
   isProcessing: boolean;
+  templateGroups?: Array<{ id: string; name: string }>;
 }) => {
   const [isEditMode, setIsEditMode] = useState(mode === 'create');
   const [formState, setFormState] = useState<TemplateFormState>(() => {
@@ -89,6 +94,7 @@ const TemplateModal = ({
         description: initialData.description || '',
         isUnicode: Boolean(initialData.isUnicode || initialData.language !== 'en'),
         variables: ensureVariableArray(initialData.content, initialData.variables),
+        templateGroupId: initialData.templateGroupId ?? '',
       };
     }
     return {
@@ -143,8 +149,8 @@ const TemplateModal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
       <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <h2 className="text-2xl font-semibold">
               {!isEditMode ? 'View Template' : mode === 'create' ? 'Create Template' : 'Edit Template'}
             </h2>
@@ -154,17 +160,42 @@ const TemplateModal = ({
                 : 'Configure template details and map placeholders to friendly labels.'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-            aria-label="Close Modal"
-          >
-            ✕
-          </button>
+          <div className="flex shrink-0 items-center gap-2 pt-0.5">
+            {!isEditMode && (
+              <Button variant="primary" size="sm" onClick={() => setIsEditMode(true)}>
+                Edit Template
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              aria-label="Close modal"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">Group</label>
+            <select
+              className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+              value={formState.templateGroupId}
+              onChange={(e) =>
+                setFormState((prev) => ({ ...prev, templateGroupId: e.target.value }))
+              }
+              disabled={!isEditMode}
+            >
+              <option value="">No group</option>
+              {templateGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Template Name</label>
             <Input
@@ -314,20 +345,16 @@ const TemplateModal = ({
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={onClose} disabled={isProcessing}>
-            {isEditMode ? 'Cancel' : 'Close'}
-          </Button>
-          {!isEditMode ? (
-            <Button variant="primary" onClick={() => setIsEditMode(true)}>
-              Edit Template
+        {isEditMode && (
+          <div className="flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-slate-800">
+            <Button variant="secondary" onClick={onClose} disabled={isProcessing}>
+              Cancel
             </Button>
-          ) : (
             <Button variant="primary" onClick={handleSubmit} disabled={isProcessing}>
               {isProcessing ? 'Saving…' : mode === 'create' ? 'Create Template' : 'Save Changes'}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -2375,6 +2402,10 @@ export default function TemplatesPage() {
   const [testSmsTemplate, setTestSmsTemplate] = useState<MessageTemplate | null>(null);
   const [activeTab, setActiveTab] = useState<CommunicationsTab>('templates');
   const [highlightSmsJobId, setHighlightSmsJobId] = useState<string | null>(null);
+  const [templateGroupFilter, setTemplateGroupFilter] = useState<string>('');
+  const [newGroupModalOpen, setNewGroupModalOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [editingGroup, setEditingGroup] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -2398,16 +2429,27 @@ export default function TemplatesPage() {
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ['communicationTemplates', languageFilter, showInactive, search],
+    queryKey: ['communicationTemplates', languageFilter, showInactive, search, templateGroupFilter],
     queryFn: async () => {
       const response = await communicationAPI.getTemplates({
         language: languageFilter === 'all' ? undefined : languageFilter,
         isActive: showInactive ? undefined : true,
         search: search.trim() || undefined,
+        templateGroupId: templateGroupFilter || undefined,
       });
       return response?.data ?? [];
     },
     enabled: isMounted && Boolean(user),
+  });
+
+  const {
+    data: templateGroupsList = [],
+    isFetching: templateGroupsFetching,
+  } = useQuery({
+    queryKey: ['templateGroups'],
+    queryFn: () => communicationAPI.listTemplateGroups(),
+    enabled: isMounted && Boolean(user) && activeTab === 'templates',
+    staleTime: 60_000,
   });
 
   const {
@@ -2436,10 +2478,12 @@ export default function TemplatesPage() {
         description: payload.description,
         isUnicode: payload.isUnicode,
         variables: payload.variables,
+        templateGroupId: payload.templateGroupId.trim() || null,
       }),
     onSuccess: () => {
       showToast.success('Template created successfully');
       queryClient.invalidateQueries({ queryKey: ['communicationTemplates'] });
+      queryClient.invalidateQueries({ queryKey: ['activeTemplates'] });
       setModalMode(null);
       setEditingTemplate(undefined);
     },
@@ -2459,10 +2503,12 @@ export default function TemplatesPage() {
         description: payload.description,
         isUnicode: payload.isUnicode,
         variables: payload.variables,
+        templateGroupId: payload.templateGroupId.trim() || null,
       }),
     onSuccess: () => {
       showToast.success('Template updated successfully');
       queryClient.invalidateQueries({ queryKey: ['communicationTemplates'] });
+      queryClient.invalidateQueries({ queryKey: ['activeTemplates'] });
       setModalMode(null);
       setEditingTemplate(undefined);
     },
@@ -2477,6 +2523,7 @@ export default function TemplatesPage() {
     onSuccess: () => {
       showToast.success('Template deactivated');
       queryClient.invalidateQueries({ queryKey: ['communicationTemplates'] });
+      queryClient.invalidateQueries({ queryKey: ['activeTemplates'] });
     },
     onError: (error: any) => {
       console.error('Error deleting template:', error);
@@ -2489,12 +2536,69 @@ export default function TemplatesPage() {
     onSuccess: () => {
       showToast.success('Template permanently deleted');
       queryClient.invalidateQueries({ queryKey: ['communicationTemplates'] });
+      queryClient.invalidateQueries({ queryKey: ['activeTemplates'] });
     },
     onError: (error: any) => {
       console.error('Error hard deleting template:', error);
       showToast.error(error.response?.data?.message || 'Failed to permanently delete template');
     },
   });
+
+  const createGroupMutation = useMutation({
+    mutationFn: (name: string) => communicationAPI.createTemplateGroup({ name }),
+    onSuccess: () => {
+      showToast.success('Template group created');
+      queryClient.invalidateQueries({ queryKey: ['templateGroups'] });
+      setNewGroupName('');
+    },
+    onError: (error: any) => {
+      console.error('Error creating template group:', error);
+      showToast.error(error.response?.data?.message || 'Failed to create group');
+    },
+  });
+
+  const updateGroupMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      communicationAPI.updateTemplateGroup(id, { name }),
+    onSuccess: () => {
+      showToast.success('Group updated');
+      queryClient.invalidateQueries({ queryKey: ['templateGroups'] });
+      queryClient.invalidateQueries({ queryKey: ['communicationTemplates'] });
+      setEditingGroup(null);
+    },
+    onError: (error: any) => {
+      console.error('Error updating template group:', error);
+      showToast.error(error.response?.data?.message || 'Failed to update group');
+    },
+  });
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: (id: string) => communicationAPI.deleteTemplateGroup(id),
+    onSuccess: (_data, deletedId) => {
+      showToast.success('Group deleted');
+      queryClient.invalidateQueries({ queryKey: ['templateGroups'] });
+      queryClient.invalidateQueries({ queryKey: ['communicationTemplates'] });
+      queryClient.invalidateQueries({ queryKey: ['activeTemplates'] });
+      setTemplateGroupFilter((current) => (current === deletedId ? '' : current));
+      setEditingGroup((prev) => (prev?.id === deletedId ? null : prev));
+    },
+    onError: (error: any) => {
+      console.error('Error deleting template group:', error);
+      showToast.error(error.response?.data?.message || 'Failed to delete group');
+    },
+  });
+
+  const groupModalBusy =
+    createGroupMutation.isPending ||
+    updateGroupMutation.isPending ||
+    deleteGroupMutation.isPending;
+
+  const closeGroupModal = () => {
+    if (groupModalBusy) return;
+    setNewGroupModalOpen(false);
+    setNewGroupName('');
+    setEditingGroup(null);
+  };
 
   const handleAddTemplate = () => {
     setModalMode('create');
@@ -2610,61 +2714,68 @@ export default function TemplatesPage() {
             <p className="text-xs text-slate-500 dark:text-slate-400">DLT-approved templates for SMS.</p>
           </div>
           <div
-            className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-slate-200 pt-2 text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-400 md:border-t-0 md:pt-0 sm:gap-x-3 sm:text-xs"
+            className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-2 border-t border-slate-200 pt-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400 md:border-t-0 md:pt-0"
             aria-label="Bulk SMS account"
           >
             <span className="shrink-0 font-semibold text-slate-700 dark:text-slate-200">BulkSMS</span>
             {bulkSmsAccountLoading ? (
-              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-8 w-44 sm:h-9" />
             ) : bulkSmsAccountError ? (
-              <span className="text-red-600 dark:text-red-400">Could not load balance.</span>
+              <span className="text-sm text-red-600 dark:text-red-400">Could not load balance.</span>
             ) : (
               <>
-                {(bulkSmsAccount?.username || bulkSmsAccount?.senderId) && (
-                  <span className="text-slate-600 dark:text-slate-400">
-                    {bulkSmsAccount?.username ? (
-                      <>
-                        User{' '}
-                        <span className="font-medium text-slate-900 dark:text-slate-100">{bulkSmsAccount.username}</span>
-                      </>
-                    ) : null}
-                    {bulkSmsAccount?.username && bulkSmsAccount?.senderId ? (
-                      <span className="mx-1 text-slate-300 dark:text-slate-600" aria-hidden>
-                        ·
-                      </span>
-                    ) : null}
-                    {bulkSmsAccount?.senderId ? (
-                      <>
-                        Sender{' '}
-                        <span className="font-mono text-[11px] font-medium text-slate-800 dark:text-slate-200 sm:text-xs">
-                          {bulkSmsAccount.senderId}
-                        </span>
-                      </>
-                    ) : null}
+                {bulkSmsAccount?.username ? (
+                  <span className="flex flex-wrap items-baseline gap-x-1.5">
+                    <span className="shrink-0">User</span>
+                    <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
+                      {bulkSmsAccount.username}
+                    </span>
                   </span>
-                )}
+                ) : null}
+                {bulkSmsAccount?.username && bulkSmsAccount?.senderId ? (
+                  <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                    ·
+                  </span>
+                ) : null}
+                {bulkSmsAccount?.senderId ? (
+                  <span className="flex flex-wrap items-baseline gap-x-1.5">
+                    <span className="shrink-0">Sender</span>
+                    <span className="font-mono text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
+                      {bulkSmsAccount.senderId}
+                    </span>
+                  </span>
+                ) : null}
                 {!bulkSmsAccount?.configured ? (
-                  <span className="text-amber-800 dark:text-amber-400">
+                  <span className="text-sm text-amber-800 dark:text-amber-400">
                     {bulkSmsAccount?.providerMessage || 'API key not configured.'}
                   </span>
                 ) : bulkSmsAccount?.providerMessage ? (
                   <span
-                    className="max-w-[min(100%,18rem)] truncate text-amber-800 dark:text-amber-400 sm:max-w-md"
+                    className="max-w-[min(100%,18rem)] truncate text-sm text-amber-800 dark:text-amber-400 sm:max-w-md"
                     title={bulkSmsAccount.providerMessage}
                   >
                     {bulkSmsAccount.providerMessage}
                   </span>
                 ) : typeof bulkSmsAccount?.balanceCredits === 'number' && Number.isFinite(bulkSmsAccount.balanceCredits) ? (
-                  <span className="text-slate-600 dark:text-slate-400" title={bulkSmsAccount.balanceRaw || undefined}>
-                    Credits{' '}
-                    <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                  <span
+                    className="flex flex-wrap items-baseline gap-x-1.5"
+                    title={bulkSmsAccount.balanceRaw || undefined}
+                  >
+                    <span className="shrink-0">Credits</span>
+                    <span
+                      className={`text-xl font-bold tabular-nums tracking-tight sm:text-2xl ${
+                        bulkSmsAccount.balanceCredits < 20000
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-emerald-700 dark:text-emerald-400'
+                      }`}
+                    >
                       {bulkSmsAccount.balanceCredits.toLocaleString(undefined, {
                         maximumFractionDigits: 2,
                       })}
                     </span>
                   </span>
                 ) : (
-                  <span className="text-slate-500" title={bulkSmsAccount?.balanceRaw || undefined}>
+                  <span className="text-sm text-slate-500" title={bulkSmsAccount?.balanceRaw || undefined}>
                     Credits — {bulkSmsAccount?.balanceRaw ? `(${bulkSmsAccount.balanceRaw.slice(0, 60)}${bulkSmsAccount.balanceRaw.length > 60 ? '…' : ''})` : ''}
                   </span>
                 )}
@@ -2672,16 +2783,21 @@ export default function TemplatesPage() {
             )}
           </div>
         </div>
-        <Button variant="primary" size="sm" className="shrink-0 self-start sm:self-auto" onClick={handleAddTemplate}>
-          + New template
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 self-start sm:self-auto">
+          <Button variant="secondary" size="sm" onClick={() => setNewGroupModalOpen(true)}>
+            + New group
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleAddTemplate}>
+            + New template
+          </Button>
+        </div>
       </div>
       {!bulkSmsAccountLoading &&
         bulkSmsAccount?.configured &&
         !bulkSmsAccount?.username &&
         !bulkSmsAccountError && (
-          <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-400">
-            Set <code className="rounded bg-slate-100 px-1 font-mono dark:bg-slate-800">BULK_SMS_ACCOUNT_USERNAME</code>{' '}
+          <p className="text-xs leading-snug text-slate-500 dark:text-slate-400">
+            Set <code className="rounded bg-slate-100 px-1 font-mono text-[11px] dark:bg-slate-800">BULK_SMS_ACCOUNT_USERNAME</code>{' '}
             on the server to show the portal user name.
           </p>
         )}
@@ -2716,6 +2832,23 @@ export default function TemplatesPage() {
               ))}
             </select>
           </div>
+          <div className="w-full min-w-0 sm:w-44">
+            <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Group
+            </label>
+            <select
+              className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              value={templateGroupFilter}
+              onChange={(e) => setTemplateGroupFilter(e.target.value)}
+            >
+              <option value="">All groups</option>
+              {templateGroupsList.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <label className="flex cursor-pointer items-center gap-2 pb-0.5 text-xs text-slate-600 dark:text-slate-300 sm:pb-1">
             <input
               type="checkbox"
@@ -2744,6 +2877,9 @@ export default function TemplatesPage() {
                 <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Name
                 </th>
+                <th className="hidden px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:table-cell dark:text-slate-400">
+                  Group
+                </th>
                 <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   DLT ID
                 </th>
@@ -2767,13 +2903,13 @@ export default function TemplatesPage() {
             <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900/30">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-4">
+                  <td colSpan={8} className="px-3 py-4">
                     <TemplatesSkeleton />
                   </td>
                 </tr>
               ) : templates.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-xs text-slate-500">
+                  <td colSpan={8} className="px-3 py-8 text-center text-xs text-slate-500">
                     No templates found. Click &quot;New template&quot; to add one.
                   </td>
                 </tr>
@@ -2791,6 +2927,11 @@ export default function TemplatesPage() {
                       {template.description ? (
                         <div className="line-clamp-1 text-[11px] text-slate-500 dark:text-slate-400">{template.description}</div>
                       ) : null}
+                    </td>
+                    <td className="hidden max-w-[10rem] px-3 py-2 align-top text-xs text-slate-600 sm:table-cell dark:text-slate-300">
+                      <span className="line-clamp-2" title={template.templateGroupName || undefined}>
+                        {template.templateGroupName || '—'}
+                      </span>
                     </td>
                     <td className="max-w-[9rem] px-3 py-2 align-top font-mono text-xs text-orange-700 dark:text-orange-400">
                       <span className="block truncate" title={template.dltTemplateId}>
@@ -2903,6 +3044,7 @@ export default function TemplatesPage() {
 
       {modalMode && (
         <TemplateModal
+          key={modalMode === 'edit' ? editingTemplate?._id ?? 'edit' : 'create'}
           mode={modalMode}
           onClose={() => {
             if (!createMutation.isPending && !updateMutation.isPending) {
@@ -2913,7 +3055,197 @@ export default function TemplatesPage() {
           onSubmit={handleModalSubmit}
           initialData={modalMode === 'edit' ? editingTemplate : undefined}
           isProcessing={createMutation.isPending || updateMutation.isPending}
+          templateGroups={templateGroupsList}
         />
+      )}
+
+      {newGroupModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="template-groups-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeGroupModal();
+          }}
+        >
+          <Card className="flex max-h-[85vh] w-full max-w-lg flex-col gap-4 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h3
+                  id="template-groups-modal-title"
+                  className="text-lg font-semibold text-slate-900 dark:text-slate-50"
+                >
+                  Template groups
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Manage groups for filtering templates. Deleting a group unlinks templates from it (they stay
+                  active).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeGroupModal}
+                disabled={groupModalBusy}
+                className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <span>Existing groups</span>
+                {templateGroupsFetching && !groupModalBusy ? (
+                  <span className="font-normal normal-case text-slate-400">Refreshing…</span>
+                ) : null}
+              </div>
+              <div className="max-h-[min(40vh,16rem)] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/40">
+                {templateGroupsList.length === 0 ? (
+                  <p className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No groups yet. Add one below.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {templateGroupsList.map((g) => {
+                      const isEditing = editingGroup?.id === g.id;
+                      return (
+                        <li key={g.id} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
+                          {isEditing ? (
+                            <>
+                              <Input
+                                value={editingGroup.name}
+                                onChange={(e) =>
+                                  setEditingGroup((prev) =>
+                                    prev && prev.id === g.id ? { ...prev, name: e.target.value } : prev
+                                  )
+                                }
+                                className="h-9 min-w-0 flex-1 text-sm"
+                                autoFocus
+                                disabled={updateGroupMutation.isPending}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') setEditingGroup(null);
+                                  if (
+                                    e.key === 'Enter' &&
+                                    editingGroup?.name.trim() &&
+                                    !updateGroupMutation.isPending
+                                  ) {
+                                    updateGroupMutation.mutate({
+                                      id: g.id,
+                                      name: editingGroup.name.trim(),
+                                    });
+                                  }
+                                }}
+                              />
+                              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={updateGroupMutation.isPending}
+                                  onClick={() => setEditingGroup(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  disabled={
+                                    !editingGroup?.name.trim() ||
+                                    updateGroupMutation.isPending ||
+                                    editingGroup.name.trim() === g.name
+                                  }
+                                  onClick={() =>
+                                    updateGroupMutation.mutate({
+                                      id: g.id,
+                                      name: editingGroup!.name.trim(),
+                                    })
+                                  }
+                                >
+                                  {updateGroupMutation.isPending ? 'Saving…' : 'Save'}
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <span
+                                className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 dark:text-slate-100"
+                                title={g.name}
+                              >
+                                {g.name}
+                              </span>
+                              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={groupModalBusy || Boolean(editingGroup)}
+                                  onClick={() => setEditingGroup({ id: g.id, name: g.name })}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                  disabled={groupModalBusy || Boolean(editingGroup)}
+                                  onClick={() => {
+                                    if (
+                                      typeof window !== 'undefined' &&
+                                      !window.confirm(
+                                        `Delete group "${g.name}"? Templates in this group will become ungrouped.`
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    deleteGroupMutation.mutate(g.id);
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Add new group
+              </label>
+              <Input
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="e.g. Admissions 2026"
+                className="h-10"
+                disabled={groupModalBusy || Boolean(editingGroup)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newGroupName.trim() && !createGroupMutation.isPending) {
+                    createGroupMutation.mutate(newGroupName.trim());
+                  }
+                }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" size="sm" disabled={groupModalBusy} onClick={closeGroupModal}>
+                Close
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={!newGroupName.trim() || createGroupMutation.isPending || Boolean(editingGroup)}
+                onClick={() => createGroupMutation.mutate(newGroupName.trim())}
+              >
+                {createGroupMutation.isPending ? 'Creating…' : 'Create group'}
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
 
       <TestTemplateSmsModal
