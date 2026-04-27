@@ -2410,6 +2410,18 @@ export default function TemplatesPage() {
     enabled: isMounted && Boolean(user),
   });
 
+  const {
+    data: bulkSmsAccount,
+    isLoading: bulkSmsAccountLoading,
+    error: bulkSmsAccountError,
+  } = useQuery({
+    queryKey: ['bulkSmsAccountStatus'],
+    queryFn: () => communicationAPI.getBulkSmsAccountStatus(),
+    enabled: isMounted && Boolean(user) && activeTab === 'templates',
+    staleTime: 90_000,
+    retry: 1,
+  });
+
   const templates: MessageTemplate[] = Array.isArray(templatesResponse)
     ? templatesResponse
     : [];
@@ -2591,15 +2603,88 @@ export default function TemplatesPage() {
 
       {activeTab === 'templates' ? (
         <>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Message templates</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">DLT-approved templates for SMS.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-6">
+          <div className="min-w-0 shrink-0">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Message templates</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">DLT-approved templates for SMS.</p>
+          </div>
+          <div
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-slate-200 pt-2 text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-400 md:border-t-0 md:pt-0 sm:gap-x-3 sm:text-xs"
+            aria-label="Bulk SMS account"
+          >
+            <span className="shrink-0 font-semibold text-slate-700 dark:text-slate-200">BulkSMS</span>
+            {bulkSmsAccountLoading ? (
+              <Skeleton className="h-4 w-40" />
+            ) : bulkSmsAccountError ? (
+              <span className="text-red-600 dark:text-red-400">Could not load balance.</span>
+            ) : (
+              <>
+                {(bulkSmsAccount?.username || bulkSmsAccount?.senderId) && (
+                  <span className="text-slate-600 dark:text-slate-400">
+                    {bulkSmsAccount?.username ? (
+                      <>
+                        User{' '}
+                        <span className="font-medium text-slate-900 dark:text-slate-100">{bulkSmsAccount.username}</span>
+                      </>
+                    ) : null}
+                    {bulkSmsAccount?.username && bulkSmsAccount?.senderId ? (
+                      <span className="mx-1 text-slate-300 dark:text-slate-600" aria-hidden>
+                        ·
+                      </span>
+                    ) : null}
+                    {bulkSmsAccount?.senderId ? (
+                      <>
+                        Sender{' '}
+                        <span className="font-mono text-[11px] font-medium text-slate-800 dark:text-slate-200 sm:text-xs">
+                          {bulkSmsAccount.senderId}
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
+                )}
+                {!bulkSmsAccount?.configured ? (
+                  <span className="text-amber-800 dark:text-amber-400">
+                    {bulkSmsAccount?.providerMessage || 'API key not configured.'}
+                  </span>
+                ) : bulkSmsAccount?.providerMessage ? (
+                  <span
+                    className="max-w-[min(100%,18rem)] truncate text-amber-800 dark:text-amber-400 sm:max-w-md"
+                    title={bulkSmsAccount.providerMessage}
+                  >
+                    {bulkSmsAccount.providerMessage}
+                  </span>
+                ) : typeof bulkSmsAccount?.balanceCredits === 'number' && Number.isFinite(bulkSmsAccount.balanceCredits) ? (
+                  <span className="text-slate-600 dark:text-slate-400" title={bulkSmsAccount.balanceRaw || undefined}>
+                    Credits{' '}
+                    <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                      {bulkSmsAccount.balanceCredits.toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-slate-500" title={bulkSmsAccount?.balanceRaw || undefined}>
+                    Credits — {bulkSmsAccount?.balanceRaw ? `(${bulkSmsAccount.balanceRaw.slice(0, 60)}${bulkSmsAccount.balanceRaw.length > 60 ? '…' : ''})` : ''}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
         </div>
         <Button variant="primary" size="sm" className="shrink-0 self-start sm:self-auto" onClick={handleAddTemplate}>
           + New template
         </Button>
       </div>
+      {!bulkSmsAccountLoading &&
+        bulkSmsAccount?.configured &&
+        !bulkSmsAccount?.username &&
+        !bulkSmsAccountError && (
+          <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+            Set <code className="rounded bg-slate-100 px-1 font-mono dark:bg-slate-800">BULK_SMS_ACCOUNT_USERNAME</code>{' '}
+            on the server to show the portal user name.
+          </p>
+        )}
 
       <div className="rounded-lg border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/40">
         <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">

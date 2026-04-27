@@ -1048,6 +1048,18 @@ export const communicationAPI = {
       }>;
     };
   },
+  /** BulkSMSApps: portal username (from env) + live credits from check-balance API v2. */
+  getBulkSmsAccountStatus: async () => {
+    const response = await api.get('/communications/sms/account');
+    return (response.data?.data ?? response.data) as {
+      configured: boolean;
+      username: string | null;
+      senderId: string;
+      balanceCredits: number | null;
+      balanceRaw: string | null;
+      providerMessage: string | null;
+    };
+  },
 };
 
 // Joining API
