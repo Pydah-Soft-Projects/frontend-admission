@@ -19,6 +19,14 @@ import { showToast } from '@/lib/toast';
 
 type AssignmentMode = 'bulk' | 'single' | 'remove' | 'stats' | 'institution';
 
+/** Assign-leads dropdowns: show name + HRMS department (API hydrates department on `/users/assignable`). */
+function assignableUserOptionLabel(user: User): string {
+  const name = String(user.name || '').trim() || 'User';
+  const dept = String(user.department || '').trim();
+  if (dept && dept !== '-') return `${name} — ${dept}`;
+  return name;
+}
+
 interface AssignmentStats {
   totalLeads: number;
   assignedCount: number;
@@ -1550,7 +1558,7 @@ export default function AssignLeadsPage() {
                         <optgroup key={role} label={role === 'Sub Super Admin' ? 'Sub Super Admins' : role + 's'}>
                           {roleUsers.map((user) => (
                             <option key={user.id || user._id} value={user.id || user._id}>
-                              {user.name} ({user.email})
+                              {assignableUserOptionLabel(user)}
                             </option>
                           ))}
                         </optgroup>
@@ -1725,7 +1733,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="Sub Super Admins">
                       {usersByRole['Sub Super Admin'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email}) - Sub Admin
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
@@ -1735,7 +1743,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="Student Counselors">
                       {usersByRole['Student Counselor'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email})
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
@@ -1744,7 +1752,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="Data Entry Users">
                       {usersByRole['Data Entry User'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email})
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
@@ -1753,7 +1761,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="PRO Users">
                       {usersByRole['PRO'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email})
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
@@ -1975,7 +1983,7 @@ export default function AssignLeadsPage() {
                     </option>
                     {bulkUsersBySelectedRole.map((user) => (
                       <option key={user.id || user._id} value={user.id || user._id}>
-                        {user.name} ({user.email})
+                        {assignableUserOptionLabel(user)}
                       </option>
                     ))}
                   </select>
@@ -2194,7 +2202,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="Sub Super Admins">
                       {usersByRole['Sub Super Admin'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email}) - Sub Admin
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
@@ -2204,7 +2212,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="Student Counselors">
                       {usersByRole['Student Counselor'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email})
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
@@ -2213,7 +2221,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="Data Entry Users">
                       {usersByRole['Data Entry User'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email})
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
@@ -2222,7 +2230,7 @@ export default function AssignLeadsPage() {
                     <optgroup label="PRO Users">
                       {usersByRole['PRO'].map((user) => (
                         <option key={user.id || user._id} value={user.id || user._id}>
-                          {user.name} ({user.email})
+                          {assignableUserOptionLabel(user)}
                         </option>
                       ))}
                     </optgroup>
