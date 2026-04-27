@@ -145,9 +145,12 @@ export default function ReportsPage() {
   /** Default to Student Counselor so the heavy summary loads a smaller cohort first. */
   const [performanceRole, setPerformanceRole] = useState('Student Counselor');
   const [performanceDepartment, setPerformanceDepartment] = useState('');
-  const [performanceGroup, setPerformanceGroup] = useState('');
+  /** Lead `student_group` (MySQL), not HRMS employee group. */
+  const [performanceStudentGroup, setPerformanceStudentGroup] = useState('');
+  const [performanceDivision, setPerformanceDivision] = useState('');
   const [dailyDepartment, setDailyDepartment] = useState('');
-  const [dailyGroup, setDailyGroup] = useState('');
+  const [dailyStudentGroup, setDailyStudentGroup] = useState('');
+  const [dailyDivision, setDailyDivision] = useState('');
   const [dailyPage, setDailyPage] = useState(1);
   const [dailyLimit, setDailyLimit] = useState(50);
   const [performancePage, setPerformancePage] = useState(1);
@@ -236,6 +239,13 @@ export default function ReportsPage() {
   }, [users]);
 
   const performanceFilterOptions = useMemo(() => {
+    const divisions = Array.from(
+      new Set(
+        users
+          .map((u: any) => u?.division)
+          .filter((d: any) => d && d !== '-')
+      )
+    ).sort();
     const departments = Array.from(
       new Set(
         users
@@ -257,7 +267,7 @@ export default function ReportsPage() {
           .filter((r: any) => r && r !== '-')
       )
     ).sort();
-    return { departments, groups, roles };
+    return { divisions, departments, groups, roles };
   }, [users]);
 
   const activityLogUsers = useMemo(
@@ -273,6 +283,13 @@ export default function ReportsPage() {
     queryKey: ['filterOptions'],
     queryFn: () => leadAPI.getFilterOptions(),
   });
+
+  const callReportStudentGroupOptions = useMemo(() => {
+    const raw = filterOptions as { data?: { studentGroups?: string[] }; studentGroups?: string[] } | undefined;
+    const payload = raw?.data ?? raw;
+    const list = payload?.studentGroups;
+    return Array.isArray(list) ? list : [];
+  }, [filterOptions]);
 
   // Date preset handler
   const handleDatePreset = (preset: DatePreset) => {
@@ -331,13 +348,14 @@ export default function ReportsPage() {
 
   // Call Reports
   const { data: callReports, isLoading: isLoadingCalls, error: callReportsError } = useQuery({
-    queryKey: ['callReports', filters.startDate, filters.endDate, filters.userId, dailyDepartment, dailyGroup, dailyPage, dailyLimit],
+    queryKey: ['callReports', filters.startDate, filters.endDate, filters.userId, dailyDivision, dailyDepartment, dailyStudentGroup, dailyPage, dailyLimit],
     queryFn: () => reportAPI.getDailyCallReports({
       startDate: filters.startDate,
       endDate: filters.endDate,
       userId: filters.userId || undefined,
+      division: dailyDivision || undefined,
       department: dailyDepartment || undefined,
-      group: dailyGroup || undefined,
+      studentGroup: dailyStudentGroup || undefined,
       page: dailyPage,
       limit: dailyLimit,
     }),
@@ -427,8 +445,9 @@ export default function ReportsPage() {
       performanceLimit,
       performanceSearch,
       performanceRole,
+      performanceDivision,
       performanceDepartment,
-      performanceGroup,
+      performanceStudentGroup,
     ],
     queryFn: () =>
       leadAPI.getUserAnalytics({
@@ -440,8 +459,9 @@ export default function ReportsPage() {
         limit: performanceLimit,
         perfSearch: performanceSearch.trim() || undefined,
         perfRole: performanceRole || undefined,
+        perfDivision: performanceDivision || undefined,
         perfDepartment: performanceDepartment || undefined,
-        perfGroup: performanceGroup || undefined,
+        studentGroup: performanceStudentGroup || undefined,
       }),
     enabled: activeTab === 'calls' && callSubTab === 'performance',
     retry: 2,
@@ -463,8 +483,9 @@ export default function ReportsPage() {
     filters.academicYear,
     performanceSearch,
     performanceRole,
+    performanceDivision,
     performanceDepartment,
-    performanceGroup,
+    performanceStudentGroup,
     performanceLimit,
   ]);
 
@@ -486,8 +507,9 @@ export default function ReportsPage() {
         performanceLimit,
         performanceSearch,
         performanceRole,
+        performanceDivision,
         performanceDepartment,
-        performanceGroup,
+        performanceStudentGroup,
       ],
       queryFn: () =>
         leadAPI.getUserAnalytics({
@@ -499,8 +521,9 @@ export default function ReportsPage() {
           limit: performanceLimit,
           perfSearch: performanceSearch.trim() || undefined,
           perfRole: performanceRole || undefined,
+          perfDivision: performanceDivision || undefined,
           perfDepartment: performanceDepartment || undefined,
-          perfGroup: performanceGroup || undefined,
+          studentGroup: performanceStudentGroup || undefined,
         }),
       staleTime: 600_000,
     });
@@ -513,8 +536,9 @@ export default function ReportsPage() {
     performanceLimit,
     performanceSearch,
     performanceRole,
+    performanceDivision,
     performanceDepartment,
-    performanceGroup,
+    performanceStudentGroup,
   ]);
 
   /** Start prefetch as soon as Call Reports is open (even on Daily) so first switch to Performance is faster. */
@@ -645,7 +669,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     setDailyPage(1);
-  }, [filters.startDate, filters.endDate, filters.userId, dailyDepartment, dailyGroup, dailyLimit]);
+  }, [filters.startDate, filters.endDate, filters.userId, dailyDivision, dailyDepartment, dailyStudentGroup, dailyLimit]);
 
   const getLeadStatusCount = (day: any, status: string) =>
     Number((day?.statusBeforeReclaimCounts?.[status] ?? day?.leadStatusCounts?.[status]) || 0);
@@ -866,8 +890,9 @@ export default function ReportsPage() {
         includeAssignmentDetails: false,
         perfSearch: performanceSearch.trim() || undefined,
         perfRole: performanceRole || undefined,
+        perfDivision: performanceDivision || undefined,
         perfDepartment: performanceDepartment || undefined,
-        perfGroup: performanceGroup || undefined,
+        studentGroup: performanceStudentGroup || undefined,
       });
       rowsToPrint = Array.isArray(full?.users) ? full.users : [];
     } catch (e) {
@@ -2091,41 +2116,75 @@ export default function ReportsPage() {
 
                   {/* Daily sub-tab controls */}
                   {callSubTab === 'daily' && (
-                    <div className="flex items-center gap-3 pb-1">
-                      <select
-                        value={dailyDepartment}
-                        onChange={(e) => setDailyDepartment(e.target.value)}
-                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                      >
-                        <option value="">All Departments</option>
-                        {performanceFilterOptions.departments.map((d) => (
-                          <option key={`daily-dept-${d}`} value={d}>{d}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={dailyGroup}
-                        onChange={(e) => setDailyGroup(e.target.value)}
-                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                      >
-                        <option value="">All Groups</option>
-                        {performanceFilterOptions.groups.map((g) => (
-                          <option key={`daily-group-${g}`} value={g}>{g}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={String(dailyLimit)}
-                        onChange={(e) => {
-                          const nextLimit = Number(e.target.value) || 50;
-                          setExpandedDailyUsers(new Set());
-                          setDailyLimit(nextLimit);
-                          setDailyPage(1);
-                        }}
-                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                      >
-                        <option value="25">25 / page</option>
-                        <option value="50">50 / page</option>
-                        <option value="100">100 / page</option>
-                      </select>
+                    <div className="flex flex-wrap items-end gap-3 pb-1">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Division
+                        </span>
+                        <select
+                          value={dailyDivision}
+                          onChange={(e) => setDailyDivision(e.target.value)}
+                          aria-label="Filter by division"
+                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="">All divisions</option>
+                          {performanceFilterOptions.divisions.map((d) => (
+                            <option key={`daily-div-${d}`} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Department
+                        </span>
+                        <select
+                          value={dailyDepartment}
+                          onChange={(e) => setDailyDepartment(e.target.value)}
+                          aria-label="Filter by department"
+                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="">All departments</option>
+                          {performanceFilterOptions.departments.map((d) => (
+                            <option key={`daily-dept-${d}`} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Student group
+                        </span>
+                        <select
+                          value={dailyStudentGroup}
+                          onChange={(e) => setDailyStudentGroup(e.target.value)}
+                          aria-label="Filter calls by lead student group (leads.student_group)"
+                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="">All student groups</option>
+                          {callReportStudentGroupOptions.map((g: string) => (
+                            <option key={`daily-sg-${g}`} value={g}>{g}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Page size
+                        </span>
+                        <select
+                          value={String(dailyLimit)}
+                          onChange={(e) => {
+                            const nextLimit = Number(e.target.value) || 50;
+                            setExpandedDailyUsers(new Set());
+                            setDailyLimit(nextLimit);
+                            setDailyPage(1);
+                          }}
+                          aria-label="Rows per page"
+                          className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="25">25 / page</option>
+                          <option value="50">50 / page</option>
+                          <option value="100">100 / page</option>
+                        </select>
+                      </div>
                       {/* Date range label */}
                       {filters.startDate && filters.endDate && (
                         <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded px-2 py-1 whitespace-nowrap">
@@ -2163,7 +2222,7 @@ export default function ReportsPage() {
                               User: g.userName || '—',
                               Division: g.fullUser?.division || '—',
                               Department: g.fullUser?.department || '—',
-                              Group: g.fullUser?.group || '—',
+                              'Employee group (HRMS)': g.fullUser?.group || '—',
                               Role: g.fullUser?.roleName || '—',
                               Date: format(new Date(r.date), 'dd MMM yyyy'),
                               'Calls/Visits Done': r.callCount ?? 0,
@@ -2179,7 +2238,7 @@ export default function ReportsPage() {
                               newRow.User = "";
                               newRow.Division = "";
                               newRow.Department = "";
-                              newRow.Group = "";
+                              newRow['Employee group (HRMS)'] = "";
                             }
                             return newRow;
                           });
@@ -2225,54 +2284,93 @@ export default function ReportsPage() {
                     </div>
                   )}
                   {callSubTab === 'performance' && (
-                    <div className="flex flex-wrap items-center gap-2 pb-1">
-                      <div className="relative">
-                        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                        <input
-                          type="text"
-                          value={performanceSearch}
-                          onChange={(e) => setPerformanceSearch(e.target.value)}
-                          placeholder="Search user"
-                          className="h-8 w-40 rounded-md border border-slate-300 bg-white pl-7 pr-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        />
+                    <div className="flex flex-wrap items-end gap-2 pb-1">
+                      <div className="relative flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Search
+                        </span>
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={performanceSearch}
+                            onChange={(e) => setPerformanceSearch(e.target.value)}
+                            placeholder="User name or email"
+                            className="h-8 w-40 rounded-md border border-slate-300 bg-white pl-7 pr-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                          />
+                        </div>
                       </div>
-                      <select
-                        value={performanceRole}
-                        onChange={(e) => setPerformanceRole(e.target.value)}
-                        className="h-8 min-w-[9.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        aria-label="Filter by role"
-                      >
-                        <option value="">All roles</option>
-                        {performanceFilterOptions.roles.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={performanceDepartment}
-                        onChange={(e) => setPerformanceDepartment(e.target.value)}
-                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                      >
-                        <option value="">All Departments</option>
-                        {performanceFilterOptions.departments.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={performanceGroup}
-                        onChange={(e) => setPerformanceGroup(e.target.value)}
-                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                      >
-                        <option value="">All Groups</option>
-                        {performanceFilterOptions.groups.map((g) => (
-                          <option key={g} value={g}>{g}</option>
-                        ))}
-                      </select>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Role
+                        </span>
+                        <select
+                          value={performanceRole}
+                          onChange={(e) => setPerformanceRole(e.target.value)}
+                          className="h-8 min-w-[9.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                          aria-label="Filter by role"
+                        >
+                          <option value="">All roles</option>
+                          {performanceFilterOptions.roles.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Division
+                        </span>
+                        <select
+                          value={performanceDivision}
+                          onChange={(e) => setPerformanceDivision(e.target.value)}
+                          aria-label="Filter by division"
+                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="">All divisions</option>
+                          {performanceFilterOptions.divisions.map((d) => (
+                            <option key={`perf-div-${d}`} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Department
+                        </span>
+                        <select
+                          value={performanceDepartment}
+                          onChange={(e) => setPerformanceDepartment(e.target.value)}
+                          aria-label="Filter by department"
+                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="">All departments</option>
+                          {performanceFilterOptions.departments.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
+                          Student group
+                        </span>
+                        <select
+                          value={performanceStudentGroup}
+                          onChange={(e) => setPerformanceStudentGroup(e.target.value)}
+                          aria-label="Filter users with portfolio leads in this student group"
+                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="">All student groups</option>
+                          {callReportStudentGroupOptions.map((g: string) => (
+                            <option key={`perf-sg-${g}`} value={g}>{g}</option>
+                          ))}
+                        </select>
+                      </div>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="self-end"
                         onClick={() => void handlePrintPerformanceDetails()}
                       >
                         Print Detailed Report

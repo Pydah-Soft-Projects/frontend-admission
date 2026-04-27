@@ -639,6 +639,8 @@ export const leadAPI = {
     perfSearch?: string;
     perfDepartment?: string;
     perfGroup?: string;
+    /** Filter employees by HRMS / hydrated division (same as user.division). */
+    perfDivision?: string;
     perfRole?: string;
     /** Skip server in-memory analytics cache (use after bulk DB fixes e.g. call_status scripts). */
     bypassCache?: boolean;
@@ -667,6 +669,7 @@ export const leadAPI = {
     if (params?.perfSearch != null && params.perfSearch !== '') queryParams.append('perfSearch', params.perfSearch);
     if (params?.perfDepartment != null && params.perfDepartment !== '') queryParams.append('perfDepartment', params.perfDepartment);
     if (params?.perfGroup != null && params.perfGroup !== '') queryParams.append('perfGroup', params.perfGroup);
+    if (params?.perfDivision != null && params.perfDivision !== '') queryParams.append('perfDivision', params.perfDivision);
     if (params?.perfRole != null && params.perfRole !== '') queryParams.append('perfRole', params.perfRole);
     if (params?.bypassCache) queryParams.append('bypassCache', 'true');
     if (params?.rosterOnly) queryParams.append('rosterOnly', 'true');
@@ -1264,7 +1267,10 @@ export const reportAPI = {
     userId?: string;
     division?: string;
     department?: string;
+    /** HRMS employee group (Mongo HRMS); not lead student_group. */
     group?: string;
+    /** Lead cohort: `leads.student_group` (MySQL). Inter matches Inter + Inter-%. */
+    studentGroup?: string;
     page?: number;
     limit?: number;
   }) => {
@@ -1275,6 +1281,7 @@ export const reportAPI = {
     if (params?.division) queryParams.append('division', params.division);
     if (params?.department) queryParams.append('department', params.department);
     if (params?.group) queryParams.append('group', params.group);
+    if (params?.studentGroup) queryParams.append('studentGroup', params.studentGroup);
     if (params?.page) queryParams.append('page', String(params.page));
     if (params?.limit) queryParams.append('limit', String(params.limit));
     const query = queryParams.toString();
