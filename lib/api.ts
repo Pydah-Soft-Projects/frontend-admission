@@ -418,6 +418,11 @@ export const leadAPI = {
     const response = await api.get(`/leads/filters/options${q ? `?${q}` : ''}`);
     return response.data;
   },
+  /** One lightweight query + server cache — prefer over getFilterOptions when only `studentGroups` is needed. */
+  getStudentGroupFilterOptions: async () => {
+    const response = await api.get('/leads/filters/student-groups');
+    return response.data?.data || response.data;
+  },
   getAllIds: async (filters?: {
     mandal?: string;
     state?: string;

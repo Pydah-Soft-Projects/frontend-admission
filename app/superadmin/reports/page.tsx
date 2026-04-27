@@ -284,12 +284,18 @@ export default function ReportsPage() {
     queryFn: () => leadAPI.getFilterOptions(),
   });
 
+  /** Dedicated endpoint: one DISTINCT on `leads.student_group` + long server cache — not blocked by full filter-options bundle. */
+  const { data: studentGroupFilterPayload } = useQuery({
+    queryKey: ['studentGroupFilterOptions'],
+    queryFn: () => leadAPI.getStudentGroupFilterOptions(),
+    staleTime: 300_000,
+    enabled: activeTab === 'calls',
+  });
+
   const callReportStudentGroupOptions = useMemo(() => {
-    const raw = filterOptions as { data?: { studentGroups?: string[] }; studentGroups?: string[] } | undefined;
-    const payload = raw?.data ?? raw;
-    const list = payload?.studentGroups;
+    const list = (studentGroupFilterPayload as { studentGroups?: string[] } | undefined)?.studentGroups;
     return Array.isArray(list) ? list : [];
-  }, [filterOptions]);
+  }, [studentGroupFilterPayload]);
 
   // Date preset handler
   const handleDatePreset = (preset: DatePreset) => {
@@ -1369,6 +1375,7 @@ export default function ReportsPage() {
         'Calls/Visits Done': u.calls?.total ?? 0,
         Balance: balance,
         'Interested Leads': u.interested ?? 0,
+        Visited: u.visitedCumulative ?? '',
         Confirmed: u.convertedLeads ?? 0,
         Admitted: admitted,
       };
@@ -2214,7 +2221,29 @@ export default function ReportsPage() {
                               grouped[seen.get(r.userName)!].rows.push(r);
                             }
                           });
-                          grouped.forEach(g => g.rows.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+                          grouped.forEach((g) => {
+                            g.rows.sort((a: any, b: any) => {
+                              if (a?.rangeAggregate || b?.rangeAggregate) return 0;
+                              const ta = a?.date ? new Date(a.date).getTime() : 0;
+                              const tb = b?.date ? new Date(b.date).getTime() : 0;
+                              return ta - tb;
+                            });
+                          });
+
+                          const dateLabelForDailyExport = (r: any) => {
+                            if (r?.rangeAggregate && filters.startDate && filters.endDate) {
+                              const a = format(new Date(filters.startDate), 'dd MMM yyyy');
+                              const b = format(new Date(filters.endDate), 'dd MMM yyyy');
+                              const same = filters.startDate === filters.endDate;
+                              const rangeStr = same ? a : `${a} – ${b}`;
+                              const dwa = typeof r.daysWithActivity === 'number' && r.daysWithActivity > 0
+                                ? ` (${r.daysWithActivity} day${r.daysWithActivity !== 1 ? 's' : ''} with activity)`
+                                : '';
+                              return `${rangeStr}${dwa}`;
+                            }
+                            if (!r?.date) return '—';
+                            return format(new Date(r.date), 'dd MMM yyyy');
+                          };
 
                           // Build flat data rows
                           const allRows = grouped.flatMap(g =>
@@ -2224,7 +2253,7 @@ export default function ReportsPage() {
                               Department: g.fullUser?.department || '—',
                               'Employee group (HRMS)': g.fullUser?.group || '—',
                               Role: g.fullUser?.roleName || '—',
-                              Date: format(new Date(r.date), 'dd MMM yyyy'),
+                              Date: dateLabelForDailyExport(r),
                               'Calls/Visits Done': r.callCount ?? 0,
                               'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
                               'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
@@ -2384,15 +2413,16 @@ export default function ReportsPage() {
               {callSubTab === 'daily' && (
                 callReports?.reports && callReports.reports.length > 0 ? (
                   <>
-                    <Card className="overflow-hidden border-slate-200 dark:border-slate-700">
-                      <div className="overflow-x-auto">
+                    <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                           <thead>
                             <tr className="bg-[#475569] dark:bg-[#334155]">
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Department</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Group</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Date</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
+                                {callReports.reports.some((r: any) => r?.rangeAggregate) ? 'Period' : 'Date'}
+                              </th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Calls/Visits Done</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Total Duration</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Avg Duration</th>
@@ -2413,14 +2443,34 @@ export default function ReportsPage() {
                                 }
                               });
 
+                              const formatDailyDateCell = (r: any) => {
+                                if (r?.rangeAggregate && filters.startDate && filters.endDate) {
+                                  const a = format(new Date(filters.startDate), 'dd MMM yyyy');
+                                  const b = format(new Date(filters.endDate), 'dd MMM yyyy');
+                                  const same = filters.startDate === filters.endDate;
+                                  return (
+                                    <div className="flex flex-col gap-0.5">
+                                      <span>{same ? a : `${a} – ${b}`}</span>
+                                      {typeof r.daysWithActivity === 'number' && r.daysWithActivity > 0 && (
+                                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                          {r.daysWithActivity} day{r.daysWithActivity !== 1 ? 's' : ''} with activity
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                if (!r?.date) return <span className="text-slate-400">—</span>;
+                                return <span>{format(new Date(r.date), 'dd MMM yyyy')}</span>;
+                              };
+
                               return grouped.flatMap((group, gIdx) => {
-                                const isMultiDay = group.rows.length > 1;
+                                const isMultiDay = group.rows.length > 1 && !group.rows[0]?.rangeAggregate;
                                 const isExpanded = expandedDailyUsers.has(group.userName);
                                 const rowBg = gIdx % 2 === 0
                                   ? 'bg-[#ffffff] dark:bg-[#1e293b]/50'
                                   : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30';
 
-                                // ── Single-day: show date directly, no accordion ──
+                                // ── Single row per user (date filter = cumulative from API, or one calendar day) ──
                                 if (!isMultiDay) {
                                   const r = group.rows[0];
                                   return [(
@@ -2428,7 +2478,7 @@ export default function ReportsPage() {
                                       <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100 border-r border-slate-100 dark:border-slate-700">{group.userName}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-700">{group.fu?.department || '—'}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-700">{group.fu?.group || '—'}</td>
-                                      <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{format(new Date(r.date), 'dd MMM yyyy')}</td>
+                                      <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{formatDailyDateCell(r)}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{r.callCount}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{formatSecondsToMMSS(Number(r.totalDuration) || 0)}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{formatSecondsToMMSS(Number(r.averageDuration) || 0)}</td>
@@ -2436,9 +2486,9 @@ export default function ReportsPage() {
                                   )];
                                 }
 
-                                // ── Multi-day aggregates ──
-                                const totalCalls    = group.rows.reduce((s: number, r: any) => s + (Number(r.callCount)    || 0), 0);
-                                const totalDuration = group.rows.reduce((s: number, r: any) => s + (Number(r.totalDuration) || 0), 0);
+                                // ── Overall mode: multiple calendar rows per user — collapsed summary + expandable per-day ──
+                                const totalCalls    = group.rows.reduce((s: number, row: any) => s + (Number(row.callCount)    || 0), 0);
+                                const totalDuration = group.rows.reduce((s: number, row: any) => s + (Number(row.totalDuration) || 0), 0);
                                 const avgDuration   = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
 
                                 const toggleExpand = () =>
@@ -2449,7 +2499,6 @@ export default function ReportsPage() {
                                   });
 
                                 if (!isExpanded) {
-                                  // ── Collapsed summary row ──
                                   return [(
                                     <tr
                                       key={`${group.userName}-summary`}
@@ -2476,7 +2525,6 @@ export default function ReportsPage() {
                                   )];
                                 }
 
-                                // ── Expanded rows: user spans all date rows ──
                                 return group.rows.map((report: any, rIdx: number) => (
                                   <tr key={`${group.userName}-${rIdx}`} className={`${rowBg} hover:bg-slate-50 dark:hover:bg-slate-700/50`}>
                                     {rIdx === 0 && (
@@ -2495,7 +2543,7 @@ export default function ReportsPage() {
                                         <td rowSpan={group.rows.length} className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 align-top border-r border-slate-100 dark:border-slate-700">{group.fu?.group || '—'}</td>
                                       </>
                                     )}
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{format(new Date(report.date), 'dd MMM yyyy')}</td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{formatDailyDateCell(report)}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{report.callCount}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{formatSecondsToMMSS(report.totalDuration)}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{formatSecondsToMMSS(report.averageDuration)}</td>
@@ -2505,8 +2553,7 @@ export default function ReportsPage() {
                             })()}
                           </tbody>
                         </table>
-                      </div>
-                    </Card>
+                    </div>
                     <div className="flex flex-wrap items-center justify-between gap-3 px-1">
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         Showing page {callReports?.pagination?.page || 1} of {callReports?.pagination?.pages || 1}
@@ -2628,6 +2675,12 @@ export default function ReportsPage() {
                             >
                               Interested Leads
                             </th>
+                            <th
+                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
+                              title="Student Counselor only: leads in the period-allotted cohort whose current call_status is Visited (cumulative bucket count). Other roles: not applicable."
+                            >
+                              Visited
+                            </th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Confirmed</th>
                             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Admitted</th>
                           </tr>
@@ -2713,12 +2766,17 @@ export default function ReportsPage() {
                                     </div>
                                   </td>
                                   <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.interested ?? 0}</td>
+                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
+                                    {String(user.roleName || '').trim() === 'Student Counselor'
+                                      ? (user.visitedCumulative ?? 0)
+                                      : '—'}
+                                  </td>
                                   <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.convertedLeads ?? 0}</td>
                                   <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.admittedLeads ?? user.statusBreakdown?.Admitted ?? 0}</td>
                                 </tr>
                                 {isExpanded && (
                                   <tr className={`${baseRowBg}`}>
-                                    <td colSpan={7} className="px-6 py-4 border-t border-slate-200/70 dark:border-slate-700">
+                                    <td colSpan={8} className="px-6 py-4 border-t border-slate-200/70 dark:border-slate-700">
                                       <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/30 p-4">
                                         {!detailUser ? (
                                           <div className="py-5 text-center text-xs text-slate-500 dark:text-slate-400">
@@ -3345,6 +3403,7 @@ export default function ReportsPage() {
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Calls/Visits Done</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Balance</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Interested Leads</th>
+                                      <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Visited</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Confirmed</th>
                                       <th className="px-4 py-2 text-left font-medium text-slate-700 dark:text-slate-300">Admitted</th>
                                     </tr>
@@ -3357,6 +3416,7 @@ export default function ReportsPage() {
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Calls/Visits Done']}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Balance}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Interested Leads']}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Visited === '' || row.Visited == null ? '—' : row.Visited}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Confirmed}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Admitted}</td>
                                       </tr>
