@@ -714,6 +714,7 @@ export default function ReportsPage() {
     'Not Interested',
     'Not Available',
     'Scheduled Revisit',
+    'Wrong Data',
     'Confirmed',
   ] as const;
 

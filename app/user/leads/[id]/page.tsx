@@ -124,7 +124,7 @@ export default function UserLeadDetailPage() {
       return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Visited', 'Confirmed', 'CET Applied'];
     }
     if (user?.roleName === 'PRO') {
-      return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'];
+      return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Wrong Data', 'Confirmed'];
     }
     return [
       'Interested',
@@ -201,7 +201,7 @@ export default function UserLeadDetailPage() {
       return ['Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Visited', 'Confirmed', 'CET Applied'].sort();
     }
     if (user?.roleName === 'PRO') {
-      return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Confirmed'].sort();
+      return ['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Wrong Data', 'Confirmed'].sort();
     }
     return [
       'Interested',

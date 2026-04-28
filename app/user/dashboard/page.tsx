@@ -76,6 +76,7 @@ const PRO_VISIT_STATUS_LABELS = [
   'Not Interested',
   'Not Available',
   'Scheduled Revisit',
+  'Wrong Data',
   'Confirmed',
 ] as const;
 

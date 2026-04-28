@@ -280,6 +280,7 @@ export default function UserLeadsPage() {
       'Not Interested',
       'Not Available',
       'Scheduled Revisit',
+      'Wrong Data',
       'Confirmed',
     ];
     if (user?.roleName === 'PRO') {
