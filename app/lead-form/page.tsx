@@ -290,14 +290,11 @@ export default function LeadFormPage() {
   };
 
   return (
-    <div className="min-h-screen relative">
-      {/* Background - solid warm light theme */}
-      <div className="fixed inset-0 bg-gradient-to-br from-orange-50/40 via-amber-50/20 to-orange-50/30 pointer-events-none" />
-
-      <div className="relative z-10">
-        <main className="max-w-3xl mx-auto px-4 py-6 sm:px-6 lg:px-8 sm:py-8">
+    <div className="w-full min-h-screen bg-transparent flex flex-col">
+      <main className="w-full max-w-3xl mx-auto flex-1 flex flex-col justify-start p-3 sm:p-6 lg:p-8">
+        <div className="w-full bg-white/95 dark:bg-slate-900/95 sm:rounded-2xl sm:shadow-xl sm:border sm:border-slate-200 dark:sm:border-slate-800 flex-1 sm:flex-none">
           {showSuccess ? (
-            <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm sm:border sm:border-slate-200 dark:bg-slate-900/95 dark:sm:border-slate-800">
+            <div className="text-center py-12 sm:py-16 px-4">
               <div className="text-center py-10 sm:py-12">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-7 h-7 sm:w-8 sm:h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -312,11 +309,11 @@ export default function LeadFormPage() {
                   <Button variant="primary">Go to Home</Button>
                 </Link>
               </div>
-            </Card>
+            </div>
           ) : (
-            <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm sm:border sm:border-slate-200 dark:bg-slate-900/95 dark:sm:border-slate-800 p-5 sm:p-6">
+            <div className="p-4 sm:p-8">
               <form onSubmit={handleSubmit} className="space-y-5">
-                <h2 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-6">Please fill in your details</h2>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mb-2 sm:mb-6">Please fill in your details</h2>
 
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
@@ -621,10 +618,10 @@ export default function LeadFormPage() {
                   </Button>
                 </div>
               </form>
-            </Card>
+            </div>
           )}
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
