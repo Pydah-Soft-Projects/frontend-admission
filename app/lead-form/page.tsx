@@ -277,11 +277,11 @@ export default function LeadFormPage() {
       // Show success message
       setShowSuccess(true);
 
-      // Reset form after 2 seconds
-      setTimeout(() => {
-        setDynamicFormData({});
-        setShowSuccess(false);
-      }, 3000);
+      // Provide a refill function instead of auto-resetting
+      // setTimeout(() => {
+      //   setDynamicFormData({});
+      //   setShowSuccess(false);
+      // }, 3000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to submit form. Please try again.');
     } finally {
@@ -305,15 +305,22 @@ export default function LeadFormPage() {
                 <p className="text-gray-600 mb-6">
                   Your lead information has been submitted successfully. We will get back to you soon.
                 </p>
-                <Link href="/">
-                  <Button variant="primary">Go to Home</Button>
-                </Link>
+                <Button 
+                  variant="primary" 
+                  onClick={() => {
+                    setDynamicFormData({});
+                    setShowSuccess(false);
+                  }}
+                  className="font-semibold"
+                >
+                  Submit Another Response
+                </Button>
               </div>
             </div>
           ) : (
             <div className="p-4 sm:p-8">
               <form onSubmit={handleSubmit} className="space-y-5">
-                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mb-2 sm:mb-6">Please fill in your details</h2>
+
 
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
@@ -602,12 +609,7 @@ export default function LeadFormPage() {
                   </div>
                 )}
 
-                <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
-                  <Link href="/" className="w-full sm:w-auto sm:flex-1">
-                    <Button type="button" variant="outline" className="w-full h-11 text-sm rounded-lg">
-                      Cancel
-                    </Button>
-                  </Link>
+                <div className="flex pt-4 sm:pt-6">
                   <Button
                     type="submit"
                     variant="primary"
