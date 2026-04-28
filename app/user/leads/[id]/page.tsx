@@ -3043,72 +3043,78 @@ export default function UserLeadDetailPage() {
             <div className="flex-1 overflow-y-auto px-4 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Name *</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Name *</label>
                   <Input
                     value={formData.name || ''}
                     disabled={true}
-                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
+                    className="h-9 text-[13px] bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Phone</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Phone</label>
                   <Input
                     value={formData.phone || ''}
                     disabled={true}
-                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
+                    className="h-9 text-[13px] bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Father Name *</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Father Name *</label>
                   <Input
                     value={formData.fatherName || ''}
                     disabled={true}
-                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
+                    className="h-9 text-[13px] bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Father Phone</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Father Phone</label>
                   <Input
                     value={formData.fatherPhone || ''}
                     disabled={true}
-                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
+                    className="h-9 text-[13px] bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  <label className="block text-[10px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                     Alternate Mobile
-                    <span className="text-[10px] normal-case font-normal text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">Optional</span>
+                    <span className="text-[9px] normal-case font-normal text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">Optional</span>
                   </label>
                   <Input
                     value={formData.alternateMobile || ''}
                     onChange={(e) => setFormData({ ...formData, alternateMobile: e.target.value })}
-                    className="h-10"
+                    className="h-9 text-[13px]"
                     placeholder="Enter alternate mobile number"
                     type="tel"
                     maxLength={15}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Village *</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Village *</label>
                   <Input
                     value={formData.village || ''}
-                    disabled={true}
-                    className="h-10 bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-slate-800/50 dark:text-slate-400"
+                    onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                    disabled={user?.roleName !== 'PRO'}
+                    className={`h-9 text-[13px] disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-50 disabled:text-slate-500 dark:disabled:bg-slate-800/50 dark:disabled:text-slate-400 ${
+                      user?.roleName === 'PRO'
+                        ? 'bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-50'
+                        : ''
+                    }`}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Full Address</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Full Address</label>
                   <textarea
-                    className="flex min-h-[80px] w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400 dark:ring-offset-slate-950"
+                    className="flex min-h-[60px] w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[13px] ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-800 dark:ring-offset-slate-950 dark:focus-visible:ring-slate-300 dark:disabled:bg-slate-800/50 dark:disabled:text-slate-400 bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-50"
                     value={formData.address || ''}
-                    disabled={true}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    disabled={user?.roleName !== 'PRO'}
                     placeholder="Enter full address details here..."
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">State</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">State</label>
                   <select
-                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
+                    className="h-9 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 text-[13px] focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
                     value={formData.state || 'Andhra Pradesh'}
                     disabled={true}
                   >
@@ -3118,9 +3124,9 @@ export default function UserLeadDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">District *</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">District *</label>
                   <select
-                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
+                    className="h-9 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 text-[13px] focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
                     value={formData.district || ''}
                     disabled={true}
                   >
@@ -3131,9 +3137,9 @@ export default function UserLeadDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Mandal *</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Mandal *</label>
                   <select
-                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
+                    className="h-9 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 text-[13px] focus:outline-none cursor-not-allowed text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
                     value={formData.mandal || ''}
                     disabled={true}
                   >
@@ -3144,9 +3150,9 @@ export default function UserLeadDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Student Group</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Student Group</label>
                   <select
-                    className="h-10 w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
+                    className="h-9 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-[13px] focus:outline-none focus:ring-2 focus:ring-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
                     value={formData.studentGroup || ''}
                     onChange={(e) => setFormData({ ...formData, studentGroup: e.target.value })}
                   >
@@ -3157,11 +3163,11 @@ export default function UserLeadDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">College Name</label>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">College Name</label>
                   <Input
                     value={formData.interCollege || ''}
                     onChange={(e) => setFormData({ ...formData, interCollege: e.target.value })}
-                    className="h-10"
+                    className="h-9 text-[13px]"
                     placeholder="Enter college name"
                   />
                 </div>

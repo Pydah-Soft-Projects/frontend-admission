@@ -564,7 +564,14 @@ export default function ReportsPage() {
     isLoading: isLoadingPerformanceAnalytics,
     error: performanceAnalyticsError,
   } = useQuery({
-    queryKey: ['userAnalyticsPerformanceExpanded', filters.startDate, filters.endDate, filters.academicYear, expandedPerformanceUserIds.join(',')],
+    queryKey: [
+      'userAnalyticsPerformanceExpanded',
+      filters.startDate,
+      filters.endDate,
+      filters.academicYear,
+      performanceStudentGroup,
+      expandedPerformanceUserIds.join(','),
+    ],
     queryFn: async () => {
       if (expandedPerformanceUserIds.length === 0) return {};
       const batchUserIds = expandedPerformanceUserIds.join(',');
@@ -573,6 +580,7 @@ export default function ReportsPage() {
           startDate: filters.startDate,
           endDate: filters.endDate,
           academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+          studentGroup: performanceStudentGroup || undefined,
           userId: batchUserIds,
           includeAssignmentDetails: true,
         });

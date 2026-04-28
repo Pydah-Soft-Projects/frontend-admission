@@ -10,7 +10,8 @@ export type PermissionModuleKey =
   | 'communications'
   | 'reports'
   | 'formBuilder'
-  | 'masterData';
+  | 'masterData'
+  | 'visitors';
 
 export interface PermissionModuleDefinition {
   key: PermissionModuleKey;
@@ -58,6 +59,11 @@ export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
     key: 'masterData',
     label: 'States, Districts & Mandals',
     description: 'Manage states, districts, mandals, schools, and college names for dropdowns and lead data.',
+  },
+  {
+    key: 'visitors',
+    label: 'Visitor Management',
+    description: 'Track and manage walk-in visitors and their statuses.',
   },
 ];
 
