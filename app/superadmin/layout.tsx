@@ -184,16 +184,12 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   const description =
     roleLabel === 'Data Entry User'
       ? 'Create a single prospect manually and add them to the admissions workflow.'
-      : roleLabel === 'Sub Super Admin'
-        ? 'Access the modules delegated to you by the super admin team.'
-        : '';
+      : '';
 
   const title =
     roleLabel === 'Data Entry User'
       ? 'Data Entry'
-      : roleLabel === 'Super Admin'
-        ? ''
-        : 'Command Center';
+      : '';
 
   if (!isAuthorised) {
     return <Loading />;

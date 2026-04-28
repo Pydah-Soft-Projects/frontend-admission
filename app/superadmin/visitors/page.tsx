@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
 export default function VisitorsPage() {
     const [code, setCode] = useState('');
@@ -39,6 +40,31 @@ export default function VisitorsPage() {
     useEffect(() => {
         fetchRecentVisits();
     }, []);
+
+    const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+
+    useEffect(() => {
+        setHeaderContent(
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
+                <div>
+                    <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 sm:text-2xl">
+                        Visitor Verification
+                    </h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        Process on-campus attendance by validating counselor-generated access codes.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        System Live
+                    </span>
+                </div>
+            </div>
+        );
+
+        return () => clearHeaderContent();
+    }, [setHeaderContent, clearHeaderContent]);
 
     const filteredVisits = recentVisits.filter(visit => {
         if (statusFilter === 'all') return true;
@@ -91,75 +117,55 @@ export default function VisitorsPage() {
     };
 
     return (
-        <div className="space-y-10 pb-12">
-            {/* Page Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 sm:text-3xl">
-                        Visitor Verification
-                    </h1>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                        Process on-campus attendance by validating counselor-generated access codes.
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        System Live
-                    </span>
-                </div>
-            </div>
-
+        <div className="space-y-8 pb-10">
             {/* Main Section: Full Width */}
             <div className="space-y-6 w-full">
-                {/* Verification Input Card */}
-                <Card className="overflow-hidden border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-sm">
-                    <div className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="space-y-1">
-                                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                    <div className="p-1.5 rounded-lg bg-orange-100 dark:bg-orange-950 text-orange-600 dark:text-orange-400">
-                                        <Search className="w-5 h-5" />
-                                    </div>
-                                    Validate Access Code
-                                </h2>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Enter the 6-digit code provided by the student.</p>
-                            </div>
-                            <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 rounded-full border border-slate-100 dark:border-slate-800">
-                                <Clock className="w-3 h-3" />
-                                24h Windows
-                            </div>
-                        </div>
-
-                        <form onSubmit={handleVerify} className="flex flex-col sm:flex-row gap-3">
-                            <div className="flex-1 relative">
-                                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400">
-                                    <Hash className="w-5 h-5" />
+                {/* Verification Input Section */}
+                <div className="pt-2">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="space-y-1">
+                            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-orange-100 dark:bg-orange-950 text-orange-600 dark:text-orange-400">
+                                    <Search className="w-4 h-4" />
                                 </div>
-                                <input
-                                    type="text"
-                                    maxLength={6}
-                                    placeholder="000000"
-                                    value={code}
-                                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                                    className="w-full pl-11 pr-4 py-3 text-xl tracking-[0.2em] font-bold rounded-xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950 focus:border-orange-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-4 focus:ring-orange-500/5 outline-none transition-all placeholder:text-slate-200 dark:placeholder:text-slate-800"
-                                />
-                            </div>
-                            <Button
-                                type="submit"
-                                disabled={loading || code.length !== 6}
-                                className="h-[52px] sm:w-40 text-base font-bold bg-slate-900 dark:bg-orange-500 hover:bg-slate-800 dark:hover:bg-orange-600 rounded-xl"
-                            >
-                                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Verify Code'}
-                            </Button>
-                        </form>
-
-                        <div className="mt-4 flex items-center gap-2 text-[10px] font-semibold text-slate-400">
-                            <AlertCircle className="w-3.5 h-3.5 text-orange-500" />
-                            <span>Verification codes are single-use only. Expire after 24 hours.</span>
+                                Validate Access Code
+                            </h2>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Enter the 6-digit code provided by the student.</p>
+                        </div>
+                        <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 rounded-full border border-slate-100 dark:border-slate-800">
+                            <Clock className="w-3 h-3" />
+                            24h Windows
                         </div>
                     </div>
-                </Card>
+
+                    <form onSubmit={handleVerify} className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1 relative">
+                            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400">
+                                <Hash className="w-5 h-5" />
+                            </div>
+                            <input
+                                type="text"
+                                maxLength={6}
+                                placeholder="000000"
+                                value={code}
+                                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                                className="w-full pl-11 pr-4 py-3 text-lg tracking-[0.2em] font-bold rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/5 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 shadow-sm"
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={loading || code.length !== 6}
+                            className="h-[52px] sm:w-36 text-sm font-bold bg-slate-900 dark:bg-orange-500 hover:bg-slate-800 dark:hover:bg-orange-600 rounded-xl"
+                        >
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify Code'}
+                        </Button>
+                    </form>
+
+                    <div className="mt-3 flex items-center gap-2 text-[10px] font-semibold text-slate-400">
+                        <AlertCircle className="w-3.5 h-3.5 text-orange-500" />
+                        <span>Verification codes are single-use only. Expire after 24 hours.</span>
+                    </div>
+                </div>
 
                 {/* Visitor Result Card (Conditional) */}
                 {visitorData && (
@@ -307,22 +313,38 @@ export default function VisitorsPage() {
                         <p className="text-sm text-slate-400 mt-1">Try switching to a different status or refresh the list.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+                    <div className="flex flex-col gap-3">
                         {filteredVisits.map((visit) => (
                             <Card
                                 key={visit.id}
-                                className="group relative overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 p-5 transition-all hover:shadow-2xl hover:shadow-indigo-500/5 hover:-translate-y-1"
+                                className="group relative overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 px-4 py-3 transition-all hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-4"
                             >
-                                <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-4 min-w-0">
                                     <div className={cn(
-                                        "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black shadow-inner",
+                                        "w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-sm font-black shadow-inner",
                                         visit.status === 'used'
                                             ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400'
                                             : visit.status === 'expired'
                                                 ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
                                                 : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400'
                                     )}>
-                                        {visit.status === 'used' ? <CheckCircle2 className="w-6 h-6" /> : visit.code}
+                                        {visit.status === 'used' ? <CheckCircle2 className="w-5 h-5" /> : visit.status === 'expired' ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+                                    </div>
+                                    <div className="space-y-0.5 min-w-0">
+                                        <h4 className="font-bold text-slate-900 dark:text-slate-100 truncate text-sm leading-tight">
+                                            {visit.lead_name}
+                                        </h4>
+                                        <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider truncate">
+                                            <User className="w-3 h-3 shrink-0" />
+                                            <span className="truncate">Agent: {visit.sender_name}</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-4 sm:gap-6 shrink-0">
+                                    <div className="hidden sm:flex items-center gap-1.5 text-slate-400">
+                                        <Clock className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] font-bold">{format(new Date(visit.created_at), 'MMM d, h:mm a')}</span>
                                     </div>
                                     <div className={cn(
                                         "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border",
@@ -333,23 +355,6 @@ export default function VisitorsPage() {
                                                 : "bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-950/40 dark:border-amber-900"
                                     )}>
                                         {visit.status}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-1 mb-4">
-                                    <h4 className="font-bold text-slate-900 dark:text-slate-100 truncate text-base leading-tight">
-                                        {visit.lead_name}
-                                    </h4>
-                                    <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
-                                        <User className="w-3 h-3" />
-                                        Agent: {visit.sender_name}
-                                    </p>
-                                </div>
-
-                                <div className="pt-4 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
-                                    <div className="flex items-center gap-1.5 text-slate-400">
-                                        <Clock className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-bold">{format(new Date(visit.created_at), 'MMM d, h:mm a')}</span>
                                     </div>
                                     <button className="text-slate-300 dark:text-slate-700 hover:text-indigo-500 transition-colors">
                                         <ChevronRight className="w-4 h-4" />
