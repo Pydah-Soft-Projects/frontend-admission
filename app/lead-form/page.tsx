@@ -295,12 +295,12 @@ export default function LeadFormPage() {
       <div className="fixed inset-0 bg-gradient-to-br from-orange-50/40 via-amber-50/20 to-orange-50/30 pointer-events-none" />
 
       <div className="relative z-10">
-        <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-3xl mx-auto px-4 py-6 sm:px-6 lg:px-8 sm:py-8">
           {showSuccess ? (
-            <Card>
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm sm:border sm:border-slate-200 dark:bg-slate-900/95 dark:sm:border-slate-800">
+              <div className="text-center py-10 sm:py-12">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-7 h-7 sm:w-8 sm:h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
@@ -314,9 +314,9 @@ export default function LeadFormPage() {
               </div>
             </Card>
           ) : (
-            <Card>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <h2 className="text-xl font-semibold mb-6">Please fill in your details</h2>
+            <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm sm:border sm:border-slate-200 dark:bg-slate-900/95 dark:sm:border-slate-800 p-5 sm:p-6">
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <h2 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-6">Please fill in your details</h2>
 
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
@@ -347,13 +347,13 @@ export default function LeadFormPage() {
 
                 {sortedFormFields.length > 0 && (
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-6">
+                    <h3 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2 sm:mb-6">
                       {dynamicForm?.name || 'Please fill in your details'}
                     </h3>
                     {dynamicForm?.description && (
-                      <p className="text-sm text-gray-600 mb-6">{dynamicForm.description}</p>
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-4 sm:mb-6">{dynamicForm.description}</p>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                       {sortedFormFields.map((field: any) => {
                         const fieldValue = dynamicFormData[field.fieldName] || field.defaultValue || '';
                         const dataCollectionType = dynamicFormData.data_collection_type ?? '';
@@ -374,8 +374,8 @@ export default function LeadFormPage() {
                             (isDistrictField(field) && !selectedState) ||
                             (isMandalField(field) && (!selectedState || !selectedDistrict));
                           return (
-                            <div key={field._id}>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <div key={field._id} className="space-y-1.5">
+                              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                                 {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <select
@@ -383,7 +383,7 @@ export default function LeadFormPage() {
                                 onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
                                 required={isFieldRequired}
                                 disabled={disabled}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50/50 text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/10 transition-all hover:bg-white hover:border-slate-300 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-100 dark:focus:border-orange-500/50 dark:focus:bg-slate-950 disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <option value="">
                                   {isDistrictField(field) && !selectedState
@@ -403,7 +403,7 @@ export default function LeadFormPage() {
                                 })}
                               </select>
                               {field.helpText && (
-                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 ml-1">{field.helpText}</p>
                               )}
                             </div>
                           );
@@ -414,13 +414,13 @@ export default function LeadFormPage() {
                           const disabled = !hasSelectedGroup || institutionsLoading;
                           const datalistId = `${field.fieldName}-institutions`;
                           return (
-                            <div key={field._id}>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <div key={field._id} className="space-y-1.5">
+                              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                                 {field.fieldLabel}{' '}
                                 {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               {!hasSelectedGroup && (
-                                <p className="mb-2 text-xs text-gray-500">
+                                <p className="mb-1.5 text-[11px] text-slate-500 dark:text-slate-400 ml-1">
                                   Select a student group to choose an institution.
                                 </p>
                               )}
@@ -438,6 +438,7 @@ export default function LeadFormPage() {
                                     : `Start typing to search ${labelSuffix.toLowerCase()}`
                                 }
                                 disabled={disabled}
+                                className="!py-2.5 !text-sm !rounded-lg"
                               />
                               <datalist id={datalistId}>
                                 {activeInstitutions.map((item) => (
@@ -445,7 +446,7 @@ export default function LeadFormPage() {
                                 ))}
                               </datalist>
                               {hasSelectedGroup && !institutionsLoading && activeInstitutions.length === 0 && (
-                                <p className="mt-2 text-xs text-gray-500">
+                                <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400 ml-1">
                                   No {labelSuffix.toLowerCase()} names available yet.
                                 </p>
                               )}
@@ -457,15 +458,15 @@ export default function LeadFormPage() {
                         if (field.fieldType === 'dropdown') {
                           const dropdownOptions = normalizeFieldOptions(field.options);
                           return (
-                            <div key={field._id}>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <div key={field._id} className="space-y-1.5">
+                              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                                 {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <select
                                 value={fieldValue}
                                 onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
                                 required={isFieldRequired}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50/50 text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/10 transition-all hover:bg-white hover:border-slate-300 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-100 dark:focus:border-orange-500/50 dark:focus:bg-slate-950 disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <option value="">Select {field.fieldLabel}</option>
                                 {dropdownOptions.map((option) => {
@@ -479,7 +480,7 @@ export default function LeadFormPage() {
                                 })}
                               </select>
                               {field.helpText && (
-                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 ml-1">{field.helpText}</p>
                               )}
                             </div>
                           );
@@ -488,13 +489,13 @@ export default function LeadFormPage() {
                         if (field.fieldType === 'radio') {
                           const radioOptions = normalizeFieldOptions(field.options);
                           return (
-                            <div key={field._id}>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <div key={field._id} className="space-y-2">
+                              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1 mb-2">
                                 {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <div className="space-y-2">
                                 {radioOptions.length > 0 && radioOptions.map((option) => (
-                                  <label key={option.value} className="flex items-center gap-2 cursor-pointer group">
+                                  <label key={option.value} className="flex items-center gap-2 cursor-pointer group px-1">
                                     <input
                                       type="radio"
                                       name={field.fieldName}
@@ -502,14 +503,14 @@ export default function LeadFormPage() {
                                       checked={fieldValue === option.value}
                                       onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
                                       required={isFieldRequired}
-                                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                      className="w-4 h-4 text-orange-500 border-slate-300 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800"
                                     />
-                                    <span className="text-sm text-gray-700">{option.label}</span>
+                                    <span className="text-sm text-slate-700 dark:text-slate-300">{option.label}</span>
                                   </label>
                                 ))}
                               </div>
                               {field.helpText && (
-                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 ml-1">{field.helpText}</p>
                               )}
                             </div>
                           );
@@ -517,20 +518,20 @@ export default function LeadFormPage() {
 
                         if (field.fieldType === 'checkbox') {
                           return (
-                            <div key={field._id} className="md:col-span-2">
+                            <div key={field._id} className="md:col-span-2 px-1">
                               <label className="flex items-center gap-2 cursor-pointer group">
                                 <input
                                   type="checkbox"
                                   checked={fieldValue === true || fieldValue === 'true'}
                                   onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.checked)}
-                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                                  className="w-4 h-4 text-orange-500 border-slate-300 rounded focus:ring-orange-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-800"
                                 />
-                                <span className="text-sm font-medium text-gray-700">
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                                 </span>
                               </label>
                               {field.helpText && (
-                                <p className="text-xs text-gray-500 mt-1 ml-6">{field.helpText}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 ml-6">{field.helpText}</p>
                               )}
                             </div>
                           );
@@ -538,8 +539,8 @@ export default function LeadFormPage() {
 
                         if (field.fieldType === 'textarea') {
                           return (
-                            <div key={field._id} className="md:col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <div key={field._id} className="md:col-span-2 space-y-1.5">
+                              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                                 {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <textarea
@@ -548,10 +549,10 @@ export default function LeadFormPage() {
                                 placeholder={field.placeholder || ''}
                                 required={isFieldRequired}
                                 rows={4}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50/50 text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/10 transition-all hover:bg-white hover:border-slate-300 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-100 dark:focus:border-orange-500/50 dark:focus:bg-slate-950 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                               />
                               {field.helpText && (
-                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 ml-1">{field.helpText}</p>
                               )}
                             </div>
                           );
@@ -559,8 +560,8 @@ export default function LeadFormPage() {
 
                         if (field.fieldType === 'file') {
                           return (
-                            <div key={field._id} className="md:col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <div key={field._id} className="md:col-span-2 space-y-1.5">
+                              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                                 {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                               </label>
                               <input
@@ -572,10 +573,10 @@ export default function LeadFormPage() {
                                   }
                                 }}
                                 required={isFieldRequired}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm"
+                                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50/50 text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/10 transition-all hover:bg-white hover:border-slate-300 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-100 dark:focus:border-orange-500/50 dark:focus:bg-slate-950 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 dark:file:bg-orange-900/30 dark:file:text-orange-400"
                               />
                               {field.helpText && (
-                                <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 ml-1">{field.helpText}</p>
                               )}
                             </div>
                           );
@@ -592,9 +593,10 @@ export default function LeadFormPage() {
                               onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
                               placeholder={field.placeholder || ''}
                               required={isFieldRequired}
+                              className="!py-2.5 !text-sm !rounded-lg"
                             />
                             {field.helpText && (
-                              <p className="text-xs text-gray-500 mt-1">{field.helpText}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 ml-1">{field.helpText}</p>
                             )}
                           </div>
                         );
@@ -603,20 +605,20 @@ export default function LeadFormPage() {
                   </div>
                 )}
 
-                <div className="flex gap-4 pt-4">
+                <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
+                  <Link href="/" className="w-full sm:w-auto sm:flex-1">
+                    <Button type="button" variant="outline" className="w-full h-11 text-sm rounded-lg">
+                      Cancel
+                    </Button>
+                  </Link>
                   <Button
                     type="submit"
                     variant="primary"
                     disabled={isSubmitting}
-                    className="flex-1"
+                    className="w-full sm:w-auto sm:flex-1 h-11 text-sm font-semibold rounded-lg bg-orange-600 hover:bg-orange-700"
                   >
                     {isSubmitting ? 'Submitting...' : 'Submit'}
                   </Button>
-                  <Link href="/" className="flex-1">
-                    <Button type="button" variant="outline" className="w-full">
-                      Cancel
-                    </Button>
-                  </Link>
                 </div>
               </form>
             </Card>
