@@ -72,7 +72,7 @@ export default function AssignLeadsPage() {
   const [statsLocationMandals, setStatsLocationMandals] = useState<LocationOption[]>([]);
   const [academicYear, setAcademicYear] = useState<number | ''>(2026);
   const [studentGroup, setStudentGroup] = useState<string>('');
-  const [count, setCount] = useState(1000);
+  const [count, setCount] = useState<number | ''>('');
   const [targetDate, setTargetDate] = useState<string>('');
   const [cycleNumber, setCycleNumber] = useState<number | ''>('');
   const [isReady, setIsReady] = useState(false);
@@ -93,7 +93,7 @@ export default function AssignLeadsPage() {
   const [removeAcademicYear, setRemoveAcademicYear] = useState<number | ''>('');
   const [removeStudentGroup, setRemoveStudentGroup] = useState<string>('');
   const [removeCycleNumber, setRemoveCycleNumber] = useState<number | ''>('');
-  const [removeCount, setRemoveCount] = useState(100);
+  const [removeCount, setRemoveCount] = useState<number | ''>('');
 
   const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
   const studentGroupOptions = filters?.studentGroups?.length ? filters.studentGroups : STUDENT_GROUP_OPTIONS;
@@ -120,7 +120,7 @@ export default function AssignLeadsPage() {
   const [institutionName, setInstitutionName] = useState<string>('');
   const [institutionAcademicYear, setInstitutionAcademicYear] = useState<number | ''>(2026);
   const [institutionUserId, setInstitutionUserId] = useState<string>('');
-  const [institutionCount, setInstitutionCount] = useState(1000);
+  const [institutionCount, setInstitutionCount] = useState<number | ''>('');
   const [institutionTargetDate, setInstitutionTargetDate] = useState('');
   const [singleAssignTargetDate, setSingleAssignTargetDate] = useState('');
   const [institutionCycleNumber, setInstitutionCycleNumber] = useState<number | ''>('');
@@ -1697,7 +1697,7 @@ export default function AssignLeadsPage() {
                     min={1}
                     max={10000}
                     value={institutionCount}
-                    onChange={(e) => setInstitutionCount(Number(e.target.value))}
+                    onChange={(e) => setInstitutionCount(e.target.value === '' ? '' : Number(e.target.value))}
                     required
                     className="w-full min-w-0 px-3 py-2 text-sm"
                   />
@@ -1728,7 +1728,7 @@ export default function AssignLeadsPage() {
                   onClick={() => {
                     setInstitutionUserId('');
                     setInstitutionName('');
-                    setInstitutionCount(1000);
+                    setInstitutionCount('');
                     setInstitutionTargetDate('');
                     setInstitutionCycleNumber('');
                   }}
@@ -1919,7 +1919,7 @@ export default function AssignLeadsPage() {
                   min={1}
                   max={Math.max(assignedToUserCount, 10000)}
                   value={removeCount}
-                  onChange={(event) => setRemoveCount(Number(event.target.value))}
+                  onChange={(event) => setRemoveCount(event.target.value === '' ? '' : Number(event.target.value))}
                   required
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
@@ -1957,7 +1957,7 @@ export default function AssignLeadsPage() {
                     setRemoveAcademicYear('');
                     setRemoveStudentGroup('');
                     setRemoveCycleNumber('');
-                    setRemoveCount(100);
+                    setRemoveCount('');
                   }}
                   disabled={removeAssignmentsMutation.isPending}
                 >
@@ -2165,7 +2165,7 @@ export default function AssignLeadsPage() {
                   min={1}
                   max={10000}
                   value={count}
-                  onChange={(event) => setCount(Number(event.target.value))}
+                  onChange={(event) => setCount(event.target.value === '' ? '' : Number(event.target.value))}
                   required
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
@@ -2174,6 +2174,9 @@ export default function AssignLeadsPage() {
                   {studentGroup && `, ${studentGroup}`}
                   {mandal && ` in ${mandal}`}
                   {state && `, ${state}`}
+                </p>
+                <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                  Note: Leads are assigned in LIFO order (Newest First) based on their creation date.
                 </p>
               </div>
 
@@ -2202,7 +2205,7 @@ export default function AssignLeadsPage() {
                     setAcademicYear(2026);
                     setCycleNumber('');
                     setTargetDate('');
-                    setCount(1000);
+                    setCount('');
                   }}
                   disabled={assignMutation.isPending}
                 >
