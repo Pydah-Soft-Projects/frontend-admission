@@ -1,12 +1,45 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { joiningAPI, admissionAPI, paymentAPI, paymentSettingsAPI } from '@/lib/api';
+import {
+  joiningAPI,
+  admissionAPI,
+  paymentAPI,
+  paymentSettingsAPI,
+  registrationFormAPI,
+  courseAPI,
+} from '@/lib/api';
+import { JoiningDynamicRegistrationFields } from '@/components/joining/JoiningDynamicRegistrationFields';
+import {
+  applyMappedRegistrationField,
+  isJoiningRegistrationFieldMapped,
+  mergeJoiningStudentInfoFromExtras,
+  readMappedRegistrationField,
+} from '@/lib/joiningRegistrationFieldMap';
+import {
+  filterJoiningRegistrationDisplayFields,
+  stripJoiningRedundantRegistrationExtras,
+} from '@/lib/joiningRegistrationFieldFilter';
+import {
+  buildCertificateChecklistStoredValue,
+  certificateChecklistValuesEqual,
+  computeCertificationStatusFromChecklist,
+  listCertificateItemOptions,
+  parseCertificateChecklistEntry,
+  type CertificateChecklistStoredValue,
+} from '@/lib/certificateChecklistEntry';
+import { coerceJoiningRegistrationField } from '@/lib/joiningRegistrationFieldCoerce';
+import { mergeLeadIntoJoiningFormState, type LeadLike } from '@/lib/joiningLeadPrefill';
+import { computeScholarshipRegistrationPatches } from '@/lib/joiningScholarshipQuotaDefault';
+import {
+  computeAcademicYearRegistrationPatches,
+  resolveTotalYearsFromCourseSettings,
+} from '@/lib/joiningAcademicYearRegistration';
 import { showToast } from '@/lib/toast';
 import {
   Joining,
@@ -23,10 +56,12 @@ import {
   CoursePaymentSettings,
   PaymentTransaction,
   CashfreeConfigPreview,
+  CertificateGuidance,
 } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { useLocations } from '@/lib/useLocations';
+import { useInstitutions } from '@/lib/useInstitutions';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -66,6 +101,15 @@ const documentLabels: Record<keyof JoiningDocuments, string> = {
   rationCard: 'Ration Card',
 };
 
+/** Hidden from the joining UI checklist (covered by settings `certificate_config` per program level). */
+const DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST = new Set<keyof JoiningDocuments>([
+  'ssc',
+  'inter',
+  'ugOrPgCmm',
+  'transferCertificate',
+  'studyCertificate',
+]);
+
 const quotaOptions = ['Management', 'Convenor', 'Not Applicable'] as const;
 
 const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: string }> = [
@@ -77,6 +121,8 @@ const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: strin
 const mediumOptionValues = new Set(mediumOptions.map((option) => option.value));
 
 const documentStatusOptions: JoiningDocumentStatus[] = ['pending', 'received'];
+const FIXED_REGISTRATION_ACADEMIC_YEAR = '2026';
+const FIXED_REGISTRATION_SEMESTER = '1-1';
 
 const normalizeDateInput = (value?: string) => {
   if (!value) return '';
@@ -260,6 +306,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       course: joining?.courseInfo?.course || '',
       branch: joining?.courseInfo?.branch || '',
       quota: joining?.courseInfo?.quota || '',
+      programLevel: joining?.courseInfo?.programLevel || '',
     },
     studentInfo: {
       name: joining?.studentInfo?.name || '',
@@ -382,6 +429,8 @@ const JoiningDetailPage = () => {
   const [showMotherAadhaar, setShowMotherAadhaar] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
+  const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [openPaymentMode, setOpenPaymentMode] = useState<'cash' | 'online' | null>(null);
   const [shouldPromptPayment, setShouldPromptPayment] = useState(false);
@@ -402,6 +451,7 @@ const JoiningDetailPage = () => {
     stateName: commState || undefined,
     districtName: commDistrict || undefined,
   });
+  const { colleges } = useInstitutions();
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['joining', leadId],
@@ -414,7 +464,300 @@ const JoiningDetailPage = () => {
 
   const joiningRecord = data?.data?.joining as Joining | undefined;
   // Use leadData from joining instead of populated lead
-  const lead = (joiningRecord?.leadData as any) || data?.data?.lead;
+  /** Prefer populated `lead` from API (includes address, academicYear, studentGroup); fall back to snapshot in `leadData`. */
+  const lead = (data?.data?.lead as any) || (joiningRecord?.leadData as any);
+
+  const { data: registrationFormsResponse, isError: registrationFormsError } = useQuery({
+    queryKey: ['registration-form', 'student-db', 'forms', 'joining'],
+    queryFn: async () =>
+      registrationFormAPI.listForms({ showInactive: false, includeFieldCount: true }),
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const registrationForms = useMemo(() => {
+    const payload = (registrationFormsResponse as any)?.data ?? registrationFormsResponse;
+    if (!payload) return [] as any[];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray((payload as any).data)) return (payload as any).data;
+    return [] as any[];
+  }, [registrationFormsResponse]);
+
+  useEffect(() => {
+    if (!registrationFormId && registrationForms.length > 0) {
+      const def = registrationForms.find((f: any) => f.isDefault) ?? registrationForms[0];
+      const id = def?.id || def?._id;
+      if (id) setRegistrationFormId(id);
+    }
+  }, [registrationForms, registrationFormId]);
+
+  const {
+    data: registrationFormResponse,
+    isLoading: isLoadingRegistrationForm,
+    isError: registrationFormError,
+  } = useQuery({
+    queryKey: ['registration-form', 'student-db', 'form', registrationFormId, 'joining'],
+    queryFn: async () => {
+      if (!registrationFormId) return null;
+      return registrationFormAPI.getForm(registrationFormId, {
+        includeFields: true,
+        showInactive: false,
+      });
+    },
+    enabled: !!registrationFormId,
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const registrationFormDefinition = useMemo(() => {
+    if (!registrationFormResponse) return null;
+    const payload = (registrationFormResponse as any)?.data ?? registrationFormResponse;
+    return payload || null;
+  }, [registrationFormResponse]);
+
+  const sortedRegistrationFields = useMemo(() => {
+    const fields = registrationFormDefinition?.fields;
+    if (!Array.isArray(fields)) return [] as any[];
+    return [...fields].sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  }, [registrationFormDefinition]);
+
+  /** Management → not eligible; Convenor → eligible (registration fields whose name/label match scholarship). */
+  useEffect(() => {
+    const q = (formState.courseInfo.quota || '').trim();
+    if (q !== 'Management' && q !== 'Convenor') return;
+    if (!sortedRegistrationFields.length) return;
+    const patches = computeScholarshipRegistrationPatches(q, sortedRegistrationFields);
+    if (!Object.keys(patches).length) return;
+    setRegistrationExtras((prev) => {
+      let next = { ...prev };
+      let changed = false;
+      for (const [k, v] of Object.entries(patches)) {
+        const cur = next[k];
+        if (cur !== undefined && cur !== null && String(cur).trim() !== '') continue;
+        if (next[k] === v) continue;
+        next[k] = v;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [sortedRegistrationFields, formState.courseInfo.quota, registrationFormId]);
+
+  /** Omits course / branch / quota / student_type / Aadhaar / caste / address keys (etc.) — edited above in Course & Quota or structured student fields. */
+  const joiningRegistrationDisplayFields = useMemo(
+    () => filterJoiningRegistrationDisplayFields(sortedRegistrationFields),
+    [sortedRegistrationFields]
+  );
+
+  const joiningRegistrationDisplayFieldsCoerced = useMemo(
+    () => joiningRegistrationDisplayFields.map((f: any) => coerceJoiningRegistrationField(f)),
+    [joiningRegistrationDisplayFields]
+  );
+
+  const registrationFormFieldsAllFilteredOut =
+    sortedRegistrationFields.length > 0 && joiningRegistrationDisplayFields.length === 0;
+
+  const registrationDynHas = useMemo(
+    () => (names: string[]) =>
+      joiningRegistrationDisplayFieldsCoerced.some((f: any) =>
+        names.includes(String(f.fieldName || '').trim().toLowerCase())
+      ),
+    [joiningRegistrationDisplayFieldsCoerced]
+  );
+
+  const regHasDyn = joiningRegistrationDisplayFieldsCoerced.length > 0;
+  const hideJoiningStudentName = regHasDyn && registrationDynHas(['student_name', 'name']);
+  const hideJoiningStudentPhone =
+    regHasDyn &&
+    registrationDynHas([
+      'student_phone',
+      'phone',
+      'student_mobile',
+      'student_mobileno',
+      'mobile',
+      'applicant_mobile',
+      'candidate_mobile',
+    ]);
+  const hideJoiningStudentGender = regHasDyn && registrationDynHas(['student_gender', 'gender']);
+  const hideJoiningDateOfBirth = regHasDyn &&
+    registrationDynHas([
+      'date_of_birth',
+      'dateofbirth',
+      'dob',
+      'student_dob',
+      'student_date_of_birth',
+      'birth_date',
+      'birthdate',
+    ]);
+  const hideJoiningFatherName = regHasDyn && registrationDynHas(['father_name', 'fathername']);
+  const hideJoiningMotherName = regHasDyn && registrationDynHas(['mother_name', 'mothername']);
+  const hideJoiningDoor = regHasDyn && registrationDynHas(['address_door_street', 'door_street']);
+  const hideJoiningLandmark = regHasDyn && registrationDynHas(['address_landmark', 'landmark']);
+  const hideJoiningVillage = regHasDyn && registrationDynHas(['address_village_city', 'village', 'city', 'address_village']);
+  const hideJoiningState = regHasDyn && registrationDynHas(['state', 'address_state']);
+  const hideJoiningDistrict = regHasDyn && registrationDynHas(['address_district', 'district']);
+  const hideJoiningMandal = regHasDyn && registrationDynHas(['address_mandal', 'mandal']);
+  const hideJoiningPin = regHasDyn && registrationDynHas(['pincode', 'pin_code', 'address_pin_code']);
+
+  useEffect(() => {
+    if (!joiningRecord?._id) return;
+    const saved = joiningRecord.registrationFormData;
+    const ld = (joiningRecord.leadData || {}) as Record<string, unknown>;
+    const dyn = ld.dynamicFields || ld.dynamic_fields;
+    const merged: Record<string, unknown> = {
+      ...(dyn && typeof dyn === 'object' ? (dyn as Record<string, unknown>) : {}),
+      ...(saved && typeof saved === 'object' ? saved : {}),
+    };
+    const cleaned = { ...merged };
+    Object.keys(cleaned).forEach((k) => {
+      if (isJoiningRegistrationFieldMapped(k)) delete cleaned[k];
+    });
+    let next = stripJoiningRedundantRegistrationExtras(cleaned);
+    const leadSnap = lead as LeadLike | undefined;
+    // Academic year: always mirror the lead’s intake year on this workspace (single source of truth).
+    if (leadSnap?.academicYear != null && !Number.isNaN(Number(leadSnap.academicYear))) {
+      const y = String(leadSnap.academicYear);
+      next = { ...next, academic_year: y, academicYear: y };
+    }
+    // Upload / intake batch from lead (UUID) — common registration field names.
+    const uploadBid =
+      leadSnap?.uploadBatchId != null && String(leadSnap.uploadBatchId).trim() !== ''
+        ? String(leadSnap.uploadBatchId).trim()
+        : '';
+    if (uploadBid) {
+      next = {
+        ...next,
+        upload_batch_id: uploadBid,
+        uploadBatchId: uploadBid,
+        batch_id: uploadBid,
+        batchId: uploadBid,
+        batch: uploadBid,
+        upload_batch: uploadBid,
+      };
+    }
+    if (leadSnap?.studentGroup && String(leadSnap.studentGroup).trim()) {
+      const sg = String(leadSnap.studentGroup).trim();
+      if (next.student_group === undefined && next.studentGroup === undefined) {
+        next = { ...next, student_group: sg };
+      }
+    }
+    if (next.student_status === undefined && next.studentStatus === undefined) {
+      next = { ...next, student_status: 'Regular' };
+    }
+    next = {
+      ...next,
+      academic_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
+      academicYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
+      current_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
+      currentYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
+      current_semester: FIXED_REGISTRATION_SEMESTER,
+      currentSemester: FIXED_REGISTRATION_SEMESTER,
+      semester: FIXED_REGISTRATION_SEMESTER,
+      semister: FIXED_REGISTRATION_SEMESTER,
+    };
+    setRegistrationExtras(next);
+  }, [joiningRecord?._id, joiningRecord?.updatedAt, lead]);
+
+  const registrationLocationState = useMemo(
+    () =>
+      formState.address.communication.state ||
+      String(registrationExtras.state || registrationExtras.address_state || ''),
+    [formState.address.communication.state, registrationExtras]
+  );
+
+  const registrationLocationDistrict = useMemo(
+    () =>
+      formState.address.communication.district ||
+      String(registrationExtras.district || registrationExtras.address_district || ''),
+    [formState.address.communication.district, registrationExtras]
+  );
+
+  const handleRegistrationFieldChange = useCallback((fieldName: string, value: unknown) => {
+    const n = fieldName.toLowerCase();
+    if (
+      n === 'academic_year' ||
+      n === 'academicyear' ||
+      n === 'current_year' ||
+      n === 'currentyear'
+    ) {
+      setRegistrationExtras((prev) => ({
+        ...prev,
+        [fieldName]: FIXED_REGISTRATION_ACADEMIC_YEAR,
+        academic_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
+        academicYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
+        current_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
+        currentYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
+      }));
+      return;
+    }
+    if (
+      n === 'current_semester' ||
+      n === 'currentsemester' ||
+      n === 'semester' ||
+      n === 'semister'
+    ) {
+      setRegistrationExtras((prev) => ({
+        ...prev,
+        [fieldName]: FIXED_REGISTRATION_SEMESTER,
+        current_semester: FIXED_REGISTRATION_SEMESTER,
+        currentSemester: FIXED_REGISTRATION_SEMESTER,
+        semester: FIXED_REGISTRATION_SEMESTER,
+        semister: FIXED_REGISTRATION_SEMESTER,
+      }));
+      return;
+    }
+    if (isJoiningRegistrationFieldMapped(fieldName)) {
+      setFormState((prev) => applyMappedRegistrationField(prev, fieldName, value));
+      return;
+    }
+    setRegistrationExtras((prev) => {
+      const next = { ...prev, [fieldName]: value };
+      if (n === 'state' || n === 'address_state') {
+        delete next.district;
+        delete next.address_district;
+        delete next.mandal;
+        delete next.address_mandal;
+      } else if (n === 'district' || n === 'address_district') {
+        delete next.mandal;
+        delete next.address_mandal;
+      } else if (n === 'student_group' || n === 'studentgroup') {
+        delete next.school_or_college_name;
+      }
+      return next;
+    });
+  }, []);
+
+  const selectedCollegeId = useMemo(() => {
+    const rawId =
+      registrationExtras.college_id ??
+      registrationExtras.collegeId ??
+      registrationExtras.school_or_college_id ??
+      registrationExtras.schoolOrCollegeId;
+    if (rawId !== undefined && rawId !== null && String(rawId).trim() !== '') {
+      return String(rawId).trim();
+    }
+    const byName =
+      (registrationExtras.school_or_college_name as string) ||
+      (registrationExtras.college as string) ||
+      '';
+    const match = colleges.find((c) => c.name === byName);
+    return match?.id || '';
+  }, [registrationExtras, colleges]);
+
+  const handleCollegeSelect = useCallback(
+    (collegeId: string) => {
+      const selected = colleges.find((item) => item.id === collegeId);
+      setRegistrationExtras((prev) => ({
+        ...prev,
+        college_id: collegeId || undefined,
+        collegeId: collegeId || undefined,
+        school_or_college_id: collegeId || undefined,
+        schoolOrCollegeId: collegeId || undefined,
+        school_or_college_name: selected?.name || '',
+        college: selected?.name || '',
+      }));
+    },
+    [colleges]
+  );
 
   const {
     data: courseSettingsResponse,
@@ -454,6 +797,294 @@ const JoiningDetailPage = () => {
       };
     });
   }, [courseSettingsResponse]);
+
+  /** Application (intake) academic year from lead + completion year = application year + course/branch total_years. */
+  useEffect(() => {
+    const leadSnap = lead as LeadLike | undefined;
+    const appRaw = leadSnap?.academicYear;
+    if (appRaw == null || Number.isNaN(Number(appRaw))) return;
+    const applicationYear = Number(appRaw);
+    if (!sortedRegistrationFields.length) return;
+    const totalYears = resolveTotalYearsFromCourseSettings(
+      courseSettings,
+      formState.courseInfo.courseId,
+      formState.courseInfo.branchId
+    );
+    const patches = computeAcademicYearRegistrationPatches(
+      sortedRegistrationFields,
+      applicationYear,
+      totalYears
+    );
+    setRegistrationExtras((prev) => {
+      let next = { ...prev };
+      let changed = false;
+      for (const [k, v] of Object.entries(patches)) {
+        if (next[k] !== v) {
+          next[k] = v;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [
+    sortedRegistrationFields,
+    registrationFormId,
+    lead,
+    formState.courseInfo.courseId,
+    formState.courseInfo.branchId,
+    courseSettings,
+  ]);
+
+  const { data: programLevelsResponse } = useQuery({
+    queryKey: ['courses', 'program-levels'],
+    queryFn: async () => courseAPI.listProgramLevels(),
+    staleTime: 120_000,
+  });
+
+  const programLevels: string[] = useMemo(() => {
+    const payload = programLevelsResponse?.data;
+    if (Array.isArray(payload)) {
+      return payload as string[];
+    }
+    if (payload && Array.isArray((payload as { data?: unknown }).data)) {
+      return (payload as { data: string[] }).data;
+    }
+    return [];
+  }, [programLevelsResponse]);
+
+  const filteredCourseSettings = useMemo(() => {
+    const pl = (formState.courseInfo.programLevel || '').trim();
+    if (programLevels.length > 0 && !pl) {
+      return [] as CoursePaymentSettings[];
+    }
+    if (!pl || programLevels.length === 0) {
+      return courseSettings;
+    }
+    return courseSettings.filter((item) => {
+      const lv = item.course.level != null ? String(item.course.level).trim() : '';
+      return lv === pl;
+    });
+  }, [courseSettings, formState.courseInfo.programLevel, programLevels]);
+
+  const programLevelTrimmed = (formState.courseInfo.programLevel || '').trim();
+  const { data: certificateGuidanceResponse, isLoading: isLoadingCertificateGuidance } = useQuery({
+    queryKey: ['courses', 'certificate-guidance', programLevelTrimmed],
+    enabled: Boolean(programLevelTrimmed),
+    queryFn: async () => courseAPI.getCertificateGuidance(programLevelTrimmed),
+  });
+
+  const certificateGuidance: CertificateGuidance | null = useMemo(() => {
+    const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
+    const inner =
+      envelope && typeof envelope === 'object' && 'data' in envelope
+        ? (envelope as { data: unknown }).data
+        : envelope;
+    if (!inner || typeof inner !== 'object') return null;
+    const g = inner as CertificateGuidance;
+    if (g.format === 'certificate_config') {
+      return g;
+    }
+    const body = String(g.body ?? '').trim();
+    if (!body) return null;
+    return g;
+  }, [certificateGuidanceResponse]);
+
+  useEffect(() => {
+    const items = certificateGuidance?.items;
+    if (!items?.length || certificateGuidance?.format !== 'certificate_config') {
+      return;
+    }
+    setRegistrationExtras((prev) => {
+      const prevRaw = prev.certificate_checklist;
+      const prevMap =
+        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
+          ? (prevRaw as Record<string, unknown>)
+          : {};
+      const nextMap: Record<string, CertificateChecklistStoredValue> = {};
+      for (const item of items) {
+        const id = String(item.id || item.name || '').trim();
+        if (!id) continue;
+        const opts = listCertificateItemOptions(item);
+        const prevEntry = parseCertificateChecklistEntry(prevMap[id]);
+        if (opts.length > 0) {
+          const valid = new Set(opts.map((o) => o.encoded));
+          const option =
+            prevEntry.option && valid.has(prevEntry.option)
+              ? prevEntry.option
+              : opts[0]!.encoded;
+          nextMap[id] = { status: prevEntry.status, option };
+        } else {
+          nextMap[id] = prevEntry.status;
+        }
+      }
+      const prevKeys = Object.keys(prevMap).sort().join(',');
+      const nextKeys = Object.keys(nextMap).sort().join(',');
+      if (prevKeys === nextKeys) {
+        let allMatch = true;
+        for (const k of Object.keys(nextMap)) {
+          if (!certificateChecklistValuesEqual(prevMap[k], nextMap[k])) {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch) return prev;
+      }
+      return { ...prev, certificate_checklist: nextMap };
+    });
+  }, [certificateGuidance?.format, certificateGuidance?.items]);
+
+  const documentsChecklistForPrint = useMemo(() => {
+    const labels: Record<string, string> = {};
+    const docs: Record<string, JoiningDocumentStatus | undefined> = {};
+    (Object.entries(documentLabels) as [keyof JoiningDocuments, string][]).forEach(([key, label]) => {
+      if (DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key)) return;
+      labels[key] = label;
+      docs[key] = formState.documents[key] || 'pending';
+    });
+    const raw = registrationExtras.certificate_checklist;
+    const ccMap =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+    if (certificateGuidance?.format === 'certificate_config' && certificateGuidance.items?.length) {
+      for (const item of certificateGuidance.items) {
+        const id = String(item.id || item.name || '').trim();
+        if (!id) continue;
+        const sk = `cert:${id}`;
+        const entry = parseCertificateChecklistEntry(ccMap[id]);
+        const opts = listCertificateItemOptions(item);
+        const optLabel = opts.find((o) => o.encoded === entry.option)?.label;
+        labels[sk] = optLabel ? `${item.name} (${optLabel})` : item.name;
+        docs[sk] = entry.status === 'received' ? 'received' : 'pending';
+      }
+    }
+    return { labels, docs };
+  }, [formState.documents, registrationExtras.certificate_checklist, certificateGuidance]);
+
+  const certificateChecklistParsed = useMemo(() => {
+    const raw = registrationExtras.certificate_checklist;
+    const out: Record<string, { status: JoiningDocumentStatus; option?: string }> = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return out;
+    }
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      out[k] = parseCertificateChecklistEntry(v);
+    }
+    return out;
+  }, [registrationExtras.certificate_checklist]);
+
+  const derivedCertificationStatus = useMemo((): 'Verified' | 'Unverified' | null => {
+    if (certificateGuidance?.format !== 'certificate_config' || !certificateGuidance.items?.length) {
+      return null;
+    }
+    return computeCertificationStatusFromChecklist(
+      certificateGuidance.items,
+      registrationExtras.certificate_checklist
+    );
+  }, [certificateGuidance, registrationExtras.certificate_checklist]);
+
+  const getRegistrationFieldValue = useCallback(
+    (fieldName: string): string | boolean => {
+      const fl = fieldName.toLowerCase();
+      if (isJoiningRegistrationFieldMapped(fieldName)) {
+        const v = readMappedRegistrationField(formState, fieldName);
+        if (fl === 'student_gender' || fl === 'gender') {
+          const g = String(v).trim();
+          if (!g) return '';
+          const low = g.toLowerCase();
+          if (low === 'male' || low === 'm') return 'Male';
+          if (low === 'female' || low === 'f') return 'Female';
+          if (low === 'other' || low === 'o') return 'Other';
+          return g;
+        }
+        return v;
+      }
+      if (fl === 'student_status' || fl === 'studentstatus') {
+        const v = registrationExtras[fieldName] ?? registrationExtras.student_status;
+        if (v === undefined || v === null || String(v).trim() === '') return 'Regular';
+        return String(v);
+      }
+      if (
+        fl === 'academic_year' ||
+        fl === 'academicyear' ||
+        fl === 'current_year' ||
+        fl === 'currentyear'
+      ) {
+        return FIXED_REGISTRATION_ACADEMIC_YEAR;
+      }
+      if (
+        fl === 'current_semester' ||
+        fl === 'currentsemester' ||
+        fl === 'semester' ||
+        fl === 'semister'
+      ) {
+        return FIXED_REGISTRATION_SEMESTER;
+      }
+      if (
+        fl === 'certification_status' ||
+        fl === 'certificationstatus' ||
+        fl === 'certificate_status' ||
+        fl === 'certificatestatus' ||
+        fl === 'certificates_status' ||
+        fl === 'certificatesstatus' ||
+        fl === 'certification'
+      ) {
+        if (derivedCertificationStatus !== null) {
+          return derivedCertificationStatus;
+        }
+        const v = registrationExtras[fieldName];
+        if (v === undefined || v === null || String(v).trim() === '') return 'Unverified';
+        return String(v);
+      }
+      const v = registrationExtras[fieldName];
+      if (typeof v === 'boolean') return v;
+      if (v === undefined || v === null) return '';
+      return String(v);
+    },
+    [formState, registrationExtras, derivedCertificationStatus]
+  );
+
+  useEffect(() => {
+    if (!joiningRecord?._id || courseSettings.length === 0) return;
+    const fromApi = joiningRecord.courseInfo?.programLevel;
+    if (fromApi && String(fromApi).trim()) return;
+    const cid = joiningRecord.courseInfo?.courseId;
+    if (!cid) return;
+    const entry = courseSettings.find((item) => item.course._id === cid);
+    const inferred =
+      entry?.course?.level != null && String(entry.course.level).trim()
+        ? String(entry.course.level).trim()
+        : '';
+    if (!inferred) return;
+    setFormState((prev) => {
+      if ((prev.courseInfo.programLevel || '').trim()) return prev;
+      return {
+        ...prev,
+        courseInfo: { ...prev.courseInfo, programLevel: inferred },
+      };
+    });
+  }, [joiningRecord?._id, joiningRecord?.courseInfo?.courseId, joiningRecord?.courseInfo?.programLevel, courseSettings]);
+
+  useEffect(() => {
+    const pl = (formState.courseInfo.programLevel || '').trim();
+    if (!pl || programLevels.length === 0) return;
+    const cid = formState.courseInfo.courseId;
+    if (!cid) return;
+    const entry = courseSettings.find((item) => item.course._id === cid);
+    const lv = entry?.course?.level != null ? String(entry.course.level).trim() : '';
+    if (lv && lv !== pl) {
+      setFormState((prev) => ({
+        ...prev,
+        courseInfo: {
+          ...prev.courseInfo,
+          courseId: undefined,
+          course: '',
+          branchId: undefined,
+          branch: '',
+        },
+      }));
+    }
+  }, [formState.courseInfo.programLevel, formState.courseInfo.courseId, courseSettings, programLevels.length]);
 
   const { data: cashfreeConfigResponse } = useQuery({
     queryKey: ['payments', 'cashfree-config'],
@@ -676,10 +1307,11 @@ const JoiningDetailPage = () => {
       setPaymentSummary(joining.paymentSummary || null);
 
       if (joining.status !== 'approved' || !hasAppliedAdmissionSnapshot) {
-        setFormState(buildInitialState(joining));
+        const base = buildInitialState(joining);
+        setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
       }
     }
-  }, [data, lead?.admissionNumber, hasAppliedAdmissionSnapshot]);
+  }, [data, lead, hasAppliedAdmissionSnapshot]);
 
   const {
     data: admissionData,
@@ -689,8 +1321,13 @@ const JoiningDetailPage = () => {
     queryKey: ['admission', leadId, status],
     enabled: !!leadId && status === 'approved',
     queryFn: async () => {
-      const response = await admissionAPI.getByLeadId(leadId as string);
-      return response;
+      const candidateLeadId = lead?.id || joiningRecord?.leadId || (leadId as string);
+      try {
+        return await admissionAPI.getByLeadId(candidateLeadId);
+      } catch {
+        const candidateJoiningId = joiningRecord?._id || (leadId as string);
+        return admissionAPI.getByJoiningId(candidateJoiningId);
+      }
     },
   });
 
@@ -705,7 +1342,8 @@ const JoiningDetailPage = () => {
         }));
         setPaymentSummary(record.paymentSummary || null);
         if (!hasAppliedAdmissionSnapshot) {
-          setFormState(buildInitialState(record as unknown as Joining));
+          const base = buildInitialState(record as unknown as Joining);
+          setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
           setHasAppliedAdmissionSnapshot(true);
         }
       }
@@ -716,7 +1354,7 @@ const JoiningDetailPage = () => {
         setHasAppliedAdmissionSnapshot(false);
       }
     }
-  }, [status, admissionData, hasAppliedAdmissionSnapshot, joiningRecord]);
+  }, [status, admissionData, hasAppliedAdmissionSnapshot, joiningRecord, lead]);
 
   const handleCourseFieldChange = (field: 'course' | 'branch' | 'quota', value: string) => {
     setFormState((prev) => ({
@@ -726,6 +1364,27 @@ const JoiningDetailPage = () => {
         [field]: value,
         ...(field === 'course' ? { courseId: undefined } : {}),
         ...(field === 'branch' ? { branchId: undefined } : {}),
+      },
+    }));
+    if (field === 'quota') {
+      const patches = computeScholarshipRegistrationPatches(value, sortedRegistrationFields);
+      if (Object.keys(patches).length > 0) {
+        setRegistrationExtras((prev) => ({ ...prev, ...patches }));
+      }
+    }
+  };
+
+  const handleProgramLevelChange = (value: string) => {
+    const next = value.trim();
+    setFormState((prev) => ({
+      ...prev,
+      courseInfo: {
+        ...prev.courseInfo,
+        programLevel: next,
+        courseId: undefined,
+        course: '',
+        branchId: undefined,
+        branch: '',
       },
     }));
   };
@@ -745,7 +1404,7 @@ const JoiningDetailPage = () => {
       return;
     }
 
-    const course = courseSettings.find((item) => item.course._id === courseId);
+    const course = filteredCourseSettings.find((item) => item.course._id === courseId);
     // Always store both ID and name when selecting
     setFormState((prev) => ({
       ...prev,
@@ -1320,6 +1979,40 @@ const JoiningDetailPage = () => {
     }));
   };
 
+  const updateCertificateChecklistStatus = (
+    itemId: string,
+    value: JoiningDocumentStatus,
+    hasOptions: boolean
+  ) => {
+    const id = String(itemId || '').trim();
+    if (!id) return;
+    setRegistrationExtras((prev) => {
+      const raw = prev.certificate_checklist;
+      const cur =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? { ...(raw as Record<string, CertificateChecklistStoredValue>) }
+          : {};
+      const prevEntry = parseCertificateChecklistEntry(cur[id]);
+      cur[id] = buildCertificateChecklistStoredValue(hasOptions, value, prevEntry.option);
+      return { ...prev, certificate_checklist: cur };
+    });
+  };
+
+  const updateCertificateChecklistOption = (itemId: string, encoded: string) => {
+    const id = String(itemId || '').trim();
+    if (!id) return;
+    setRegistrationExtras((prev) => {
+      const raw = prev.certificate_checklist;
+      const cur =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? { ...(raw as Record<string, CertificateChecklistStoredValue>) }
+          : {};
+      const prevEntry = parseCertificateChecklistEntry(cur[id]);
+      cur[id] = { status: prevEntry.status, option: encoded.trim() || undefined };
+      return { ...prev, certificate_checklist: cur };
+    });
+  };
+
   const payloadForSave = useMemo(() => {
     // Ensure course and branch names are stored when IDs are present
     const courseInfo = { ...formState.courseInfo };
@@ -1343,7 +2036,10 @@ const JoiningDetailPage = () => {
 
     return {
       courseInfo,
-      studentInfo: formState.studentInfo,
+      studentInfo: mergeJoiningStudentInfoFromExtras(
+        formState.studentInfo,
+        registrationExtras as Record<string, unknown>
+      ),
       parents: formState.parents,
       reservation: {
         general: formState.reservation.general,
@@ -1354,8 +2050,19 @@ const JoiningDetailPage = () => {
       educationHistory: formState.educationHistory,
       siblings: formState.siblings,
       documents: formState.documents,
+      registrationFormData: (() => {
+        const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
+        if (derivedCertificationStatus !== null) {
+          return {
+            ...stripped,
+            certification_status: derivedCertificationStatus,
+            certificates_status: derivedCertificationStatus,
+          };
+        }
+        return stripped;
+      })(),
     };
-  }, [formState, courseSettings]);
+  }, [formState, courseSettings, registrationExtras, derivedCertificationStatus]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -1384,9 +2091,19 @@ const JoiningDetailPage = () => {
     },
   });
 
+  const joiningDraftPayloadRef = useRef(payloadForSave);
+  joiningDraftPayloadRef.current = payloadForSave;
+  const joiningRecordIdRef = useRef<string | undefined>(undefined);
+  joiningRecordIdRef.current = joiningRecord?._id;
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       if (!leadId) return null;
+      const payload = {
+        ...joiningDraftPayloadRef.current,
+        ...(joiningRecordIdRef.current ? { _id: joiningRecordIdRef.current } : {}),
+      };
+      await joiningAPI.saveDraft(leadId, payload);
       return joiningAPI.submit(leadId);
     },
     onSuccess: () => {
@@ -1628,102 +2345,266 @@ const JoiningDetailPage = () => {
                   Loading course and branch directory…
                 </p>
               ) : courseSettings.length > 0 ? (
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      Select Managed Course
-                    </label>
-                    <select
-                      value={formState.courseInfo.courseId || ''}
-                      onChange={(event) => handleManagedCourseSelect(event.target.value)}
-                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                    >
-                      <option value="">Choose a course</option>
-                      {courseSettings.map((item) => (
-                        <option key={item.course._id} value={item.course._id}>
-                          {item.course.name}
-                          {item.course.code ? ` (${item.course.code})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Managed in Course &amp; Branch Setup. Selecting here keeps payments in sync.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      Select Managed Branch
-                    </label>
-                    <select
-                      value={formState.courseInfo.branchId || ''}
-                      onChange={(event) => handleManagedBranchSelect(event.target.value)}
-                      disabled={!formState.courseInfo.courseId}
-                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
-                    >
-                      <option value="">
-                        {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
-                      </option>
-                      {(() => {
-                        if (!selectedCourseSetting) return null;
-                        // Additional frontend deduplication as final safety check
-                        const branchMap = new Map<string, Branch>();
-                        selectedCourseSetting.branches.forEach((branch) => {
-                          const branchId = branch._id;
-                          if (branchId && !branchMap.has(branchId)) {
-                            branchMap.set(branchId, branch);
-                          }
-                        });
-                        const uniqueBranches = Array.from(branchMap.values());
-
-                        return uniqueBranches.map((branch) => {
-                          const branchId = branch._id;
-                          return (
-                            <option key={branchId} value={branchId}>
-                              {branch.name}
-                              {branch.code ? ` (${branch.code})` : ''}
+                <>
+                  {programLevels.length > 0 ? (
+                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6 md:items-start">
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Program level
+                        </label>
+                        <select
+                          value={formState.courseInfo.programLevel || ''}
+                          onChange={(event) => handleProgramLevelChange(event.target.value)}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        >
+                          <option value="">Select program level</option>
+                          {programLevels.map((lvl) => (
+                            <option key={lvl} value={lvl}>
+                              {lvl}
                             </option>
-                          );
-                        });
-                      })()}
-                    </select>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Branch list updates based on the selected course.
-                    </p>
-                  </div>
-                </div>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          From <span className="font-mono">student_database.courses</span> (level or metadata). Course
+                          list follows this level.
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Quota
+                        </label>
+                        <select
+                          value={formState.courseInfo.quota || ''}
+                          onChange={(event) => handleCourseFieldChange('quota', event.target.value)}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        >
+                          <option value="">Select quota</option>
+                          {formState.courseInfo.quota &&
+                            !quotaOptions.includes(formState.courseInfo.quota as (typeof quotaOptions)[number]) && (
+                              <option value={formState.courseInfo.quota}>{formState.courseInfo.quota}</option>
+                            )}
+                          {quotaOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          College
+                        </label>
+                        <select
+                          value={selectedCollegeId}
+                          onChange={(event) => handleCollegeSelect(event.target.value)}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        >
+                          <option value="">Select college</option>
+                          {colleges.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          From secondary DB colleges list (same source family as courses).
+                        </p>
+                      </div>
+                      {!programLevelTrimmed ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                            Select a program level to load courses for that level.
+                          </p>
+                        </div>
+                      ) : filteredCourseSettings.length > 0 ? (
+                        <>
+                          <div className="min-w-0">
+                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                              Select Managed Course
+                            </label>
+                            <select
+                              value={formState.courseInfo.courseId || ''}
+                              onChange={(event) => handleManagedCourseSelect(event.target.value)}
+                              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                            >
+                              <option value="">Choose a course</option>
+                              {filteredCourseSettings.map((item) => (
+                                <option key={item.course._id} value={item.course._id}>
+                                  {item.course.name}
+                                  {item.course.code ? ` (${item.course.code})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              Managed in Course &amp; Branch Setup. Keeps payments in sync.
+                            </p>
+                          </div>
+                          <div className="min-w-0">
+                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                              Select Managed Branch
+                            </label>
+                            <select
+                              value={formState.courseInfo.branchId || ''}
+                              onChange={(event) => handleManagedBranchSelect(event.target.value)}
+                              disabled={!formState.courseInfo.courseId}
+                              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                            >
+                              <option value="">
+                                {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
+                              </option>
+                              {(() => {
+                                if (!selectedCourseSetting) return null;
+                                const branchMap = new Map<string, Branch>();
+                                selectedCourseSetting.branches.forEach((branch) => {
+                                  const branchId = branch._id;
+                                  if (branchId && !branchMap.has(branchId)) {
+                                    branchMap.set(branchId, branch);
+                                  }
+                                });
+                                const uniqueBranches = Array.from(branchMap.values());
+                                return uniqueBranches.map((branch) => {
+                                  const branchId = branch._id;
+                                  return (
+                                    <option key={branchId} value={branchId}>
+                                      {branch.name}
+                                      {branch.code ? ` (${branch.code})` : ''}
+                                    </option>
+                                  );
+                                });
+                              })()}
+                            </select>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              Updates when the course changes.
+                            </p>
+                          </div>
+                        </>
+                      ) : programLevelTrimmed ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
+                          <p className="text-sm text-amber-800 dark:text-amber-200">
+                            No managed courses are tagged for this program level. Check course level values or payment
+                            configuration.
+                          </p>
+                        </div>
+                      ) : null}
+                      {admissionNumberDisplay ? (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200 md:col-span-2">
+                          Admission Number
+                          <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6 md:items-start">
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Select Managed Course
+                        </label>
+                        <select
+                          value={formState.courseInfo.courseId || ''}
+                          onChange={(event) => handleManagedCourseSelect(event.target.value)}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        >
+                          <option value="">Choose a course</option>
+                          {courseSettings.map((item) => (
+                            <option key={item.course._id} value={item.course._id}>
+                              {item.course.name}
+                              {item.course.code ? ` (${item.course.code})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          Managed in Course &amp; Branch Setup. Selecting here keeps payments in sync.
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Select Managed Branch
+                        </label>
+                        <select
+                          value={formState.courseInfo.branchId || ''}
+                          onChange={(event) => handleManagedBranchSelect(event.target.value)}
+                          disabled={!formState.courseInfo.courseId}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                        >
+                          <option value="">
+                            {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
+                          </option>
+                          {(() => {
+                            if (!selectedCourseSetting) return null;
+                            const branchMap = new Map<string, Branch>();
+                            selectedCourseSetting.branches.forEach((branch) => {
+                              const branchId = branch._id;
+                              if (branchId && !branchMap.has(branchId)) {
+                                branchMap.set(branchId, branch);
+                              }
+                            });
+                            const uniqueBranches = Array.from(branchMap.values());
+                            return uniqueBranches.map((branch) => {
+                              const branchId = branch._id;
+                              return (
+                                <option key={branchId} value={branchId}>
+                                  {branch.name}
+                                  {branch.code ? ` (${branch.code})` : ''}
+                                </option>
+                              );
+                            });
+                          })()}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          Branch list updates based on the selected course.
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Quota
+                        </label>
+                        <select
+                          value={formState.courseInfo.quota || ''}
+                          onChange={(event) => handleCourseFieldChange('quota', event.target.value)}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        >
+                          <option value="">Select quota</option>
+                          {formState.courseInfo.quota &&
+                            !quotaOptions.includes(formState.courseInfo.quota as (typeof quotaOptions)[number]) && (
+                              <option value={formState.courseInfo.quota}>{formState.courseInfo.quota}</option>
+                            )}
+                          {quotaOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          College
+                        </label>
+                        <select
+                          value={selectedCollegeId}
+                          onChange={(event) => handleCollegeSelect(event.target.value)}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        >
+                          <option value="">Select college</option>
+                          {colleges.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          From secondary DB colleges list (same source family as courses).
+                        </p>
+                      </div>
+                      {admissionNumberDisplay ? (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200 md:col-span-2">
+                          Admission Number
+                          <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </>
               ) : null}
-              <div
-                className={`mt-6 grid gap-4 ${admissionNumberDisplay ? 'md:grid-cols-2' : 'md:grid-cols-1'
-                  }`}
-              >
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Quota
-                  </label>
-                  <select
-                    value={formState.courseInfo.quota || ''}
-                    onChange={(event) => handleCourseFieldChange('quota', event.target.value)}
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                  >
-                    <option value="">Select quota</option>
-                    {formState.courseInfo.quota &&
-                      !quotaOptions.includes(formState.courseInfo.quota as (typeof quotaOptions)[number]) && (
-                        <option value={formState.courseInfo.quota}>{formState.courseInfo.quota}</option>
-                      )}
-                    {quotaOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {admissionNumberDisplay && (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200">
-                    Admission Number
-                    <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
-                  </div>
-                )}
-              </div>
               {configuredFee !== null && (
                 <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 shadow-sm dark:border-blue-900/50 dark:bg-blue-900/30 dark:text-blue-200">
                   <div className="flex items-center justify-between">
@@ -1754,7 +2635,63 @@ const JoiningDetailPage = () => {
               <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                 1. Student Information
               </h2>
+              {status === 'draft' ? (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50/90 to-white p-4 dark:border-slate-700 dark:from-slate-900/60 dark:to-slate-900/40">
+                  <div className="flex flex-col gap-2 border-b border-slate-200/80 pb-3 dark:border-slate-700/80 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        Registration fields (student database)
+                      </h3>
+                      <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                        Definitions load from secondary MySQL (<span className="font-mono">student_database</span>
+                        ). Course, branch, quota, student type, Aadhaar, caste, and address are not repeated here — use{' '}
+                        <span className="font-medium text-slate-700 dark:text-slate-300">Course &amp; Quota</span>{' '}
+                        above so fee rules stay aligned.
+                      </p>
+                    </div>
+                  </div>
+                  {registrationFormsError ? (
+                    <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                      Could not load form list from the student database. Check DB_SECONDARY_* and that a{' '}
+                      <span className="font-mono">forms</span> or <span className="font-mono">form_builder_forms</span>{' '}
+                      table is available.
+                    </p>
+                  ) : registrationFormError ? (
+                    <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                      Could not load the selected registration form from the student database.
+                    </p>
+                  ) : !registrationFormId ? (
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                      No active registration form found in the student database.
+                    </p>
+                  ) : isLoadingRegistrationForm ? (
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading registration form…</p>
+                  ) : registrationFormFieldsAllFilteredOut ? (
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+                      This registration form only contained fields that are already covered above (for example
+                      course or branch). Nothing extra to show here.
+                    </p>
+                  ) : regHasDyn ? (
+                    <div className="mt-4">
+                      <JoiningDynamicRegistrationFields
+                        formTitle={registrationFormDefinition?.name || undefined}
+                        formDescription={registrationFormDefinition?.description}
+                        fields={joiningRegistrationDisplayFieldsCoerced}
+                        getValue={getRegistrationFieldValue}
+                        onChange={handleRegistrationFieldChange}
+                        selectedState={registrationLocationState}
+                        selectedDistrict={registrationLocationDistrict}
+                      />
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                      No active fields on the default registration form in the student database.
+                    </p>
+                  )}
+                </div>
+              ) : null}
               <div className="mt-6 grid gap-4 md:grid-cols-2">
+                {!hideJoiningStudentName ? (
                 <div>
                   <Input
                     label="Student Name"
@@ -1763,6 +2700,26 @@ const JoiningDetailPage = () => {
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                 </div>
+                ) : null}
+                {!hideJoiningStudentPhone ? (
+                  <div>
+                    <Input
+                      label="Student mobile number"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel"
+                      value={formState.studentInfo.phone || ''}
+                      onChange={(event) =>
+                        handleStudentInfoChange('phone', event.target.value.replace(/\D/g, ''))
+                      }
+                      placeholder="10-digit mobile"
+                      maxLength={15}
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                      Pulled from the lead when you open joining; edit here if it changed.
+                    </p>
+                  </div>
+                ) : null}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                     Aadhaar Number
@@ -1790,14 +2747,9 @@ const JoiningDetailPage = () => {
                     Stored securely. Masked by default for privacy.
                   </p>
                 </div>
-                <Input
-                  label="Student Phone (10 digits)"
-                  value={formState.studentInfo.phone || ''}
-                  onChange={(event) => handleStudentInfoChange('phone', event.target.value)}
-                  maxLength={10}
-                  placeholder="Enter 10-digit number"
-                />
+                {(!hideJoiningStudentGender || !hideJoiningDateOfBirth) ? (
                 <div className="grid grid-cols-2 gap-4">
+                  {!hideJoiningStudentGender ? (
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                       Gender
@@ -1813,6 +2765,8 @@ const JoiningDetailPage = () => {
                       <option value="Other">Other</option>
                     </select>
                   </div>
+                  ) : null}
+                  {!hideJoiningDateOfBirth ? (
                   <div>
                     <Input
                       label="Date of Birth"
@@ -1822,7 +2776,9 @@ const JoiningDetailPage = () => {
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                   </div>
+                  ) : null}
                 </div>
+                ) : null}
               </div>
             </section>
 
@@ -1836,6 +2792,7 @@ const JoiningDetailPage = () => {
                     Father Information
                   </h3>
                   <div className="mt-4 space-y-3">
+                    {!hideJoiningFatherName ? (
                     <div>
                       <Input
                         label="Father Name"
@@ -1844,12 +2801,7 @@ const JoiningDetailPage = () => {
                       />
                       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                     </div>
-                    <Input
-                      label="Father Phone"
-                      value={formState.parents.father.phone || ''}
-                      onChange={(event) => handleParentChange('father', 'phone', event.target.value)}
-                      maxLength={10}
-                    />
+                    ) : null}
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                         Father Aadhaar Number
@@ -1881,6 +2833,7 @@ const JoiningDetailPage = () => {
                     Mother Information
                   </h3>
                   <div className="mt-4 space-y-3">
+                    {!hideJoiningMotherName ? (
                     <div>
                       <Input
                         label="Mother Name"
@@ -1889,12 +2842,7 @@ const JoiningDetailPage = () => {
                       />
                       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                     </div>
-                    <Input
-                      label="Mother Phone"
-                      value={formState.parents.mother.phone || ''}
-                      onChange={(event) => handleParentChange('mother', 'phone', event.target.value)}
-                      maxLength={10}
-                    />
+                    ) : null}
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                         Mother Aadhaar Number
@@ -1995,6 +2943,7 @@ const JoiningDetailPage = () => {
                 4. Address for Communication (Uppercase)
               </h2>
               <div className="mt-6 grid gap-4 md:grid-cols-2">
+                {!hideJoiningDoor ? (
                 <Input
                   label="Door No / Street Name"
                   value={formState.address.communication.doorOrStreet || ''}
@@ -2002,6 +2951,8 @@ const JoiningDetailPage = () => {
                     handleCommunicationAddressChange('doorOrStreet', event.target.value.toUpperCase())
                   }
                 />
+                ) : null}
+                {!hideJoiningLandmark ? (
                 <Input
                   label="Landmark"
                   value={formState.address.communication.landmark || ''}
@@ -2009,6 +2960,8 @@ const JoiningDetailPage = () => {
                     handleCommunicationAddressChange('landmark', event.target.value.toUpperCase())
                   }
                 />
+                ) : null}
+                {!hideJoiningVillage ? (
                 <Input
                   label="Village / Town / City"
                   value={formState.address.communication.villageOrCity || ''}
@@ -2016,6 +2969,8 @@ const JoiningDetailPage = () => {
                     handleCommunicationAddressChange('villageOrCity', event.target.value.toUpperCase())
                   }
                 />
+                ) : null}
+                {!hideJoiningState ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
                   <select
@@ -2029,6 +2984,8 @@ const JoiningDetailPage = () => {
                     ))}
                   </select>
                 </div>
+                ) : null}
+                {!hideJoiningDistrict ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">District</label>
                   <select
@@ -2042,6 +2999,8 @@ const JoiningDetailPage = () => {
                     ))}
                   </select>
                 </div>
+                ) : null}
+                {!hideJoiningMandal ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mandal</label>
                   <select
@@ -2055,6 +3014,8 @@ const JoiningDetailPage = () => {
                     ))}
                   </select>
                 </div>
+                ) : null}
+                {!hideJoiningPin ? (
                 <Input
                   label="PIN Code"
                   value={formState.address.communication.pinCode || ''}
@@ -2063,6 +3024,7 @@ const JoiningDetailPage = () => {
                   }
                   maxLength={6}
                 />
+                ) : null}
               </div>
             </section>
 
@@ -2339,12 +3301,14 @@ const JoiningDetailPage = () => {
                     9. Documents Checklist
                   </h2>
                   <p className="text-sm text-gray-500">
-                    Mark each document as received to track joining completeness.
+                    Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
+                    Certificate are tracked under <span className="font-medium">Certificate information checklist</span>{' '}
+                    (from student database settings).
                   </p>
                 </div>
                 <PrintableDocumentChecklist
-                  documentLabels={documentLabels as Record<string, string>}
-                  documents={formState.documents as Record<string, 'pending' | 'received' | undefined>}
+                  documentLabels={documentsChecklistForPrint.labels}
+                  documents={documentsChecklistForPrint.docs as Record<string, 'pending' | 'received' | undefined>}
                   title="Documents Checklist"
                   studentName={formState.studentInfo.name || (lead as any)?.name || undefined}
                   enquiryNumber={(lead as any)?.enquiryNumber || undefined}
@@ -2353,43 +3317,186 @@ const JoiningDetailPage = () => {
                 />
               </div>
               <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {Object.entries(documentLabels).map(([key, label]) => (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
-                    </div>
-                    <div className="flex gap-3">
-                      {documentStatusOptions.map((statusOption) => (
-                        <label
-                          key={`${key}-${statusOption}`}
-                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${(formState.documents[key as keyof JoiningDocuments] || 'pending') ===
-                            statusOption
-                            ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
-                            : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
-                            }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`document-${key}`}
-                            value={statusOption}
-                            checked={
-                              (formState.documents[key as keyof JoiningDocuments] || 'pending') ===
+                {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
+                  .filter(([key]) => !DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key))
+                  .map(([key, label]) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
+                      </div>
+                      <div className="flex gap-3">
+                        {documentStatusOptions.map((statusOption) => (
+                          <label
+                            key={`${key}-${statusOption}`}
+                            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${(formState.documents[key] || 'pending') ===
                               statusOption
-                            }
-                            onChange={() =>
-                              updateDocumentStatus(key as keyof JoiningDocuments, statusOption)
-                            }
-                            className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
-                        </label>
-                      ))}
+                              ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
+                              : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
+                              }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`document-${key}`}
+                              value={statusOption}
+                              checked={(formState.documents[key] || 'pending') === statusOption}
+                              onChange={() => updateDocumentStatus(key, statusOption)}
+                              className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
+                  ))}
+              </div>
+
+              <div className="mt-10 border-t border-slate-200 pt-8 dark:border-slate-700">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">
+                  Certificate information checklist
+                </h3>
+                {derivedCertificationStatus !== null && (
+                  <p className="mt-2 text-sm text-gray-700 dark:text-slate-300">
+                    <span className="font-medium text-gray-900 dark:text-slate-100">Certification status</span>
+                    {': '}
+                    <span
+                      className={
+                        derivedCertificationStatus === 'Verified'
+                          ? 'ml-1 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                          : 'ml-1 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200'
+                      }
+                    >
+                      {derivedCertificationStatus}
+                    </span>
+                  </p>
+                )}
+                <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                  From <span className="font-mono">student_database.settings</span> (<span className="font-mono">certificate_config</span>
+                  ) for the program level selected in Course &amp; Quota. Status is saved with the joining draft.
+                </p>
+                {!programLevelTrimmed ? (
+                  <p className="mt-4 text-sm text-amber-700 dark:text-amber-300">
+                    Select a program level in Course &amp; Quota to load this checklist.
+                  </p>
+                ) : isLoadingCertificateGuidance ? (
+                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">Loading certificate rules…</p>
+                ) : certificateGuidance?.format === 'certificate_config' &&
+                  certificateGuidance.items &&
+                  certificateGuidance.items.length > 0 ? (
+                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    {certificateGuidance.items
+                      .filter((item) => String(item.id || item.name || '').trim())
+                      .map((item) => {
+                      const itemId = String(item.id || item.name || '').trim();
+                      const certOpts = listCertificateItemOptions(item);
+                      const hasCertOptions = certOpts.length > 0;
+                      const parsed = certificateChecklistParsed[itemId] ?? {
+                        status: 'pending' as JoiningDocumentStatus,
+                      };
+                      const status = parsed.status === 'received' ? 'received' : 'pending';
+                      const selectedEncoded =
+                        hasCertOptions &&
+                        parsed.option &&
+                        certOpts.some((o) => o.encoded === parsed.option)
+                          ? parsed.option!
+                          : hasCertOptions
+                            ? certOpts[0]!.encoded
+                            : undefined;
+                      return (
+                        <div
+                          key={itemId}
+                          className="flex flex-col gap-2 rounded-xl border border-indigo-200/80 bg-indigo-50/40 px-4 py-3 shadow-sm dark:border-indigo-900/50 dark:bg-indigo-950/30"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{item.name}</p>
+                            <span
+                              className={
+                                item.required
+                                  ? 'shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800 dark:bg-rose-900/50 dark:text-rose-200'
+                                  : 'shrink-0 rounded-full bg-slate-200/90 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-600 dark:text-slate-200'
+                              }
+                            >
+                              {item.required ? 'Required' : 'Optional'}
+                            </span>
+                          </div>
+                          {hasCertOptions ? (
+                            <div className="flex flex-wrap gap-2">
+                              {certOpts.map(({ encoded, label }) => (
+                                <label
+                                  key={encoded}
+                                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                    selectedEncoded === encoded
+                                      ? 'border-indigo-500 bg-white text-indigo-950 shadow-sm ring-1 ring-indigo-300 dark:border-indigo-400 dark:bg-indigo-900/40 dark:text-indigo-50 dark:ring-indigo-600'
+                                      : 'border-indigo-200/80 bg-white/70 text-indigo-900 hover:border-indigo-400 dark:border-indigo-800 dark:bg-slate-800/60 dark:text-indigo-100 dark:hover:border-indigo-500'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`cert-option-${itemId}`}
+                                    value={encoded}
+                                    checked={selectedEncoded === encoded}
+                                    onChange={() => updateCertificateChecklistOption(itemId, encoded)}
+                                    className="h-3 w-3 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span>{label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="mt-1 flex justify-end gap-3 border-t border-indigo-200/60 pt-2 dark:border-indigo-800/50">
+                            {documentStatusOptions.map((statusOption) => (
+                              <label
+                                key={`${itemId}-${statusOption}`}
+                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${status === statusOption
+                                  ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
+                                  : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-600 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
+                                  }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`cert-checklist-${itemId}`}
+                                  value={statusOption}
+                                  checked={status === statusOption}
+                                  onChange={() =>
+                                    updateCertificateChecklistStatus(
+                                      itemId,
+                                      statusOption,
+                                      hasCertOptions
+                                    )
+                                  }
+                                  className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
+                ) : certificateGuidance?.format === 'certificate_config' ? (
+                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                    No certificate rules matched this program level, or <span className="font-mono">certificate_config</span>{' '}
+                    is empty for it.
+                  </p>
+                ) : certificateGuidance ? (
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/50">
+                    {certificateGuidance.format === 'html' ? (
+                      <div
+                        className="certificate-guidance-html max-w-none [&_ul]:list-disc [&_ul]:pl-5"
+                        dangerouslySetInnerHTML={{ __html: certificateGuidance.body || '' }}
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap">{certificateGuidance.body}</div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                    Could not load certificate configuration.
+                  </p>
+                )}
               </div>
             </section>
 

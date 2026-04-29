@@ -809,6 +809,26 @@ export const courseAPI = {
     const response = await api.delete(`/courses/${courseId}/branches/${branchId}`);
     return response.data;
   },
+  /** Distinct program levels from secondary `student_database.courses`. */
+  listProgramLevels: async () => {
+    const response = await api.get('/courses/program-levels');
+    return response.data;
+  },
+  /** Certificate / document copy from secondary `settings` for a program level. */
+  getCertificateGuidance: async (level: string) => {
+    const q = new URLSearchParams();
+    q.set('level', level);
+    const response = await api.get(`/courses/certificate-guidance?${q.toString()}`);
+    return response.data;
+  },
+  /** Colleges from secondary DB (same source as courses). */
+  listCollegesFromSecondary: async (params?: { showInactive?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.showInactive) queryParams.append('showInactive', 'true');
+    const query = queryParams.toString();
+    const response = await api.get(`/courses/colleges${query ? `?${query}` : ''}`);
+    return response.data;
+  },
 };
 
 // Payment Settings API
@@ -1509,6 +1529,26 @@ export const formBuilderAPI = {
   },
   reorderFields: async (formId: string, fieldIds: string[]) => {
     const response = await api.put(`/form-builder/forms/${formId}/fields/reorder`, { fieldIds });
+    return response.data;
+  },
+};
+
+/** Registration form definitions from secondary MySQL (DB_SECONDARY / student_database). Read-only. */
+export const registrationFormAPI = {
+  listForms: async (params?: { showInactive?: boolean; includeFieldCount?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.showInactive) queryParams.append('showInactive', 'true');
+    if (params?.includeFieldCount === false) queryParams.append('includeFieldCount', 'false');
+    const query = queryParams.toString();
+    const response = await api.get(`/registration-form/forms${query ? `?${query}` : ''}`);
+    return response.data;
+  },
+  getForm: async (formId: string, params?: { includeFields?: boolean; showInactive?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.includeFields === false) queryParams.append('includeFields', 'false');
+    if (params?.showInactive) queryParams.append('showInactive', 'true');
+    const query = queryParams.toString();
+    const response = await api.get(`/registration-form/forms/${formId}${query ? `?${query}` : ''}`);
     return response.data;
   },
 };

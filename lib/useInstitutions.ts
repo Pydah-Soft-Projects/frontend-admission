@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { locationsAPI } from './api';
+import { courseAPI, locationsAPI } from './api';
 
 type InstitutionItem = { id: string; name: string };
 
@@ -21,9 +21,9 @@ export function useInstitutions() {
   });
 
   const collegesQuery = useQuery({
-    queryKey: ['locations', 'colleges'],
+    queryKey: ['secondary', 'colleges'],
     queryFn: async () => {
-      const res = await locationsAPI.listColleges();
+      const res = await courseAPI.listCollegesFromSecondary();
       return extractData(res);
     },
     staleTime: 5 * 60 * 1000,

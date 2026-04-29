@@ -36,23 +36,24 @@ export const useCourseLookup = (): CourseLookup => {
     const branches = new Map<string, string>();
 
     courseList.forEach((item) => {
-      courses.set(item._id, item.name);
+      courses.set(String(item._id), item.name);
       (item.branches || []).forEach((branch) => {
-        branches.set(branch._id, branch.name);
+        branches.set(String(branch._id), branch.name);
       });
     });
 
     return { courses, branches };
   }, [coursesResponse]);
 
+  /** Empty string when unknown so callers can fall back to stored `course` / `branch` labels. */
   const getCourseName = (courseId?: string | null): string => {
-    if (!courseId) return '—';
-    return lookup.courses.get(courseId) || '—';
+    if (courseId == null || String(courseId).trim() === '') return '';
+    return lookup.courses.get(String(courseId)) || '';
   };
 
   const getBranchName = (branchId?: string | null): string => {
-    if (!branchId) return '—';
-    return lookup.branches.get(branchId) || '—';
+    if (branchId == null || String(branchId).trim() === '') return '';
+    return lookup.branches.get(String(branchId)) || '';
   };
 
   return {

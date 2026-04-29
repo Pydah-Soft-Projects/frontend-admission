@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
-import { admissionAPI, paymentAPI } from '@/lib/api';
+import { admissionAPI, joiningAPI, paymentAPI } from '@/lib/api';
 import { Admission, PaymentSummary, PaymentTransaction } from '@/types';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
@@ -36,6 +36,51 @@ const maskAadhaar = (value?: string) => {
   if (value.length <= 4) return value;
   return `${value.slice(0, 4)} ${'•'.repeat(4)} ${value.slice(-4)}`;
 };
+
+const formatRegistrationFieldLabel = (key: string): string =>
+  String(key || '')
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const normalizeRegistrationFieldKey = (key: string): string => {
+  const normalized = String(key || '')
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase()
+    .trim();
+
+  const aliasToCanonical: Record<string, string> = {
+    semister: 'current_semester',
+    semester: 'current_semester',
+    current_semester: 'current_semester',
+    academic_year: 'current_year',
+    current_year: 'current_year',
+    college_id: 'college',
+    collegeid: 'college',
+    school_or_college_id: 'college',
+    schoolorcollegeid: 'college',
+    school_or_college_name: 'college',
+    schoolorcollegename: 'college',
+    college: 'college',
+    certificates_status: 'certificates_status',
+    certification_status: 'certificates_status',
+  };
+
+  return aliasToCanonical[normalized] || normalized;
+};
+
+const registrationFieldLabelOverrides: Record<string, string> = {
+  current_semester: 'Current Semester',
+  current_year: 'Current Year',
+  college: 'College',
+  certificates_status: 'Certificates Status',
+};
+
+const isImageDataUrl = (value: unknown): value is string =>
+  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
 
 export default function AdmissionDetailPage() {
   const params = useParams();
@@ -102,6 +147,22 @@ export default function AdmissionDetailPage() {
     return [];
   }, [transactionsData]);
 
+  const { data: joiningForRegistrationData } = useQuery({
+    queryKey: ['joining', 'registration-form-data', admission?.joiningId],
+    enabled:
+      !!admission?.joiningId &&
+      (!admission?.registrationFormData || Object.keys(admission.registrationFormData).length === 0),
+    queryFn: async () => {
+      if (!admission?.joiningId) return null;
+      try {
+        const response = await joiningAPI.getByLeadId(admission.joiningId);
+        return response;
+      } catch {
+        return null;
+      }
+    },
+  });
+
   useEffect(() => {
     setHeaderContent(
       <div className="flex items-center justify-between w-full">
@@ -121,8 +182,8 @@ export default function AdmissionDetailPage() {
               application={admission}
               enquiryNumber={lead?.enquiryNumber}
               admissionNumber={admission.admissionNumber}
-              courseName={getCourseName(admission.courseInfo?.courseId) || undefined}
-              branchName={getBranchName(admission.courseInfo?.branchId) || undefined}
+              courseName={admission.courseInfo?.course || getCourseName(admission.courseInfo?.courseId) || undefined}
+              branchName={admission.courseInfo?.branch || getBranchName(admission.courseInfo?.branchId) || undefined}
               paymentSummary={paymentSummary ?? undefined}
               transactions={transactions}
               title="Student Application"
@@ -171,6 +232,42 @@ export default function AdmissionDetailPage() {
     }));
   };
 
+  const registrationFieldSource =
+    admission.registrationFormData && Object.keys(admission.registrationFormData).length > 0
+      ? admission.registrationFormData
+      : ((joiningForRegistrationData?.data?.joining?.registrationFormData as Record<string, unknown> | undefined) ||
+        {});
+
+  const registrationFieldEntries = (() => {
+    const deduped = new Map<string, unknown>();
+    for (const [key, value] of Object.entries(registrationFieldSource)) {
+      const lk = String(key || '').toLowerCase();
+      if (lk === 'certificate_checklist') continue;
+      if (lk.startsWith('_')) continue;
+      if (value === undefined || value === null) continue;
+      if (typeof value === 'string' && value.trim() === '') continue;
+
+      const canonicalKey = normalizeRegistrationFieldKey(key);
+      const existing = deduped.get(canonicalKey);
+      if (existing === undefined) {
+        deduped.set(canonicalKey, value);
+        continue;
+      }
+
+      // Prefer descriptive college name over numeric college id aliases.
+      if (canonicalKey === 'college') {
+        const existingText = String(existing ?? '').trim();
+        const nextText = String(value ?? '').trim();
+        const existingLooksLikeId = /^\d+$/.test(existingText);
+        const nextLooksLikeId = /^\d+$/.test(nextText);
+        if (existingLooksLikeId && !nextLooksLikeId) {
+          deduped.set(canonicalKey, value);
+        }
+      }
+    }
+    return Array.from(deduped.entries());
+  })();
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       {/* Student & Course Information - Highlighted */}
@@ -217,13 +314,13 @@ export default function AdmissionDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Course</p>
                 <p className="text-lg font-bold text-blue-600 dark:text-blue-300 mt-1">
-                  {getCourseName(admission.courseInfo?.courseId) || admission.courseInfo?.course || '—'}
+                  {admission.courseInfo?.course || getCourseName(admission.courseInfo?.courseId) || '—'}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Branch</p>
                 <p className="text-lg font-bold text-blue-600 dark:text-blue-300 mt-1">
-                  {getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || '—'}
+                  {admission.courseInfo?.branch || getBranchName(admission.courseInfo?.branchId) || '—'}
                 </p>
               </div>
               <div>
@@ -368,6 +465,35 @@ export default function AdmissionDetailPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Registration Form Fields */}
+      {registrationFieldEntries.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
+            Registration Form Fields
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {registrationFieldEntries.map(([key, raw]) => (
+              <div key={key} className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {registrationFieldLabelOverrides[key] || formatRegistrationFieldLabel(key)}
+                </p>
+                {isImageDataUrl(raw) ? (
+                  <img
+                    src={raw}
+                    alt={registrationFieldLabelOverrides[key] || formatRegistrationFieldLabel(key)}
+                    className="mt-2 h-24 w-24 rounded-lg border border-slate-300 object-cover dark:border-slate-600"
+                  />
+                ) : (
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100 break-words">
+                    {typeof raw === 'object' ? JSON.stringify(raw) : String(raw)}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

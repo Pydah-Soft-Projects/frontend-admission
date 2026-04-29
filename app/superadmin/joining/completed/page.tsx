@@ -147,10 +147,12 @@ const CompletedAdmissionsPage = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                       <div className="flex flex-col gap-1">
-                        <span>{getCourseName(record.courseInfo?.courseId) || record.courseInfo?.course || '—'}</span>
+                        <span>
+                          {record.courseInfo?.course || getCourseName(record.courseInfo?.courseId) || '—'}
+                        </span>
                         {record.courseInfo?.branchId && (
                           <span className="text-xs text-slate-400">
-                            {getBranchName(record.courseInfo?.branchId) || record.courseInfo?.branch || ''}
+                            {record.courseInfo?.branch || getBranchName(record.courseInfo?.branchId) || ''}
                           </span>
                         )}
                       </div>

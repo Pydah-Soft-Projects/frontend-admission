@@ -273,10 +273,12 @@ export default function PaymentTransactionsPage() {
                     ? admission?.courseInfo 
                     : joining?.courseInfo;
                   // Use managed course/branch from IDs, fallback to stored names
-                  const courseName = getCourseName(courseInfo?.courseId || transaction.courseId) || 
-                    courseInfo?.course || '—';
-                  const branchName = getBranchName(courseInfo?.branchId || transaction.branchId) || 
-                    courseInfo?.branch || '';
+                  const courseName =
+                    courseInfo?.course ||
+                    getCourseName(courseInfo?.courseId || transaction.courseId) ||
+                    '—';
+                  const branchName =
+                    courseInfo?.branch || getBranchName(courseInfo?.branchId || transaction.branchId) || '';
                   const quota = courseInfo?.quota || '—';
                   
                   const modeLabel =

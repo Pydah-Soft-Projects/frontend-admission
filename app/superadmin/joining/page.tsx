@@ -306,10 +306,14 @@ const JoiningPipelinePage = () => {
                       {activeTab === 'pending' ? (
                         <>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                            {getCourseName(joining.courseInfo?.courseId) || joining.courseInfo?.course || '—'}
+                            {joining.courseInfo?.course ||
+                              getCourseName(joining.courseInfo?.courseId) ||
+                              '—'}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                            {getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || '—'}
+                            {joining.courseInfo?.branch ||
+                              getBranchName(joining.courseInfo?.branchId) ||
+                              '—'}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                             {joining.courseInfo?.quota || '—'}
@@ -324,9 +328,17 @@ const JoiningPipelinePage = () => {
                         <>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                             <div className="flex flex-col gap-1">
-                              <span>{getCourseName(joining.courseInfo?.courseId) || joining.courseInfo?.course || joining.lead?.courseInterested || joining.leadData?.courseInterested || '—'}</span>
+                              <span>
+                                {joining.courseInfo?.course ||
+                                  getCourseName(joining.courseInfo?.courseId) ||
+                                  joining.lead?.courseInterested ||
+                                  joining.leadData?.courseInterested ||
+                                  '—'}
+                              </span>
                               <span className="text-xs text-slate-400">
-                                {getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || 'Branch pending'}
+                                {joining.courseInfo?.branch ||
+                                  getBranchName(joining.courseInfo?.branchId) ||
+                                  'Branch pending'}
                               </span>
                             </div>
                           </td>

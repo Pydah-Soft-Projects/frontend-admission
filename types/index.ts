@@ -77,6 +77,10 @@ export interface Course {
   name: string;
   code?: string;
   description?: string;
+  /** Academic / program level from secondary `courses` (column or metadata). */
+  level?: string | null;
+  /** Program length in years from secondary `courses.total_years` when available. */
+  totalYears?: number | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -88,6 +92,8 @@ export interface Branch {
   name: string;
   code?: string;
   description?: string;
+  /** Program length in years from secondary `course_branches.total_years` when available. */
+  totalYears?: number | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -187,6 +193,7 @@ export interface Lead {
   fatherName: string;
   fatherPhone: string;
   motherName?: string;
+  motherPhone?: string;
   village: string;
   address?: string;
   district: string;
@@ -248,6 +255,7 @@ export interface LeadUpdatePayload {
   fatherName?: string;
   fatherPhone?: string;
   motherName?: string;
+  motherPhone?: string;
   village?: string;
   address?: string;
   district?: string;
@@ -375,6 +383,28 @@ export interface JoiningCourseInfo {
   course?: string;
   branch?: string;
   quota?: string;
+  /** Program level from secondary DB; persisted in joining `lead_data._joiningProgramLevel`. */
+  programLevel?: string;
+}
+
+/** One row inside `settings.certificate_config` JSON (diploma / ug / pg arrays). */
+export interface CertificateConfigItem {
+  id: string;
+  name: string;
+  required?: boolean;
+  options?: Array<{ value?: string; type?: string } | string>;
+}
+
+/** Certificate guidance from secondary `settings` (by program level). */
+export interface CertificateGuidance {
+  level: string;
+  /** Plain HTML/text legacy rows, or structured `certificate_config` from settings. */
+  format: 'text' | 'html' | 'certificate_config';
+  body?: string;
+  matchedRows: number;
+  /** Which top-level key matched in certificate_config (e.g. ug, diploma, pg). */
+  configKey?: string | null;
+  items?: CertificateConfigItem[];
 }
 
 export interface JoiningStudentInfo {
@@ -460,6 +490,8 @@ export interface Joining {
   _id: string;
   leadId?: string; // Made optional to support joinings without leads
   leadData?: any; // Snapshot of lead data stored in joining
+  /** Extra answers from Form Builder fields not stored on joining columns (persisted in lead_data._joiningRegistrationExtras). */
+  registrationFormData?: Record<string, unknown>;
   status: JoiningStatus;
   courseInfo: JoiningCourseInfo;
   studentInfo: JoiningStudentInfo;
@@ -484,6 +516,11 @@ export interface Joining {
   paymentSummary?: PaymentSummary;
   createdAt: string;
   updatedAt: string;
+  /** List/detail when API joins or embeds lead summary (e.g. enquiry # on pipeline). */
+  lead?: Pick<
+    Lead,
+    'name' | 'phone' | 'enquiryNumber' | 'hallTicketNumber' | 'leadStatus'
+  >;
 }
 
 export interface Pagination {
@@ -572,6 +609,8 @@ export interface Admission {
   admissionNumber: string;
   enquiryNumber?: string; // Enquiry number from lead
   leadData?: any; // Snapshot of lead data stored in admission
+  /** Extra answers from Form Builder fields (copied from joining lead_data._joiningRegistrationExtras). */
+  registrationFormData?: Record<string, unknown>;
   status: 'active' | 'withdrawn';
   admissionDate: string;
   courseInfo: JoiningCourseInfo;

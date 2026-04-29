@@ -37,6 +37,17 @@ const maskAadhaar = (value?: string) => {
   return `${value.slice(0, 4)} ${'•'.repeat(4)} ${value.slice(-4)}`;
 };
 
+const formatRegistrationFieldLabel = (key: string): string =>
+  String(key || '')
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const isImageDataUrl = (value: unknown): value is string =>
+  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
+
 export default function JoiningDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -64,7 +75,8 @@ export default function JoiningDetailPage() {
   });
 
   const joining = data?.data?.joining as Joining | undefined;
-  const lead = (joining?.leadData as any) || data?.data?.lead;
+  /** Prefer API `lead` (fresher); fall back to snapshot in `joining.leadData`. */
+  const lead = (data?.data?.lead as any) || (joining?.leadData as any);
 
   // Fetch admission if joining is approved
   const { data: admissionData } = useQuery({
@@ -138,8 +150,8 @@ export default function JoiningDetailPage() {
               application={joining}
               enquiryNumber={lead?.enquiryNumber}
               admissionNumber={admission?.admissionNumber}
-              courseName={getCourseName(joining.courseInfo?.courseId) || undefined}
-              branchName={getBranchName(joining.courseInfo?.branchId) || undefined}
+              courseName={joining.courseInfo?.course || getCourseName(joining.courseInfo?.courseId) || undefined}
+              branchName={joining.courseInfo?.branch || getBranchName(joining.courseInfo?.branchId) || undefined}
               paymentSummary={paymentSummary ?? undefined}
               transactions={transactions}
               title="Student Application"
@@ -190,6 +202,17 @@ export default function JoiningDetailPage() {
       [type]: !prev[type],
     }));
   };
+
+  const registrationFieldEntries = Object.entries(joining.registrationFormData || {}).filter(
+    ([key, value]) => {
+      const lk = String(key || '').toLowerCase();
+      if (lk === 'certificate_checklist') return false;
+      if (lk.startsWith('_')) return false;
+      if (value === undefined || value === null) return false;
+      if (typeof value === 'string' && value.trim() === '') return false;
+      return true;
+    }
+  );
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -284,13 +307,13 @@ export default function JoiningDetailPage() {
               <div className="rounded-xl bg-blue-100 dark:bg-blue-900/50 p-4 border-2 border-blue-300 dark:border-blue-700">
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">Course</p>
                 <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                  {getCourseName(joining.courseInfo?.courseId) || joining.courseInfo?.course || '—'}
+                  {joining.courseInfo?.course || getCourseName(joining.courseInfo?.courseId) || '—'}
                 </p>
               </div>
               <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/50 p-4 border-2 border-emerald-300 dark:border-emerald-700">
                 <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-2">Branch</p>
                 <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">
-                  {getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || '—'}
+                  {joining.courseInfo?.branch || getBranchName(joining.courseInfo?.branchId) || '—'}
                 </p>
               </div>
               <div className="rounded-xl bg-amber-100 dark:bg-amber-900/50 p-4 border-2 border-amber-300 dark:border-amber-700">
@@ -614,6 +637,35 @@ export default function JoiningDetailPage() {
                   </p>
                   <p className="text-xs text-gray-500 dark:text-slate-400 capitalize">{value}</p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Registration Form Fields */}
+      {registrationFieldEntries.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
+            Registration Form Fields
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {registrationFieldEntries.map(([key, raw]) => (
+              <div key={key} className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {formatRegistrationFieldLabel(key)}
+                </p>
+                {isImageDataUrl(raw) ? (
+                  <img
+                    src={raw}
+                    alt={formatRegistrationFieldLabel(key)}
+                    className="mt-2 h-24 w-24 rounded-lg border border-slate-300 object-cover dark:border-slate-600"
+                  />
+                ) : (
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100 break-words">
+                    {typeof raw === 'object' ? JSON.stringify(raw) : String(raw)}
+                  </p>
+                )}
               </div>
             ))}
           </div>
