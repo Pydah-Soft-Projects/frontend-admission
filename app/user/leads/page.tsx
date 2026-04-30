@@ -14,6 +14,7 @@ import { showToast } from '@/lib/toast';
 import { LeadCardSkeleton, Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { keepPreviousData } from '@tanstack/react-query';
 
 // Debounce hook for search
 function useDebounce<T>(value: T, delay: number): T {
@@ -85,7 +86,9 @@ export default function UserLeadsPage() {
 
   const [showFilters, setShowFilters] = useState(false);
   /** PRO: narrows village dropdown options (server filter uses full address match). */
-  const [villageListSearch, setVillageListSearch] = useState('');
+  /** PRO: debounced search text for village/address broad matching. */
+  const [appliedVillageSearch, setAppliedVillageSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 500);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -136,7 +139,7 @@ export default function UserLeadsPage() {
   }, [setMobileTopBar, clearMobileTopBar]);
 
   // Debounce search input
-  const debouncedSearch = useDebounce(search, 700);
+
 
   useEffect(() => {
     if (isRestored) {
@@ -187,9 +190,6 @@ export default function UserLeadsPage() {
     }
   }, [user, filters.district, filters.mandal]);
 
-  useEffect(() => {
-    setVillageListSearch('');
-  }, [filters.district, filters.mandal]);
 
   // Search suggestions (same backend `search` as main list); only fetch when 2+ chars to limit traffic
   useEffect(() => {
@@ -224,12 +224,6 @@ export default function UserLeadsPage() {
     return () => { active = false; };
   }, [debouncedSearch, filters, user?.roleName]);
 
-  const villageOptionsForSelect = useMemo(() => {
-    const list = filterOptions?.villages || [];
-    if (user?.roleName !== 'PRO' || !villageListSearch.trim()) return list;
-    const q = villageListSearch.trim().toLowerCase();
-    return list.filter((v) => String(v).toLowerCase().includes(q));
-  }, [filterOptions?.villages, user?.roleName, villageListSearch]);
 
   // Main list: single `search` param — backend matches fuzzy name, enquiry number, student/father phone (raw + normalized digits)
   const queryFilters = useMemo(() => {
@@ -248,11 +242,20 @@ export default function UserLeadsPage() {
     if (activeTab === 'touched') {
       query.touchedToday = true;
     }
-    if (user?.roleName === 'PRO' && query.village) {
-      query.villageInAddress = true;
+    if (user?.roleName === 'PRO') {
+      const v = query.village;
+      const vSearch = appliedVillageSearch?.trim();
+      
+      if (v || vSearch) {
+        query.villageInAddress = true;
+        // If checkboxes are selected, they take precedence; otherwise use the search text as the village filter
+        if (!v && vSearch) {
+          query.village = vSearch;
+        }
+      }
     }
     return query;
-  }, [page, limit, filters, debouncedSearch, activeTab, user?.roleName]);
+  }, [page, limit, filters, debouncedSearch, appliedVillageSearch, activeTab, user?.roleName]);
 
   /** Pipeline filter dropdown (lead_status) */
   const pipelineStatusFilterOptions = useMemo(() => {
@@ -315,6 +318,7 @@ export default function UserLeadsPage() {
     enabled: !!user,
     staleTime: 30000,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
   });
 
   const leads = leadsData?.leads || [];
@@ -572,6 +576,8 @@ export default function UserLeadsPage() {
           <div className="relative min-w-0 flex-1">
             <Input
               type="text"
+              id="main-leads-search-input"
+              name="mainSearch"
               placeholder="Name, enquiry, or mobile number…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -694,63 +700,15 @@ export default function UserLeadsPage() {
               className={`flex min-w-0 flex-col gap-1 ${user?.roleName === 'PRO' ? 'col-span-2' : 'col-span-1'}`}
             >
               <label className="text-[10px] font-medium text-slate-500">Village</label>
-              {user?.roleName === 'PRO' && (
-                <Input
-                  type="search"
-                  className="!h-8 min-h-0 py-1 text-xs"
-                  placeholder="Search village name…"
-                  value={villageListSearch}
-                  onChange={(e) => setVillageListSearch(e.target.value)}
-                  disabled={!filters.district}
-                  title="Filter the dropdown; applied filter matches this text inside address, village, mandal, district, state"
-                />
-              )}
               {user?.roleName === 'PRO' ? (
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 border border-slate-200 rounded bg-slate-50/30">
-                    {villageOptionsForSelect.length === 0 && (
-                      <p className="text-[10px] text-slate-400 italic">
-                        {filters.district ? 'No villages found' : 'Select district first'}
-                      </p>
-                    )}
-                    {villageOptionsForSelect.map((v) => {
-                      const isSelected = Array.isArray(filters.village) 
-                        ? filters.village.includes(v) 
-                        : filters.village === v;
-                      return (
-                        <label 
-                          key={`village-chk-${v}`} 
-                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] cursor-pointer transition-all ${
-                            isSelected 
-                              ? 'bg-orange-500 border-orange-600 text-white shadow-sm' 
-                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="hidden"
-                            checked={isSelected}
-                            onChange={() => handleFilterChange('village', v)}
-                          />
-                          <span className="truncate max-w-[100px]">{v}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {Array.isArray(filters.village) && filters.village.length > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[9px] font-semibold text-orange-600 uppercase">
-                        {filters.village.length} selected
-                      </span>
-                      <button 
-                        onClick={() => handleFilterChange('village', '')}
-                        className="text-[9px] text-slate-400 hover:text-red-500 underline"
-                      >
-                        Clear selection
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <VillageFilterPRO 
+                  key={`village-filter-${filters.district || 'none'}-${filters.mandal || 'none'}`}
+                  villages={filterOptions?.villages || []}
+                  selectedVillages={filters.village}
+                  onToggle={(v) => handleFilterChange('village', v)}
+                  districtSelected={!!filters.district}
+                  onSearchChange={setAppliedVillageSearch}
+                />
               ) : (
                 <select
                   className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -764,7 +722,7 @@ export default function UserLeadsPage() {
                   }
                 >
                   <option value="">{filters.district ? 'All villages' : 'Select district first'}</option>
-                  {villageOptionsForSelect.map((v) => (
+                  {(filterOptions?.villages || []).map((v) => (
                     <option key={v} value={v}>
                       {v}
                     </option>
@@ -1274,3 +1232,108 @@ export default function UserLeadsPage() {
   );
 }
 
+
+interface VillageFilterPROProps {
+  villages: string[];
+  selectedVillages: string | string[] | undefined;
+  onToggle: (v: string) => void;
+  districtSelected: boolean;
+  onSearchChange: (val: string) => void;
+}
+
+const VillageFilterPRO = ({
+  villages,
+  selectedVillages,
+  onToggle,
+  districtSelected,
+  onSearchChange,
+}: VillageFilterPROProps) => {
+  const [localSearch, setLocalSearch] = useState('');
+  const debouncedLocalSearch = useDebounce(localSearch, 500);
+
+  useEffect(() => {
+    onSearchChange(debouncedLocalSearch);
+  }, [debouncedLocalSearch, onSearchChange]);
+
+  const options = useMemo(() => {
+    if (!localSearch.trim()) return villages;
+    const q = localSearch.trim().toLowerCase();
+    return villages.filter((v) => String(v).toLowerCase().includes(q));
+  }, [villages, localSearch]);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="relative group">
+        <input
+          type="text"
+          id="village-list-search-input"
+          name="villageListSearch"
+          className="w-full h-8 rounded border border-slate-200 bg-white py-1 px-2.5 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:bg-slate-50 disabled:cursor-not-allowed dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+          placeholder="Search / Filter village name…"
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          title="Type to search for leads by village or address name globally, or filter the list below once a district is selected."
+        />
+        {localSearch && (
+          <button
+            type="button"
+            onClick={() => setLocalSearch('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 border border-slate-200 rounded bg-slate-50/30">
+        {options.length === 0 && (
+          <p className="text-[10px] text-slate-400 italic">
+            {districtSelected ? 'No villages found' : 'Select district first'}
+          </p>
+        )}
+        {options.map((v) => {
+          const isSelected = Array.isArray(selectedVillages) 
+            ? selectedVillages.includes(v) 
+            : selectedVillages === v;
+          return (
+            <label 
+              key={`village-chk-${v}`} 
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] cursor-pointer transition-all ${
+                isSelected 
+                  ? 'bg-orange-500 border-orange-600 text-white shadow-sm' 
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="hidden"
+                checked={isSelected}
+                onChange={() => onToggle(v)}
+              />
+              {isSelected && (
+                <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {v}
+            </label>
+          );
+        })}
+      </div>
+      {Array.isArray(selectedVillages) && selectedVillages.length > 0 && (
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] font-semibold text-orange-600 uppercase">
+            {selectedVillages.length} selected
+          </span>
+          <button 
+            onClick={() => onToggle('')}
+            className="text-[9px] text-slate-400 hover:text-red-500 underline"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};

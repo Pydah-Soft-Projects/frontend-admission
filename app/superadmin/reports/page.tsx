@@ -1002,7 +1002,7 @@ export default function ReportsPage() {
               <td>${allottedTotal}</td>
               ${allottedFooterCells}
               <td>${periodBalanceFoot}</td>
-              <td>—</td>
+              <td>${Number(pc?.reclaimedTotalInPeriod ?? 0) || '—'}</td>
             </tr>`
           : '';
 
@@ -1037,10 +1037,45 @@ export default function ReportsPage() {
 
         const mergedPrintUser = { ...user, ...(detailUser || {}) };
         const mainRowBalance = getPerformanceBalanceDisplay(mergedPrintUser);
+        const mainRowLeads = getPerformanceTotalLeadsDisplay(mergedPrintUser);
+        const mainRowCalls = mergedPrintUser.calls?.total ?? 0;
+        const mainRowInterested = mergedPrintUser.interested ?? 0;
+        const mainRowVisited = roleKey === 'Student Counselor' ? (mergedPrintUser.visitedCumulative ?? 0) : '—';
+        const mainRowConfirmed = mergedPrintUser.convertedLeads ?? 0;
+        const mainRowAdmitted = mergedPrintUser.admittedLeads ?? mergedPrintUser.statusBreakdown?.Admitted ?? 0;
+
+        const summaryTableHtml = `
+          <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;background:#f8fafc;border:1px solid #e2e8f0;">
+            <thead>
+              <tr style="background:#475569;color:#fff;text-align:center;">
+                <th style="padding:4px;border:1px solid #334155;">Total Leads</th>
+                <th style="padding:4px;border:1px solid #334155;">Calls Done</th>
+                <th style="padding:4px;border:1px solid #334155;">Balance</th>
+                <th style="padding:4px;border:1px solid #334155;">Interested</th>
+                <th style="padding:4px;border:1px solid #334155;">Visited</th>
+                <th style="padding:4px;border:1px solid #334155;">Confirmed</th>
+                <th style="padding:4px;border:1px solid #334155;">Admitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="text-align:center;font-weight:700;color:#1e293b;">
+                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowLeads}</td>
+                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowCalls}</td>
+                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowBalance}</td>
+                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowInterested}</td>
+                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowVisited}</td>
+                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowConfirmed}</td>
+                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowAdmitted}</td>
+              </tr>
+            </tbody>
+          </table>
+        `;
+
         return `
         <section style="margin-bottom:10px; break-inside: avoid;">
           <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> · ${statusLabel}</h3>
-          <p style="margin:0 0 4px 0;font-size:8px;color:#475569;">Student Counselor — Main row Balance = Total Leads (bucket sum) − Calls/Visits Done. Main row: <strong>${mainRowBalance}</strong>.</p>
+          ${summaryTableHtml}
+          <p style="margin:0 0 4px 0;font-size:8px;color:#475569;">Student Counselor — Assignment history by date buckets. Main table summary counts shown above.</p>
           <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
             <thead>
               <tr>
@@ -1118,21 +1153,55 @@ export default function ReportsPage() {
             <td>${allottedTotal}</td>
             ${visitCells}
             <td>${bal}</td>
-            <td>—</td>
+            <td>${Number(pc?.reclaimedTotalInPeriod ?? 0) || '—'}</td>
           </tr></tfoot>`;
         }
       }
 
       const mergedPrintUserOther = { ...user, ...(detailUser || {}) };
       const printMainBalanceOther = getPerformanceBalanceDisplay(mergedPrintUserOther);
+      const mainRowLeadsOther = getPerformanceTotalLeadsDisplay(mergedPrintUserOther);
+      const mainRowCallsOther = mergedPrintUserOther.calls?.total ?? 0;
+      const mainRowInterestedOther = mergedPrintUserOther.interested ?? 0;
+      const mainRowVisitedOther = roleKey === 'PRO' ? (mergedPrintUserOther.visitedCumulative ?? 0) : '—';
+      const mainRowConfirmedOther = mergedPrintUserOther.convertedLeads ?? 0;
+      const mainRowAdmittedOther = mergedPrintUserOther.admittedLeads ?? mergedPrintUserOther.statusBreakdown?.Admitted ?? 0;
+
+      const summaryTableOtherHtml = `
+        <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;background:#f8fafc;border:1px solid #e2e8f0;">
+          <thead>
+            <tr style="background:#475569;color:#fff;text-align:center;">
+              <th style="padding:4px;border:1px solid #334155;">Total Leads</th>
+              <th style="padding:4px;border:1px solid #334155;">Calls/Visits Done</th>
+              <th style="padding:4px;border:1px solid #334155;">Balance</th>
+              <th style="padding:4px;border:1px solid #334155;">Interested</th>
+              <th style="padding:4px;border:1px solid #334155;">Visited</th>
+              <th style="padding:4px;border:1px solid #334155;">Confirmed</th>
+              <th style="padding:4px;border:1px solid #334155;">Admitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="text-align:center;font-weight:700;color:#1e293b;">
+              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowLeadsOther}</td>
+              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowCallsOther}</td>
+              <td style="padding:4px;border:1px solid #e2e8f0;">${printMainBalanceOther}</td>
+              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowInterestedOther}</td>
+              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowVisitedOther}</td>
+              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowConfirmedOther}</td>
+              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowAdmittedOther}</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
 
       return `
         <section style="margin-bottom:10px; break-inside: avoid;">
           <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> · ${statusLabel}</h3>
+          ${summaryTableOtherHtml}
           ${
             printMode === 'pro'
-              ? `<p style="margin:0 0 4px 0;font-size:8px;color:#475569;">PRO — Main row Balance = Total Leads (bucket sum) − visit-status totals excluding Assigned. Main row: <strong>${printMainBalanceOther}</strong>.</p>`
-              : ''
+              ? `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">PRO — Assignment history by date buckets. Main table summary counts shown above.</p>`
+              : `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">Pipeline Summary — Main table summary counts shown above.</p>`
           }
           <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
             <thead>
@@ -1239,6 +1308,43 @@ export default function ReportsPage() {
       requestAnimationFrame(runPrint);
     });
   };
+
+  const handleExportPerformanceSummaryExcel = () => {
+    if (performanceTableUsers.length === 0) {
+      showToast.error('No data to export');
+      return;
+    }
+
+    const exportData = performanceTableUsers.map((u, idx) => {
+      const role = String(u?.roleName || '').trim();
+      return {
+        'S.No': idx + 1,
+        'User': u.name || u.userName || 'Unknown',
+        'Email': u.email || '—',
+        'Role': role || '—',
+        'Total Leads': getPerformanceTotalLeadsDisplay(u),
+        'Calls/Visits Done': u.calls?.total ?? 0,
+        'Balance': getPerformanceBalanceDisplay(u),
+        'Interested': u.interested ?? 0,
+        'Visited': role === 'Student Counselor' ? (u.visitedCumulative ?? 0) : '—',
+        'Confirmed': u.convertedLeads ?? 0,
+        'Admitted': u.admittedLeads ?? u.statusBreakdown?.Admitted ?? 0,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Performance Summary');
+
+    const cols = Object.keys(exportData[0]).map((key) => ({
+      wch: Math.max(key.length, ...exportData.map((r: any) => String(r[key] ?? '').length)) + 2,
+    }));
+    worksheet['!cols'] = cols;
+
+    XLSX.writeFile(workbook, `user-performance-summary-${filters.startDate}-${filters.endDate}.xlsx`);
+  };
+
+
 
   // States for Abstract tab (state → districts → mandals)
   const { data: abstractStates } = useQuery({
@@ -2444,15 +2550,26 @@ export default function ReportsPage() {
                           ))}
                         </select>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="self-end"
-                        onClick={() => void handlePrintPerformanceDetails()}
-                      >
-                        Print Detailed Report
-                      </Button>
+                      <div className="flex self-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handlePrintPerformanceDetails()}
+                        >
+                          Print Detailed Report
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400"
+                          onClick={handleExportPerformanceSummaryExcel}
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
+                          Export Excel
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

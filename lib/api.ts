@@ -234,48 +234,27 @@ export const userSettingsAPI = {
 
 // Lead API
 export const leadAPI = {
-  getAll: async (filters?: {
-    page?: number;
-    limit?: number;
-    mandal?: string;
-    district?: string;
-    village?: string;
-    /** PRO: substring match across address + location fields (see backend GET /leads) */
-    villageInAddress?: boolean;
-    state?: string;
-    source?: string;
-    quota?: string;
-    leadStatus?: string;
-    callStatus?: string;
-    visitStatus?: string;
-    applicationStatus?: string;
-    assignedTo?: string;
-    academicYear?: number | string;
-    studentGroup?: string;
-    search?: string;
-    enquiryNumber?: string;
-    scheduledOn?: string;
-    /** When true, only leads with at least one comment or status update today by current user */
-    touchedToday?: boolean;
-    cycleNumber?: number | string;
-  }) => {
+  getAll: async (filters?: LeadFilters) => {
     const params = new URLSearchParams();
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        if (key === 'touchedToday') {
-          if (value === true) params.append(key, 'true');
+        if (key === 'touchedToday' || key === 'villageInAddress' || key === 'needsUpdate') {
+          if (value === true || value === 'true' || value === 1 || value === '1') params.append(key, 'true');
           return;
         }
-        if (key === 'villageInAddress') {
-          if (value === true) params.append(key, 'true');
-          return;
-        }
-        if (value !== undefined && value !== null && value !== '') {
+        if (Array.isArray(value)) {
+          value.forEach((v) => {
+            if (v !== undefined && v !== null && v !== '') {
+              params.append(key, String(v));
+            }
+          });
+        } else if (value !== undefined && value !== null && value !== '') {
           params.append(key, String(value));
         }
       });
     }
     const response = await api.get(`/leads?${params.toString()}`);
+
     // Backend returns { success: true, data: { leads: [...], pagination: {...} }, message: "..." }
     // Extract the nested data property for consistency
     return response.data?.data || response.data;
