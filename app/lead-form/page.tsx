@@ -197,19 +197,45 @@ export default function LeadFormPage() {
     setError(null);
     setIsSubmitting(true);
 
-    // Validate required dynamic form fields
+    // Validate required and format of dynamic form fields
     if (sortedFormFields.length > 0) {
       const missingFields: string[] = [];
+      const invalidFields: string[] = [];
       const dataCollectionType = dynamicFormData.data_collection_type ?? '';
       const isStaffNameRequired = dataCollectionType === 'Direct' || dataCollectionType === 'Exam Center';
 
       sortedFormFields.forEach((field: any) => {
         const value = dynamicFormData[field.fieldName];
         const isEmpty = value === undefined || value === null || value === '' || (typeof value === 'string' && value.trim() === '');
+        
         if (field.isRequired && isEmpty) {
           missingFields.push(field.fieldLabel);
+        } else if (!isEmpty) {
+          // Format validation for non-empty fields
+          const stringValue = String(value).trim();
+          
+          // Phone validation (Type 'tel' or field name contains 'phone', 'mobile', 'contact')
+          const isPhoneField = field.fieldType === 'tel' || 
+                             /phone|mobile|contact/i.test(field.fieldName) || 
+                             /phone|mobile|contact/i.test(field.fieldLabel);
+          
+          if (isPhoneField) {
+            const phoneRegex = /^[6-9]\d{9}$/; // 10 digits starting with 6-9
+            if (!phoneRegex.test(stringValue)) {
+              invalidFields.push(`${field.fieldLabel} (must be a valid 10-digit number)`);
+            }
+          }
+
+          // Email validation
+          if (field.fieldType === 'email' || /email/i.test(field.fieldName)) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(stringValue)) {
+              invalidFields.push(`${field.fieldLabel} (invalid email format)`);
+            }
+          }
         }
       });
+
       // Staff name is required when Data Collection Type is Direct or Exam Center
       if (isStaffNameRequired) {
         const staffName = dynamicFormData.staff_name;
@@ -218,8 +244,13 @@ export default function LeadFormPage() {
           missingFields.push('Staff Name');
         }
       }
-      if (missingFields.length > 0) {
-        setError(`Please fill in required fields: ${missingFields.join(', ')}`);
+
+      if (missingFields.length > 0 || invalidFields.length > 0) {
+        const errors = [];
+        if (missingFields.length > 0) errors.push(`Required: ${missingFields.join(', ')}`);
+        if (invalidFields.length > 0) errors.push(`Invalid: ${invalidFields.join(', ')}`);
+        
+        setError(errors.join(' | '));
         setIsSubmitting(false);
         return;
       }
@@ -587,16 +618,29 @@ export default function LeadFormPage() {
                         }
 
                         // Default: text, number, email, tel, date
+                        const isPhoneField = field.fieldType === 'tel' || 
+                                           /phone|mobile|contact/i.test(field.fieldName) || 
+                                           /phone|mobile|contact/i.test(field.fieldLabel);
+                        
                         return (
                           <div key={field._id}>
                             <Input
                               label={`${field.fieldLabel} ${isFieldRequired ? '*' : ''}`}
                               name={field.fieldName}
-                              type={field.fieldType === 'date' ? 'date' : field.fieldType === 'number' ? 'number' : field.fieldType === 'email' ? 'email' : field.fieldType === 'tel' ? 'tel' : 'text'}
+                              type={field.fieldType === 'date' ? 'date' : field.fieldType === 'number' ? 'number' : field.fieldType === 'email' ? 'email' : isPhoneField ? 'tel' : 'text'}
                               value={fieldValue}
-                              onChange={(e) => handleDynamicFieldChange(field.fieldName, e.target.value)}
-                              placeholder={field.placeholder || ''}
+                              onChange={(e) => {
+                                let val = e.target.value;
+                                if (isPhoneField) {
+                                  // Only allow digits and max 10 characters
+                                  val = val.replace(/\D/g, '').slice(0, 10);
+                                }
+                                handleDynamicFieldChange(field.fieldName, val);
+                              }}
+                              placeholder={field.placeholder || (isPhoneField ? 'e.g. 9876543210' : '')}
                               required={isFieldRequired}
+                              maxLength={isPhoneField ? 10 : undefined}
+                              pattern={isPhoneField ? "[6-9][0-9]{9}" : undefined}
                               className="!py-2.5 !text-sm !rounded-lg"
                             />
                             {field.helpText && (
