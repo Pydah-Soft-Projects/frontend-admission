@@ -943,6 +943,12 @@ export default function ReportsPage() {
         academicYear: filters.academicYear != null ? filters.academicYear : undefined,
         userId: userIds.join(','),
         includeAssignmentDetails: true,
+        // Apply filters to ensure detailed assignments match what was seen in the table
+        perfSearch: performanceSearch.trim() || undefined,
+        perfRole: performanceRole || undefined,
+        perfDivision: performanceDivision || undefined,
+        perfDepartment: performanceDepartment || undefined,
+        studentGroup: performanceStudentGroup || undefined,
       });
       const usersArr = Array.isArray(data?.users) ? data.users : [];
       usersArr.forEach((u: any) => {

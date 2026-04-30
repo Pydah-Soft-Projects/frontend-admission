@@ -338,7 +338,21 @@ export default function UserLeadsPage() {
         setPage(1);
         return newFilters;
       }
-      newFilters[key] = value as LeadFilters[K];
+      
+      // Handle multiple village selection for PRO
+      if (key === 'village' && typeof value === 'string' && user?.roleName === 'PRO') {
+        const currentVillages = Array.isArray(prev.village) ? prev.village : (prev.village ? [prev.village] : []);
+        if (currentVillages.includes(value)) {
+          const next = currentVillages.filter(v => v !== value);
+          if (next.length === 0) delete newFilters.village;
+          else newFilters.village = next;
+        } else {
+          newFilters.village = [...currentVillages, value];
+        }
+      } else {
+        newFilters[key] = value as LeadFilters[K];
+      }
+
       if (key === 'district') {
         delete newFilters.mandal;
         delete newFilters.village;
@@ -691,26 +705,72 @@ export default function UserLeadsPage() {
                   title="Filter the dropdown; applied filter matches this text inside address, village, mandal, district, state"
                 />
               )}
-              <select
-                className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
-                value={filters.village || ''}
-                onChange={(e) => handleFilterChange('village', e.target.value)}
-                disabled={!filters.district}
-                title={
-                  !filters.district
-                    ? 'Select a district first to list villages'
-                    : user?.roleName === 'PRO'
-                      ? 'Matches leads where this text appears in address / location fields'
+              {user?.roleName === 'PRO' ? (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 border border-slate-200 rounded bg-slate-50/30">
+                    {villageOptionsForSelect.length === 0 && (
+                      <p className="text-[10px] text-slate-400 italic">
+                        {filters.district ? 'No villages found' : 'Select district first'}
+                      </p>
+                    )}
+                    {villageOptionsForSelect.map((v) => {
+                      const isSelected = Array.isArray(filters.village) 
+                        ? filters.village.includes(v) 
+                        : filters.village === v;
+                      return (
+                        <label 
+                          key={`village-chk-${v}`} 
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] cursor-pointer transition-all ${
+                            isSelected 
+                              ? 'bg-orange-500 border-orange-600 text-white shadow-sm' 
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="hidden"
+                            checked={isSelected}
+                            onChange={() => handleFilterChange('village', v)}
+                          />
+                          <span className="truncate max-w-[100px]">{v}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {Array.isArray(filters.village) && filters.village.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-semibold text-orange-600 uppercase">
+                        {filters.village.length} selected
+                      </span>
+                      <button 
+                        onClick={() => handleFilterChange('village', '')}
+                        className="text-[9px] text-slate-400 hover:text-red-500 underline"
+                      >
+                        Clear selection
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <select
+                  className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  value={typeof filters.village === 'string' ? filters.village : ''}
+                  onChange={(e) => handleFilterChange('village', e.target.value)}
+                  disabled={!filters.district}
+                  title={
+                    !filters.district
+                      ? 'Select a district first to list villages'
                       : undefined
-                }
-              >
-                <option value="">{filters.district ? 'All villages' : 'Select district first'}</option>
-                {villageOptionsForSelect.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
+                  }
+                >
+                  <option value="">{filters.district ? 'All villages' : 'Select district first'}</option>
+                  {villageOptionsForSelect.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="flex min-w-0 flex-col gap-1 col-span-1">
               <label className="text-[10px] font-medium text-slate-500">Student group</label>
