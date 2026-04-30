@@ -592,6 +592,7 @@ export interface OverviewAnalyticsDailyJoining {
 export interface OverviewAnalyticsResponse {
   totals: OverviewAnalyticsTotals;
   leadStatusBreakdown: Record<string, number>;
+  studentGroupCallsBreakdown?: Record<string, number>;
   joiningStatusBreakdown: Record<string, number>;
   admissionStatusBreakdown: Record<string, number>;
   daily: {
@@ -844,6 +845,7 @@ export interface OverviewAnalytics {
     interestedLeads?: number;
   };
   leadStatusBreakdown: Record<string, number>;
+  studentGroupCallsBreakdown?: Record<string, number>;
   joiningStatusBreakdown: Record<string, number>;
   admissionStatusBreakdown: Record<string, number>;
   daily: {

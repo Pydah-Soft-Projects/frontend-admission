@@ -319,6 +319,14 @@ export default function SuperAdminDashboard() {
       .filter((item) => item.value > 0);
   }, [overviewAnalytics]);
 
+  const studentGroupCallsData = useMemo(() => {
+    if (!(overviewAnalytics as any)?.studentGroupCallsBreakdown) return [];
+    return Object.entries((overviewAnalytics as any).studentGroupCallsBreakdown)
+      .map(([group, count]) => ({ group, count: Number(count) }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [overviewAnalytics]);
+
   /** Pipeline funnel: one aggregated overview query (same filters as summary cards). */
   const pipelineFunnelStages = useMemo(() => {
     const t = overviewAnalytics?.totals;
@@ -373,10 +381,10 @@ export default function SuperAdminDashboard() {
     const fixedShapeWidths = [100, 82, 66, 52, 40];
 
     return baseStages.map((stage, index) => ({
-        ...stage,
-        // Keep funnel geometry consistent irrespective of data values.
-        widthPct: fixedShapeWidths[index] ?? 36,
-      }));
+      ...stage,
+      // Keep funnel geometry consistent irrespective of data values.
+      widthPct: fixedShapeWidths[index] ?? 36,
+    }));
   }, [overviewAnalytics]);
 
   const summaryCards = useMemo(() => ([
@@ -562,11 +570,10 @@ export default function SuperAdminDashboard() {
                   setScheduledTab('today');
                   setShowAllCalls(false);
                 }}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                  scheduledTab === 'today'
+                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${scheduledTab === 'today'
                     ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                }`}
+                  }`}
               >
                 Today ({todayScheduledLeads.length} + {yesterdayMissedLeads.length})
               </button>
@@ -575,11 +582,10 @@ export default function SuperAdminDashboard() {
                   setScheduledTab('yesterdayMissed');
                   setShowAllCalls(false);
                 }}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                  scheduledTab === 'yesterdayMissed'
+                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${scheduledTab === 'yesterdayMissed'
                     ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                }`}
+                  }`}
               >
                 Yesterday Missed ({yesterdayMissedLeads.length})
               </button>
@@ -620,50 +626,77 @@ export default function SuperAdminDashboard() {
             )}
           </div>
 
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-m font-semibold text-[#0f172a] dark:text-[#f1f5f9]">Recent Leads by Source</h2>
-              <Link href="/superadmin/leads" className="text-xs font-medium text-[#ea580c] hover:text-[#c2410c] dark:text-[#f97316]">
-                View leads
-              </Link>
-            </div>
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-              <div className="flex items-center gap-2 border-b border-slate-100 p-2 dark:border-slate-800">
-                {[3, 7, 10].map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setRecentLeadsDays(d as 3 | 7 | 10)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                      recentLeadsDays === d
-                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    Last {d} days
-                  </button>
-                ))}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between px-1">
+                <h2 className="text-m font-semibold text-[#0f172a] dark:text-[#f1f5f9]">Recent Leads by Source</h2>
+                <Link href="/superadmin/leads" className="text-xs font-medium text-[#ea580c] hover:text-[#c2410c] dark:text-[#f97316]">
+                  View leads
+                </Link>
               </div>
-              {recentLeadsSourceCounts.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
-                  No recent leads found.
-                </div>
-              ) : (
-                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {recentLeadsSourceCounts.slice(0, 8).map((row) => (
-                    <li key={row.source} className="flex items-center justify-between px-3 py-2">
-                      <Link
-                        href={`/superadmin/leads?source=${encodeURIComponent(row.source)}`}
-                        className="truncate text-sm text-slate-700 hover:text-orange-600 dark:text-slate-200 dark:hover:text-orange-300"
-                      >
-                        {row.source}
-                      </Link>
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {formatNumber(row.count)}
-                      </span>
-                    </li>
+              <div className="flex flex-col h-full overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center gap-2 border-b border-slate-100 p-2 dark:border-slate-800">
+                  {[3, 7, 10].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setRecentLeadsDays(d as 3 | 7 | 10)}
+                      className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${recentLeadsDays === d
+                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                        }`}
+                    >
+                      Last {d} days
+                    </button>
                   ))}
-                </ul>
-              )}
+                </div>
+                {recentLeadsSourceCounts.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                    No recent leads found.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {recentLeadsSourceCounts.slice(0, 8).map((row) => (
+                      <li key={row.source} className="flex items-center justify-between px-3 py-2">
+                        <Link
+                          href={`/superadmin/leads?source=${encodeURIComponent(row.source)}`}
+                          className="truncate text-sm text-slate-700 hover:text-orange-600 dark:text-slate-200 dark:hover:text-orange-300"
+                        >
+                          {row.source}
+                        </Link>
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {formatNumber(row.count)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between px-1">
+                <h2 className="text-m font-semibold text-[#0f172a] dark:text-[#f1f5f9]">Today&apos;s Calls/Visits Summary</h2>
+              </div>
+              <div className="flex flex-col h-full overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                {studentGroupCallsData.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                    No calls/visits done for selected filters.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {studentGroupCallsData.map((row) => (
+                      <li key={row.group} className="flex items-center justify-between px-3 py-2">
+                        <span className="truncate text-sm text-slate-700 dark:text-slate-200">
+                          {row.group}
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {formatNumber(row.count)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -707,7 +740,7 @@ export default function SuperAdminDashboard() {
                 </label>
               </div>
             </div>
-            
+
           </div>
           <div className="min-h-72 px-3 py-3 sm:px-4">
             <div className="grid grid-cols-[minmax(6.5rem,1fr)_minmax(0,2.7fr)_minmax(6.5rem,1fr)] items-start gap-2">
@@ -934,9 +967,8 @@ export default function SuperAdminDashboard() {
                 aria-label={userPerfListRefetching ? 'Updating list' : 'Applying search'}
               >
                 <Loader2
-                  className={`h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-300 ${
-                    userPerfListRefetching ? 'animate-spin' : 'animate-pulse'
-                  }`}
+                  className={`h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-300 ${userPerfListRefetching ? 'animate-spin' : 'animate-pulse'
+                    }`}
                   aria-hidden
                 />
                 {userPerfListRefetching ? 'Updating list…' : 'Applying search…'}
@@ -976,90 +1008,90 @@ export default function SuperAdminDashboard() {
             </div>
           ) : userAnalytics.length > 0 ? (
             <div className={`space-y-4 ${isFetchingUserAnalytics ? 'opacity-70' : ''} transition-opacity`}>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {userAnalytics.map((user: any) => {
-                const statusEntries = Object.entries(user.statusBreakdown || {}).filter(([_, count]) => (count as number) > 0);
-                return (
-                  <div
-                    key={user.userId}
-                    className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{user.name}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{user.email}</p>
-                      </div>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
-                          : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
-                          }`}
-                      >
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {userAnalytics.map((user: any) => {
+                  const statusEntries = Object.entries(user.statusBreakdown || {}).filter(([_, count]) => (count as number) > 0);
+                  return (
+                    <div
+                      key={user.userId}
+                      className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30"
+                    >
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Assigned</span>
-                        <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                          {formatNumber(user.totalAssigned || 0)}
+                        <div>
+                          <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{user.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{user.email}</p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isActive
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
+                            : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
+                            }`}
+                        >
+                          {user.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </div>
-                      {statusEntries.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-                            Status Breakdown
-                          </p>
-                          {statusEntries.map(([status, count]) => (
-                            <div key={status} className="flex items-center justify-between">
-                              <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{status}</span>
-                              <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-2">
-                                {formatNumber(count as number)}
-                              </span>
-                            </div>
-                          ))}
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Assigned</span>
+                          <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                            {formatNumber(user.totalAssigned || 0)}
+                          </span>
                         </div>
-                      )}
-                      {statusEntries.length === 0 && (
-                        <p className="text-xs text-slate-400 dark:text-slate-500 italic">No leads assigned</p>
-                      )}
+                        {statusEntries.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                              Status Breakdown
+                            </p>
+                            {statusEntries.map(([status, count]) => (
+                              <div key={status} className="flex items-center justify-between">
+                                <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{status}</span>
+                                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 ml-2">
+                                  {formatNumber(count as number)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {statusEntries.length === 0 && (
+                          <p className="text-xs text-slate-400 dark:text-slate-500 italic">No leads assigned</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-            {userPerfPagination && userPerfPagination.total > 0 && (
-              <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Showing {(userPerfPagination.page - 1) * userPerfPagination.limit + 1}–
-                  {Math.min(userPerfPagination.page * userPerfPagination.limit, userPerfPagination.total)} of{' '}
-                  {formatNumber(userPerfPagination.total)} users
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={userPerfPagination.page <= 1 || isFetchingUserAnalytics}
-                    onClick={() => setUserPerfPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
-                    Page {userPerfPagination.page} / {userPerfPagination.pages}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={userPerfPagination.page >= userPerfPagination.pages || isFetchingUserAnalytics}
-                    onClick={() => setUserPerfPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
+                  );
+                })}
               </div>
-            )}
+              {userPerfPagination && userPerfPagination.total > 0 && (
+                <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Showing {(userPerfPagination.page - 1) * userPerfPagination.limit + 1}–
+                    {Math.min(userPerfPagination.page * userPerfPagination.limit, userPerfPagination.total)} of{' '}
+                    {formatNumber(userPerfPagination.total)} users
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={userPerfPagination.page <= 1 || isFetchingUserAnalytics}
+                      onClick={() => setUserPerfPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      Page {userPerfPagination.page} / {userPerfPagination.pages}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={userPerfPagination.page >= userPerfPagination.pages || isFetchingUserAnalytics}
+                      onClick={() => setUserPerfPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="py-8 text-center">
