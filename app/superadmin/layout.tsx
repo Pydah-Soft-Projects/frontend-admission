@@ -40,8 +40,8 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
     icon: AcademicIcon,
     permissionKey: 'joining',
     children: [
-      { href: '/superadmin/joining', label: 'Joining Pipeline', icon: AcademicIcon, permissionKey: 'joining' },
       { href: '/superadmin/joining/confirmed', label: 'Confirmed Leads', icon: ListIcon, permissionKey: 'joining' },
+      { href: '/superadmin/joining', label: 'Joining Pipeline', icon: AcademicIcon, permissionKey: 'joining' },
       { href: '/superadmin/joining/completed', label: 'Admissions', icon: AcademicIcon, permissionKey: 'joining' },
     ],
   },
