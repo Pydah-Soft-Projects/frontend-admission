@@ -985,26 +985,28 @@ export default function ReportsPage() {
       const headerStatusPipeline = `<th>Assigned</th><th>Interested</th><th>Not Interested</th><th>Wrong Data</th><th>Call Back</th><th>Confirmed</th>`;
 
       if (printMode === 'counsellor') {
-        const pc = detailUser?.expandedAssignmentDiagnostics?.performanceCohort;
-        const allottedMap = foldOutcomeCallMapToCanonical(pc?.allottedByCallStatus as Record<string, unknown> | undefined);
-        const allottedDisplayMap = mergeNotAnsweredIntoCallBackForCounsellorDisplay(allottedMap);
-        const allottedTotal = Number(pc?.allottedDistinctLeads ?? 0);
+        // CALCULATE TRUE CUMULATIVE SUMS FOR FOOTER (matches user expectation of "adding up")
+        const sumRowsTotalAllotted = rows.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
+        const sumRowsBalance = rows.reduce((s: number, day: any) => s + Number(getCounsellorAssignmentBalanceForDay(day)), 0);
+        const sumRowsReclaimed = rows.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
+        
+        const sumRowsStatusMap: Record<string, number> = {};
+        COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.forEach(col => {
+          sumRowsStatusMap[col] = rows.reduce((s: number, day: any) => s + Number(getCounsellorCallStatusCountForDisplay(day, col)), 0);
+        });
+
         const allottedFooterCells = COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map(
-          (c) => `<td>${countDistinctOutcomeCallByStatus(allottedDisplayMap, c)}</td>`
+          (c) => `<td>${sumRowsStatusMap[c]}</td>`
         ).join('');
-        const periodBalanceFoot =
-          typeof pc?.periodBalanceByPortfolioRule === 'number' && !Number.isNaN(pc.periodBalanceByPortfolioRule)
-            ? pc.periodBalanceByPortfolioRule
-            : '—';
-        const footerRowCounsellor = pc
-          ? `<tr style="font-weight:700;background:#f1f5f9;">
-              <td colspan="4">Leads allotted (period) — distinct leads by current call_status (Not Answered merged into Call Back)</td>
-              <td>${allottedTotal}</td>
-              ${allottedFooterCells}
-              <td>${periodBalanceFoot}</td>
-              <td>${Number(pc?.reclaimedTotalInPeriod ?? 0) || '—'}</td>
-            </tr>`
-          : '';
+
+        const footerRowCounsellor = `
+          <tr style="font-weight:700;background:#f1f5f9;">
+            <td colspan="4">Cumulative Total (Sum of rows)</td>
+            <td>${sumRowsTotalAllotted}</td>
+            ${allottedFooterCells}
+            <td>${sumRowsBalance}</td>
+            <td>${sumRowsReclaimed}</td>
+          </tr>`;
 
         const headerStatusCounsellor = `${COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
         const printColSpanCounsellor = counsellorExpandedAssignmentColSpan;
@@ -1039,19 +1041,26 @@ export default function ReportsPage() {
         const mainRowBalance = getPerformanceBalanceDisplay(mergedPrintUser);
         const mainRowLeads = getPerformanceTotalLeadsDisplay(mergedPrintUser);
         const mainRowCalls = mergedPrintUser.calls?.total ?? 0;
-        const mainRowInterested = mergedPrintUser.interested ?? 0;
+        
+        // Ensure Interested includes CET Applied for Counselors in the Summary Table
+        const rawInterested = Number(mergedPrintUser.interested || 0);
+        const rawCetApplied = roleKey === 'Student Counselor' 
+          ? Number(mergedPrintUser.statusBreakdown?.['CET Applied'] || mergedPrintUser.statusBreakdown?.['cet applied'] || 0)
+          : 0;
+        const mainRowInterested = roleKey === 'Student Counselor' ? (rawInterested + rawCetApplied) : rawInterested;
+
         const mainRowVisited = roleKey === 'Student Counselor' ? (mergedPrintUser.visitedCumulative ?? 0) : '—';
         const mainRowConfirmed = mergedPrintUser.convertedLeads ?? 0;
-        const mainRowAdmitted = mergedPrintUser.admittedLeads ?? mergedPrintUser.statusBreakdown?.Admitted ?? 0;
+        const mainRowAdmitted = mergedPrintUser.admittedLeads ?? mergedPrintUser.statusBreakdown?.Admitted ?? mergedPrintUser.statusBreakdown?.admitted ?? 0;
 
         const summaryTableHtml = `
           <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;background:#f8fafc;border:1px solid #e2e8f0;">
             <thead>
-              <tr style="background:#475569;color:#fff;text-align:center;">
+              <tr style="background:#f1f5f9;color:#0f172a;text-align:center;">
                 <th style="padding:4px;border:1px solid #334155;">Total Leads</th>
-                <th style="padding:4px;border:1px solid #334155;">Calls Done</th>
+                <th style="padding:4px;border:1px solid #334155;">Calls/Visits Done</th>
                 <th style="padding:4px;border:1px solid #334155;">Balance</th>
-                <th style="padding:4px;border:1px solid #334155;">Interested</th>
+                <th style="padding:4px;border:1px solid #334155;">Interested Leads</th>
                 <th style="padding:4px;border:1px solid #334155;">Visited</th>
                 <th style="padding:4px;border:1px solid #334155;">Confirmed</th>
                 <th style="padding:4px;border:1px solid #334155;">Admitted</th>
@@ -1131,50 +1140,73 @@ export default function ReportsPage() {
           }).join('')
         : `<tr><td colspan="${printColSpan}">No date-wise assignment history found.</td></tr>`;
 
+      // CALCULATE TRUE CUMULATIVE SUMS FOR FOOTER (PRO / Pipeline)
+      const sumRowsTotalAllottedOther = rows.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
+      const sumRowsReclaimedOther = rows.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
+      
       let footerRowPro = '';
-      if (printMode === 'pro' && detailUser?.expandedAssignmentDiagnostics?.performanceCohort) {
-        const pc = detailUser.expandedAssignmentDiagnostics.performanceCohort as {
-          allottedDistinctLeads?: number;
-          allottedByVisitStatus?: Record<string, unknown>;
-          periodBalanceByPortfolioRule?: number;
-        };
-        if (pc.allottedByVisitStatus) {
-          const visitMap = foldOutcomeVisitMapToCanonical(pc.allottedByVisitStatus);
-          const allottedTotal = Number(pc.allottedDistinctLeads ?? 0);
-          const visitCells = PRO_VISIT_STATUS_COLUMNS.map(
-            (c) => `<td>${countDistinctOutcomeCallByStatus(visitMap, c)}</td>`
-          ).join('');
-          const bal =
-            typeof pc.periodBalanceByPortfolioRule === 'number' && !Number.isNaN(pc.periodBalanceByPortfolioRule)
-              ? pc.periodBalanceByPortfolioRule
-              : '—';
-          footerRowPro = `<tfoot><tr style="font-weight:700;background:#f1f5f9;">
-            <td colspan="4">Leads allotted (period) — distinct by current visit_status</td>
-            <td>${allottedTotal}</td>
-            ${visitCells}
-            <td>${bal}</td>
-            <td>${Number(pc?.reclaimedTotalInPeriod ?? 0) || '—'}</td>
-          </tr></tfoot>`;
-        }
+      if (printMode === 'pro') {
+        const sumRowsBalancePro = rows.reduce((s: number, day: any) => s + Number(getProAssignmentBalanceForDay(day)), 0);
+        const sumRowsStatusMapPro: Record<string, number> = {};
+        PRO_VISIT_STATUS_COLUMNS.forEach(col => {
+          sumRowsStatusMapPro[col] = rows.reduce((s: number, day: any) => s + Number(getProVisitStatusCountForDisplay(day, col)), 0);
+        });
+
+        const visitCells = PRO_VISIT_STATUS_COLUMNS.map(
+          (c) => `<td>${sumRowsStatusMapPro[c]}</td>`
+        ).join('');
+
+        footerRowPro = `<tfoot><tr style="font-weight:700;background:#f1f5f9;">
+          <td colspan="4">Cumulative Total (Sum of rows)</td>
+          <td>${sumRowsTotalAllottedOther}</td>
+          ${visitCells}
+          <td>${sumRowsBalancePro}</td>
+          <td>${sumRowsReclaimedOther}</td>
+        </tr></tfoot>`;
+      } else {
+        // Pipeline mode footer
+        const sumAssigned = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Assigned')), 0);
+        const sumInterested = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Interested')), 0);
+        const sumNotInterested = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Not Interested')), 0);
+        const sumWrongData = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Wrong Data')), 0);
+        const sumCallBack = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Call Back')), 0);
+        const sumConfirmed = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Confirmed')), 0);
+
+        footerRowPro = `<tfoot><tr style="font-weight:700;background:#f1f5f9;">
+          <td colspan="4">Cumulative Total (Sum of rows)</td>
+          <td>${sumRowsTotalAllottedOther}</td>
+          <td>${sumAssigned}</td>
+          <td>${sumInterested}</td>
+          <td>${sumNotInterested}</td>
+          <td>${sumWrongData}</td>
+          <td>${sumCallBack}</td>
+          <td>${sumConfirmed}</td>
+          <td>${sumRowsReclaimedOther}</td>
+        </tr></tfoot>`;
       }
 
       const mergedPrintUserOther = { ...user, ...(detailUser || {}) };
       const printMainBalanceOther = getPerformanceBalanceDisplay(mergedPrintUserOther);
       const mainRowLeadsOther = getPerformanceTotalLeadsDisplay(mergedPrintUserOther);
       const mainRowCallsOther = mergedPrintUserOther.calls?.total ?? 0;
-      const mainRowInterestedOther = mergedPrintUserOther.interested ?? 0;
+      
+      // Ensure Interested includes CET Applied for Pipeline roles
+      const rawInterestedOther = Number(mergedPrintUserOther.interested || 0);
+      const rawCetAppliedOther = Number(mergedPrintUserOther.statusBreakdown?.['CET Applied'] || mergedPrintUserOther.statusBreakdown?.['cet applied'] || 0);
+      const mainRowInterestedOther = (rawInterestedOther + rawCetAppliedOther);
+
       const mainRowVisitedOther = roleKey === 'PRO' ? (mergedPrintUserOther.visitedCumulative ?? 0) : '—';
       const mainRowConfirmedOther = mergedPrintUserOther.convertedLeads ?? 0;
-      const mainRowAdmittedOther = mergedPrintUserOther.admittedLeads ?? mergedPrintUserOther.statusBreakdown?.Admitted ?? 0;
+      const mainRowAdmittedOther = mergedPrintUserOther.admittedLeads ?? mergedPrintUserOther.statusBreakdown?.Admitted ?? mergedPrintUserOther.statusBreakdown?.admitted ?? 0;
 
       const summaryTableOtherHtml = `
         <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;background:#f8fafc;border:1px solid #e2e8f0;">
           <thead>
-            <tr style="background:#475569;color:#fff;text-align:center;">
+            <tr style="background:#f1f5f9;color:#0f172a;text-align:center;">
               <th style="padding:4px;border:1px solid #334155;">Total Leads</th>
               <th style="padding:4px;border:1px solid #334155;">Calls/Visits Done</th>
               <th style="padding:4px;border:1px solid #334155;">Balance</th>
-              <th style="padding:4px;border:1px solid #334155;">Interested</th>
+              <th style="padding:4px;border:1px solid #334155;">Interested Leads</th>
               <th style="padding:4px;border:1px solid #334155;">Visited</th>
               <th style="padding:4px;border:1px solid #334155;">Confirmed</th>
               <th style="padding:4px;border:1px solid #334155;">Admitted</th>
@@ -2804,51 +2836,43 @@ export default function ReportsPage() {
                         </p>
                       </Card>
                     )}
-                    <div className="overflow-x-auto rounded-lg border border-[#e2e8f0] dark:border-[#475569]">
-                      <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                         <thead>
-                          <tr className="bg-[#475569] dark:bg-[#334155]">
-                            <th className="w-52 px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
+                          <tr className="bg-slate-50 dark:bg-slate-800/50">
+                            <th className="w-52 px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">User</th>
                             <th
-                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
+                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
                               title="Student Counselor / PRO: sum of date-wise Total Allotted (same lead may appear in multiple buckets). Other roles: portfolio leads handled."
                             >
                               Total Leads
                             </th>
                             <th
-                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                              title="Student Counselor / PRO: sum of period-allotted cohort by current call/visit status, excluding Assigned (matches expanded footer). Other roles: distinct leads with any outcome call in the activity window."
+                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                              title="Total calls and visits logged by this user in the selected period."
                             >
-                              {datePreset === 'today' ? 'Today Calls/Visits Done' :
-                                datePreset === 'yesterday' ? 'Yesterday Calls/Visits Done' :
-                                  datePreset === 'last7days' ? 'Last 7 Days Calls/Visits Done' :
-                                    datePreset === 'last30days' ? 'Last 30 Days Calls/Visits Done' :
-                                      datePreset === 'thisWeek' ? 'This Week Calls/Visits Done' :
-                                        datePreset === 'thisMonth' ? 'This Month Calls/Visits Done' :
-                                          datePreset === 'lastMonth' ? 'Last Month Calls/Visits Done' :
-                                            datePreset === 'custom' ? 'Custom Range Calls/Visits Done' :
-                                              'Calls/Visits Done'}
+                              Calls/Visits Done
                             </th>
                             <th
-                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
+                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
                               title="Student Counselor / PRO: Total Leads (bucket sum) − Calls/Visits Done, minimum 0. Other roles: portfolio-style pending balance."
                             >
                               Balance
                             </th>
                             <th
-                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
+                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
                               title="Student Counselor: Interested + CET Applied on period-allotted cohort (current call_status). PRO: Interested on cohort (current visit_status). Other roles: Interested + CET Applied from pipeline status-change counts in the period."
                             >
                               Interested Leads
                             </th>
                             <th
-                              className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white"
+                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
                               title="Student Counselor only: leads in the period-allotted cohort whose current call_status is Visited (cumulative bucket count). Other roles: not applicable."
                             >
                               Visited
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Confirmed</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Admitted</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Confirmed</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Admitted</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
@@ -2931,7 +2955,16 @@ export default function ReportsPage() {
                                       )}
                                     </div>
                                   </td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.interested ?? 0}</td>
+                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
+                                    {(() => {
+                                      const isCounsellor = String(user.roleName || '').trim() === 'Student Counselor';
+                                      const interested = Number(user.interested || 0);
+                                      const cetApplied = isCounsellor 
+                                        ? Number(user.statusBreakdown?.['CET Applied'] || user.statusBreakdown?.['cet applied'] || 0)
+                                        : 0;
+                                      return interested + cetApplied;
+                                    })()}
+                                  </td>
                                   <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
                                     {String(user.roleName || '').trim() === 'Student Counselor'
                                       ? (user.visitedCumulative ?? 0)
@@ -3100,55 +3133,46 @@ export default function ReportsPage() {
                                                           </tr>
                                                         )}
                                                       </tbody>
-                                                      {pc ? (
                                                         <tfoot>
-                                                          <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
-                                                            <td colSpan={4} className="px-3 py-2 align-top">
-                                                              <div className="font-semibold text-slate-900 dark:text-slate-100">Leads allotted (period)</div>
-                                                              <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">
-                                                                Distinct leads with an assignment to you in the selected period; cells use current
-                                                                call_status. <strong className="font-medium text-slate-700 dark:text-slate-300">Not Answered</strong> is
-                                                                merged into <strong className="font-medium text-slate-700 dark:text-slate-300">Call Back</strong> (no separate
-                                                                column).
-                                                                {!allottedOk && allottedTotal > 0 && (
-                                                                  <span className="text-amber-700 dark:text-amber-300">
-                                                                    {' '}
-                                                                    (status sum {sumAllottedCols} ≠ distinct total {allottedTotal})
-                                                                  </span>
-                                                                )}
-                                                                {sumBucketTotalAllotted > allottedTotal && allottedTotal > 0 && (
-                                                                  <span className="mt-1 block text-slate-600 dark:text-slate-400">
-                                                                    Sum of row “Total Allotted” ({sumBucketTotalAllotted}) is higher than {allottedTotal}{' '}
-                                                                    because rows are per allotted/target bucket — the same student can be counted in more than
-                                                                    one row if they have multiple allotments in the period.
-                                                                  </span>
-                                                                )}
-                                                              </div>
-                                                            </td>
-                                                            <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                              {allottedTotal}
-                                                            </td>
-                                                            {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
-                                                              <td
-                                                                key={`foot-${col}`}
-                                                                className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100"
-                                                              >
-                                                                {countDistinctOutcomeCallByStatus(allottedDisplayMap, col)}
-                                                              </td>
-                                                            ))}
-                                                            <td
-                                                              className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100"
-                                                              title="Same formula as main row Balance: bucket-sum allotted − Calls/Visits Done (sum of non-Assigned call_status on distinct cohort)"
-                                                            >
-                                                              {typeof pc?.periodBalanceByPortfolioRule === 'number' &&
-                                                              !Number.isNaN(pc.periodBalanceByPortfolioRule)
-                                                                ? pc.periodBalanceByPortfolioRule
-                                                                : '—'}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
-                                                          </tr>
+                                                          {(() => {
+                                                            // CALCULATE TRUE CUMULATIVE SUMS FOR FOOTER (matches user expectation of "adding up")
+                                                            const sumRowsTotalAllotted = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
+                                                            const sumRowsBalance = assignmentsByDate.reduce((s: number, day: any) => s + Number(getCounsellorAssignmentBalanceForDay(day)), 0);
+                                                            
+                                                            const sumRowsStatusMap: Record<string, number> = {};
+                                                            COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.forEach(col => {
+                                                              sumRowsStatusMap[col] = assignmentsByDate.reduce((s: number, day: any) => s + Number(getCounsellorCallStatusCountForDisplay(day, col)), 0);
+                                                            });
+
+                                                            return (
+                                                              <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
+                                                                <td colSpan={4} className="px-3 py-2 align-top">
+                                                                  <div className="font-semibold text-slate-900 dark:text-slate-100">Cumulative Total</div>
+                                                                  <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                                                                    Sum of row counts above.
+                                                                  </div>
+                                                                </td>
+                                                                <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                                                                  {sumRowsTotalAllotted}
+                                                                </td>
+                                                                {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
+                                                                  <td
+                                                                    key={`foot-${col}`}
+                                                                    className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100"
+                                                                  >
+                                                                    {sumRowsStatusMap[col]}
+                                                                  </td>
+                                                                ))}
+                                                                <td
+                                                                  className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100"
+                                                                >
+                                                                  {sumRowsBalance}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
+                                                              </tr>
+                                                            );
+                                                          })()}
                                                         </tfoot>
-                                                      ) : null}
                                                     </table>
                                                   </div>
                                                 </>
@@ -3278,78 +3302,53 @@ export default function ReportsPage() {
                                                 </tr>
                                               )}
                                             </tbody>
-                                            {expandedMode === 'pro' &&
-                                              (() => {
-                                                const pc = detailUser?.expandedAssignmentDiagnostics?.performanceCohort as
-                                                  | {
-                                                      allottedDistinctLeads?: number;
-                                                      allottedByVisitStatus?: Record<string, unknown>;
-                                                      periodBalanceByPortfolioRule?: number;
-                                                    }
-                                                  | undefined;
-                                                if (!pc?.allottedByVisitStatus) return null;
-                                                const visitMap = foldOutcomeVisitMapToCanonical(pc.allottedByVisitStatus);
-                                                const allottedTotal = Number(pc.allottedDistinctLeads ?? 0);
-                                                const knownVisit = PRO_VISIT_STATUS_COLUMNS as unknown as string[];
-                                                const sumAllottedCols = knownVisit.reduce(
-                                                  (s, col) => s + countDistinctOutcomeCallByStatus(visitMap, col),
-                                                  0
-                                                );
-                                                const allottedOk = allottedTotal <= 0 || sumAllottedCols === allottedTotal;
-                                                const sumBucketTotalAllotted = assignmentsByDate.reduce(
-                                                  (s: number, day: any) => s + Number(day?.totalAssigned ?? 0),
-                                                  0
-                                                );
-                                                const periodBalanceFoot =
-                                                  typeof pc.periodBalanceByPortfolioRule === 'number' &&
-                                                  !Number.isNaN(pc.periodBalanceByPortfolioRule)
-                                                    ? pc.periodBalanceByPortfolioRule
-                                                    : '—';
-                                                return (
-                                                  <tfoot>
-                                                    <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
-                                                      <td colSpan={4} className="px-3 py-2 align-top">
-                                                        <div className="font-semibold text-slate-900 dark:text-slate-100">
-                                                          Leads allotted (period)
-                                                        </div>
-                                                        <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">
-                                                          Distinct leads with an assignment in the period; cells use current visit_status.
-                                                          {!allottedOk && allottedTotal > 0 && (
-                                                            <span className="text-amber-700 dark:text-amber-300">
-                                                              {' '}
-                                                              (status sum {sumAllottedCols} ≠ distinct total {allottedTotal})
-                                                            </span>
-                                                          )}
-                                                          {sumBucketTotalAllotted > allottedTotal && allottedTotal > 0 && (
-                                                            <span className="mt-1 block text-slate-600 dark:text-slate-400">
-                                                              Sum of row “Total Allotted” ({sumBucketTotalAllotted}) can exceed {allottedTotal} when the same
-                                                              student appears in more than one allotted/target row.
-                                                            </span>
-                                                          )}
-                                                        </div>
-                                                      </td>
-                                                      <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                        {allottedTotal}
-                                                      </td>
-                                                      {PRO_VISIT_STATUS_COLUMNS.map((col) => (
-                                                        <td
-                                                          key={`pro-foot-${col}`}
-                                                          className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100"
-                                                        >
-                                                          {countDistinctOutcomeCallByStatus(visitMap, col)}
+                                              <tfoot>
+                                                {(() => {
+                                                  const sumRowsTotalAllotted = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
+                                                  const sumRowsBalance = assignmentsByDate.reduce((s: number, day: any) => s + Number(getProAssignmentBalanceForDay(day)), 0);
+                                                  
+                                                  if (expandedMode === 'pro') {
+                                                    const sumRowsStatusMap: Record<string, number> = {};
+                                                    PRO_VISIT_STATUS_COLUMNS.forEach(col => {
+                                                      sumRowsStatusMap[col] = assignmentsByDate.reduce((s: number, day: any) => s + Number(getProVisitStatusCountForDisplay(day, col)), 0);
+                                                    });
+
+                                                    return (
+                                                      <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
+                                                        <td colSpan={4} className="px-3 py-2 align-top">
+                                                          <div className="font-semibold text-slate-900 dark:text-slate-100">Cumulative Total</div>
+                                                          <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">Sum of rows above.</div>
                                                         </td>
-                                                      ))}
-                                                      <td
-                                                        className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100"
-                                                        title="Same as main row Balance"
-                                                      >
-                                                        {periodBalanceFoot}
-                                                      </td>
-                                                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
-                                                    </tr>
-                                                  </tfoot>
-                                                );
-                                              })()}
+                                                        <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">{sumRowsTotalAllotted}</td>
+                                                        {PRO_VISIT_STATUS_COLUMNS.map((col) => (
+                                                          <td key={`foot-pro-${col}`} className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                                                            {sumRowsStatusMap[col]}
+                                                          </td>
+                                                        ))}
+                                                        <td className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100">{sumRowsBalance}</td>
+                                                        <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
+                                                      </tr>
+                                                    );
+                                                  } else {
+                                                    // Pipeline mode cumulative footer
+                                                    const statusCols = ['Assigned', 'Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed'];
+                                                    return (
+                                                      <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
+                                                        <td colSpan={4} className="px-3 py-2 align-top">
+                                                          <div className="font-semibold text-slate-900 dark:text-slate-100">Cumulative Total</div>
+                                                        </td>
+                                                        <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">{sumRowsTotalAllotted}</td>
+                                                        {statusCols.map(col => (
+                                                          <td key={`foot-pipe-${col}`} className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
+                                                            {assignmentsByDate.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, col)), 0)}
+                                                          </td>
+                                                        ))}
+                                                        <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
+                                                      </tr>
+                                                    );
+                                                  }
+                                                })()}
+                                              </tfoot>
                                           </table>
                                         </div>
                                             </>
@@ -3419,27 +3418,27 @@ export default function ReportsPage() {
                         </div>
                       )}
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                      <Card className="p-4">
-                        <p className="text-xs text-slate-500">Users (this page)</p>
-                        <p className="text-xl font-bold">{performanceSummary.usersCovered}</p>
+                      <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Users (This Page)</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.usersCovered}</p>
                       </Card>
-                      <Card className="p-4">
-                        <p className="text-xs text-slate-500">Assigned leads (this page)</p>
-                        <p className="text-xl font-bold">{performanceSummary.totalAssigned}</p>
+                      <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Total Leads (This Page)</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.totalAssigned}</p>
                       </Card>
-                      <Card className="p-4">
-                        <p className="text-xs text-slate-500">Interested (this page)</p>
-                        <p className="text-xl font-bold">{performanceSummary.totalInterested}</p>
+                      <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Interested Leads (This Page)</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.totalInterested}</p>
                       </Card>
-                      <Card className="p-4">
-                        <p className="text-xs text-slate-500">Callbacks / revisits (report total)</p>
-                        <p className="text-xl font-bold">
+                      <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Callbacks / Revisits</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
                           {Number(performanceSummaryTotals?.totalCallbacksRevisits ?? 0).toLocaleString()}
                         </p>
                       </Card>
-                      <Card className="p-4">
-                        <p className="text-xs text-slate-500">Unattended (reclaimed)</p>
-                        <p className="text-xl font-bold">
+                      <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Unattended Leads</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
                           {Number(performanceSummaryTotals?.totalUnattended ?? 0).toLocaleString()}
                         </p>
                       </Card>
