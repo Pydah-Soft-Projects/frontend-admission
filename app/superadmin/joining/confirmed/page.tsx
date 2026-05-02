@@ -2,19 +2,54 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { leadAPI } from '@/lib/api';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { leadAPI, joiningAPI } from '@/lib/api';
+import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
+import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
 import { Lead } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
+import { showToast } from '@/lib/toast';
 
 const ConfirmedLeadsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { canWrite: canWriteJoining } = useModulePermission('joining');
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
+  const [smsSession, setSmsSession] = useState<{
+    leadId: string;
+    admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
+    joiningOnlineAdmissionMode: true;
+  } | null>(null);
+
+  const sendAdmissionSmsMutation = useMutation({
+    mutationFn: (leadId: string) => joiningAPI.createPublicEditLink(leadId),
+    onSuccess: (res, leadId) => {
+      const parsed = parseJoiningPublicLinkFromApiResponse(res);
+      if (!parsed?.url) {
+        showToast.error('Link was created but the URL could not be resolved.');
+        return;
+      }
+      void navigator.clipboard?.writeText(parsed.url).catch(() => {});
+      setSmsSession({
+        leadId,
+        admissionPublicLink: {
+          url: parsed.url,
+          expiresAt: parsed.expiresAt,
+          pathToken: parsed.pathToken,
+        },
+        joiningOnlineAdmissionMode: true,
+      });
+      showToast.success('Public link created (copied). Review the SMS, then send.');
+    },
+    onError: (e: unknown) => {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      showToast.error(err?.response?.data?.message || err?.message || 'Could not create link');
+    },
+  });
 
   const queryKey = useMemo(() => ['confirmed-leads', page, limit, searchTerm], [page, limit, searchTerm]);
 
@@ -65,9 +100,9 @@ const ConfirmedLeadsPage = () => {
               setPage(1);
             }}
           />
-          <Link href="/superadmin/joining/new">
-            <Button variant="primary" className="whitespace-nowrap">
-              Add Joining Form
+          <Link href="/superadmin/joining/new" className="sm:ml-auto sm:shrink-0">
+            <Button variant="outline" className="whitespace-nowrap">
+              Add Joining Form (staff)
             </Button>
           </Link>
         </div>
@@ -128,11 +163,23 @@ const ConfirmedLeadsPage = () => {
                       {lead.updatedAt ? new Date(lead.updatedAt).toLocaleString() : '—'}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link href={`/superadmin/joining/${lead._id}/detail`}>
-                        <Button variant="primary" size="sm">
-                          View Details
-                        </Button>
-                      </Link>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {canWriteJoining && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={sendAdmissionSmsMutation.isPending}
+                            onClick={() => sendAdmissionSmsMutation.mutate(lead._id)}
+                          >
+                            {sendAdmissionSmsMutation.isPending ? 'Preparing…' : 'Send admission SMS'}
+                          </Button>
+                        )}
+                        <Link href={`/superadmin/joining/${lead._id}/detail`}>
+                          <Button variant="primary" size="sm">
+                            View Details
+                          </Button>
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -167,6 +214,14 @@ const ConfirmedLeadsPage = () => {
           </div>
         )}
       </Card>
+
+      <JoiningDraftSmsModal
+        open={Boolean(smsSession)}
+        leadId={smsSession?.leadId}
+        admissionPublicLink={smsSession?.admissionPublicLink}
+        joiningOnlineAdmissionMode={Boolean(smsSession?.joiningOnlineAdmissionMode)}
+        onClose={() => setSmsSession(null)}
+      />
     </div>
   );
 };

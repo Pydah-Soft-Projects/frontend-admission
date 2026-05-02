@@ -1134,6 +1134,20 @@ export const joiningAPI = {
     const response = await api.post(`/joinings/${leadId}/approve`);
     return response.data;
   },
+  /** Mint a time-limited public URL to edit a draft joining form (default TTL 5 minutes on server). */
+  createPublicEditLink: async (leadId: string) => {
+    const response = await api.post(`/joinings/${leadId}/public-edit-link`);
+    return response.data as {
+      data?: {
+        path: string;
+        publicUrl: string;
+        token: string;
+        expiresAt: string;
+        ttlSeconds: number;
+      };
+      message?: string;
+    };
+  },
 };
 
 export const admissionAPI = {

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { joiningAPI } from '@/lib/api';
+import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
+import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
 import { JoiningListResponse } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -35,6 +37,11 @@ const JoiningPipelinePage = () => {
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'draft' | 'pending'>('draft');
+  const [smsSession, setSmsSession] = useState<{
+    leadId: string;
+    admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
+    joiningOnlineAdmissionMode: true;
+  } | null>(null);
   const { getCourseName, getBranchName } = useCourseLookup();
 
   const { data, isLoading, isFetching } = useQuery<JoiningListResponse>({
@@ -47,16 +54,6 @@ const JoiningPipelinePage = () => {
         search: searchTerm || undefined,
         status: statusValue,
       });
-      
-      // Debug logging
-      console.log('Joining API Response:', {
-        statusValue,
-        activeTab,
-        response,
-        data: response?.data,
-        joinings: response?.data?.joinings?.length || 0,
-      });
-      
       return response;
     },
     placeholderData: (previousData) => previousData,
@@ -69,20 +66,32 @@ const JoiningPipelinePage = () => {
   const joinings = payload.joinings ?? [];
   const pagination = payload.pagination ?? { page: 1, pages: 1, total: 0, limit };
   
-  // Debug logging
-  useEffect(() => {
-    console.log('Joining Page State:', {
-      activeTab,
-      isLoading,
-      isFetching,
-      data,
-      payload,
-      joiningsCount: joinings.length,
-      pagination,
-    });
-  }, [activeTab, isLoading, isFetching, data, payload, joinings.length, pagination]);
   const isEmpty = !isLoading && joinings.length === 0;
   const queryClient = useQueryClient();
+
+  const mintLinkForSmsMutation = useMutation({
+    mutationFn: (leadId: string) => joiningAPI.createPublicEditLink(leadId),
+    onSuccess: (res, leadId) => {
+      const parsed = parseJoiningPublicLinkFromApiResponse(res);
+      if (!parsed?.url) {
+        showToast.error('Link was created but the URL could not be resolved. Copy it from the joining detail page instead.');
+        return;
+      }
+      setSmsSession({
+        leadId,
+        admissionPublicLink: {
+          url: parsed.url,
+          expiresAt: parsed.expiresAt,
+          pathToken: parsed.pathToken,
+        },
+        joiningOnlineAdmissionMode: true,
+      });
+      showToast.success('Public link created. Review the message, then send SMS.');
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      showToast.error(error?.response?.data?.message || error?.message || 'Could not create public link');
+    },
+  });
 
   const approveMutation = useMutation({
     mutationFn: async (leadId: string) => {
@@ -376,14 +385,26 @@ const JoiningPipelinePage = () => {
                             </Link>
                           </div>
                         ) : (
-                          <Link href={`/superadmin/joining/${joining.leadId || joining._id || 'new'}/detail`}>
-                            <Button variant="primary" className="group inline-flex items-center gap-2">
-                              <span className="transition-transform group-hover:-translate-x-0.5">View Details</span>
-                              <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </Button>
-                          </Link>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            {joining.leadId && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={mintLinkForSmsMutation.isPending}
+                                onClick={() => mintLinkForSmsMutation.mutate(joining.leadId!)}
+                              >
+                                {mintLinkForSmsMutation.isPending ? 'Preparing…' : 'Send admission SMS'}
+                              </Button>
+                            )}
+                            <Link href={`/superadmin/joining/${joining.leadId || joining._id || 'new'}/detail`}>
+                              <Button variant="primary" className="group inline-flex items-center gap-2">
+                                <span className="transition-transform group-hover:-translate-x-0.5">View Details</span>
+                                <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </Button>
+                            </Link>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -394,6 +415,14 @@ const JoiningPipelinePage = () => {
           </table>
         </div>
       </Card>
+
+      <JoiningDraftSmsModal
+        open={Boolean(smsSession)}
+        leadId={smsSession?.leadId}
+        admissionPublicLink={smsSession?.admissionPublicLink}
+        joiningOnlineAdmissionMode={Boolean(smsSession?.joiningOnlineAdmissionMode)}
+        onClose={() => setSmsSession(null)}
+      />
 
       {pagination.pages > 1 && (
         <div className="mt-6 flex items-center justify-end gap-3">

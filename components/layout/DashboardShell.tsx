@@ -114,12 +114,16 @@ type DashboardHeaderContextValue = {
 
 const DashboardHeaderContext = createContext<DashboardHeaderContextValue | null>(null);
 
+const noopHeaderContext: DashboardHeaderContextValue = {
+  setHeaderContent: () => {},
+  clearHeaderContent: () => {},
+  setMobileTopBar: () => {},
+  clearMobileTopBar: () => {},
+};
+
 export const useDashboardHeader = () => {
   const ctx = useContext(DashboardHeaderContext);
-  if (!ctx) {
-    throw new Error('useDashboardHeader must be used within DashboardShell');
-  }
-  return ctx;
+  return ctx ?? noopHeaderContext;
 };
 
 type PermissionContextValue = {

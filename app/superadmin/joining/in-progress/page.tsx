@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { joiningAPI } from '@/lib/api';
+import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
+import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
 import { JoiningListResponse, JoiningStatus } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { showToast } from '@/lib/toast';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 
 const statusPalette: Record<JoiningStatus, string> = {
@@ -25,6 +28,35 @@ const JoiningInProgressPage = () => {
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState<JoiningStatus[]>(defaultStatuses);
+  const [smsSession, setSmsSession] = useState<{
+    leadId: string;
+    admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
+    joiningOnlineAdmissionMode: true;
+  } | null>(null);
+
+  const mintLinkForSmsMutation = useMutation({
+    mutationFn: (leadId: string) => joiningAPI.createPublicEditLink(leadId),
+    onSuccess: (res, leadId) => {
+      const parsed = parseJoiningPublicLinkFromApiResponse(res);
+      if (!parsed?.url) {
+        showToast.error('Link was created but the URL could not be resolved.');
+        return;
+      }
+      setSmsSession({
+        leadId,
+        admissionPublicLink: {
+          url: parsed.url,
+          expiresAt: parsed.expiresAt,
+          pathToken: parsed.pathToken,
+        },
+        joiningOnlineAdmissionMode: true,
+      });
+      showToast.success('Public link created. Review the message, then send SMS.');
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      showToast.error(error?.response?.data?.message || error?.message || 'Could not create public link');
+    },
+  });
   const { getCourseName, getBranchName } = useCourseLookup();
 
   const queryKey = useMemo(
@@ -223,14 +255,26 @@ const JoiningInProgressPage = () => {
                       {new Date(joining.updatedAt).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link href={`/superadmin/joining/${joining.leadId || joining._id}/detail`}>
-                        <Button variant="outline" className="group inline-flex items-center gap-2">
-                          <span className="transition-transform group-hover:-translate-x-0.5">View Details</span>
-                          <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Button>
-                      </Link>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {joining.status === 'draft' && joining.leadId && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={mintLinkForSmsMutation.isPending}
+                            onClick={() => mintLinkForSmsMutation.mutate(joining.leadId!)}
+                          >
+                            {mintLinkForSmsMutation.isPending ? 'Preparing…' : 'Send admission SMS'}
+                          </Button>
+                        )}
+                        <Link href={`/superadmin/joining/${joining.leadId || joining._id}/detail`}>
+                          <Button variant="outline" className="group inline-flex items-center gap-2">
+                            <span className="transition-transform group-hover:-translate-x-0.5">View Details</span>
+                            <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Button>
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -239,6 +283,14 @@ const JoiningInProgressPage = () => {
           </table>
         </div>
       </Card>
+
+      <JoiningDraftSmsModal
+        open={Boolean(smsSession)}
+        leadId={smsSession?.leadId}
+        admissionPublicLink={smsSession?.admissionPublicLink}
+        joiningOnlineAdmissionMode={Boolean(smsSession?.joiningOnlineAdmissionMode)}
+        onClose={() => setSmsSession(null)}
+      />
 
       {pagination.pages > 1 && (
         <div className="mt-6 flex items-center justify-end gap-3">
