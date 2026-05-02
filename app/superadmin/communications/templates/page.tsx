@@ -987,6 +987,8 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
               <th className="w-9 px-2 py-2 text-left text-xs font-semibold text-slate-500" scope="col" aria-label="Expand" />
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Time</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Source</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Users</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Group</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Template</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
               <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Progress</th>
@@ -996,7 +998,7 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {polledJobs.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
                   No jobs yet. Send a bulk SMS from the other tabs to see activity here.
                 </td>
               </tr>
@@ -1041,6 +1043,16 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                       <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-200">
                         {j.source === 'user_specific_leads' ? 'User-specific leads' : 'Send to leads'}
                       </td>
+                      <td className="max-w-[10rem] truncate px-3 py-2 text-xs text-slate-600 dark:text-slate-400" title={userRosterChips.length > 0 ? userRosterChips.map(u => u.name).join(', ') : undefined}>
+                        {userRosterChips.length > 0 
+                          ? userRosterChips.length === 1 
+                            ? userRosterChips[0].name 
+                            : `${userRosterChips[0].name} +${userRosterChips.length - 1}`
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">
+                        {jRc?.studentGroup || '—'}
+                      </td>
                       <td className="max-w-[10rem] truncate px-3 py-2 text-xs" title={j.templateName || ''}>
                         {j.templateName || '—'}
                       </td>
@@ -1083,7 +1095,7 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                     </tr>
                     {isOpen ? (
                       <tr className="bg-slate-50/70 dark:bg-slate-900/30">
-                        <td colSpan={7} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
+                        <td colSpan={9} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
                           <div className="space-y-3 px-3 py-3 sm:px-4 sm:py-3.5">
                             {canResume ? (
                               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
@@ -1444,6 +1456,12 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
       return communicationAPI.createBulkSmsJob({
         source: 'send_to_leads',
         templateId: tpl._id,
+        reportContext: {
+          version: 1,
+          studentGroup: studentGroupFilter.trim() || null,
+          district: districtFilter.trim() || null,
+          selectedUsers: [],
+        },
         items: rows.map((row) => ({
           leadId: row.leadId,
           leadName: row.leadName,
