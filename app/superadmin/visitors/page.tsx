@@ -121,23 +121,7 @@ export default function VisitorsPage() {
             {/* Main Section: Full Width */}
             <div className="space-y-6 w-full">
                 {/* Verification Input Section */}
-                <div className="pt-2">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="space-y-1">
-                            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                <div className="p-1.5 rounded-lg bg-orange-100 dark:bg-orange-950 text-orange-600 dark:text-orange-400">
-                                    <Search className="w-4 h-4" />
-                                </div>
-                                Validate Access Code
-                            </h2>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Enter the 6-digit code provided by the student.</p>
-                        </div>
-                        <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 rounded-full border border-slate-100 dark:border-slate-800">
-                            <Clock className="w-3 h-3" />
-                            24h Windows
-                        </div>
-                    </div>
-
+                <div className="-mt-6">
                     <form onSubmit={handleVerify} className="flex flex-col sm:flex-row gap-3">
                         <div className="flex-1 relative">
                             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400">
@@ -313,55 +297,59 @@ export default function VisitorsPage() {
                         <p className="text-sm text-slate-400 mt-1">Try switching to a different status or refresh the list.</p>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-3">
-                        {filteredVisits.map((visit) => (
-                            <Card
-                                key={visit.id}
-                                className="group relative overflow-hidden border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 px-4 py-3 transition-all hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-4"
-                            >
-                                <div className="flex items-center gap-4 min-w-0">
-                                    <div className={cn(
-                                        "w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-sm font-black shadow-inner",
-                                        visit.status === 'used'
-                                            ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400'
-                                            : visit.status === 'expired'
-                                                ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
-                                                : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400'
-                                    )}>
-                                        {visit.status === 'used' ? <CheckCircle2 className="w-5 h-5" /> : visit.status === 'expired' ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
-                                    </div>
-                                    <div className="space-y-0.5 min-w-0">
-                                        <h4 className="font-bold text-slate-900 dark:text-slate-100 truncate text-sm leading-tight">
-                                            {visit.lead_name}
-                                        </h4>
-                                        <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider truncate">
-                                            <User className="w-3 h-3 shrink-0" />
-                                            <span className="truncate">Agent: {visit.sender_name}</span>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4 sm:gap-6 shrink-0">
-                                    <div className="hidden sm:flex items-center gap-1.5 text-slate-400">
-                                        <Clock className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-bold">{format(new Date(visit.created_at), 'MMM d, h:mm a')}</span>
-                                    </div>
-                                    <div className={cn(
-                                        "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border",
-                                        visit.status === 'used'
-                                            ? "bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:border-emerald-900"
-                                            : visit.status === 'expired'
-                                                ? "bg-rose-50 border-rose-100 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900"
-                                                : "bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-950/40 dark:border-amber-900"
-                                    )}>
-                                        {visit.status}
-                                    </div>
-                                    <button className="text-slate-300 dark:text-slate-700 hover:text-indigo-500 transition-colors">
-                                        <ChevronRight className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </Card>
-                        ))}
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Lead Details</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Handled By</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Timestamp</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {filteredVisits.map((visit) => (
+                                        <tr key={visit.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 flex items-center justify-center text-xs font-black">
+                                                        {visit.lead_name?.charAt(0)}
+                                                    </div>
+                                                    <span className="font-bold text-slate-900 dark:text-slate-100">{visit.lead_name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                                    <User className="w-3.5 h-3.5" />
+                                                    <span className="text-sm font-medium">{visit.sender_name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                    <span className="text-xs font-bold">{format(new Date(visit.created_at), 'MMM d, h:mm a')}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex justify-center">
+                                                    <span className={cn(
+                                                        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border",
+                                                        visit.status === 'used'
+                                                            ? "bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:border-emerald-900"
+                                                            : visit.status === 'expired'
+                                                                ? "bg-rose-50 border-rose-100 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900"
+                                                                : "bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-950/40 dark:border-amber-900"
+                                                    )}>
+                                                        {visit.status}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </div>
