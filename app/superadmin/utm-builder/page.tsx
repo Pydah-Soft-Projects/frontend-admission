@@ -676,126 +676,107 @@ export default function UtmBuilderPage() {
                 <p>Generate or shorten a URL to see it here</p>
               </div>
             )}
-
-            {/* Previous URLs Section - Inside Generated URLs Card */}
-            {shortUrlsData?.data?.shortUrls && shortUrlsData.data.shortUrls.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4" />
-                  Previous URLs
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 dark:border-slate-700">
-                        <th className="text-left py-2 px-3">Campaign</th>
-                        <th className="text-left py-2 px-3">Source</th>
-                        <th className="text-left py-2 px-3">Medium</th>
-                        <th className="text-left py-2 px-3">Clicks</th>
-                        <th className="text-left py-2 px-3">Created</th>
-                        <th className="text-left py-2 px-3">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shortUrlsData.data.shortUrls.map((url: any) => (
-                        <tr
-                          key={url._id}
-                          className="border-b border-gray-100 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
-                          onClick={() => {
-                            setSelectedUrlId(url._id);
-                            setShowAnalyticsModal(true);
-                          }}
-                        >
-                          <td className="py-2 px-3 font-medium">{url.utmCampaign || '-'}</td>
-                          <td className="py-2 px-3">{url.utmSource || '-'}</td>
-                          <td className="py-2 px-3">{url.utmMedium || '-'}</td>
-                          <td className="py-2 px-3">
-                            <span className="font-semibold text-blue-600 dark:text-blue-400">
-                              {url.clickCount || 0}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3">
-                            {new Date(url.createdAt).toLocaleDateString()}
-                          </td>
-                          <td className="py-2 px-3">
-                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                onClick={() => copyToClipboard(url.originalUrl, 'Full URL')}
-                                variant="outline"
-                                className="p-1.5 text-xs"
-                                title="Copy Full URL"
-                              >
-                                <CopyIcon className="w-3.5 h-3.5" />
-                              </Button>
-                              {url.shortUrl && (
-                                <Button
-                                  onClick={() => copyToClipboard(url.shortUrl, 'Short URL')}
-                                  variant="outline"
-                                  className="p-1.5 text-xs"
-                                  title="Copy Short URL"
-                                >
-                                  <LinkIcon className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
         </Card>
       </div>
 
-      {/* Recent Short URLs List - Only URLs with short codes */}
-      {shortUrlsData?.data?.shortUrls && shortUrlsData.data.shortUrls.filter((url: any) => url.shortCode).length > 0 && (
+      {/* UTM Campaigns History */}
+      {shortUrlsData?.data?.shortUrls && (
         <Card>
-          <h2 className="text-xl font-semibold mb-4">Recent Short URLs</h2>
+          <h2 className="text-xl font-semibold mb-4">UTM Campaigns History</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-slate-700">
-                  <th className="text-left py-2 px-4">Short URL</th>
                   <th className="text-left py-2 px-4">Campaign</th>
-                  <th className="text-left py-2 px-4">Source</th>
-                  <th className="text-left py-2 px-4">Medium</th>
-                  <th className="text-left py-2 px-4">Clicks</th>
+                  <th className="text-left py-2 px-4">Source / Medium</th>
+                  <th className="text-left py-2 px-4">URL Type</th>
+                  <th className="text-left py-2 px-4">Short Link</th>
+                  <th className="text-left py-2 px-4 text-center">Clicks</th>
+                  <th className="text-left py-2 px-4">Creator</th>
                   <th className="text-left py-2 px-4">Created</th>
-                  <th className="text-left py-2 px-4">Actions</th>
+                  <th className="text-right py-2 px-4">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {shortUrlsData.data.shortUrls
-                  .filter((url: any) => url.shortCode)
-                  .map((url: any) => (
-                    <tr key={url._id} className="border-b border-gray-100 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800/50">
-                      <td className="py-2 px-4 font-mono text-xs">{url.shortUrl}</td>
-                      <td className="py-2 px-4">{url.utmCampaign || '-'}</td>
-                      <td className="py-2 px-4">{url.utmSource || '-'}</td>
-                      <td className="py-2 px-4">{url.utmMedium || '-'}</td>
-                      <td className="py-2 px-4">
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                {shortUrlsData.data.shortUrls.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-gray-500">
+                      No UTM links generated yet.
+                    </td>
+                  </tr>
+                ) : (
+                  shortUrlsData.data.shortUrls.map((url: any) => (
+                    <tr
+                      key={url._id}
+                      className="hover:bg-gray-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                      onClick={() => {
+                        setSelectedUrlId(url._id);
+                        setShowAnalyticsModal(true);
+                      }}
+                    >
+                      <td className="py-3 px-4 font-medium">{url.utmCampaign || '-'}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col">
+                          <span className="text-gray-900 dark:text-slate-100">{url.utmSource || '-'}</span>
+                          <span className="text-xs text-gray-500">{url.utmMedium || '-'}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {url.shortCode ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                            Shortened
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-400">
+                            Long UTM
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[10px] max-w-[12rem] truncate">
+                        {url.shortUrl || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="font-bold text-blue-600 dark:text-blue-400">
                           {url.clickCount || 0}
                         </span>
                       </td>
-                      <td className="py-2 px-4">
+                      <td className="py-3 px-4">
+                        <div className="text-xs">
+                          <p className="font-medium text-gray-700 dark:text-slate-300">{url.createdBy?.name || 'System'}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-xs text-gray-500">
                         {new Date(url.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="py-2 px-4">
-                        <Button
-                          onClick={() => copyToClipboard(url.shortUrl, 'URL')}
-                          variant="outline"
-                          className="text-xs flex items-center gap-1"
-                        >
-                          <CopyIcon className="w-3 h-3" />
-                          Copy
-                        </Button>
+                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            onClick={() => copyToClipboard(url.shortUrl || url.originalUrl, 'URL')}
+                            variant="outline"
+                            className="p-1.5"
+                            title="Copy Link"
+                          >
+                            <CopyIcon className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setSelectedUrlId(url._id);
+                              setShowAnalyticsModal(true);
+                            }}
+                            variant="outline"
+                            className="p-1.5"
+                            title="View Analytics"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
