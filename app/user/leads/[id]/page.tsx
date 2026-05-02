@@ -1086,7 +1086,7 @@ export default function UserLeadDetailPage() {
       if (response.success) {
         setGeneratedVisitorCode(response.data);
         setShowVisitorCodeModal(true);
-        showToast.success('Visitor code generated! It has been logged to the server.');
+        showToast.success('Visitor code generated and sent to lead!');
       } else {
         showToast.error(response.message || 'Failed to generate code');
       }
@@ -3196,11 +3196,16 @@ export default function UserLeadDetailPage() {
             <DialogTitle className="text-xl font-bold text-center">Visitor Code Generated</DialogTitle>
           </DialogHeader>
           <div className="py-8 flex flex-col items-center">
-            <div className="text-5xl font-mono font-bold tracking-widest text-indigo-600 dark:text-indigo-400 mb-4">
-              {generatedVisitorCode?.code}
+            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-            <p className="text-sm text-slate-500 text-center px-4">
-              This code is valid for 24 hours. Please share this with the visitor for verification at the desk.
+            <p className="text-base text-slate-700 dark:text-slate-300 text-center px-4 font-medium">
+              Visitor code has been generated and sent to the lead's mobile number via SMS.
+            </p>
+            <p className="text-sm text-slate-500 text-center px-4 mt-2">
+              The lead can use this code for verification when they visit the campus.
             </p>
             {generatedVisitorCode?.expiresAt && (
               <p className="text-xs text-slate-400 mt-2">
