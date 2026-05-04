@@ -145,11 +145,23 @@ export default function AssignLeadsPage() {
 
       const isProExport = String(exportTargetRole || '').trim().toUpperCase() === 'PRO';
 
-      const dataToExport = exportData.map((lead: any) => {
+      // Sort by village if it's a PRO export
+      const sortedExportData = [...exportData];
+      if (isProExport) {
+        sortedExportData.sort((a, b) => {
+          const vA = String(a.village || '').trim().toLowerCase();
+          const vB = String(b.village || '').trim().toLowerCase();
+          return vA.localeCompare(vB);
+        });
+      }
+
+      const dataToExport = sortedExportData.map((lead: any) => {
         if (isProExport) {
           return {
             'Lead Name': lead.name ?? '',
             'Phone Number': lead.phone ?? '',
+            'Father Name': lead.fatherName ?? '',
+            'Father Phone': lead.fatherPhone ?? '',
             District: lead.district ?? '',
             Mandal: lead.mandal ?? '',
             Village: lead.village ?? '',
@@ -160,6 +172,8 @@ export default function AssignLeadsPage() {
         return {
           'Lead Name': lead.name ?? '',
           'Phone Number': lead.phone ?? '',
+          'Father Name': lead.fatherName ?? '',
+          'Father Phone': lead.fatherPhone ?? '',
           Remarks: lead.remarks || '',
         };
       });

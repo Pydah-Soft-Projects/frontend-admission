@@ -666,6 +666,7 @@ function BulkSmsReviewModal({
   isSending,
   onConfirmSend,
   subtitle,
+  statusBreakdown,
 }: {
   open: boolean;
   onClose: () => void;
@@ -675,6 +676,7 @@ function BulkSmsReviewModal({
   isSending?: boolean;
   onConfirmSend: (rows: SmsReviewRow[]) => void | Promise<void>;
   subtitle?: string;
+  statusBreakdown?: Record<string, number>;
 }) {
   const [draft, setDraft] = useState<SmsReviewRow[]>([]);
 
@@ -763,6 +765,16 @@ function BulkSmsReviewModal({
                 {template.dltTemplateId || '—'}
               </p>
             ) : null}
+            {statusBreakdown && Object.keys(statusBreakdown).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                {Object.entries(statusBreakdown).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
+                  <span key={status} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                    {status || 'Unknown'}: {count.toLocaleString()}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -921,12 +933,14 @@ function TestTemplateSmsModal({
   const [phone, setPhone] = useState('');
   const [headerHandle, setHeaderHandle] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [hasUploaded, setHasUploaded] = useState(false);
   const [varRows, setVarRows] = useState<{ key: string; value: string }[]>([]);
 
   useEffect(() => {
     if (!open || !template) return;
     setPhone('');
     setHeaderHandle(template.headerHandle || '');
+    setHasUploaded(false);
     setVarRows(buildSmsVariablesFromTemplate(template));
   }, [open, template]);
 
@@ -1018,7 +1032,8 @@ function TestTemplateSmsModal({
                   onChange={(e) => setHeaderHandle(e.target.value)}
                   placeholder="URL or Media ID"
                   className="flex-1 font-mono text-[11px]"
-                  disabled={mutation.isPending || isUploading}
+                  disabled={mutation.isPending || isUploading || hasUploaded}
+                  readOnly={hasUploaded}
                 />
                 <div className="relative">
                   <input
@@ -1043,9 +1058,11 @@ function TestTemplateSmsModal({
                         
                         if (res.data?.id) {
                           setHeaderHandle(res.data.id);
+                          setHasUploaded(true);
                           showToast.success('Media uploaded to Meta successfully');
                         } else if (res.data?.url) {
                           setHeaderHandle(res.data.url);
+                          setHasUploaded(true);
                           showToast.success('Media uploaded successfully');
                         }
                       } catch (err: any) {
@@ -2261,6 +2278,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
 
   const [smsReviewOpen, setSmsReviewOpen] = useState(false);
   const [smsReviewRows, setSmsReviewRows] = useState<SmsReviewRow[]>([]);
+  const [smsReviewStatusBreakdown, setSmsReviewStatusBreakdown] = useState<Record<string, number>>({});
   const [isPreparingSmsReview, setIsPreparingSmsReview] = useState(false);
   const smsPrepareGenRef = useRef(0);
 
@@ -2325,6 +2343,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     setSmsReviewOpen(true);
     setIsPreparingSmsReview(true);
     setSmsReviewRows([]);
+    setSmsReviewStatusBreakdown({});
     try {
       const allLeads: Lead[] = [];
       const pageSize = 500;
@@ -2354,6 +2373,15 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
         return;
       }
       const targetLeads = allLeads.filter(leadHasRecipient).slice(0, MAX_SMS_BULK_LEADS);
+      
+      // Calculate status breakdown of all loaded leads
+      const breakdown: Record<string, number> = {};
+      allLeads.forEach(l => {
+        const s = l.leadStatus || 'No Status';
+        breakdown[s] = (breakdown[s] || 0) + 1;
+      });
+      setSmsReviewStatusBreakdown(breakdown);
+
       const rows: SmsReviewRow[] = [];
       for (const lead of targetLeads) {
         const numbers = buildRecipientNumbersForLead(lead, sendPrimary, sendFather);
@@ -2398,6 +2426,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     setIsPreparingSmsReview(false);
     setSmsReviewOpen(false);
     setSmsReviewRows([]);
+    setSmsReviewStatusBreakdown({});
   }, [confirmSendMutation.isPending]);
 
   const filterSelectClass =
@@ -2681,6 +2710,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
         isPreparing={isPreparingSmsReview}
         isSending={confirmSendMutation.isPending}
         onConfirmSend={(rows) => confirmSendMutation.mutate(rows)}
+        statusBreakdown={smsReviewStatusBreakdown}
         subtitle={`Edit variables per lead, then queue a background job (up to ${MAX_SMS_BULK_LEADS} SMS).`}
       />
     </div>
