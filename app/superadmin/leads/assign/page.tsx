@@ -54,6 +54,7 @@ export default function AssignLeadsPage() {
   const [mandal, setMandal] = useState('');
   const [state, setState] = useState('');
   const [district, setDistrict] = useState('');
+  const [village, setVillage] = useState('');
   /** Academic year for the stats cards and bulk assignment. Default '' = All (matches dashboard). */
   const [statsAcademicYear, setStatsAcademicYear] = useState<number | ''>('');
   const [statsStudentGroup, setStatsStudentGroup] = useState<string>('');
@@ -61,15 +62,18 @@ export default function AssignLeadsPage() {
   const [statsState, setStatsState] = useState('');
   const [statsDistrict, setStatsDistrict] = useState('');
   const [statsMandal, setStatsMandal] = useState('');
+  const [statsVillage, setStatsVillage] = useState('');
   const [statsCycleNumber, setStatsCycleNumber] = useState<number | ''>('');
   const [debouncedStatsState, setDebouncedStatsState] = useState('');
   const [debouncedStatsDistrict, setDebouncedStatsDistrict] = useState('');
   const [debouncedStatsMandal, setDebouncedStatsMandal] = useState('');
+  const [debouncedStatsVillage, setDebouncedStatsVillage] = useState('');
   const [debouncedStatsAcademicYear, setDebouncedStatsAcademicYear] = useState<number | ''>('');
   const [debouncedStatsStudentGroup, setDebouncedStatsStudentGroup] = useState('');
   const [debouncedStatsCycleNumber, setDebouncedStatsCycleNumber] = useState<number | ''>('');
   const [statsLocationDistricts, setStatsLocationDistricts] = useState<LocationOption[]>([]);
   const [statsLocationMandals, setStatsLocationMandals] = useState<LocationOption[]>([]);
+  const [statsLocationVillages, setStatsLocationVillages] = useState<LocationOption[]>([]);
   const [academicYear, setAcademicYear] = useState<number | ''>(2026);
   const [studentGroup, setStudentGroup] = useState<string>('');
   const [count, setCount] = useState<number | ''>('');
@@ -82,14 +86,17 @@ export default function AssignLeadsPage() {
   const [locationStates, setLocationStates] = useState<LocationOption[]>([]);
   const [locationDistricts, setLocationDistricts] = useState<LocationOption[]>([]);
   const [locationMandals, setLocationMandals] = useState<LocationOption[]>([]);
+  const [locationVillages, setLocationVillages] = useState<LocationOption[]>([]);
 
   // Remove assignment state
   const [removeUserId, setRemoveUserId] = useState('');
   const [removeMandal, setRemoveMandal] = useState('');
   const [removeState, setRemoveState] = useState('');
   const [removeDistrict, setRemoveDistrict] = useState('');
+  const [removeVillage, setRemoveVillage] = useState('');
   const [removeLocationDistricts, setRemoveLocationDistricts] = useState<LocationOption[]>([]);
   const [removeLocationMandals, setRemoveLocationMandals] = useState<LocationOption[]>([]);
+  const [removeLocationVillages, setRemoveLocationVillages] = useState<LocationOption[]>([]);
   const [removeAcademicYear, setRemoveAcademicYear] = useState<number | ''>('');
   const [removeStudentGroup, setRemoveStudentGroup] = useState<string>('');
   const [removeCycleNumber, setRemoveCycleNumber] = useState<number | ''>('');
@@ -308,6 +315,28 @@ export default function AssignLeadsPage() {
     return () => { cancelled = true; };
   }, [state, district]);
 
+  // When mandal (bulk) changes: fetch villages
+  useEffect(() => {
+    if (!state || !district || !mandal) {
+      setLocationVillages([]);
+      setVillage('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listVillages({ stateName: state, districtName: district, mandalName: mandal });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationVillages(arr.map((v: { id?: string; name: string }) => ({ id: v.id || v.name || '', name: v.name || String(v) })));
+        setVillage('');
+      } catch (e) {
+        if (!cancelled) setLocationVillages([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [state, district, mandal]);
+
   // When removeState changes: fetch remove districts, clear remove district & mandal
   useEffect(() => {
     if (!removeState) {
@@ -355,6 +384,28 @@ export default function AssignLeadsPage() {
     })();
     return () => { cancelled = true; };
   }, [removeState, removeDistrict]);
+
+  // When removeMandal changes: fetch remove villages
+  useEffect(() => {
+    if (!removeState || !removeDistrict || !removeMandal) {
+      setRemoveLocationVillages([]);
+      setRemoveVillage('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listVillages({ stateName: removeState, districtName: removeDistrict, mandalName: removeMandal });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setRemoveLocationVillages(arr.map((v: { id?: string; name: string }) => ({ id: v.id || v.name || '', name: v.name || String(v) })));
+        setRemoveVillage('');
+      } catch (e) {
+        if (!cancelled) setRemoveLocationVillages([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [removeState, removeDistrict, removeMandal]);
 
   // Stats tab: when statsState changes, load districts and clear district/mandal
   useEffect(() => {
@@ -404,6 +455,28 @@ export default function AssignLeadsPage() {
     return () => { cancelled = true; };
   }, [statsState, statsDistrict]);
 
+  // Stats tab: when statsMandal changes, load villages
+  useEffect(() => {
+    if (!statsState || !statsDistrict || !statsMandal) {
+      setStatsLocationVillages([]);
+      setStatsVillage('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listVillages({ stateName: statsState, districtName: statsDistrict, mandalName: statsMandal });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setStatsLocationVillages(arr.map((v: { id?: string; name: string }) => ({ id: v.id || v.name || '', name: v.name || String(v) })));
+        setStatsVillage('');
+      } catch {
+        if (!cancelled) setStatsLocationVillages([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [statsState, statsDistrict, statsMandal]);
+
   // Location context: Stats tab uses its own dropdowns; bulk/remove use bulk/remove forms; institution tab has no geo (summary uses year / group / cycle only).
   useEffect(() => {
     if (mode !== 'stats') return;
@@ -411,16 +484,18 @@ export default function AssignLeadsPage() {
       setDebouncedStatsState(statsState);
       setDebouncedStatsDistrict(statsDistrict);
       setDebouncedStatsMandal(statsMandal);
+      setDebouncedStatsVillage(statsVillage);
       setDebouncedStatsAcademicYear(statsAcademicYear);
       setDebouncedStatsStudentGroup(statsStudentGroup);
       setDebouncedStatsCycleNumber(statsCycleNumber);
     }, 300);
     return () => clearTimeout(t);
-  }, [mode, statsState, statsDistrict, statsMandal, statsAcademicYear, statsStudentGroup, statsCycleNumber]);
+  }, [mode, statsState, statsDistrict, statsMandal, statsVillage, statsAcademicYear, statsStudentGroup, statsCycleNumber]);
 
   const statsQueryState = mode === 'stats' ? debouncedStatsState : mode === 'institution' ? '' : state;
   const statsQueryDistrict = mode === 'stats' ? debouncedStatsDistrict : mode === 'institution' ? '' : district;
   const statsQueryMandal = mode === 'stats' ? debouncedStatsMandal : mode === 'institution' ? '' : mandal;
+  const statsQueryVillage = mode === 'stats' ? debouncedStatsVillage : mode === 'institution' ? '' : village;
 
   // Top stats: bulk tab uses the bulk form filters; stats tab uses debounced stats filters; institution tab uses year / student group / cycle only (no state/district/mandal).
   const statsQueryAcademicYear =
@@ -455,9 +530,10 @@ export default function AssignLeadsPage() {
     isLoading: isStatsLoading,
     isFetching: isStatsFetching
   } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStats', mode, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryKey: ['assignmentStats', mode, statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
+        village: statsQueryVillage || undefined,
         mandal: statsQueryMandal || undefined,
         district: statsQueryDistrict || undefined,
         state: statsQueryState || undefined,
@@ -485,9 +561,10 @@ export default function AssignLeadsPage() {
   const stats = statsData?.data;
 
   const { data: statsBreakdownsData, isFetching: isBreakdownsFetching } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStatsBreakdowns', statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryKey: ['assignmentStatsBreakdowns', statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
+        village: statsQueryVillage || undefined,
         mandal: statsQueryMandal || undefined,
         district: statsQueryDistrict || undefined,
         state: statsQueryState || undefined,
@@ -561,6 +638,35 @@ export default function AssignLeadsPage() {
       (mode === 'bulk' || mode === 'stats') &&
       !!statsQueryState &&
       !!statsQueryDistrict &&
+      !(mode === 'bulk' && academicYear === ''),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: villageGeoStatsRaw, isFetching: isVillageGeoFetching } = useQuery({
+    queryKey: ['assignmentStatsGeo', 'village', mode, statsQueryState, statsQueryDistrict, statsQueryMandal, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryFn: async () => {
+      const response = await leadAPI.getAssignmentStats({
+        academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
+        studentGroup: statsQueryStudentGroup || undefined,
+        cycleNumber: statsQueryCycleNumber !== '' ? statsQueryCycleNumber : undefined,
+        state: statsQueryState || undefined,
+        district: statsQueryDistrict || undefined,
+        mandal: statsQueryMandal || undefined,
+        geoBreakdown: 'village',
+        targetRole: targetRole || undefined,
+        includeBreakdowns: false,
+      });
+      const payload = (response?.data ?? response) as any;
+      return payload;
+    },
+    enabled:
+      isReady &&
+      !!currentUser &&
+      (mode === 'bulk' || mode === 'stats') &&
+      !!statsQueryState &&
+      !!statsQueryDistrict &&
+      !!statsQueryMandal &&
       !(mode === 'bulk' && academicYear === ''),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -641,6 +747,15 @@ export default function AssignLeadsPage() {
     }
     return m;
   }, [mandalGeoStatsRaw]);
+
+  const villageCountByName = useMemo(() => {
+    const m = new Map<string, { u: number; a: number }>();
+    for (const row of villageGeoStatsRaw?.villageAssignmentBreakdown || []) {
+      const k = String(row.village || '').trim().toLowerCase();
+      m.set(k, { u: row.unassignedCount, a: row.assignedCount });
+    }
+    return m;
+  }, [villageGeoStatsRaw]);
 
   // Institution-wise: use schools for 10th, colleges for Inter/Degree etc.
   const institutionUseSchools = institutionStudentGroup === '10th';
@@ -786,11 +901,12 @@ export default function AssignLeadsPage() {
     isFetching: isRemoveUserCountFetching,
     isError: isRemoveUserCountError,
   } = useQuery<{ data: { count: number } }>({
-    queryKey: ['assignedCountForUser', removeUserId, removeMandal, removeDistrict, removeState, removeAcademicYear, removeStudentGroup, removeCycleNumber],
+    queryKey: ['assignedCountForUser', removeUserId, removeVillage, removeMandal, removeDistrict, removeState, removeAcademicYear, removeStudentGroup, removeCycleNumber],
     queryFn: async () => {
       if (!removeUserId) return { data: { count: 0 } };
       const { count } = await leadAPI.getAssignedCountForUser({
         userId: removeUserId,
+        village: removeVillage || undefined,
         mandal: removeMandal || undefined,
         district: removeDistrict || undefined,
         state: removeState || undefined,
@@ -859,6 +975,7 @@ export default function AssignLeadsPage() {
       mandal?: string;
       district?: string;
       state?: string;
+      village?: string;
       academicYear?: number | string;
       studentGroup?: string;
       count?: number;
@@ -898,6 +1015,7 @@ export default function AssignLeadsPage() {
         setMandal('');
         setState('');
         setDistrict('');
+        setVillage('');
         setStudentGroup('');
         setAcademicYear(2026);
         setCycleNumber('');
@@ -927,6 +1045,7 @@ export default function AssignLeadsPage() {
       mandal?: string;
       district?: string;
       state?: string;
+      village?: string;
       academicYear?: number | string;
       studentGroup?: string;
       cycleNumber?: number | string;
@@ -944,6 +1063,7 @@ export default function AssignLeadsPage() {
       setRemoveMandal('');
       setRemoveState('');
       setRemoveDistrict('');
+      setRemoveVillage('');
       setRemoveAcademicYear('');
       setRemoveStudentGroup('');
       setRemoveCycleNumber('');
@@ -979,6 +1099,7 @@ export default function AssignLeadsPage() {
       mandal: mandal || undefined,
       district: district || undefined,
       state: state || undefined,
+      village: village || undefined,
       academicYear,
       studentGroup: studentGroup || undefined,
       targetDate: targetDate.trim(),
@@ -1066,6 +1187,7 @@ export default function AssignLeadsPage() {
       mandal: removeMandal || undefined,
       district: removeDistrict || undefined,
       state: removeState || undefined,
+      village: removeVillage || undefined,
       academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
       studentGroup: removeStudentGroup || undefined,
       cycleNumber: removeCycleNumber !== '' ? removeCycleNumber : undefined,
@@ -1369,9 +1491,14 @@ export default function AssignLeadsPage() {
                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:opacity-50"
                   >
                     <option value="">All Districts</option>
-                    {statsLocationDistricts.map((d) => (
-                      <option key={d.id || d.name} value={d.name}>{d.name}</option>
-                    ))}
+                    {statsLocationDistricts.map((d) => {
+                      const c = districtCountByName.get(String(d.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
+                      return (
+                        <option key={d.id || d.name} value={d.name}>
+                          {d.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -1380,12 +1507,36 @@ export default function AssignLeadsPage() {
                     value={statsMandal}
                     onChange={(e) => setStatsMandal(e.target.value)}
                     disabled={!statsDistrict}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:opacity-50"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
                   >
                     <option value="">All Mandals</option>
-                    {statsLocationMandals.map((m) => (
-                      <option key={m.id || m.name} value={m.name}>{m.name}</option>
-                    ))}
+                    {statsLocationMandals.map((m) => {
+                      const c = mandalCountByName.get(String(m.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
+                      return (
+                        <option key={m.id || m.name} value={m.name}>
+                          {m.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Village</label>
+                  <select
+                    value={statsVillage}
+                    onChange={(e) => setStatsVillage(e.target.value)}
+                    disabled={!statsMandal}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
+                  >
+                    <option value="">All Villages</option>
+                    {statsLocationVillages.map((v) => {
+                      const c = villageCountByName.get(String(v.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
+                      return (
+                        <option key={v.id || v.name} value={v.name}>
+                          {v.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -1883,29 +2034,56 @@ export default function AssignLeadsPage() {
                     disabled={!removeState}
                   >
                     <option value="">All Districts</option>
-                    {removeLocationDistricts.map((d) => (
-                      <option key={d.id || d.name} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
+                    {removeLocationDistricts.map((d) => {
+                      const c = districtCountByName.get(String(d.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
+                      return (
+                        <option key={d.id || d.name} value={d.name}>
+                          {d.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Mandal (optional)
+                    Mandal
                   </label>
                   <select
-                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    className="w-full min-w-0 rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                     value={removeMandal}
                     onChange={(e) => setRemoveMandal(e.target.value)}
                     disabled={!removeDistrict}
                   >
                     <option value="">All Mandals</option>
-                    {removeLocationMandals.map((m) => (
-                      <option key={m.id || m.name} value={m.name}>
-                        {m.name}
-                      </option>
-                    ))}
+                    {removeLocationMandals.map((m) => {
+                      const c = mandalCountByName.get(String(m.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
+                      return (
+                        <option key={m.id || m.name} value={m.name}>
+                          {m.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div className="min-w-0">
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Village
+                  </label>
+                  <select
+                    className="w-full min-w-0 rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={removeVillage}
+                    onChange={(e) => setRemoveVillage(e.target.value)}
+                    disabled={!removeMandal}
+                  >
+                    <option value="">All Villages</option>
+                    {removeLocationVillages.map((v) => {
+                      const c = villageCountByName.get(String(v.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
+                      return (
+                        <option key={v.id || v.name} value={v.name}>
+                          {v.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -1927,7 +2105,8 @@ export default function AssignLeadsPage() {
                   {removeAcademicYear !== '' && ` for ${removeAcademicYear}`}
                   {removeStudentGroup && `, ${removeStudentGroup}`}
                   {removeCycleNumber !== '' && `, cycle ${removeCycleNumber}`}
-                  {removeMandal && ` in ${removeMandal}`}
+                  {removeVillage && ` in ${removeVillage}`}
+                  {removeMandal && `, ${removeMandal}`}
                   {removeState && `, ${removeState}`}
                 </p>
               </div>
@@ -2088,7 +2267,7 @@ export default function AssignLeadsPage() {
                 Reclaim runs when that slot&apos;s date is due (pipeline rules apply). &quot;Assigned&quot; keeps the same cycle; &quot;Not Interested&quot; and &quot;Wrong Data&quot; advance cycle on reclaim when the lead is fully unassigned.
               </p>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                     State (optional)
@@ -2105,9 +2284,6 @@ export default function AssignLeadsPage() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Select state first, then district and mandal.
-                  </p>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -2124,7 +2300,7 @@ export default function AssignLeadsPage() {
                       const c = districtCountByName.get(String(d.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
                       return (
                         <option key={d.id || d.name} value={d.name}>
-                          {d.name} — Unassigned: {c.u.toLocaleString()}, Assigned: {c.a.toLocaleString()}
+                          {d.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
                         </option>
                       );
                     })}
@@ -2145,16 +2321,37 @@ export default function AssignLeadsPage() {
                       const c = mandalCountByName.get(String(m.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
                       return (
                         <option key={m.id || m.name} value={m.name}>
-                          {m.name} — Unassigned: {c.u.toLocaleString()}, Assigned: {c.a.toLocaleString()}
+                          {m.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
                         </option>
                       );
                     })}
                   </select>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Filter by state → district → mandal. Leave blank for all.
-                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Village (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={village}
+                    onChange={(e) => setVillage(e.target.value)}
+                    disabled={!mandal}
+                  >
+                    <option value="">All Villages</option>
+                    {locationVillages.map((v) => {
+                      const c = villageCountByName.get(String(v.name).trim().toLowerCase()) ?? { u: 0, a: 0 };
+                      return (
+                        <option key={v.id || v.name} value={v.name}>
+                          {v.name} — UA: {c.u.toLocaleString()}, A: {c.a.toLocaleString()}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
               </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                Filter by state → district → mandal → village. Leave blank for all.
+              </p>
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -2172,7 +2369,8 @@ export default function AssignLeadsPage() {
                   Number of {targetRole === 'PRO' ? 'available' : 'unassigned'} leads to assign. Available: {stats?.unassignedCount.toLocaleString() || 0} leads
                   {academicYear !== '' && ` for ${academicYear}`}
                   {studentGroup && `, ${studentGroup}`}
-                  {mandal && ` in ${mandal}`}
+                  {village && ` in ${village}`}
+                  {mandal && `, ${mandal}`}
                   {state && `, ${state}`}
                 </p>
                 <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">

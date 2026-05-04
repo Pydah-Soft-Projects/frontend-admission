@@ -470,6 +470,7 @@ export const leadAPI = {
     institutionName?: string;
     targetDate?: string;
     district?: string;
+    village?: string;
     cycleNumber?: number | string;
   }) => {
     const response = await api.post('/leads/assign', data);
@@ -483,6 +484,8 @@ export const leadAPI = {
     institutionName?: string;
     forBreakdown?: 'school' | 'college';
     district?: string;
+    mandal?: string;
+    village?: string;
     cycleNumber?: number | string;
     targetRole?: string;
     /** When `district`, requires `state`. When `mandal`, requires `state` and `district`. */
@@ -496,6 +499,7 @@ export const leadAPI = {
   }) => {
     const queryParams = new URLSearchParams();
     if (params?.mandal) queryParams.append('mandal', params.mandal);
+    if (params?.village) queryParams.append('village', params.village);
     if (params?.district) queryParams.append('district', params.district);
     if (params?.state) queryParams.append('state', params.state);
     if (params?.academicYear != null && params.academicYear !== '') queryParams.append('academicYear', String(params.academicYear));
@@ -517,6 +521,7 @@ export const leadAPI = {
     mandal?: string;
     district?: string;
     state?: string;
+    village?: string;
     academicYear?: number | string;
     studentGroup?: string;
     cycleNumber?: number | string;
@@ -524,6 +529,7 @@ export const leadAPI = {
     const queryParams = new URLSearchParams();
     queryParams.append('userId', String(params.userId).trim());
     if (params.mandal) queryParams.append('mandal', params.mandal);
+    if (params.village) queryParams.append('village', params.village);
     if (params.district) queryParams.append('district', params.district);
     if (params.state) queryParams.append('state', params.state);
     if (params.academicYear != null && params.academicYear !== '') queryParams.append('academicYear', String(params.academicYear));
@@ -549,6 +555,8 @@ export const leadAPI = {
     academicYear?: number | string;
     studentGroup?: string;
     district?: string;
+    mandal?: string;
+    village?: string;
     cycleNumber?: number | string;
     count: number;
   }) => {
@@ -855,18 +863,20 @@ export const paymentSettingsAPI = {
 
 // Communications API
 export const communicationAPI = {
-  getTemplates: async (filters?: {
+  getTemplates: async (params?: {
     language?: string;
     isActive?: boolean;
     search?: string;
     templateGroupId?: string;
+    category?: 'sms' | 'whatsapp';
   }) => {
-    const params = new URLSearchParams();
-    if (filters?.language) params.append('language', filters.language);
-    if (filters?.isActive !== undefined) params.append('isActive', String(filters.isActive));
-    if (filters?.search) params.append('search', filters.search);
-    if (filters?.templateGroupId) params.append('templateGroupId', filters.templateGroupId);
-    const query = params.toString();
+    const queryParams = new URLSearchParams();
+    if (params?.language) queryParams.append('language', params.language);
+    if (params?.isActive !== undefined) queryParams.append('isActive', String(params.isActive));
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.templateGroupId) queryParams.append('templateGroupId', params.templateGroupId);
+    if (params?.category) queryParams.append('category', params.category);
+    const query = queryParams.toString();
     const response = await api.get(`/communications/templates${query ? `?${query}` : ''}`);
     return response.data;
   },
@@ -891,9 +901,10 @@ export const communicationAPI = {
     const response = await api.delete(`/communications/templates/groups/${encodeURIComponent(id)}`);
     return response.data?.data ?? response.data;
   },
-  getActiveTemplates: async (language?: string) => {
+  getActiveTemplates: async (language?: string, category?: 'sms' | 'whatsapp') => {
     const params = new URLSearchParams();
     if (language) params.append('language', language);
+    if (category) params.append('category', category);
     const query = params.toString();
     const response = await api.get(
       `/communications/templates/active${query ? `?${query}` : ''}`
@@ -939,6 +950,12 @@ export const communicationAPI = {
     return response.data;
   },
   /** Super Admin: send rendered template to one number (no lead / no communications log row). */
+  uploadWhatsAppMedia: async (formData: FormData) => {
+    const response = await api.post('/communications/whatsapp/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
   testTemplateSms: async (
     templateId: string,
     data: { phone: string; variables?: Array<{ key: string; value: string }> }
@@ -966,6 +983,17 @@ export const communicationAPI = {
     const response = await api.post(`/communications/lead/${leadId}/sms`, data);
     return response.data;
   },
+  sendWhatsApp: async (
+    leadId: string,
+    data: {
+      contactNumbers: string[];
+      templateId: string;
+      variables?: Record<string, string>;
+    }
+  ) => {
+    const response = await api.post(`/communications/lead/${leadId}/whatsapp`, data);
+    return response.data;
+  },
   getHistory: async (
     leadId: string,
     params?: { page?: number; limit?: number; type?: 'call' | 'sms' }
@@ -983,6 +1011,10 @@ export const communicationAPI = {
   getStats: async (leadId: string) => {
     const response = await api.get(`/communications/lead/${leadId}/stats`);
     return response.data;
+  },
+  syncWhatsAppTemplates: async () => {
+    const response = await api.post('/communications/whatsapp/sync-templates');
+    return response.data as { success: boolean; message: string; data: { syncCount: number } };
   },
   /** Super Admin: queue large batch SMS; processes in background (see Communications → SMS job reports). */
   createBulkSmsJob: async (body: {
@@ -1002,6 +1034,29 @@ export const communicationAPI = {
     }>;
   }) => {
     const response = await api.post('/communications/sms-bulk/jobs', body);
+    return (response.data?.data ?? response.data) as {
+      jobId: string;
+      totalItems: number;
+      templateName: string;
+      message?: string;
+    };
+  },
+  createBulkWhatsAppJob: async (body: {
+    source: 'send_to_leads' | 'user_specific_leads';
+    templateId: string;
+    reportContext?: {
+      studentGroup?: string | null;
+      district?: string | null;
+      selectedUsers: Array<{ id: string; name: string }>;
+    };
+    items: Array<{
+      leadId: string;
+      leadName?: string;
+      contactNumbers: string[];
+      variables?: Record<string, string> | Array<{ key: string, value: string }>;
+    }>;
+  }) => {
+    const response = await api.post('/communications/whatsapp-bulk/jobs', body);
     return (response.data?.data ?? response.data) as {
       jobId: string;
       totalItems: number;
@@ -1366,12 +1421,13 @@ export const reportAPI = {
     // Extract the nested data property for consistency
     return response.data?.data || response.data;
   },
-  getLeadsAbstract: async (params: { academicYear: number | string; studentGroup?: string; stateId?: string; districtId?: string }) => {
+  getLeadsAbstract: async (params: { academicYear: number | string; studentGroup?: string; stateId?: string; districtId?: string; mandalId?: string }) => {
     const queryParams = new URLSearchParams();
     queryParams.append('academicYear', String(params.academicYear));
     if (params.studentGroup) queryParams.append('studentGroup', params.studentGroup);
     if (params.stateId) queryParams.append('stateId', params.stateId);
     if (params.districtId) queryParams.append('districtId', params.districtId);
+    if (params.mandalId) queryParams.append('mandalId', params.mandalId);
     const response = await api.get(`/reports/leads-abstract?${queryParams.toString()}`);
     return response.data?.data || response.data;
   },
@@ -1579,8 +1635,15 @@ export const locationsAPI = {
   },
   listColleges: async () => {
     const response = await api.get('/locations/colleges');
-    const data = response.data?.data ?? response.data;
-    return Array.isArray(data) ? data : [];
+    return response.data?.data || response.data;
+  },
+  listVillages: async (params: { stateName: string; districtName: string; mandalName: string }) => {
+    const q = new URLSearchParams();
+    if (params.stateName) q.append('stateName', params.stateName);
+    if (params.districtName) q.append('districtName', params.districtName);
+    if (params.mandalName) q.append('mandalName', params.mandalName);
+    const response = await api.get(`/locations/villages?${q.toString()}`);
+    return response.data?.data || response.data;
   },
 };
 

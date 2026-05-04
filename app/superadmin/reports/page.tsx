@@ -194,6 +194,7 @@ export default function ReportsPage() {
     studentGroup: '',
     abstractStateId: '',
     abstractDistrictId: '',
+    abstractMandalId: '',
   });
 
   // Fetch users
@@ -1443,6 +1444,31 @@ export default function ReportsPage() {
         districtId: filters.abstractDistrictId || undefined,
       }),
     enabled: activeTab === 'abstract' && !!filters.abstractDistrictId,
+    staleTime: 60000,
+    retry: 2,
+  });
+
+  const {
+    data: leadsAbstractVillages,
+    isLoading: isLoadingAbstractVillages,
+    isFetching: isFetchingAbstractVillages,
+  } = useQuery({
+    queryKey: [
+      'leadsAbstract',
+      'villages',
+      filters.academicYear,
+      filters.studentGroup,
+      filters.abstractStateId,
+      filters.abstractDistrictId,
+      filters.abstractMandalId,
+    ],
+    queryFn: () =>
+      reportAPI.getLeadsAbstract({
+        ...abstractReportParams,
+        districtId: filters.abstractDistrictId || undefined,
+        mandalId: filters.abstractMandalId || undefined,
+      }),
+    enabled: activeTab === 'abstract' && !!filters.abstractMandalId,
     staleTime: 60000,
     retry: 2,
   });
@@ -4325,12 +4351,12 @@ export default function ReportsPage() {
               <LeadsAbstractSkeleton />
             ) : leadsAbstractDistricts ? (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-16rem)]">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-16rem)]">
                 {/* Districts table – always shown first */}
-                <Card className="flex flex-col overflow-hidden h-full">
+                <Card noPadding className="flex flex-col overflow-hidden h-full">
                   <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Totals per district (counselor assigned vs unassigned) · Select a row for mandals</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Totals per district · Select row for mandals</p>
                   </div>
                   <div className="flex-1 overflow-y-auto">
                     {isFetchingAbstractDistricts && !leadsAbstractDistricts ? (
@@ -4360,7 +4386,7 @@ export default function ReportsPage() {
                               key={row.id ?? `district-${idx}`}
                               onClick={() => {
                                 if (row.id) {
-                                  setFilters({ ...filters, abstractDistrictId: row.id });
+                                  setFilters({ ...filters, abstractDistrictId: row.id, abstractMandalId: '' });
                                 }
                               }}
                               className={`grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center px-3 py-2.5 text-sm cursor-pointer transition-colors sm:px-4 md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem] ${filters.abstractDistrictId === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
@@ -4382,12 +4408,12 @@ export default function ReportsPage() {
                   </div>
                 </Card>
 
-                {/* Mandals table – only when a district is selected; loading state isolated here */}
+                {/* Mandals table – only when a district is selected */}
                 {filters.abstractDistrictId ? (
-                  <Card className="flex flex-col overflow-hidden h-full">
+                  <Card noPadding className="flex flex-col overflow-hidden h-full">
                     <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Assigned vs unassigned per mandal for the selected district</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Assigned vs unassigned · Select row for villages</p>
                     </div>
                     <div className="flex-1 overflow-y-auto">
                       {(isLoadingAbstractMandals || isFetchingAbstractMandals) && !leadsAbstractMandals ? (
@@ -4400,7 +4426,7 @@ export default function ReportsPage() {
                         </div>
                       ) : (leadsAbstractMandals?.mandalBreakdown || []).length === 0 ? (
                         <div className="flex items-center justify-center h-full p-4 text-sm text-slate-500">
-                          No mandals found for this district
+                          No mandals found
                         </div>
                       ) : (
                         <>
@@ -4417,8 +4443,12 @@ export default function ReportsPage() {
                             {(leadsAbstractMandals?.mandalBreakdown || []).map((row: { id?: string; name: string; count: number; assignedCount?: number; unassignedCount?: number }, idx: number) => (
                               <li
                                 key={row.id ?? `mandal-${idx}`}
-                                className={`grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center px-3 py-2.5 text-sm sm:px-4 md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem] ${row.name === leadsAbstractMandals?.maxMandal ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                                  }`}
+                                onClick={() => {
+                                  if (row.id) {
+                                    setFilters({ ...filters, abstractMandalId: row.id });
+                                  }
+                                }}
+                                className={`grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center px-3 py-2.5 text-sm cursor-pointer transition-colors sm:px-4 md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem] ${filters.abstractMandalId === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
                               >
                                 <span className="min-w-0 text-slate-900 dark:text-slate-100 truncate">
                                   {row.name}
@@ -4437,8 +4467,67 @@ export default function ReportsPage() {
                     </div>
                   </Card>
                 ) : (
-                  <div className="hidden md:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cbd5e1] dark:border-[#475569] dark:bg-[#334155]/50 text-slate-400 p-8 text-center">
-                    <p>Select a district to view mandal breakdown</p>
+                  <div className="hidden lg:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cbd5e1] dark:border-[#475569] dark:bg-[#334155]/50 text-slate-400 p-8 text-center h-full">
+                    <p>Select a district to view mandals</p>
+                  </div>
+                )}
+
+                {/* Villages table – only when a mandal is selected */}
+                {filters.abstractMandalId ? (
+                  <Card noPadding className="flex flex-col overflow-hidden h-full">
+                    <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Villages</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Aggregated from leads for the selected mandal</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                      {(isLoadingAbstractVillages || isFetchingAbstractVillages) && !leadsAbstractVillages ? (
+                        <div className="p-4 space-y-4">
+                          {[...Array(20)].map((_, i) => (
+                            <div key={i} className="flex items-center">
+                              <Skeleton className="h-8 w-full rounded" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (leadsAbstractVillages?.villageBreakdown || []).length === 0 ? (
+                        <div className="flex items-center justify-center h-full p-4 text-sm text-slate-500">
+                          No villages found
+                        </div>
+                      ) : (
+                        <>
+                          <div
+                            className="sticky top-0 z-[1] grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center border-b border-slate-200 bg-[#f1f5f9] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:bg-[#334155] dark:text-slate-300 sm:px-4 sm:text-[11px] md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem]"
+                            aria-hidden
+                          >
+                            <span>Village</span>
+                            <span className="text-right tabular-nums">Total</span>
+                            <span className="text-right tabular-nums leading-tight">Assigned</span>
+                            <span className="text-right tabular-nums leading-tight">Unassigned</span>
+                          </div>
+                          <ul className="divide-y divide-[#e2e8f0] dark:divide-[#334155]">
+                            {(leadsAbstractVillages?.villageBreakdown || []).map((row: { name: string; count: number; assignedCount?: number; unassignedCount?: number }, idx: number) => (
+                              <li
+                                key={`village-${idx}`}
+                                className={`grid grid-cols-[minmax(0,1fr)_2.75rem_4.25rem_4.5rem] gap-1.5 items-center px-3 py-2.5 text-sm sm:px-4 md:grid-cols-[minmax(0,1fr)_3rem_4.5rem_5rem] ${row.name === leadsAbstractVillages?.maxVillage ? 'bg-amber-50 dark:bg-amber-900/20 font-medium' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                              >
+                                <span className="min-w-0 text-slate-900 dark:text-slate-100 truncate">
+                                  {row.name}
+                                  {row.name === leadsAbstractVillages?.maxVillage && (
+                                    <span className="ml-1 shrink-0 text-amber-600 dark:text-amber-400">(Highest)</span>
+                                  )}
+                                </span>
+                                <span className="text-right text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300 sm:text-sm">{Number(row.count)}</span>
+                                <span className="text-right text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 sm:text-sm">{Number(row.assignedCount ?? 0)}</span>
+                                <span className="text-right text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-400 sm:text-sm">{Number(row.unassignedCount ?? 0)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  </Card>
+                ) : (
+                  <div className="hidden lg:flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cbd5e1] dark:border-[#475569] dark:bg-[#334155]/50 text-slate-400 p-8 text-center h-full">
+                    <p>Select a mandal to view villages</p>
                   </div>
                 )}
               </div>

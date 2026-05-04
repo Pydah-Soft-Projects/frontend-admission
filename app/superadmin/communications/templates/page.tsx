@@ -25,6 +25,10 @@ type TemplateFormState = {
   variables: MessageTemplateVariable[];
   /** message_template_groups.id, or '' for ungrouped */
   templateGroupId: string;
+  category: 'sms' | 'whatsapp';
+  headerType?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  headerText?: string;
+  headerHandle?: string;
 };
 
 const DEFAULT_FORM_STATE: TemplateFormState = {
@@ -36,6 +40,10 @@ const DEFAULT_FORM_STATE: TemplateFormState = {
   isUnicode: false,
   variables: [],
   templateGroupId: '',
+  category: 'sms',
+  headerType: 'TEXT',
+  headerText: '',
+  headerHandle: '',
 };
 
 const SUPPORTED_LANGUAGES = [
@@ -82,6 +90,7 @@ const TemplateModal = ({
   initialData?: MessageTemplate;
   isProcessing: boolean;
   templateGroups?: Array<{ id: string; name: string }>;
+  defaultCategory?: 'sms' | 'whatsapp';
 }) => {
   const [isEditMode, setIsEditMode] = useState(mode === 'create');
   const [formState, setFormState] = useState<TemplateFormState>(() => {
@@ -95,11 +104,15 @@ const TemplateModal = ({
         isUnicode: Boolean(initialData.isUnicode || initialData.language !== 'en'),
         variables: ensureVariableArray(initialData.content, initialData.variables),
         templateGroupId: initialData.templateGroupId ?? '',
+        category: (initialData as any).category || 'sms',
+        headerType: (initialData as any).headerType || 'TEXT',
+        headerText: (initialData as any).headerText || '',
+        headerHandle: (initialData as any).headerHandle || '',
       };
     }
-    return {
-      ...DEFAULT_FORM_STATE,
-      variables: ensureVariableArray('', []),
+    return { 
+      ...DEFAULT_FORM_STATE, 
+      category: defaultCategory || 'sms' 
     };
   });
 
@@ -177,182 +190,342 @@ const TemplateModal = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">Group</label>
-            <select
-              className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
-              value={formState.templateGroupId}
-              onChange={(e) =>
-                setFormState((prev) => ({ ...prev, templateGroupId: e.target.value }))
-              }
-              disabled={!isEditMode}
-            >
-              <option value="">No group</option>
-              {templateGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Template Name</label>
-            <Input
-              value={formState.name}
-              onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="Counselling started for Degree"
-              disabled={!isEditMode}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">DLT Template ID</label>
-            <Input
-              value={formState.dltTemplateId}
-              onChange={(e) =>
-                setFormState((prev) => ({ ...prev, dltTemplateId: e.target.value }))
-              }
-              placeholder="1607100000000129152"
-              disabled={!isEditMode}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
-            <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-              value={formState.language}
-              onChange={(e) => {
-                const language = e.target.value;
-                setFormState((prev) => ({
-                  ...prev,
-                  language,
-                  isUnicode: language !== 'en' ? true : prev.isUnicode,
-                }));
-              }}
-              disabled={!isEditMode}
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.value} value={lang.value}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2 mt-6 md:mt-8">
-            <input
-              id="unicode-toggle"
-              type="checkbox"
-              checked={formState.isUnicode}
-              onChange={(e) =>
-                setFormState((prev) => ({ ...prev, isUnicode: e.target.checked }))
-              }
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              disabled={!isEditMode}
-            />
-            <label htmlFor="unicode-toggle" className="text-sm text-gray-700">
-              Unicode (non-English) message
-            </label>
-          </div>
-        </div>
+        {!isEditMode ? (
+          /* ==========================================
+             VIEW MODE (Clean Content Display)
+             ========================================== */
+          <div className="space-y-8 animate-in fade-in duration-300">
+            {/* Meta Information Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Group</span>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {templateGroups.find(g => g.id === formState.templateGroupId)?.name || 'No Group'}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Category</span>
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  {formState.category === 'whatsapp' ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">🟢 WhatsApp</span>
+                  ) : (
+                    <span className="text-blue-600 dark:text-blue-400">🔵 Normal (SMS)</span>
+                  )}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Language</span>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {SUPPORTED_LANGUAGES.find(l => l.value === formState.language)?.label || formState.language}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  {formState.category === 'whatsapp' ? 'WhatsApp Name' : 'DLT Template ID'}
+                </span>
+                <p className="font-mono text-sm font-semibold text-orange-700 dark:text-orange-400">
+                  {formState.dltTemplateId}
+                </p>
+              </div>
+              <div className="md:col-span-2 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Internal Description</span>
+                <p className="text-sm text-slate-600 dark:text-slate-400 italic">
+                  {formState.description || 'No description provided.'}
+                </p>
+              </div>
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <Input
-            value={formState.description}
-            onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
-            placeholder="Short summary for internal reference"
-            disabled={!isEditMode}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Template Content
-          </label>
-          <textarea
-            className="w-full min-h-[150px] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-            value={formState.content}
-            onChange={(e) =>
-              setFormState((prev) => ({
-                ...prev,
-                content: e.target.value,
-              }))
-            }
-            placeholder="Use {#var#} for placeholder values"
-            disabled={!isEditMode}
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Detected placeholders: <span className="font-semibold">{variableCount}</span>
-          </p>
-        </div>
-
-        {variableCount > 0 && (
-          <div>
-            <h3 className="text-lg font-semibold mb-2">Placeholder Mapping</h3>
-            <p className="mb-3 text-xs text-gray-500 dark:text-slate-400">
-              Mark <strong className="font-medium">Global</strong> when one value is used for every recipient in bulk
-              sends; leave off to edit that placeholder per lead in the review step.
-            </p>
-            <div className="space-y-4">
-              {formState.variables.map((variable, index) => (
-                <div
-                  key={variable.key || `var-${index}`}
-                  className="grid grid-cols-1 gap-3 border-b border-gray-100 pb-3 last:border-0 dark:border-slate-800 md:grid-cols-12 md:items-end"
-                >
-                  <div className="md:col-span-2">
-                    <label className="mb-1 block text-xs font-medium text-gray-600">Placeholder key</label>
-                    <Input
-                      value={variable.key}
-                      onChange={(e) => handleVariableField(index, { key: e.target.value })}
-                      placeholder={`var${index + 1}`}
-                      disabled={!isEditMode}
-                    />
+            {/* WhatsApp Specific Header View */}
+            {formState.category === 'whatsapp' && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+                <h3 className="text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400 mb-3 flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                  WhatsApp Header Configuration
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white/60 dark:bg-slate-900/40 p-3 rounded-lg border border-emerald-100/50 dark:border-emerald-900/20">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Type</span>
+                    <p className="text-sm font-medium">
+                      {formState.headerType === 'TEXT' ? '📝 Text Message' : 
+                       formState.headerType === 'IMAGE' ? '🖼️ Image Media' :
+                       formState.headerType === 'VIDEO' ? '🎥 Video Media' :
+                       formState.headerType === 'DOCUMENT' ? '📄 Document File' : 'None'}
+                    </p>
                   </div>
-                  <div className="md:col-span-3">
-                    <label className="mb-1 block text-xs font-medium text-gray-600">Friendly label</label>
-                    <Input
-                      value={variable.label}
-                      onChange={(e) => handleVariableField(index, { label: e.target.value })}
-                      placeholder={`Variable ${index + 1}`}
-                      disabled={!isEditMode}
-                    />
-                  </div>
-                  <div className="md:col-span-4">
-                    <label className="mb-1 block text-xs font-medium text-gray-600">Default value</label>
-                    <Input
-                      value={variable.defaultValue || ''}
-                      onChange={(e) => handleVariableField(index, { defaultValue: e.target.value })}
-                      placeholder="Pre-filled when sending (optional)"
-                      disabled={!isEditMode}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 md:col-span-3">
-                    <input
-                      id={`var-global-${index}`}
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                      checked={variable.isGlobal === true}
-                      onChange={(e) => handleVariableField(index, { isGlobal: e.target.checked })}
-                      disabled={!isEditMode}
-                    />
-                    <label htmlFor={`var-global-${index}`} className="text-sm text-gray-700 dark:text-slate-300">
-                      Global (same for all)
-                    </label>
+                  <div className="bg-white/60 dark:bg-slate-900/40 p-3 rounded-lg border border-emerald-100/50 dark:border-emerald-900/20">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                      {formState.headerType === 'TEXT' ? 'Header Text' : 'Media ID/URL'}
+                    </span>
+                    <p className="text-sm font-medium truncate italic" title={formState.headerType === 'TEXT' ? formState.headerText : formState.headerHandle}>
+                      {formState.headerType === 'TEXT' ? (formState.headerText || '—') : (formState.headerHandle || '—')}
+                    </p>
                   </div>
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Template Content Box */}
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Message Content</span>
+              <div className="relative rounded-2xl bg-slate-100 p-6 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <div className="text-base leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap font-sans">
+                  {formState.content}
+                </div>
+                {/* Speech bubble tail */}
+                <div className="absolute -left-2 top-8 h-4 w-4 rotate-45 border-b border-l border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900"></div>
+              </div>
+            </div>
+
+            {/* Variables / Placeholders */}
+            {formState.variables.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Placeholder Mapping</span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] font-bold">
+                    {formState.variables.length} Variables
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {formState.variables.map((v, i) => (
+                    <div key={i} className="flex flex-col p-3 rounded-xl border border-slate-100 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[10px] font-mono font-bold text-orange-600 bg-orange-50 dark:bg-orange-950/30 px-1.5 rounded uppercase">
+                          {v.key || `var${i+1}`}
+                        </span>
+                        {v.isGlobal && (
+                          <span className="text-[9px] font-bold text-blue-600 uppercase">Global</span>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{v.label}</span>
+                      {v.defaultValue && (
+                        <span className="text-xs text-slate-500 mt-1 truncate">Default: &quot;{v.defaultValue}&quot;</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+               <Button variant="secondary" onClick={onClose}>Close Preview</Button>
             </div>
           </div>
-        )}
+        ) : (
+          /* ==========================================
+             EDIT MODE (Current Form Layout)
+             ========================================== */
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">Group</label>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                  value={formState.templateGroupId}
+                  onChange={(e) =>
+                    setFormState((prev) => ({ ...prev, templateGroupId: e.target.value }))
+                  }
+                >
+                  <option value="">No group</option>
+                  {templateGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Template Name</label>
+                <Input
+                  value={formState.name}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Counselling started for Degree"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {formState.category === 'whatsapp' ? 'WhatsApp Template Name' : 'DLT Template ID'}
+                </label>
+                <Input
+                  value={formState.dltTemplateId}
+                  onChange={(e) =>
+                    setFormState((prev) => ({ ...prev, dltTemplateId: e.target.value }))
+                  }
+                  placeholder={formState.category === 'whatsapp' ? "e.g. registration_success" : "1607100000000129152"}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                  value={formState.category}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, category: e.target.value as any }))}
+                >
+                  <option value="sms">Normal (SMS)</option>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                  value={formState.language}
+                  onChange={(e) => {
+                    const language = e.target.value;
+                    setFormState((prev) => ({
+                      ...prev,
+                      language,
+                      isUnicode: language !== 'en' ? true : prev.isUnicode,
+                    }));
+                  }}
+                >
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang.value} value={lang.value}>
+                      {lang.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 mt-6 md:mt-8">
+                <input
+                  id="unicode-toggle"
+                  type="checkbox"
+                  checked={formState.isUnicode}
+                  onChange={(e) =>
+                    setFormState((prev) => ({ ...prev, isUnicode: e.target.checked }))
+                  }
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="unicode-toggle" className="text-sm text-gray-700">
+                  Unicode (non-English) message
+                </label>
+              </div>
 
-        {isEditMode && (
-          <div className="flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-slate-800">
-            <Button variant="secondary" onClick={onClose} disabled={isProcessing}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleSubmit} disabled={isProcessing}>
-              {isProcessing ? 'Saving…' : mode === 'create' ? 'Create Template' : 'Save Changes'}
-            </Button>
+              {formState.category === 'whatsapp' && (
+                <div className="md:col-span-2 border-t pt-4 dark:border-slate-800">
+                  <label className="block text-sm font-semibold text-gray-800 dark:text-slate-200 mb-2">WhatsApp Header</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Header Type</label>
+                      <div className="text-sm font-medium py-1 px-2 bg-white dark:bg-slate-800 rounded border dark:border-slate-700">
+                        {formState.headerType === 'TEXT' ? '📝 Text' : 
+                         formState.headerType === 'IMAGE' ? '🖼️ Image' :
+                         formState.headerType === 'VIDEO' ? '🎥 Video' :
+                         formState.headerType === 'DOCUMENT' ? '📄 Document' : 'None'}
+                      </div>
+                    </div>
+                    {formState.headerType === 'TEXT' && (
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Header Text</label>
+                        <div className="text-sm py-1 px-2 bg-white dark:bg-slate-800 rounded border dark:border-slate-700 italic">
+                          {formState.headerText || 'No header text'}
+                        </div>
+                      </div>
+                    )}
+                    {formState.headerType !== 'TEXT' && formState.headerType !== 'NONE' && (
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Media Handle</label>
+                        <div className="text-[10px] text-blue-600 dark:text-blue-400 py-1 font-mono truncate bg-white dark:bg-slate-800 px-2 rounded border dark:border-slate-700" title={formState.headerHandle}>
+                          {formState.headerHandle || 'No media synced'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <Input
+                value={formState.description}
+                onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Short summary for internal reference"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Template Content
+              </label>
+              <textarea
+                className="w-full min-h-[150px] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                value={formState.content}
+                onChange={(e) =>
+                  setFormState((prev) => ({
+                    ...prev,
+                    content: e.target.value,
+                  }))
+                }
+                placeholder="Use {#var#} for placeholder values"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Detected placeholders: <span className="font-semibold">{variableCount}</span>
+              </p>
+            </div>
+
+            {variableCount > 0 && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <h3 className="text-lg font-semibold mb-2">Placeholder Mapping</h3>
+                <p className="mb-3 text-xs text-gray-500 dark:text-slate-400">
+                  Mark <strong className="font-medium">Global</strong> when one value is used for every recipient in bulk
+                  sends; leave off to edit that placeholder per lead in the review step.
+                </p>
+                <div className="space-y-4">
+                  {formState.variables.map((variable, index) => (
+                    <div
+                      key={variable.key || `var-${index}`}
+                      className="grid grid-cols-1 gap-3 border-b border-gray-100 pb-3 last:border-0 dark:border-slate-800 md:grid-cols-12 md:items-end"
+                    >
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Placeholder key</label>
+                        <Input
+                          value={variable.key}
+                          onChange={(e) => handleVariableField(index, { key: e.target.value })}
+                          placeholder={`var${index + 1}`}
+                        />
+                      </div>
+                      <div className="md:col-span-3">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Friendly label</label>
+                        <Input
+                          value={variable.label}
+                          onChange={(e) => handleVariableField(index, { label: e.target.value })}
+                          placeholder={`Variable ${index + 1}`}
+                        />
+                      </div>
+                      <div className="md:col-span-4">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Default value</label>
+                        <Input
+                          value={variable.defaultValue || ''}
+                          onChange={(e) => handleVariableField(index, { defaultValue: e.target.value })}
+                          placeholder="Pre-filled when sending (optional)"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 md:col-span-3">
+                        <input
+                          id={`var-global-${index}`}
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                          checked={variable.isGlobal === true}
+                          onChange={(e) => handleVariableField(index, { isGlobal: e.target.checked })}
+                        />
+                        <label htmlFor={`var-global-${index}`} className="text-sm text-gray-700 dark:text-slate-300">
+                          Global (same for all)
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-slate-800">
+              <Button variant="secondary" onClick={onClose} disabled={isProcessing}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSubmit} disabled={isProcessing}>
+                {isProcessing ? 'Saving…' : mode === 'create' ? 'Create Template' : 'Save Changes'}
+              </Button>
+            </div>
           </div>
         )}
       </Card>
@@ -746,11 +919,14 @@ function TestTemplateSmsModal({
   onClose: () => void;
 }) {
   const [phone, setPhone] = useState('');
+  const [headerHandle, setHeaderHandle] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [varRows, setVarRows] = useState<{ key: string; value: string }[]>([]);
 
   useEffect(() => {
     if (!open || !template) return;
     setPhone('');
+    setHeaderHandle(template.headerHandle || '');
     setVarRows(buildSmsVariablesFromTemplate(template));
   }, [open, template]);
 
@@ -762,21 +938,22 @@ function TestTemplateSmsModal({
       return communicationAPI.testTemplateSms(template._id, {
         phone: phone.trim(),
         variables: varRows,
+        headerHandle: headerHandle.trim(),
       });
     },
     onSuccess: (data: { success?: boolean; responseText?: string }) => {
       if (data?.success) {
-        showToast.success('Test SMS submitted. Check the handset for delivery.');
+        showToast.success(`Test ${template.category === 'whatsapp' ? 'WhatsApp' : 'SMS'} submitted. Check the handset for delivery.`);
         onClose();
       } else {
         const hint =
           typeof data?.responseText === 'string' ? data.responseText.trim().slice(0, 240) : '';
-        showToast.error(hint || 'SMS provider did not confirm success.');
+        showToast.error(hint || `${template.category === 'whatsapp' ? 'WhatsApp' : 'SMS'} provider did not confirm success.`);
       }
     },
     onError: (e: unknown) => {
       const ax = e as { response?: { data?: { message?: string } }; message?: string };
-      showToast.error(ax?.response?.data?.message || ax?.message || 'Failed to send test SMS');
+      showToast.error(ax?.response?.data?.message || ax?.message || `Failed to send test ${template.category === 'whatsapp' ? 'WhatsApp' : 'SMS'}`);
     },
   });
 
@@ -791,12 +968,17 @@ function TestTemplateSmsModal({
 
   if (!open || !template) return null;
 
+  const isMediaHeader = template.category === 'whatsapp' && 
+                        ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.headerType);
+
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
       <Card className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto p-6 shadow-xl">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Test SMS</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+              Test {template.category === 'whatsapp' ? 'WhatsApp' : 'SMS'}
+            </h2>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{template.name}</p>
           </div>
           <button
@@ -810,18 +992,88 @@ function TestTemplateSmsModal({
           </button>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Sends this template with the values below to one number using the same SMS provider as live sends. No lead
+          Sends this template with the values below to one number using the same {template.category === 'whatsapp' ? 'WhatsApp' : 'SMS'} provider as live sends. No lead
           record and no communication history row are created.
         </p>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Mobile number</label>
-          <Input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="e.g. 9876543210"
-            className="mt-1"
-            disabled={mutation.isPending}
-          />
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Mobile number</label>
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="e.g. 9876543210"
+              className="mt-1"
+              disabled={mutation.isPending}
+            />
+          </div>
+
+          {isMediaHeader && (
+            <div className="animate-in fade-in duration-300">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                Media ({template.headerType})
+              </label>
+              <div className="mt-1 flex gap-2">
+                <Input
+                  value={headerHandle}
+                  onChange={(e) => setHeaderHandle(e.target.value)}
+                  placeholder="URL or Media ID"
+                  className="flex-1 font-mono text-[11px]"
+                  disabled={mutation.isPending || isUploading}
+                />
+                <div className="relative">
+                  <input
+                    type="file"
+                    id="test-media-upload"
+                    className="hidden"
+                    accept={template.headerType === 'IMAGE' ? 'image/*' : 
+                            template.headerType === 'VIDEO' ? 'video/*' : 
+                            template.headerType === 'DOCUMENT' ? '.pdf,.doc,.docx' : '*/*'}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      setIsUploading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('type', template.headerType);
+                        
+                        // Use the new API method
+                        const res = await communicationAPI.uploadWhatsAppMedia(formData);
+                        
+                        if (res.data?.id) {
+                          setHeaderHandle(res.data.id);
+                          showToast.success('Media uploaded to Meta successfully');
+                        } else if (res.data?.url) {
+                          setHeaderHandle(res.data.url);
+                          showToast.success('Media uploaded successfully');
+                        }
+                      } catch (err: any) {
+                        const msg = err.response?.data?.message || err.message || 'Failed to upload media';
+                        showToast.error(msg);
+                      } finally {
+                        setIsUploading(false);
+                      }
+                    }}
+                    disabled={mutation.isPending || isUploading}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-full"
+                    onClick={() => document.getElementById('test-media-upload')?.click()}
+                    disabled={mutation.isPending || isUploading}
+                  >
+                    {isUploading ? '...' : '📁 Upload'}
+                  </Button>
+                </div>
+              </div>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Provide a URL, Meta ID, or upload a file from your computer.
+              </p>
+            </div>
+          )}
         </div>
         {varRows.length > 0 ? (
           <div className="max-h-44 space-y-2 overflow-y-auto">
@@ -1249,6 +1501,7 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
   const limit = 25;
   const [selectedById, setSelectedById] = useState<Record<string, Lead>>({});
   const [templateId, setTemplateId] = useState('');
+  const [channel, setChannel] = useState<'sms' | 'whatsapp'>('sms');
   const [sendPrimary, setSendPrimary] = useState(true);
   const [sendFather, setSendFather] = useState(false);
 
@@ -1311,9 +1564,9 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
   }, [broadcastFilterOptionsRes]);
 
   const { data: templatesData, isLoading: loadingTemplates } = useQuery({
-    queryKey: ['activeTemplates', 'communications-broadcast'],
+    queryKey: ['activeTemplates', 'communications-broadcast', channel],
     queryFn: async () => {
-      const response = await communicationAPI.getActiveTemplates();
+      const response = await communicationAPI.getActiveTemplates(undefined, channel);
       const payload = (response as { data?: MessageTemplate[] })?.data ?? response;
       return Array.isArray(payload) ? payload : [];
     },
@@ -1449,12 +1702,13 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
   const confirmSendMutation = useMutation({
     mutationFn: async (rows: SmsReviewRow[]) => {
       const tpl = selectedTemplate;
-      if (!tpl) throw new Error('Select a message template.');
+      if (!tpl) throw new Error(`Select a ${channel === 'whatsapp' ? 'WhatsApp' : 'message'} template.`);
       if (rows.length > MAX_SMS_BULK_LEADS) {
         throw new Error(`At most ${MAX_SMS_BULK_LEADS} leads per job.`);
       }
-      return communicationAPI.createBulkSmsJob({
-        source: 'send_to_leads',
+      
+      const payload = {
+        source: 'send_to_leads' as const,
         templateId: tpl._id,
         reportContext: {
           version: 1,
@@ -1468,13 +1722,18 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
           contactNumbers: row.numbers,
           variables: row.variables,
         })),
-      });
+      };
+
+      if (channel === 'whatsapp') {
+        return communicationAPI.createBulkWhatsAppJob(payload);
+      }
+      return communicationAPI.createBulkSmsJob(payload);
     },
     onSuccess: (out) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['smsBulkJobs'] });
       showToast.success(
-        `SMS job queued: ${out.totalItems} lead row(s) for template «${out.templateName}». Track status in SMS job reports.`
+        `${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} job queued: ${out.totalItems} lead row(s) for template «${out.templateName}».`
       );
       onBulkJobQueued?.(out.jobId);
       clearSelection();
@@ -1488,13 +1747,36 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:flex-wrap xl:items-end">
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Message template
-          </label>
+      <div className="flex flex-col gap-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700 xl:flex-row xl:items-start">
+        <div className="flex flex-col gap-3">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Channel
+          </span>
+          <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800">
+            <button
+              onClick={() => { setChannel('sms'); setTemplateId(''); }}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                channel === 'sms' ? 'bg-white text-orange-600 shadow-sm dark:bg-slate-900 dark:text-orange-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+            >
+              SMS
+            </button>
+            <button
+              onClick={() => { setChannel('whatsapp'); setTemplateId(''); }}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                channel === 'whatsapp' ? 'bg-white text-orange-600 shadow-sm dark:bg-slate-900 dark:text-orange-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+            >
+              WhatsApp
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-slate-100 pt-3 dark:border-slate-800 xl:border-0 xl:pt-0">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {channel === 'whatsapp' ? 'WhatsApp Template' : 'SMS Template'}
+          </span>
           {loadingTemplates ? (
-            <Skeleton className="h-10 w-full max-w-md" />
+            <Skeleton className="h-9 w-64" />
           ) : (
             <select
               className="w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
@@ -1782,7 +2064,7 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
             disabled={!canSend || confirmSendMutation.isPending}
             onClick={openSmsReview}
           >
-            {confirmSendMutation.isPending ? 'Queuing…' : `Queue SMS for ${selectedCount} lead(s)`}
+            {confirmSendMutation.isPending ? 'Queuing…' : `Queue ${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} for ${selectedCount} lead(s)`}
           </Button>
         </div>
       </div>
@@ -2421,6 +2703,7 @@ export default function TemplatesPage() {
   const [activeTab, setActiveTab] = useState<CommunicationsTab>('templates');
   const [highlightSmsJobId, setHighlightSmsJobId] = useState<string | null>(null);
   const [templateGroupFilter, setTemplateGroupFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<'sms' | 'whatsapp'>('sms');
   const [newGroupModalOpen, setNewGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [editingGroup, setEditingGroup] = useState<{ id: string; name: string } | null>(null);
@@ -2447,13 +2730,14 @@ export default function TemplatesPage() {
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ['communicationTemplates', languageFilter, showInactive, search, templateGroupFilter],
+    queryKey: ['communicationTemplates', languageFilter, showInactive, search, templateGroupFilter, categoryFilter],
     queryFn: async () => {
       const response = await communicationAPI.getTemplates({
         language: languageFilter === 'all' ? undefined : languageFilter,
         isActive: showInactive ? undefined : true,
         search: search.trim() || undefined,
         templateGroupId: templateGroupFilter || undefined,
+        category: categoryFilter,
       });
       return response?.data ?? [];
     },
@@ -2497,6 +2781,7 @@ export default function TemplatesPage() {
         isUnicode: payload.isUnicode,
         variables: payload.variables,
         templateGroupId: payload.templateGroupId.trim() || null,
+        category: payload.category,
       }),
     onSuccess: () => {
       showToast.success('Template created successfully');
@@ -2522,6 +2807,7 @@ export default function TemplatesPage() {
         isUnicode: payload.isUnicode,
         variables: payload.variables,
         templateGroupId: payload.templateGroupId.trim() || null,
+        category: payload.category,
       }),
     onSuccess: () => {
       showToast.success('Template updated successfully');
@@ -2636,6 +2922,19 @@ export default function TemplatesPage() {
     }
   };
 
+  const syncWhatsAppMutation = useMutation({
+    mutationFn: () => communicationAPI.syncWhatsAppTemplates(),
+    onSuccess: (res) => {
+      showToast.success(`Synced ${res.data.syncCount} templates from WhatsApp`);
+      queryClient.invalidateQueries({ queryKey: ['communicationTemplates'] });
+      queryClient.invalidateQueries({ queryKey: ['activeTemplates'] });
+    },
+    onError: (error: any) => {
+      console.error('WhatsApp Sync Error:', error);
+      showToast.error(error.response?.data?.message || 'Failed to sync WhatsApp templates');
+    },
+  });
+
   const activeCount = templates.filter((template) => template.isActive).length;
 
   return (
@@ -2728,86 +3027,108 @@ export default function TemplatesPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-6">
           <div className="min-w-0 shrink-0">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Message templates</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">DLT-approved templates for SMS.</p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+              {categoryFilter === 'whatsapp' ? 'WhatsApp Templates' : 'Message Templates'}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {categoryFilter === 'whatsapp' 
+                ? 'Approved WhatsApp Cloud API templates.' 
+                : 'DLT-approved templates for SMS.'}
+            </p>
           </div>
-          <div
-            className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-2 border-t border-slate-200 pt-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400 md:border-t-0 md:pt-0"
-            aria-label="Bulk SMS account"
-          >
-            <span className="shrink-0 font-semibold text-slate-700 dark:text-slate-200">BulkSMS</span>
-            {bulkSmsAccountLoading ? (
-              <Skeleton className="h-8 w-44 sm:h-9" />
-            ) : bulkSmsAccountError ? (
-              <span className="text-sm text-red-600 dark:text-red-400">Could not load balance.</span>
-            ) : (
-              <>
-                {bulkSmsAccount?.username ? (
-                  <span className="flex flex-wrap items-baseline gap-x-1.5">
-                    <span className="shrink-0">User</span>
-                    <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
-                      {bulkSmsAccount.username}
+          {categoryFilter === 'sms' && (
+            <div
+              className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-2 border-t border-slate-200 pt-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400 md:border-t-0 md:pt-0"
+              aria-label="Bulk SMS account"
+            >
+              <span className="shrink-0 font-semibold text-slate-700 dark:text-slate-200">BulkSMS</span>
+              {bulkSmsAccountLoading ? (
+                <Skeleton className="h-8 w-44 sm:h-9" />
+              ) : bulkSmsAccountError ? (
+                <span className="text-sm text-red-600 dark:text-red-400">Could not load balance.</span>
+              ) : (
+                <>
+                  {bulkSmsAccount?.username ? (
+                    <span className="flex flex-wrap items-baseline gap-x-1.5">
+                      <span className="shrink-0">User</span>
+                      <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
+                        {bulkSmsAccount.username}
+                      </span>
                     </span>
-                  </span>
-                ) : null}
-                {bulkSmsAccount?.username && bulkSmsAccount?.senderId ? (
-                  <span className="text-slate-300 dark:text-slate-600" aria-hidden>
-                    ·
-                  </span>
-                ) : null}
-                {bulkSmsAccount?.senderId ? (
-                  <span className="flex flex-wrap items-baseline gap-x-1.5">
-                    <span className="shrink-0">Sender</span>
-                    <span className="font-mono text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
-                      {bulkSmsAccount.senderId}
+                  ) : null}
+                  {bulkSmsAccount?.username && bulkSmsAccount?.senderId ? (
+                    <span className="text-slate-300 dark:text-slate-600" aria-hidden>
+                      ·
                     </span>
-                  </span>
-                ) : null}
-                {!bulkSmsAccount?.configured ? (
-                  <span className="text-sm text-amber-800 dark:text-amber-400">
-                    {bulkSmsAccount?.providerMessage || 'API key not configured.'}
-                  </span>
-                ) : bulkSmsAccount?.providerMessage ? (
-                  <span
-                    className="max-w-[min(100%,18rem)] truncate text-sm text-amber-800 dark:text-amber-400 sm:max-w-md"
-                    title={bulkSmsAccount.providerMessage}
-                  >
-                    {bulkSmsAccount.providerMessage}
-                  </span>
-                ) : typeof bulkSmsAccount?.balanceCredits === 'number' && Number.isFinite(bulkSmsAccount.balanceCredits) ? (
-                  <span
-                    className="flex flex-wrap items-baseline gap-x-1.5"
-                    title={bulkSmsAccount.balanceRaw || undefined}
-                  >
-                    <span className="shrink-0">Credits</span>
+                  ) : null}
+                  {bulkSmsAccount?.senderId ? (
+                    <span className="flex flex-wrap items-baseline gap-x-1.5">
+                      <span className="shrink-0">Sender</span>
+                      <span className="font-mono text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
+                        {bulkSmsAccount.senderId}
+                      </span>
+                    </span>
+                  ) : null}
+                  {!bulkSmsAccount?.configured ? (
+                    <span className="text-sm text-amber-800 dark:text-amber-400">
+                      {bulkSmsAccount?.providerMessage || 'API key not configured.'}
+                    </span>
+                  ) : bulkSmsAccount?.providerMessage ? (
                     <span
-                      className={`text-xl font-bold tabular-nums tracking-tight sm:text-2xl ${
-                        bulkSmsAccount.balanceCredits < 20000
-                          ? 'text-red-600 dark:text-red-400'
-                          : 'text-emerald-700 dark:text-emerald-400'
-                      }`}
+                      className="max-w-[min(100%,18rem)] truncate text-sm text-amber-800 dark:text-amber-400 sm:max-w-md"
+                      title={bulkSmsAccount.providerMessage}
                     >
-                      {bulkSmsAccount.balanceCredits.toLocaleString(undefined, {
-                        maximumFractionDigits: 2,
-                      })}
+                      {bulkSmsAccount.providerMessage}
                     </span>
-                  </span>
-                ) : (
-                  <span className="text-sm text-slate-500" title={bulkSmsAccount?.balanceRaw || undefined}>
-                    Credits — {bulkSmsAccount?.balanceRaw ? `(${bulkSmsAccount.balanceRaw.slice(0, 60)}${bulkSmsAccount.balanceRaw.length > 60 ? '…' : ''})` : ''}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
+                  ) : typeof bulkSmsAccount?.balanceCredits === 'number' && Number.isFinite(bulkSmsAccount.balanceCredits) ? (
+                    <span
+                      className="flex flex-wrap items-baseline gap-x-1.5"
+                      title={bulkSmsAccount.balanceRaw || undefined}
+                    >
+                      <span className="shrink-0">Credits</span>
+                      <span
+                        className={`text-xl font-bold tabular-nums tracking-tight sm:text-2xl ${
+                          bulkSmsAccount.balanceCredits < 20000
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-emerald-700 dark:text-emerald-400'
+                        }`}
+                      >
+                        {bulkSmsAccount.balanceCredits.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-slate-500" title={bulkSmsAccount?.balanceRaw || undefined}>
+                      Credits — {bulkSmsAccount?.balanceRaw ? `(${bulkSmsAccount.balanceRaw.slice(0, 60)}${bulkSmsAccount.balanceRaw.length > 60 ? '…' : ''})` : ''}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 self-start sm:self-auto">
-          <Button variant="secondary" size="sm" onClick={() => setNewGroupModalOpen(true)}>
-            + New group
-          </Button>
-          <Button variant="primary" size="sm" onClick={handleAddTemplate}>
-            + New template
-          </Button>
+          {categoryFilter === 'whatsapp' && (
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={() => syncWhatsAppMutation.mutate()}
+              disabled={syncWhatsAppMutation.isPending}
+            >
+              {syncWhatsAppMutation.isPending ? 'Syncing…' : '↻ Sync from WhatsApp'}
+            </Button>
+          )}
+          {categoryFilter === 'sms' && (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setNewGroupModalOpen(true)}>
+                + New group
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleAddTemplate}>
+                + New template
+              </Button>
+            </>
+          )}
         </div>
       </div>
       {!bulkSmsAccountLoading &&
@@ -2819,6 +3140,29 @@ export default function TemplatesPage() {
             on the server to show the portal user name.
           </p>
         )}
+
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
+        <button
+          onClick={() => setCategoryFilter('sms')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            categoryFilter === 'sms'
+              ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+          }`}
+        >
+          Normal Templates (SMS)
+        </button>
+        <button
+          onClick={() => setCategoryFilter('whatsapp')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            categoryFilter === 'whatsapp'
+              ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+          }`}
+        >
+          WhatsApp Templates
+        </button>
+      </div>
 
       <div className="rounded-lg border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/40">
         <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">
@@ -2899,8 +3243,13 @@ export default function TemplatesPage() {
                   Group
                 </th>
                 <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  DLT ID
+                  {categoryFilter === 'whatsapp' ? 'WhatsApp Name' : 'DLT ID'}
                 </th>
+                {categoryFilter === 'whatsapp' && (
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Header/Media
+                  </th>
+                )}
                 <th className="hidden px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:table-cell dark:text-slate-400">
                   Lang
                 </th>
@@ -2956,6 +3305,16 @@ export default function TemplatesPage() {
                         {template.dltTemplateId}
                       </span>
                     </td>
+                    {categoryFilter === 'whatsapp' && (
+                      <td className="px-3 py-2 align-top text-xs text-slate-600 dark:text-slate-300">
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                          {template.headerType === 'TEXT' ? '📝 Text' : 
+                           template.headerType === 'IMAGE' ? '🖼️ Image' :
+                           template.headerType === 'VIDEO' ? '🎥 Video' :
+                           template.headerType === 'DOCUMENT' ? '📄 Doc' : '—'}
+                        </span>
+                      </td>
+                    )}
                     <td className="hidden px-3 py-2 align-top text-xs capitalize text-slate-600 sm:table-cell dark:text-slate-300">
                       {SUPPORTED_LANGUAGES.find((lang) => lang.value === template.language)?.label ||
                         template.language?.toUpperCase()}
@@ -3074,6 +3433,7 @@ export default function TemplatesPage() {
           initialData={modalMode === 'edit' ? editingTemplate : undefined}
           isProcessing={createMutation.isPending || updateMutation.isPending}
           templateGroups={templateGroupsList}
+          defaultCategory={categoryFilter}
         />
       )}
 

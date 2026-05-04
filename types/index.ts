@@ -307,12 +307,16 @@ export interface MessageTemplate {
   isUnicode?: boolean;
   variables: MessageTemplateVariable[];
   variableCount: number;
+  category: 'sms' | 'whatsapp';
+  headerType?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  headerText?: string;
+  headerHandle?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export type CommunicationType = 'call' | 'sms';
+export type CommunicationType = 'call' | 'sms' | 'whatsapp';
 
 export type CommunicationStatus = 'pending' | 'success' | 'failed';
 
