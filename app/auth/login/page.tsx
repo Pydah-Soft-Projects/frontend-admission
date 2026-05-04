@@ -204,6 +204,9 @@ function LoginPageContent() {
     );
   }
 
+
+
+  
   // Show normal login form: Centered card layout with warm palette matching the image
   return (
     <div className="min-h-screen flex items-center justify-center lg:justify-end relative overflow-hidden bg-[#fdfcfb] px-4 sm:px-12 lg:px-24">
