@@ -616,7 +616,7 @@ export interface Admission {
   leadData?: any; // Snapshot of lead data stored in admission
   /** Extra answers from Form Builder fields (copied from joining lead_data._joiningRegistrationExtras). */
   registrationFormData?: Record<string, unknown>;
-  status: 'active' | 'withdrawn';
+  status: 'active' | 'withdrawn' | 'Admission Cancelled';
   admissionDate: string;
   courseInfo: JoiningCourseInfo;
   studentInfo: JoiningStudentInfo;

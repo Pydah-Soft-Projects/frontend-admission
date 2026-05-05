@@ -206,11 +206,13 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   // Pages where we want minimal top spacing (compact header)
   const isCompactPage =
     ['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/leads/assign'].includes(pathname) ||
+    pathname.startsWith('/superadmin/joining') ||
     isSuperadminLeadDetail;
 
   // Pages where we want full width (no max-width constraint on main content wrapper)
   const isFullWidthPage =
     ['/superadmin/leads/assign', '/superadmin/communications/templates'].includes(pathname) ||
+    pathname.startsWith('/superadmin/joining') ||
     isSuperadminLeadDetail;
 
   // Pages where we want reduced vertical spacing but keep header visible
@@ -724,7 +726,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 <header
                   className={cn(
                     'flex-shrink-0 px-4 z-10',
-                    isCompactPage ? 'pt-2 pb-0 lg:hidden' : (isReducedSpacingPage ? 'pt-6 pb-0' : 'pt-6 pb-4'),
+                    isCompactPage ? 'pt-2 pb-0' : (isReducedSpacingPage ? 'pt-6 pb-0' : 'pt-6 pb-4'),
                     'sm:px-6 lg:px-8',
                     useMobileBottomNav && 'hidden'
                   )}
@@ -792,7 +794,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   </div>
                 )}
                 <div className={cn(
-                  "mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500",
+                  "mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-full flex flex-col",
                   isFullWidthPage ? "w-full" : "max-w-[1600px]"
                 )}>
                   {children}

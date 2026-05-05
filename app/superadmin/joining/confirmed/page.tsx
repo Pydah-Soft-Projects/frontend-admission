@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { showToast } from '@/lib/toast';
+import { History, MessageSquare, FileCheck } from 'lucide-react';
 
 const ConfirmedLeadsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
@@ -89,7 +90,7 @@ const ConfirmedLeadsPage = () => {
   const isEmpty = !isLoading && leads.length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       <Card className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Input
@@ -114,19 +115,22 @@ const ConfirmedLeadsPage = () => {
             <thead className="bg-slate-50/80 backdrop-blur-sm dark:bg-slate-900/70">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Enquiry #
+                  Enquiry number
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Student
+                  Student name
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Phone
+                  Student Group
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Mandal
+                  Course interested
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Updated
+                  User name & Dept details
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Updated Date & time
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Actions
@@ -136,14 +140,14 @@ const ConfirmedLeadsPage = () => {
             <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
               {isLoading || isFetching ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-slate-500">
                     <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
                     <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">Loading leads…</p>
                   </td>
                 </tr>
               ) : isEmpty ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-slate-500">
                     <p className="font-medium text-slate-600 dark:text-slate-400">No confirmed leads found.</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.3em] text-slate-400">
                       Update lead status to "Confirmed" to start the joining workflow.
@@ -157,26 +161,46 @@ const ConfirmedLeadsPage = () => {
                       {lead.enquiryNumber || '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{lead.name}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{lead.phone}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{lead.mandal || '—'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{lead.studentGroup || '—'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{lead.courseInterested || '—'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                      {lead.assignedTo && typeof lead.assignedTo === 'object' ? (
+                        <div>
+                          <div>{lead.assignedTo.name || '—'}</div>
+                          <div className="text-xs text-slate-500">{lead.assignedTo.department || '—'}</div>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {lead.updatedAt ? new Date(lead.updatedAt).toLocaleString() : '—'}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
+                      <div className="flex flex-nowrap items-center justify-end gap-2">
+                        <Link href={`/superadmin/leads/${lead._id}`} title="Check lead history">
+                          <Button variant="outline" size="sm" className="gap-2 flex items-center whitespace-nowrap">
+                            <History className="h-4 w-4" />
+                            History
+                          </Button>
+                        </Link>
                         {canWriteJoining && (
                           <Button
                             variant="outline"
                             size="sm"
+                            className="gap-2 flex items-center whitespace-nowrap"
                             disabled={sendAdmissionSmsMutation.isPending}
                             onClick={() => sendAdmissionSmsMutation.mutate(lead._id)}
+                            title="Send sms/whatsapp"
                           >
-                            {sendAdmissionSmsMutation.isPending ? 'Preparing…' : 'Send admission SMS'}
+                            <MessageSquare className="h-4 w-4" />
+                            {sendAdmissionSmsMutation.isPending ? '...' : 'Message'}
                           </Button>
                         )}
-                        <Link href={`/superadmin/joining/${lead._id}/detail`}>
-                          <Button variant="primary" size="sm">
-                            View Details
+                        <Link href={`/superadmin/joining/${lead._id}`} title="Submit application form">
+                          <Button variant="primary" size="sm" className="gap-2 flex items-center whitespace-nowrap">
+                            <FileCheck className="h-4 w-4" />
+                            Apply
                           </Button>
                         </Link>
                       </div>

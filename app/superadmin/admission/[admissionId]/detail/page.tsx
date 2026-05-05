@@ -1,12 +1,23 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import type { FormEvent } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/Dialog';
+import { Input } from '@/components/ui/Input';
 import { admissionAPI, joiningAPI, paymentAPI } from '@/lib/api';
 import { Admission, PaymentSummary, PaymentTransaction } from '@/types';
+import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
@@ -77,9 +88,45 @@ const normalizeRegistrationFieldKey = (key: string): string => {
 const isImageDataUrl = (value: unknown): value is string =>
   typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
 
+const ADMISSION_CANCELLED_STATUS = 'Admission Cancelled';
+
+type AdmissionCancellationDetails = {
+  reason?: string;
+  approvedBy?: string;
+  cancelledAt?: string;
+};
+
+type AdmissionLeadData = Record<string, unknown> & {
+  enquiryNumber?: string;
+  _admissionCancellation?: AdmissionCancellationDetails;
+};
+
+type NestedPaymentPayload = {
+  data?: PaymentTransaction[];
+};
+
+type StudentInfoWithNotes = Admission['studentInfo'] & {
+  notes?: string;
+};
+
+type ApiError = {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+};
+
+const formatAdmissionStatus = (status?: string) => {
+  if (status === 'active') return 'Active';
+  if (status === 'withdrawn') return 'Withdrawn';
+  if (status === ADMISSION_CANCELLED_STATUS) return ADMISSION_CANCELLED_STATUS;
+  return status || '—';
+};
+
 export default function AdmissionDetailPage() {
   const params = useParams();
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const admissionId = Array.isArray(params?.admissionId) ? params.admissionId[0] : params?.admissionId;
   const { getCourseName, getBranchName } = useCourseLookup();
@@ -93,6 +140,11 @@ export default function AdmissionDetailPage() {
     father: false,
     mother: false,
   });
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [cancelForm, setCancelForm] = useState({
+    reason: '',
+    approvedBy: '',
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['admission', admissionId],
@@ -104,7 +156,35 @@ export default function AdmissionDetailPage() {
   });
 
   const admission = data?.data?.admission as Admission | undefined;
-  const lead = (admission?.leadData as any) || data?.data?.lead;
+  const lead =
+    (admission?.leadData as AdmissionLeadData | undefined) ||
+    (data?.data?.lead as AdmissionLeadData | undefined);
+  const cancellationDetails = admission?.leadData?._admissionCancellation as
+    | AdmissionCancellationDetails
+    | undefined;
+  const isAdmissionCancelled = admission?.status === ADMISSION_CANCELLED_STATUS;
+
+  const cancelAdmissionMutation = useMutation({
+    mutationFn: async () => {
+      if (!admission?._id) {
+        throw new Error('Admission record is not loaded');
+      }
+      return admissionAPI.cancelById(admission._id, {
+        reason: cancelForm.reason.trim(),
+        approvedBy: cancelForm.approvedBy.trim(),
+      });
+    },
+    onSuccess: async () => {
+      showToast.success('Admission cancelled successfully');
+      setIsCancelDialogOpen(false);
+      setCancelForm({ reason: '', approvedBy: '' });
+      await queryClient.invalidateQueries({ queryKey: ['admission', admissionId] });
+      await queryClient.invalidateQueries({ queryKey: ['admissions'] });
+    },
+    onError: (error: ApiError) => {
+      showToast.error(error.response?.data?.message || 'Failed to cancel admission');
+    },
+  });
 
   // Fetch payment information - use paymentSummary from admission if available
   const paymentSummary: PaymentSummary | null = useMemo(() => {
@@ -136,8 +216,8 @@ export default function AdmissionDetailPage() {
     if (Array.isArray(payload)) {
       return payload as PaymentTransaction[];
     }
-    if (payload && Array.isArray((payload as any).data)) {
-      return (payload as any).data as PaymentTransaction[];
+    if (payload && Array.isArray((payload as NestedPaymentPayload).data)) {
+      return (payload as NestedPaymentPayload).data || [];
     }
     return [];
   }, [transactionsData]);
@@ -168,7 +248,7 @@ export default function AdmissionDetailPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {admission?.admissionNumber && `Admission #${admission.admissionNumber}`}
             {lead?.enquiryNumber && ` • Enquiry #${lead.enquiryNumber}`}
-            {admission?.status && ` • ${admission.status === 'active' ? 'Active' : 'Withdrawn'}`}
+            {admission?.status && ` • ${formatAdmissionStatus(admission.status)}`}
           </p>
         </div>
         <div className="flex gap-3">
@@ -192,6 +272,11 @@ export default function AdmissionDetailPage() {
               </Button>
             </Link>
           )}
+          {admission && !isAdmissionCancelled && (
+            <Button variant="danger" onClick={() => setIsCancelDialogOpen(true)}>
+              Cancel Admission
+            </Button>
+          )}
           <Link href="/superadmin/joining/completed">
             <Button variant="outline">Back to List</Button>
           </Link>
@@ -199,7 +284,17 @@ export default function AdmissionDetailPage() {
       </div>
     );
     return () => clearHeaderContent();
-  }, [admission, lead, admissionId, setHeaderContent, clearHeaderContent]);
+  }, [
+    admission,
+    lead,
+    isAdmissionCancelled,
+    paymentSummary,
+    transactions,
+    getCourseName,
+    getBranchName,
+    setHeaderContent,
+    clearHeaderContent,
+  ]);
 
   if (isLoading) {
     return (
@@ -225,6 +320,19 @@ export default function AdmissionDetailPage() {
       ...prev,
       [type]: !prev[type],
     }));
+  };
+
+  const handleCancelAdmissionSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!cancelForm.reason.trim()) {
+      showToast.error('Reason for cancellation is required');
+      return;
+    }
+    if (!cancelForm.approvedBy.trim()) {
+      showToast.error('Approved by is required');
+      return;
+    }
+    cancelAdmissionMutation.mutate();
   };
 
   const registrationFieldSource =
@@ -262,6 +370,92 @@ export default function AdmissionDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+      <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-lg">
+          <form onSubmit={handleCancelAdmissionSubmit} className="space-y-5">
+            <DialogHeader>
+              <DialogTitle>Cancel Admission</DialogTitle>
+              <DialogDescription>
+                Capture the approval details before changing this student status to Admission Cancelled.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="cancel-reason"
+                  className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                >
+                  Reason for cancellation
+                </label>
+                <textarea
+                  id="cancel-reason"
+                  rows={4}
+                  value={cancelForm.reason}
+                  onChange={(event) =>
+                    setCancelForm((prev) => ({ ...prev, reason: event.target.value }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-orange-500/50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-100 dark:placeholder:text-slate-500 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:focus:border-orange-500/50 dark:focus:bg-slate-950 dark:focus:ring-orange-900/20"
+                  placeholder="Enter cancellation reason"
+                  required
+                />
+              </div>
+              <Input
+                id="cancel-approved-by"
+                label="Approved by"
+                value={cancelForm.approvedBy}
+                onChange={(event) =>
+                  setCancelForm((prev) => ({ ...prev, approvedBy: event.target.value }))
+                }
+                placeholder="Enter approver name"
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCancelDialogOpen(false)}
+                disabled={cancelAdmissionMutation.isPending}
+              >
+                Close
+              </Button>
+              <Button type="submit" variant="danger" isLoading={cancelAdmissionMutation.isPending}>
+                Submit
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {isAdmissionCancelled && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-300">
+                Admission Cancelled
+              </p>
+              <p className="mt-2 text-sm font-medium text-rose-950 dark:text-rose-100">
+                {cancellationDetails?.reason || 'Cancellation reason not available'}
+              </p>
+            </div>
+            <div className="grid gap-2 text-sm text-rose-900 dark:text-rose-100 sm:grid-cols-2 md:text-right">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-300">
+                  Approved by
+                </p>
+                <p className="font-semibold">{cancellationDetails?.approvedBy || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-300">
+                  Cancelled at
+                </p>
+                <p className="font-semibold">{formatDateTime(cancellationDetails?.cancelledAt)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Student & Course Information - Highlighted */}
       <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-lg dark:border-blue-800 dark:from-blue-900/30 dark:to-slate-900/70">
         <div className="grid gap-6 md:grid-cols-2">
@@ -333,7 +527,7 @@ export default function AdmissionDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Notes</p>
                 <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1 break-words">
-                  {(admission.studentInfo as any)?.notes || '—'}
+                  {(admission.studentInfo as StudentInfoWithNotes)?.notes || '—'}
                 </p>
               </div>
             </div>
@@ -589,23 +783,15 @@ export default function AdmissionDetailPage() {
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">
                   Payment History
                 </h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
                   {transactions.map((transaction) => (
                     <div
                       key={transaction._id}
-                      className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800/50"
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                            {formatCurrency(transaction.amount)}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-slate-400">
-                            {formatDateTime(transaction.createdAt)}
-                          </p>
-                        </div>
+                      <div className="flex items-center justify-between mb-3">
                         <span
-                          className={`rounded-full px-2 py-1 text-xs font-medium ${
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${
                             transaction.status === 'success'
                               ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
                               : transaction.status === 'pending'
@@ -615,12 +801,31 @@ export default function AdmissionDetailPage() {
                         >
                           {transaction.status}
                         </span>
-                      </div>
-                      {transaction.mode && (
-                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-                          {transaction.mode === 'cash' ? 'Cash' : 'Online'}
+                        <p className="text-lg font-bold text-gray-900 dark:text-slate-100">
+                          {formatCurrency(transaction.amount)}
                         </p>
-                      )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-0.5">Receipt No</p>
+                          <p className="font-semibold text-gray-900 dark:text-slate-200">
+                            {transaction.referenceId || transaction.cashfreeOrderId || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-0.5">Payment Mode</p>
+                          <p className="font-semibold text-gray-900 dark:text-slate-200 capitalize">
+                            {transaction.mode || '—'}
+                          </p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-0.5">Date & Time</p>
+                          <p className="font-medium text-gray-900 dark:text-slate-200">
+                            {formatDateTime(transaction.createdAt)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

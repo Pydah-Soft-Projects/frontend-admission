@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
+import { SendJoiningFormModal } from '@/components/joining/SendJoiningFormModal';
 import { JoiningListResponse } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -37,6 +38,7 @@ const JoiningPipelinePage = () => {
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'draft' | 'pending'>('draft');
+  const [isSendJoiningModalOpen, setIsSendJoiningModalOpen] = useState(false);
   const [smsSession, setSmsSession] = useState<{
     leadId: string;
     admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
@@ -101,25 +103,10 @@ const JoiningPipelinePage = () => {
       showToast.success('Joining form approved successfully');
       queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
     },
-    onError: (error: any) => {
+    onError: (error: { response?: { data?: { message?: string } } }) => {
       showToast.error(error?.response?.data?.message || 'Failed to approve joining form');
     },
   });
-
-  const formatCurrency = (amount?: number | null) => {
-    if (amount === undefined || amount === null || Number.isNaN(amount)) {
-      return '—';
-    }
-    try {
-      return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        minimumFractionDigits: 2,
-      }).format(amount);
-    } catch {
-      return amount.toString();
-    }
-  };
 
   const headerContent = useMemo(
     () => (
@@ -141,7 +128,7 @@ const JoiningPipelinePage = () => {
   }, [headerContent, setHeaderContent, clearHeaderContent]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       <Card className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Input
@@ -153,6 +140,13 @@ const JoiningPipelinePage = () => {
             }}
           />
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="whitespace-nowrap"
+              onClick={() => setIsSendJoiningModalOpen(true)}
+            >
+              Send Joining Form
+            </Button>
             <Link href="/superadmin/joining/new">
               <Button variant="primary" className="whitespace-nowrap">
                 Add Joining Form
@@ -422,6 +416,11 @@ const JoiningPipelinePage = () => {
         admissionPublicLink={smsSession?.admissionPublicLink}
         joiningOnlineAdmissionMode={Boolean(smsSession?.joiningOnlineAdmissionMode)}
         onClose={() => setSmsSession(null)}
+      />
+
+      <SendJoiningFormModal
+        open={isSendJoiningModalOpen}
+        onClose={() => setIsSendJoiningModalOpen(false)}
       />
 
       {pagination.pages > 1 && (

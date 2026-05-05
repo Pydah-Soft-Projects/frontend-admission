@@ -223,7 +223,7 @@ export function JoiningDraftSmsModal({
       .map((option) => option.number)
       .filter((n) => sanitizeDigits(n).length >= 10);
     setSmsData((prev) => ({
-      selectedNumbers: defaults.length ? [defaults[0]] : [],
+      selectedNumbers: joiningOnlineAdmissionMode ? defaults : defaults.length ? [defaults[0]] : [],
       selectedTemplates: joiningOnlineAdmissionMode ? prev.selectedTemplates : {},
       languageFilter: 'all',
     }));
