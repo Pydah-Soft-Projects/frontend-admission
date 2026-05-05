@@ -2,27 +2,74 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { admissionAPI } from '@/lib/api';
-import { AdmissionListResponse } from '@/types';
+import { Admission, AdmissionListResponse } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/Dialog';
+import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 
-const statusOptions: Array<{ label: string; value: 'all' | 'active' | 'withdrawn' }> = [
+type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
+
+const ADMISSION_CANCELLED_STATUS = 'Admission Cancelled';
+
+const statusOptions: Array<{ label: string; value: AdmissionStatusFilter }> = [
   { label: 'All', value: 'all' },
   { label: 'Active', value: 'active' },
   { label: 'Withdrawn', value: 'withdrawn' },
+  { label: 'Admission Cancelled', value: ADMISSION_CANCELLED_STATUS },
 ];
+
+const getAdmissionStatusBadge = (status?: string) => {
+  if (status === 'active') {
+    return {
+      label: 'Active',
+      className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200',
+    };
+  }
+  if (status === ADMISSION_CANCELLED_STATUS) {
+    return {
+      label: ADMISSION_CANCELLED_STATUS,
+      className: 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200',
+    };
+  }
+  return {
+    label: 'Withdrawn',
+    className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
+  };
+};
+
+type ApiError = {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+};
 
 const CompletedAdmissionsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'withdrawn'>('active');
+  const [statusFilter, setStatusFilter] = useState<AdmissionStatusFilter>('active');
+  const [cancelTarget, setCancelTarget] = useState<Admission | null>(null);
+  const [cancelForm, setCancelForm] = useState({
+    reason: '',
+    approvedBy: '',
+  });
   const { getCourseName, getBranchName } = useCourseLookup();
 
   const queryKey = useMemo(
@@ -64,9 +111,115 @@ const CompletedAdmissionsPage = () => {
   const admissions = data?.admissions ?? [];
   const pagination = data?.pagination ?? { page: 1, pages: 1, limit: 20, total: 0 };
   const isEmpty = !isLoading && admissions.length === 0;
+  const cancelAdmissionMutation = useMutation({
+    mutationFn: async () => {
+      if (!cancelTarget?._id) {
+        throw new Error('Select an admission to cancel');
+      }
+      return admissionAPI.cancelById(cancelTarget._id, {
+        reason: cancelForm.reason.trim(),
+        approvedBy: cancelForm.approvedBy.trim(),
+      });
+    },
+    onSuccess: async () => {
+      showToast.success('Admission cancelled successfully');
+      setCancelTarget(null);
+      setCancelForm({ reason: '', approvedBy: '' });
+      await queryClient.invalidateQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey: ['admissions'] });
+    },
+    onError: (error: ApiError) => {
+      showToast.error(error.response?.data?.message || 'Failed to cancel admission');
+    },
+  });
+
+  const openCancelDialog = (record: Admission) => {
+    setCancelTarget(record);
+    setCancelForm({ reason: '', approvedBy: '' });
+  };
+
+  const submitCancellation = () => {
+    if (!cancelForm.reason.trim()) {
+      showToast.error('Reason for cancellation is required');
+      return;
+    }
+    if (!cancelForm.approvedBy.trim()) {
+      showToast.error('Approved by is required');
+      return;
+    }
+    cancelAdmissionMutation.mutate();
+  };
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => !open && setCancelTarget(null)}>
+        <DialogContent className="w-[95vw] max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cancel Admission</DialogTitle>
+            <DialogDescription>
+              Capture the approval details before changing this student status to Admission Cancelled.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+              <p className="font-semibold text-slate-900 dark:text-slate-100">
+                {cancelTarget?.studentInfo?.name || 'Selected student'}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {cancelTarget?.admissionNumber || ''}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="list-cancel-reason"
+                className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+              >
+                Reason for cancellation
+              </label>
+              <textarea
+                id="list-cancel-reason"
+                rows={4}
+                value={cancelForm.reason}
+                onChange={(event) =>
+                  setCancelForm((prev) => ({ ...prev, reason: event.target.value }))
+                }
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-orange-500/50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-100 dark:placeholder:text-slate-500 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:focus:border-orange-500/50 dark:focus:bg-slate-950 dark:focus:ring-orange-900/20"
+                placeholder="Enter cancellation reason"
+                required
+              />
+            </div>
+            <Input
+              id="list-cancel-approved-by"
+              label="Approved by"
+              value={cancelForm.approvedBy}
+              onChange={(event) =>
+                setCancelForm((prev) => ({ ...prev, approvedBy: event.target.value }))
+              }
+              placeholder="Enter approver name"
+              required
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCancelTarget(null)}
+              disabled={cancelAdmissionMutation.isPending}
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              isLoading={cancelAdmissionMutation.isPending}
+              onClick={submitCancellation}
+            >
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <Input
@@ -81,7 +234,7 @@ const CompletedAdmissionsPage = () => {
             className="w-full rounded-xl border-2 border-slate-200/80 bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 md:w-auto"
             value={statusFilter}
             onChange={(event) => {
-              setStatusFilter(event.target.value as 'all' | 'active' | 'withdrawn');
+              setStatusFilter(event.target.value as AdmissionStatusFilter);
               setPage(1);
             }}
           >
@@ -158,25 +311,35 @@ const CompletedAdmissionsPage = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                      {record.status === 'active' ? (
-                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-900/60 dark:text-rose-200">
-                          Withdrawn
-                        </span>
-                      )}
+                      {(() => {
+                        const badge = getAdmissionStatusBadge(record.status);
+                        return (
+                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {record.updatedAt ? new Date(record.updatedAt).toLocaleString() : '—'}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link href={`/superadmin/admission/${record._id}/detail`}>
-                        <Button variant="outline" size="sm">
-                          View Admission
-                        </Button>
-                      </Link>
+                      <div className="flex justify-end gap-2">
+                        {record.status !== ADMISSION_CANCELLED_STATUS && (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => openCancelDialog(record)}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        <Link href={`/superadmin/admission/${record._id}/detail`}>
+                          <Button variant="outline" size="sm">
+                            View Admission
+                          </Button>
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -2400,7 +2400,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const statusLabel = status.replace('_', ' ');
 
   return (
-    <div className="mx-auto max-w-7xl space-y-10 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+    <div className="w-full space-y-10 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
       {isPublicEdit && publicExpiresAt && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           Secure public form · This link expires at{' '}

@@ -1203,6 +1203,33 @@ export const joiningAPI = {
       message?: string;
     };
   },
+  createDraftAndPublicLink: async (data: {
+    studentName: string;
+    studentPhone: string;
+    fatherPhone: string;
+    fatherName?: string;
+    courseInterested: string;
+    courseId?: string;
+    branchId?: string;
+    branch?: string;
+    quota?: string;
+    programLevel?: string;
+  }) => {
+    const response = await api.post('/joinings/send-public-link', data);
+    return response.data as {
+      data?: {
+        leadId: string;
+        joiningId: string;
+        enquiryNumber: string;
+        path: string;
+        publicUrl: string;
+        token: string;
+        expiresAt: string;
+        ttlSeconds: number;
+      };
+      message?: string;
+    };
+  },
 };
 
 export const admissionAPI = {
@@ -1233,6 +1260,10 @@ export const admissionAPI = {
   },
   updateById: async (admissionId: string, data: any) => {
     const response = await api.put(`/admissions/id/${admissionId}`, data);
+    return response.data;
+  },
+  cancelById: async (admissionId: string, data: { reason: string; approvedBy: string }) => {
+    const response = await api.post(`/admissions/id/${admissionId}/cancel`, data);
     return response.data;
   },
   updateByLeadId: async (leadId: string, data: any) => {

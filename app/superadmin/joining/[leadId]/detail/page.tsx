@@ -158,7 +158,7 @@ export default function JoiningDetailPage() {
               printButtonLabel="Print application"
             />
           )}
-          {joining?.status === 'draft' && (
+          {(joining?.status === 'draft' || joining?.status === 'pending_approval') && (
             <Link href={`/superadmin/joining/${leadId}`}>
               <Button variant="primary">
                 <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -215,7 +215,7 @@ export default function JoiningDetailPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       {/* Student & Course Information - Highlighted */}
       <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-lg dark:border-blue-800 dark:from-blue-900/30 dark:to-slate-900/70">
         <div className="grid gap-6 md:grid-cols-2">
@@ -731,23 +731,15 @@ export default function JoiningDetailPage() {
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">
                   Payment History
                 </h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
                   {transactions.map((transaction) => (
                     <div
                       key={transaction._id}
-                      className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800/50"
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                            {formatCurrency(transaction.amount)}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-slate-400">
-                            {formatDateTime(transaction.createdAt)}
-                          </p>
-                        </div>
+                      <div className="flex items-center justify-between mb-3">
                         <span
-                          className={`rounded-full px-2 py-1 text-xs font-medium ${
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${
                             transaction.status === 'success'
                               ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
                               : transaction.status === 'pending'
@@ -757,12 +749,31 @@ export default function JoiningDetailPage() {
                         >
                           {transaction.status}
                         </span>
-                      </div>
-                      {transaction.mode && (
-                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-                          {transaction.mode === 'cash' ? 'Cash' : 'Online'}
+                        <p className="text-lg font-bold text-gray-900 dark:text-slate-100">
+                          {formatCurrency(transaction.amount)}
                         </p>
-                      )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-0.5">Receipt No</p>
+                          <p className="font-semibold text-gray-900 dark:text-slate-200">
+                            {transaction.referenceId || transaction.cashfreeOrderId || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-0.5">Payment Mode</p>
+                          <p className="font-semibold text-gray-900 dark:text-slate-200 capitalize">
+                            {transaction.mode || '—'}
+                          </p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-0.5">Date & Time</p>
+                          <p className="font-medium text-gray-900 dark:text-slate-200">
+                            {formatDateTime(transaction.createdAt)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
