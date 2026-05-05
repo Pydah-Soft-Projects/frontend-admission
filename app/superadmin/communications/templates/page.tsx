@@ -750,6 +750,7 @@ function BulkSmsReviewModal({
   onConfirmSend,
   subtitle,
   statusBreakdown,
+  invalidCount,
 }: {
   open: boolean;
   onClose: () => void;
@@ -760,6 +761,7 @@ function BulkSmsReviewModal({
   onConfirmSend: (rows: SmsReviewRow[]) => void | Promise<void>;
   subtitle?: string;
   statusBreakdown?: Record<string, number>;
+  invalidCount?: number;
 }) {
   const [draft, setDraft] = useState<SmsReviewRow[]>([]);
 
@@ -848,14 +850,22 @@ function BulkSmsReviewModal({
                 {template.dltTemplateId || '—'}
               </p>
             ) : null}
-            {statusBreakdown && Object.keys(statusBreakdown).length > 0 && (
+            {((statusBreakdown && Object.keys(statusBreakdown).length > 0) || (invalidCount && invalidCount > 0)) && (
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-                {Object.entries(statusBreakdown).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
-                  <span key={status} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
-                    {status || 'Unknown'}: {count.toLocaleString()}
+                {statusBreakdown && Object.entries(statusBreakdown)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([status, count]) => (
+                    <span key={status} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                      {status || 'Unknown'}: {count.toLocaleString()}
+                    </span>
+                  ))}
+                {invalidCount && invalidCount > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-0.5 font-bold text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                    Invalid/Missing Numbers: {invalidCount.toLocaleString()}
                   </span>
-                ))}
+                ) : null}
               </div>
             )}
           </div>
@@ -979,9 +989,16 @@ function BulkSmsReviewModal({
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/90 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/80">
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                {draft.length} SMS in this job · server runs up to {SMS_SEND_CONCURRENCY} in parallel
-              </p>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  {draft.length} SMS in this job · server runs up to {SMS_SEND_CONCURRENCY} in parallel
+                </p>
+                {invalidCount && invalidCount > 0 ? (
+                  <p className="text-[10px] font-medium text-red-600 dark:text-red-400">
+                    * {invalidCount} lead(s) filtered out (invalid or missing phone numbers)
+                  </p>
+                ) : null}
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSending}>
                   Cancel
@@ -2354,10 +2371,15 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
 
   // Fetch a sample lead for preview when users are selected
   const { data: previewLead } = useQuery({
-    queryKey: ['userLeadPreview', selectedUserIds[0]],
+    queryKey: ['userLeadPreview', selectedUserIds[0], studentGroupFilter, userRosterDistrict],
     queryFn: async () => {
       if (selectedUserIds.length === 0) return null;
-      const resp = await leadAPI.getAll({ assignedTo: selectedUserIds[0], limit: 1 });
+      const resp = await leadAPI.getAll({ 
+        assignedTo: selectedUserIds[0], 
+        limit: 1,
+        ...(studentGroupFilter.trim() ? { studentGroup: studentGroupFilter.trim() } : {}),
+        ...(userRosterDistrict.trim() ? { district: userRosterDistrict.trim() } : {}),
+      });
       return resp?.leads?.[0] || null;
     },
     enabled: selectedUserIds.length > 0,
@@ -2390,6 +2412,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
   const [smsReviewOpen, setSmsReviewOpen] = useState(false);
   const [smsReviewRows, setSmsReviewRows] = useState<SmsReviewRow[]>([]);
   const [smsReviewStatusBreakdown, setSmsReviewStatusBreakdown] = useState<Record<string, number>>({});
+  const [smsReviewInvalidCount, setSmsReviewInvalidCount] = useState(0);
   const [isPreparingSmsReview, setIsPreparingSmsReview] = useState(false);
   const smsPrepareGenRef = useRef(0);
 
@@ -2485,13 +2508,15 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       }
       const targetLeads = allLeads.filter(leadHasRecipient).slice(0, MAX_SMS_BULK_LEADS);
       
-      // Calculate status breakdown of all loaded leads
+      // Calculate status breakdown of leads that actually have valid recipients
       const breakdown: Record<string, number> = {};
-      allLeads.forEach(l => {
+      const validLeads = allLeads.filter(leadHasRecipient);
+      validLeads.forEach(l => {
         const s = l.leadStatus || 'No Status';
         breakdown[s] = (breakdown[s] || 0) + 1;
       });
       setSmsReviewStatusBreakdown(breakdown);
+      setSmsReviewInvalidCount(allLeads.length - validLeads.length);
 
       const rows: SmsReviewRow[] = [];
       for (const lead of targetLeads) {
@@ -2822,6 +2847,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
         isSending={confirmSendMutation.isPending}
         onConfirmSend={(rows) => confirmSendMutation.mutate(rows)}
         statusBreakdown={smsReviewStatusBreakdown}
+        invalidCount={smsReviewInvalidCount}
         subtitle={`Edit variables per lead, then queue a background job (up to ${MAX_SMS_BULK_LEADS} SMS).`}
       />
     </div>
