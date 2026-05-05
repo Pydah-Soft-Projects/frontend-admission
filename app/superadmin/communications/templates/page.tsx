@@ -29,6 +29,7 @@ type TemplateFormState = {
   headerType?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
   headerText?: string;
   headerHandle?: string;
+  mediaGallery?: string[];
 };
 
 const DEFAULT_FORM_STATE: TemplateFormState = {
@@ -44,6 +45,7 @@ const DEFAULT_FORM_STATE: TemplateFormState = {
   headerType: 'TEXT',
   headerText: '',
   headerHandle: '',
+  mediaGallery: [],
 };
 
 const SUPPORTED_LANGUAGES = [
@@ -108,6 +110,7 @@ const TemplateModal = ({
         headerType: (initialData as any).headerType || 'TEXT',
         headerText: (initialData as any).headerText || '',
         headerHandle: (initialData as any).headerHandle || '',
+        mediaGallery: (initialData as any).mediaGallery || [],
       };
     }
     return { 
@@ -351,6 +354,7 @@ const TemplateModal = ({
                     setFormState((prev) => ({ ...prev, dltTemplateId: e.target.value }))
                   }
                   placeholder={formState.category === 'whatsapp' ? "e.g. registration_success" : "1607100000000129152"}
+                  disabled={formState.category === 'whatsapp' && mode === 'edit'}
                 />
               </div>
               <div>
@@ -402,31 +406,110 @@ const TemplateModal = ({
 
               {formState.category === 'whatsapp' && (
                 <div className="md:col-span-2 border-t pt-4 dark:border-slate-800">
-                  <label className="block text-sm font-semibold text-gray-800 dark:text-slate-200 mb-2">WhatsApp Header</label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg">
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Header Type</label>
-                      <div className="text-sm font-medium py-1 px-2 bg-white dark:bg-slate-800 rounded border dark:border-slate-700">
-                        {formState.headerType === 'TEXT' ? '📝 Text' : 
-                         formState.headerType === 'IMAGE' ? '🖼️ Image' :
-                         formState.headerType === 'VIDEO' ? '🎥 Video' :
-                         formState.headerType === 'DOCUMENT' ? '📄 Document' : 'None'}
+                  <label className="block text-sm font-semibold text-gray-800 dark:text-slate-200 mb-2">WhatsApp Header & Media Gallery</label>
+                  <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-lg space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Header Type</label>
+                        <div className="text-sm font-medium py-1 px-2 bg-white dark:bg-slate-800 rounded border dark:border-slate-700">
+                          {formState.headerType === 'TEXT' ? '📝 Text' : 
+                           formState.headerType === 'IMAGE' ? '🖼️ Image' :
+                           formState.headerType === 'VIDEO' ? '🎥 Video' :
+                           formState.headerType === 'DOCUMENT' ? '📄 Document' : 'None'}
+                        </div>
                       </div>
+                      {formState.headerType === 'TEXT' && (
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Header Text</label>
+                          <div className="text-sm py-1 px-2 bg-white dark:bg-slate-800 rounded border dark:border-slate-700 italic">
+                            {formState.headerText || 'No header text'}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    {formState.headerType === 'TEXT' && (
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Header Text</label>
-                        <div className="text-sm py-1 px-2 bg-white dark:bg-slate-800 rounded border dark:border-slate-700 italic">
-                          {formState.headerText || 'No header text'}
-                        </div>
-                      </div>
-                    )}
+
                     {formState.headerType !== 'TEXT' && formState.headerType !== 'NONE' && (
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Media Handle</label>
-                        <div className="text-[10px] text-blue-600 dark:text-blue-400 py-1 font-mono truncate bg-white dark:bg-slate-800 px-2 rounded border dark:border-slate-700" title={formState.headerHandle}>
-                          {formState.headerHandle || 'No media synced'}
+                      <div className="space-y-3">
+                        <label className="block text-[10px] uppercase font-bold text-gray-500">Stored Media URLs (Gallery)</label>
+                        <div className="max-h-40 overflow-y-auto space-y-2 pr-2">
+                          {(formState.mediaGallery || []).length === 0 && (
+                            <p className="text-xs text-slate-500 italic">No media URLs stored yet. Add one below.</p>
+                          )}
+                          {formState.mediaGallery?.map((url, i) => (
+                            <div key={i} className={`flex items-center gap-3 p-2 rounded border transition-colors ${formState.headerHandle === url ? 'bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-900/50' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
+                              <input 
+                                type="radio" 
+                                name="active-media-select" 
+                                checked={formState.headerHandle === url}
+                                onChange={() => setFormState(prev => ({ ...prev, headerHandle: url }))}
+                                className="h-4 w-4 text-orange-600 focus:ring-orange-500"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-mono truncate text-slate-600 dark:text-slate-400" title={url}>{url}</p>
+                              </div>
+                              <button 
+                                type="button" 
+                                className="text-xs text-red-500 hover:text-red-700 p-1"
+                                onClick={() => {
+                                  const nextGallery = formState.mediaGallery?.filter((_, idx) => idx !== i) || [];
+                                  setFormState(prev => ({ 
+                                    ...prev, 
+                                    mediaGallery: nextGallery,
+                                    headerHandle: prev.headerHandle === url ? (nextGallery[0] || '') : prev.headerHandle
+                                  }));
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
                         </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <div className="flex-1">
+                            <Input 
+                              placeholder="Paste new Media ID or URL..." 
+                              className="text-xs h-8"
+                              id="new-media-input"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const btn = document.getElementById('add-media-btn');
+                                  btn?.click();
+                                }
+                              }}
+                            />
+                          </div>
+                          <Button 
+                            id="add-media-btn"
+                            variant="secondary" 
+                            size="sm" 
+                            className="h-8 px-3"
+                            onClick={() => {
+                              const input = document.getElementById('new-media-input') as HTMLInputElement;
+                              const val = input.value.trim();
+                              if (!val) return;
+                              if (formState.mediaGallery?.includes(val)) {
+                                showToast.error('URL already in gallery');
+                                return;
+                              }
+                              setFormState(prev => {
+                                const nextGallery = [...(prev.mediaGallery || []), val];
+                                return {
+                                  ...prev,
+                                  mediaGallery: nextGallery,
+                                  headerHandle: prev.headerHandle || val
+                                };
+                              });
+                              input.value = '';
+                            }}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                        <p className="text-[9px] text-slate-500">
+                          Select the radio button to set the active media for this template.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1022,73 +1105,101 @@ function TestTemplateSmsModal({
           </div>
 
           {isMediaHeader && (
-            <div className="animate-in fade-in duration-300">
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                Media ({template.headerType})
-              </label>
-              <div className="mt-1 flex gap-2">
-                <Input
-                  value={headerHandle}
-                  onChange={(e) => setHeaderHandle(e.target.value)}
-                  placeholder="URL or Media ID"
-                  className="flex-1 font-mono text-[11px]"
-                  disabled={mutation.isPending || isUploading || hasUploaded}
-                  readOnly={hasUploaded}
-                />
-                <div className="relative">
-                  <input
-                    type="file"
-                    id="test-media-upload"
-                    className="hidden"
-                    accept={template.headerType === 'IMAGE' ? 'image/*' : 
-                            template.headerType === 'VIDEO' ? 'video/*' : 
-                            template.headerType === 'DOCUMENT' ? '.pdf,.doc,.docx' : '*/*'}
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      
-                      setIsUploading(true);
-                      try {
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        formData.append('type', template.headerType);
-                        
-                        // Use the new API method
-                        const res = await communicationAPI.uploadWhatsAppMedia(formData);
-                        
-                        if (res.data?.id) {
-                          setHeaderHandle(res.data.id);
-                          setHasUploaded(true);
-                          showToast.success('Media uploaded to Meta successfully');
-                        } else if (res.data?.url) {
-                          setHeaderHandle(res.data.url);
-                          setHasUploaded(true);
-                          showToast.success('Media uploaded successfully');
-                        }
-                      } catch (err: any) {
-                        const msg = err.response?.data?.message || err.message || 'Failed to upload media';
-                        showToast.error(msg);
-                      } finally {
-                        setIsUploading(false);
-                      }
-                    }}
-                    disabled={mutation.isPending || isUploading}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-full"
-                    onClick={() => document.getElementById('test-media-upload')?.click()}
-                    disabled={mutation.isPending || isUploading}
-                  >
-                    {isUploading ? '...' : '📁 Upload'}
-                  </Button>
-                </div>
+            <div className="animate-in fade-in duration-300 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                  Select from Gallery ({template.headerType})
+                </label>
+                {(template.mediaGallery || []).length > 0 ? (
+                  <div className="mt-1 max-h-32 overflow-y-auto space-y-1.5 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                    {template.mediaGallery?.map((url, i) => (
+                      <div 
+                        key={i} 
+                        className={`flex items-center gap-2 p-1.5 rounded cursor-pointer transition-colors ${headerHandle === url ? 'bg-orange-100 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                        onClick={() => setHeaderHandle(url)}
+                      >
+                        <input 
+                          type="radio" 
+                          name="test-media-select" 
+                          checked={headerHandle === url}
+                          readOnly
+                          className="h-3 w-3 text-orange-600 focus:ring-orange-500"
+                        />
+                        <p className="text-[10px] font-mono truncate flex-1" title={url}>{url}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[10px] text-slate-500 italic">No stored media found for this template.</p>
+                )}
               </div>
-              <p className="mt-1 text-[10px] text-slate-500">
-                Provide a URL, Meta ID, or upload a file from your computer.
-              </p>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                  Custom Media ID/URL
+                </label>
+                <div className="mt-1 flex gap-2">
+                  <Input
+                    value={headerHandle}
+                    onChange={(e) => setHeaderHandle(e.target.value)}
+                    placeholder="URL or Media ID"
+                    className="flex-1 font-mono text-[11px]"
+                    disabled={mutation.isPending || isUploading || hasUploaded}
+                  />
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="test-media-upload"
+                      className="hidden"
+                      accept={template.headerType === 'IMAGE' ? 'image/*' : 
+                              template.headerType === 'VIDEO' ? 'video/*' : 
+                              template.headerType === 'DOCUMENT' ? '.pdf,.doc,.docx' : '*/*'}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        
+                        setIsUploading(true);
+                        try {
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          formData.append('type', template.headerType);
+                          
+                          const res = await communicationAPI.uploadWhatsAppMedia(formData);
+                          
+                          if (res.data?.id) {
+                            setHeaderHandle(res.data.id);
+                            setHasUploaded(true);
+                            showToast.success('Media uploaded to Meta successfully');
+                          } else if (res.data?.url) {
+                            setHeaderHandle(res.data.url);
+                            setHasUploaded(true);
+                            showToast.success('Media uploaded successfully');
+                          }
+                        } catch (err: any) {
+                          const msg = err.response?.data?.message || err.message || 'Failed to upload media';
+                          showToast.error(msg);
+                        } finally {
+                          setIsUploading(false);
+                        }
+                      }}
+                      disabled={mutation.isPending || isUploading}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-full"
+                      onClick={() => document.getElementById('test-media-upload')?.click()}
+                      disabled={mutation.isPending || isUploading}
+                    >
+                      {isUploading ? '...' : '📁 Upload'}
+                    </Button>
+                  </div>
+                </div>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Select a stored URL above, provide a custom Meta ID/URL, or upload a file.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -2812,6 +2923,9 @@ export default function TemplatesPage() {
         variables: payload.variables,
         templateGroupId: payload.templateGroupId.trim() || null,
         category: payload.category,
+        headerHandle: payload.headerHandle,
+        headerText: payload.headerText,
+        mediaGallery: payload.mediaGallery,
       }),
     onSuccess: () => {
       showToast.success('Template created successfully');
@@ -2838,6 +2952,9 @@ export default function TemplatesPage() {
         variables: payload.variables,
         templateGroupId: payload.templateGroupId.trim() || null,
         category: payload.category,
+        headerHandle: payload.headerHandle,
+        headerText: payload.headerText,
+        mediaGallery: payload.mediaGallery,
       }),
     onSuccess: () => {
       showToast.success('Template updated successfully');
@@ -3272,9 +3389,11 @@ export default function TemplatesPage() {
                 <th className="hidden px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:table-cell dark:text-slate-400">
                   Group
                 </th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  {categoryFilter === 'whatsapp' ? 'WhatsApp Name' : 'DLT ID'}
-                </th>
+                {categoryFilter === 'sms' && (
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    DLT ID
+                  </th>
+                )}
                 {categoryFilter === 'whatsapp' && (
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Header/Media
@@ -3330,19 +3449,29 @@ export default function TemplatesPage() {
                         {template.templateGroupName || '—'}
                       </span>
                     </td>
-                    <td className="max-w-[9rem] px-3 py-2 align-top font-mono text-xs text-orange-700 dark:text-orange-400">
-                      <span className="block truncate" title={template.dltTemplateId}>
-                        {template.dltTemplateId}
-                      </span>
-                    </td>
+                    {categoryFilter === 'sms' && (
+                      <td className="max-w-[9rem] px-3 py-2 align-top font-mono text-xs text-orange-700 dark:text-orange-400">
+                        <span className="block truncate" title={template.dltTemplateId}>
+                          {template.dltTemplateId}
+                        </span>
+                      </td>
+                    )}
                     {categoryFilter === 'whatsapp' && (
                       <td className="px-3 py-2 align-top text-xs text-slate-600 dark:text-slate-300">
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                          {template.headerType === 'TEXT' ? '📝 Text' : 
-                           template.headerType === 'IMAGE' ? '🖼️ Image' :
-                           template.headerType === 'VIDEO' ? '🎥 Video' :
-                           template.headerType === 'DOCUMENT' ? '📄 Doc' : '—'}
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-1 whitespace-nowrap font-medium">
+                            {template.headerType === 'TEXT' ? '📝 Text' : 
+                             template.headerType === 'IMAGE' ? '🖼️ Image' :
+                             template.headerType === 'VIDEO' ? '🎥 Video' :
+                             template.headerType === 'DOCUMENT' ? '📄 Doc' : '—'}
+                          </span>
+                          {template.headerText && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1" title={template.headerText}>
+                              {template.headerType === 'DOCUMENT' ? template.headerText : 
+                               template.headerType === 'TEXT' ? template.headerText : ''}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     )}
                     <td className="hidden px-3 py-2 align-top text-xs capitalize text-slate-600 sm:table-cell dark:text-slate-300">

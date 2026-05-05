@@ -237,7 +237,6 @@ export default function UserDashboard() {
       const getVal = (labels: string[]) => {
         for (const label of labels) {
           if (breakdown[label] !== undefined) return breakdown[label];
-          // Try case variations
           const lower = label.toLowerCase();
           const found = Object.entries(breakdown).find(([k]) => k.toLowerCase() === lower);
           if (found) return found[1];
@@ -245,46 +244,69 @@ export default function UserDashboard() {
         return 0;
       };
 
+      const getHelperText = (label: string) => {
+        const l = label.toLowerCase();
+        if (l.includes('total')) return 'Total pool allotted';
+        if (l.includes('assigned')) return 'Pending first call';
+        if (l.includes('interested') && !l.includes('not')) return 'High intent';
+        if (l.includes('not interested')) return 'Declined';
+        if (l.includes('confirmed')) return isPro ? 'Finalized' : 'Joined';
+        if (l.includes('call back')) return 'Follow up needed';
+        if (l.includes('visited')) return 'Site visit done';
+        if (l.includes('applied')) return 'Form submitted';
+        if (l.includes('wrong')) return 'Invalid data';
+        if (l.includes('available')) return 'Could not reach';
+        if (l.includes('scheduled')) return 'Upcoming visit';
+        return 'Leads in this stage';
+      };
+
+      // 1. Fixed Header Cards
       const cards = [
         {
-          label: 'Assigned Leads',
+          label: 'Total Leads',
           value: analytics?.overallTotalLeads ?? analytics?.totalLeads ?? 0,
-          helper: 'Allotted to you',
+          helper: getHelperText('total'),
         },
         {
-          label: 'Interested',
-          value: getVal(['Interested']),
-          helper: 'High intent',
+          label: 'Assigned',
+          value: getVal(['Assigned']),
+          helper: getHelperText('assigned'),
         },
       ];
 
-      if (isPro) {
-        cards.push(
-          {
-            label: 'Scheduled Revisit',
-            value: getVal(['Scheduled Revisit', 'Scheduled revisit']),
-            helper: 'Upcoming visits',
-          },
-          {
-            label: 'Confirmed',
-            value: getVal(['Confirmed']),
-            helper: 'Finalized',
-          }
-        );
-      } else {
-        cards.push(
-          {
-            label: 'Confirmed',
-            value: getVal(['Confirmed']),
-            helper: 'Joined',
-          },
-          {
-            label: 'Not Interested',
-            value: getVal(['Not Interested']),
-            helper: 'Declined',
-          }
-        );
+      // 2. Identify all other active statuses (excluding 'Assigned' and 'Not set')
+      const activeStatusLabels = isPro ? PRO_VISIT_STATUS_LABELS : STUDENT_COUNSELLOR_CALL_STATUS_LABELS;
+      
+      const candidates = Object.entries(breakdown)
+        .filter(([label, count]) => {
+          const l = label.toLowerCase();
+          return l !== 'assigned' && l !== 'not set' && count > 0 && 
+                 activeStatusLabels.some(s => s.toLowerCase() === l);
+        })
+        .sort((a, b) => b[1] - a[1]); // Sort by count DESC
+
+      // 3. Select all active statuses
+      const selectedStatuses = candidates.map(c => c[0]);
+      
+      // Fallback defaults if we don't have enough active statuses (keep at least 4 cards total)
+      const defaults = isPro 
+        ? ['Interested', 'Scheduled Revisit', 'Confirmed']
+        : ['Interested', 'Confirmed', 'Not Interested'];
+      
+      while (cards.length + selectedStatuses.length < 4) {
+        const nextDefault = defaults.find(d => !selectedStatuses.includes(d) && d !== 'Assigned');
+        if (!nextDefault) break;
+        selectedStatuses.push(nextDefault);
       }
+
+      // 4. Build the final card objects
+      selectedStatuses.forEach(label => {
+        cards.push({
+          label,
+          value: getVal([label]),
+          helper: getHelperText(label),
+        });
+      });
 
       return cards;
     },
