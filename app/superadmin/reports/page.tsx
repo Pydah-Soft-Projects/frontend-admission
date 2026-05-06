@@ -1027,6 +1027,9 @@ export default function ReportsPage() {
         const sumRowsTotalAllotted = rows.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
         const sumRowsBalance = rows.reduce((s: number, day: any) => s + Number(getCounsellorAssignmentBalanceForDay(day)), 0);
         const sumRowsReclaimed = rows.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
+        const sumRowsManual = rows.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
+        const sumRowsMoved = rows.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
+        const totalRowsUnattended = sumRowsReclaimed + sumRowsManual + sumRowsMoved;
         
         const sumRowsStatusMap: Record<string, number> = {};
         COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.forEach(col => {
@@ -1043,7 +1046,7 @@ export default function ReportsPage() {
             <td>${sumRowsTotalAllotted}</td>
             ${allottedFooterCells}
             <td>${sumRowsBalance}</td>
-            <td>${sumRowsReclaimed}</td>
+            <td>${totalRowsUnattended}${totalRowsUnattended > 0 ? ` <span style="font-size:7.5px; opacity:0.8;">(${sumRowsReclaimed}R, ${sumRowsManual}M, ${sumRowsMoved}T)</span>` : ''}</td>
           </tr>`;
 
         const headerStatusCounsellor = `${COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
@@ -1172,7 +1175,7 @@ export default function ReportsPage() {
                 <td>${escapeHtml(formatAssignedMandals(day))}</td>
                 <td>${Number(day?.totalAssigned || 0)}</td>
                 ${statusCells}
-                <td>${Number(day?.reclaimedCount || 0)}</td>
+                <td>${Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)}${ (Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)) > 0 ? ` <span style="font-size:7px;">(${day.reclaimedCount || 0}R, ${day.manualUnassignedCount || 0}M, ${day.movedToOtherUserCount || 0}T)</span>` : ''}</td>
               </tr>
             `;
           }).join('')
@@ -1181,6 +1184,9 @@ export default function ReportsPage() {
       // CALCULATE TRUE CUMULATIVE SUMS FOR FOOTER (PRO / Pipeline)
       const sumRowsTotalAllottedOther = rows.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
       const sumRowsReclaimedOther = rows.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
+      const sumRowsManualOther = rows.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
+      const sumRowsMovedOther = rows.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
+      const totalRowsUnattendedOther = sumRowsReclaimedOther + sumRowsManualOther + sumRowsMovedOther;
       
       let footerRowPro = '';
       if (printMode === 'pro') {
@@ -1199,7 +1205,7 @@ export default function ReportsPage() {
           <td>${sumRowsTotalAllottedOther}</td>
           ${visitCells}
           <td>${sumRowsBalancePro}</td>
-          <td>${sumRowsReclaimedOther}</td>
+          <td>${totalRowsUnattendedOther}${totalRowsUnattendedOther > 0 ? ` <span style="font-size:7.5px; opacity:0.8;">(${sumRowsReclaimedOther}R, ${sumRowsManualOther}M, ${sumRowsMovedOther}T)</span>` : ''}</td>
         </tr></tfoot>`;
       } else {
         // Pipeline mode footer
@@ -1219,7 +1225,7 @@ export default function ReportsPage() {
           <td>${sumWrongData}</td>
           <td>${sumCallBack}</td>
           <td>${sumConfirmed}</td>
-          <td>${sumRowsReclaimedOther}</td>
+          <td>${totalRowsUnattendedOther}${totalRowsUnattendedOther > 0 ? ` <span style="font-size:7.5px; opacity:0.8;">(${sumRowsReclaimedOther}R, ${sumRowsManualOther}M, ${sumRowsMovedOther}T)</span>` : ''}</td>
         </tr></tfoot>`;
       }
 
@@ -3215,7 +3221,24 @@ export default function ReportsPage() {
                                                                           {getCounsellorAssignmentBalanceForDay(day)}
                                                                         </td>
                                                                         <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
-                                                                          {Number(day?.reclaimedCount || 0)}
+                                                                          <div className="flex flex-col gap-0.5">
+                                                                            <span className="font-semibold" title="Total Unattended (Reclaimed + Manual + Moved)">
+                                                                              {Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)}
+                                                                            </span>
+                                                                            {(Number(day?.reclaimedCount || 0) > 0 || Number(day?.manualUnassignedCount || 0) > 0 || Number(day?.movedToOtherUserCount || 0) > 0) && (
+                                                                              <div className="flex gap-1.5 text-[9px] opacity-75 font-medium">
+                                                                                {Number(day?.reclaimedCount || 0) > 0 && (
+                                                                                  <span title="Automated Reclaim (Expired/Failed)" className="text-red-600 dark:text-red-400">R:{day.reclaimedCount}</span>
+                                                                                )}
+                                                                                {Number(day?.manualUnassignedCount || 0) > 0 && (
+                                                                                  <span title="Manual Unassign (Moved to Pool)" className="text-orange-600 dark:text-orange-400">M:{day.manualUnassignedCount}</span>
+                                                                                )}
+                                                                                {Number(day?.movedToOtherUserCount || 0) > 0 && (
+                                                                                  <span title="Transferred (Moved to Other User)" className="text-blue-600 dark:text-blue-400">T:{day.movedToOtherUserCount}</span>
+                                                                                )}
+                                                                              </div>
+                                                                            )}
+                                                                          </div>
                                                                         </td>
                                                                       </tr>
                                                                     );
@@ -3265,7 +3288,26 @@ export default function ReportsPage() {
                                                                         >
                                                                           {sumRowsBalance}
                                                                         </td>
-                                                                        <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
+                                                                        <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
+                                                                          {(() => {
+                                                                            const totalR = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
+                                                                            const totalM = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
+                                                                            const totalT = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
+                                                                            const totalAll = totalR + totalM + totalT;
+                                                                            return (
+                                                                              <div className="flex flex-col gap-0.5">
+                                                                                <span className="font-bold">{totalAll}</span>
+                                                                                {totalAll > 0 && (
+                                                                                  <div className="flex gap-1 text-[9px] opacity-75 font-medium">
+                                                                                    {totalR > 0 && <span>R:{totalR}</span>}
+                                                                                    {totalM > 0 && <span>M:{totalM}</span>}
+                                                                                    {totalT > 0 && <span>T:{totalT}</span>}
+                                                                                  </div>
+                                                                                )}
+                                                                              </div>
+                                                                            );
+                                                                          })()}
+                                                                        </td>
                                                                       </tr>
                                                                     );
                                                                   })()}
@@ -3385,7 +3427,26 @@ export default function ReportsPage() {
                                                                 <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{getLeadStatusCount(day, 'Confirmed')}</td>
                                                               </>
                                                             )}
-                                                            <td className="px-3 py-2 text-amber-700 dark:text-amber-300">{Number(day?.reclaimedCount || 0)}</td>
+                                                            <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
+                                                              <div className="flex flex-col gap-0.5">
+                                                                <span className="font-semibold" title="Total Unattended (Reclaimed + Manual + Moved)">
+                                                                  {Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)}
+                                                                </span>
+                                                                {(Number(day?.reclaimedCount || 0) > 0 || Number(day?.manualUnassignedCount || 0) > 0 || Number(day?.movedToOtherUserCount || 0) > 0) && (
+                                                                  <div className="flex gap-1.5 text-[9px] opacity-75 font-medium">
+                                                                    {Number(day?.reclaimedCount || 0) > 0 && (
+                                                                      <span title="Automated Reclaim (Expired/Failed)" className="text-red-600 dark:text-red-400">R:{day.reclaimedCount}</span>
+                                                                    )}
+                                                                    {Number(day?.manualUnassignedCount || 0) > 0 && (
+                                                                      <span title="Manual Unassign (Moved to Pool)" className="text-orange-600 dark:text-orange-400">M:{day.manualUnassignedCount}</span>
+                                                                    )}
+                                                                    {Number(day?.movedToOtherUserCount || 0) > 0 && (
+                                                                      <span title="Transferred (Moved to Other User)" className="text-blue-600 dark:text-blue-400">T:{day.movedToOtherUserCount}</span>
+                                                                    )}
+                                                                  </div>
+                                                                )}
+                                                              </div>
+                                                            </td>
                                                           </tr>
                                                         );
                                                       }) : (
@@ -3423,7 +3484,26 @@ export default function ReportsPage() {
                                                                   </td>
                                                                 ))}
                                                                 <td className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100">{sumRowsBalance}</td>
-                                                                <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
+                                                                <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
+                                                                  {(() => {
+                                                                    const totalR = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
+                                                                    const totalM = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
+                                                                    const totalT = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
+                                                                    const totalAll = totalR + totalM + totalT;
+                                                                    return (
+                                                                      <div className="flex flex-col gap-0.5">
+                                                                        <span className="font-bold">{totalAll}</span>
+                                                                        {totalAll > 0 && (
+                                                                          <div className="flex gap-1 text-[9px] opacity-75 font-medium">
+                                                                            {totalR > 0 && <span>R:{totalR}</span>}
+                                                                            {totalM > 0 && <span>M:{totalM}</span>}
+                                                                            {totalT > 0 && <span>T:{totalT}</span>}
+                                                                          </div>
+                                                                        )}
+                                                                      </div>
+                                                                    );
+                                                                  })()}
+                                                                </td>
                                                               </tr>
                                                             );
                                                           } else {
@@ -3440,7 +3520,26 @@ export default function ReportsPage() {
                                                                     {assignmentsByDate.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, col)), 0)}
                                                                   </td>
                                                                 ))}
-                                                                <td className="px-3 py-2 text-slate-400 dark:text-slate-500">—</td>
+                                                                <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
+                                                                  {(() => {
+                                                                    const totalR = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
+                                                                    const totalM = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
+                                                                    const totalT = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
+                                                                    const totalAll = totalR + totalM + totalT;
+                                                                    return (
+                                                                      <div className="flex flex-col gap-0.5">
+                                                                        <span className="font-bold">{totalAll}</span>
+                                                                        {totalAll > 0 && (
+                                                                          <div className="flex gap-1 text-[9px] opacity-75 font-medium">
+                                                                            {totalR > 0 && <span>R:{totalR}</span>}
+                                                                            {totalM > 0 && <span>M:{totalM}</span>}
+                                                                            {totalT > 0 && <span>T:{totalT}</span>}
+                                                                          </div>
+                                                                        )}
+                                                                      </div>
+                                                                    );
+                                                                  })()}
+                                                                </td>
                                                               </tr>
                                                             );
                                                           }
