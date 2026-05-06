@@ -152,6 +152,7 @@ export default function SuperAdminDashboard() {
       'overview-performance',
       'current-portfolio',
       dashboardAcademicYear,
+      dashboardStudentGroup,
       debouncedUserPerfSearch,
       userPerfRole,
       userPerfPage,
@@ -161,6 +162,7 @@ export default function SuperAdminDashboard() {
       leadAPI.getUserAnalytics({
         currentPortfolioOnly: true,
         ...(dashboardAcademicYear !== '' && { academicYear: dashboardAcademicYear }),
+        ...(dashboardStudentGroup && { studentGroup: dashboardStudentGroup }),
         ...(debouncedUserPerfSearch !== '' && { perfSearch: debouncedUserPerfSearch }),
         ...(userPerfRole !== '' && { perfRole: userPerfRole }),
         page: userPerfPage,
