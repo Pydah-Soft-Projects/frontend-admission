@@ -2511,8 +2511,24 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       // Calculate status breakdown of leads that actually have valid recipients
       const breakdown: Record<string, number> = {};
       const validLeads = allLeads.filter(leadHasRecipient);
+
+      // Determine effective role for status labels (prefer roleNameFilter, then first selected user's role)
+      const firstSelectedUser = selectedUserIds.length > 0 
+        ? users.find(u => String(u.id ?? u.userId ?? '') === selectedUserIds[0])
+        : null;
+      const effectiveRole = (roleNameFilter || firstSelectedUser?.roleName || '').trim().toUpperCase();
+      const isProRole = effectiveRole === 'PRO';
+      const isCounsellorRole = effectiveRole === 'STUDENT COUNSELOR';
+
       validLeads.forEach(l => {
-        const s = l.leadStatus || 'No Status';
+        let s = '';
+        if (isProRole) {
+          s = String(l.visitStatus || '').trim() || 'Not set';
+        } else if (isCounsellorRole) {
+          s = String(l.callStatus || '').trim() || 'Not set';
+        } else {
+          s = String(l.leadStatus || '').trim() || 'New';
+        }
         breakdown[s] = (breakdown[s] || 0) + 1;
       });
       setSmsReviewStatusBreakdown(breakdown);
@@ -2552,7 +2568,9 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     selectedUserIds,
     sendFather,
     sendPrimary,
+    roleNameFilter,
     studentGroupFilter,
+    users,
     userRosterDistrict,
   ]);
 
