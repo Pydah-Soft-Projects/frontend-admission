@@ -12,6 +12,7 @@ import type {
   BulkUploadJobResponse,
   ImportJobStatusResponse,
   DeleteJobStatusResponse,
+  LeadFilters,
 } from '@/types';
 
 export type SmsBulkJobReportContext = {
@@ -484,7 +485,7 @@ export const leadAPI = {
     institutionName?: string;
     forBreakdown?: 'school' | 'college';
     district?: string;
-    mandal?: string;
+
     village?: string;
     cycleNumber?: number | string;
     targetRole?: string;
@@ -555,7 +556,6 @@ export const leadAPI = {
     academicYear?: number | string;
     studentGroup?: string;
     district?: string;
-    mandal?: string;
     village?: string;
     cycleNumber?: number | string;
     count: number;
@@ -1233,7 +1233,30 @@ export const joiningAPI = {
 };
 
 export const admissionAPI = {
-  list: async (params?: { page?: number; limit?: number; search?: string; status?: string }) => {
+  getStats: async (params?: { startDate?: string; endDate?: string; courseId?: string; branchId?: string; courseName?: string; branchName?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.courseId) queryParams.append('courseId', params.courseId);
+    if (params?.branchId) queryParams.append('branchId', params.branchId);
+    if (params?.courseName) queryParams.append('courseName', params.courseName);
+    if (params?.branchName) queryParams.append('branchName', params.branchName);
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/stats${query ? `?${query}` : ''}`);
+    return response.data?.data || response.data;
+  },
+  list: async (params?: { 
+    page?: number; 
+    limit?: number; 
+    search?: string; 
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    courseId?: string;
+    branchId?: string;
+    courseName?: string;
+    branchName?: string;
+  }) => {
     const queryParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
