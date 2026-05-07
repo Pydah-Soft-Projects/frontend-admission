@@ -85,6 +85,7 @@ const TemplateModal = ({
   initialData,
   isProcessing,
   templateGroups = [],
+  defaultCategory,
 }: {
   mode: 'create' | 'edit';
   onClose: () => void;

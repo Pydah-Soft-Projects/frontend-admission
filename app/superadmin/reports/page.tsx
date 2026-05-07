@@ -2684,9 +2684,7 @@ export default function ReportsPage() {
                         <table className="min-w-full divide-y divide-[#e2e8f0] dark:divide-[#475569]">
                           <thead>
                             <tr className="bg-[#475569] dark:bg-[#334155]">
-                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Department</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">Group</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">User Info</th>
                               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white">
                                 {callReports.reports.some((r: any) => r?.rangeAggregate) ? 'Period' : 'Date'}
                               </th>
@@ -2742,9 +2740,14 @@ export default function ReportsPage() {
                                   const r = group.rows[0];
                                   return [(
                                     <tr key={group.userName} className={`${rowBg} hover:bg-slate-50 dark:hover:bg-slate-700/50`}>
-                                      <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100 border-r border-slate-100 dark:border-slate-700">{group.userName}</td>
-                                      <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-700">{group.fu?.department || '—'}</td>
-                                      <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-700">{group.fu?.group || '—'}</td>
+                                      <td className="px-6 py-4 border-r border-slate-100 dark:border-slate-700">
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{group.userName}</span>
+                                          <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                                            {group.fu?.department || '—'} · {group.fu?.group || '—'}
+                                          </span>
+                                        </div>
+                                      </td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{formatDailyDateCell(r)}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{r.callCount}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{formatSecondsToMMSS(Number(r.totalDuration) || 0)}</td>
@@ -2772,14 +2775,17 @@ export default function ReportsPage() {
                                       className={`${rowBg} cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors`}
                                       onClick={toggleExpand}
                                     >
-                                      <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100 border-r border-slate-100 dark:border-slate-700">
+                                      <td className="px-6 py-4 border-r border-slate-100 dark:border-slate-700">
                                         <div className="flex items-center gap-2">
                                           <ChevronDown className="w-3.5 h-3.5 -rotate-90 text-orange-400 flex-shrink-0 transition-transform" />
-                                          {group.userName}
+                                          <div className="flex flex-col">
+                                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{group.userName}</span>
+                                            <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                                              {group.fu?.department || '—'} · {group.fu?.group || '—'}
+                                            </span>
+                                          </div>
                                         </div>
                                       </td>
-                                      <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-700">{group.fu?.department || '—'}</td>
-                                      <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-700">{group.fu?.group || '—'}</td>
                                       <td className="whitespace-nowrap px-6 py-4 text-sm">
                                         <span className="inline-flex items-center rounded-full bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 text-xs font-medium text-orange-600 dark:text-orange-400">
                                           {group.rows.length} days
@@ -2803,11 +2809,14 @@ export default function ReportsPage() {
                                         >
                                           <div className="flex items-center gap-2">
                                             <ChevronDown className="w-3.5 h-3.5 text-orange-400 flex-shrink-0 transition-transform" />
-                                            {group.userName}
+                                            <div className="flex flex-col">
+                                              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{group.userName}</span>
+                                              <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                                                {group.fu?.department || '—'} · {group.fu?.group || '—'}
+                                              </span>
+                                            </div>
                                           </div>
                                         </td>
-                                        <td rowSpan={group.rows.length} className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 align-top border-r border-slate-100 dark:border-slate-700">{group.fu?.department || '—'}</td>
-                                        <td rowSpan={group.rows.length} className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 align-top border-r border-slate-100 dark:border-slate-700">{group.fu?.group || '—'}</td>
                                       </>
                                     )}
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{formatDailyDateCell(report)}</td>
