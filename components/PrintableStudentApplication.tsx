@@ -196,7 +196,8 @@ function getPrintApplicationHtml(props: {
 
   if (reservation) {
     const other = reservation.other?.length ? reservation.other.join(', ') : '';
-    body += section('Reservation', `${row('Category', (reservation.general || '').toUpperCase())}${other ? row('Other', other) : ''}`);
+    const ewsStatus = reservation.isEws ? ' (EWS)' : '';
+    body += section('Reservation', `${row('Category', (reservation.general || '').toUpperCase() + ewsStatus)}${other ? row('Other', other) : ''}`);
   }
 
   if (qualifications) {

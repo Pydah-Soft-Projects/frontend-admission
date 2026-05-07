@@ -522,6 +522,7 @@ export default function JoiningDetailPage() {
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">General</p>
                 <p className="text-base font-semibold text-gray-900 dark:text-slate-100 mt-1 uppercase">
                   {joining.reservation.general || '—'}
+                  {joining.reservation.isEws && ' (EWS)'}
                 </p>
               </div>
               {joining.reservation.other && joining.reservation.other.length > 0 && (

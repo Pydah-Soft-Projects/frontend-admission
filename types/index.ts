@@ -427,6 +427,7 @@ export interface JoiningParentInfo {
 
 export interface JoiningReservation {
   general: 'oc' | 'ews' | 'bc-a' | 'bc-b' | 'bc-c' | 'bc-d' | 'bc-e' | 'sc' | 'st';
+  isEws?: boolean;
   other?: string[];
 }
 

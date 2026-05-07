@@ -330,6 +330,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
     },
     reservation: {
       general: joining?.reservation?.general || 'oc',
+      isEws: joining?.reservation?.isEws || false,
       other: joining?.reservation?.other || [],
     },
     address: {
@@ -2049,6 +2050,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     }));
   };
 
+  const handleReservationEwsChange = (value: boolean) => {
+    setFormState((prev) => ({
+      ...prev,
+      reservation: {
+        ...prev.reservation,
+        isEws: value,
+      },
+    }));
+  };
+
   const removeSibling = (index: number) => {
     setFormState((prev) => {
       const copy = [...prev.siblings];
@@ -2137,6 +2148,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       parents: formState.parents,
       reservation: {
         general: formState.reservation.general,
+        isEws: formState.reservation.isEws || false,
         other: formState.reservation.other || [],
       },
       address: formState.address,
@@ -3100,6 +3112,33 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     <option value="sc">SC</option>
                     <option value="st">ST</option>
                   </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    EWS (Economically Weaker Section)<span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-4 py-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="ews"
+                        checked={formState.reservation.isEws === true}
+                        onChange={() => handleReservationEwsChange(true)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700 dark:text-slate-200">Yes</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="ews"
+                        checked={formState.reservation.isEws !== true}
+                        onChange={() => handleReservationEwsChange(false)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700 dark:text-slate-200">No</span>
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">

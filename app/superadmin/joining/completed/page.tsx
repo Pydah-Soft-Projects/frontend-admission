@@ -62,7 +62,7 @@ type ApiError = {
 const CompletedAdmissionsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'abstract' | 'detailed'>('abstract');
+  const [activeTab, setActiveTab] = useState<'abstract' | 'detailed' | 'student-info'>('abstract');
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -103,6 +103,8 @@ const CompletedAdmissionsPage = () => {
     enabled: !!courseFilter,
   });
   const branches = Array.isArray(branchesData) ? branchesData : (branchesData as any)?.data || [];
+
+  const [isExporting, setIsExporting] = useState(false);
 
   // Stats Query
   const { data: statsData, isLoading: statsLoading } = useQuery({
@@ -204,6 +206,38 @@ const CompletedAdmissionsPage = () => {
     cancelAdmissionMutation.mutate();
   };
 
+  const handleExportExcel = async () => {
+    try {
+      setIsExporting(true);
+      const blob = await admissionAPI.exportAdmissions({
+        search: searchTerm || undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        courseId: courseFilter || undefined,
+        branchId: branchFilter || undefined,
+        courseName: getCourseName(courseFilter) || undefined,
+        branchName: getBranchName(branchFilter) || undefined,
+        startDate: dateRange.from || undefined,
+        endDate: dateRange.to || undefined,
+      });
+
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement('a');
+      link.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `admissions_export_${date}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showToast.success('Excel export started successfully');
+    } catch (error) {
+      console.error('Error exporting admissions:', error);
+      showToast.error('Failed to export admissions. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const totalAdmissionsCount = useMemo(() => {
     return stats.reduce((acc: number, curr: any) => acc + curr.totalAdmissions, 0);
   }, [stats]);
@@ -301,7 +335,7 @@ const CompletedAdmissionsPage = () => {
           </div>
         </Card>
         {stats.slice(0, 2).map((s: any) => (
-          <Card key={s.courseId} className="flex flex-col gap-1 border-l-4 border-l-slate-300 dark:border-l-slate-700">
+          <Card key={s.courseId || s.courseName} className="flex flex-col gap-1 border-l-4 border-l-slate-300 dark:border-l-slate-700">
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               {s.courseName || 'Other'}
             </span>
@@ -347,11 +381,28 @@ const CompletedAdmissionsPage = () => {
                 <List className="h-4 w-4" />
                 Detailed View
               </button>
+              <button
+                onClick={() => setActiveTab('student-info')}
+                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'student-info'
+                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                <Filter className="h-4 w-4" />
+                Student Info
+              </button>
             </div>
 
             {/* Quick Actions / Export (Moved here for better layout) */}
             <div className="flex items-center gap-2">
-               <Button variant="outline" size="sm" className="gap-2">
+               <Button 
+                 variant="outline" 
+                 size="sm" 
+                 className="gap-2"
+                 onClick={handleExportExcel}
+                 isLoading={isExporting}
+               >
                  <Download className="h-4 w-4" /> Export XLSX
                </Button>
             </div>
@@ -491,7 +542,7 @@ const CompletedAdmissionsPage = () => {
                         totalCancelled: b.totalCancelled
                       }))
                     ).map((row: any) => (
-                      <tr key={`${row.courseId}-${row.branchId}`} className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                      <tr key={`${row.courseId || row.courseName}-${row.branchId || row.branchName}`} className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30">
                         <td className="px-6 py-4">
                           <span className="font-bold text-slate-900 dark:text-slate-100">{row.courseName || 'Unknown Course'}</span>
                         </td>
@@ -527,7 +578,7 @@ const CompletedAdmissionsPage = () => {
             </div>
           </Card>
         </div>
-      ) : (
+      ) : activeTab === 'detailed' ? (
         <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
@@ -559,14 +610,14 @@ const CompletedAdmissionsPage = () => {
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
                 {isLoading || isFetching ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-6 py-16 text-center text-sm text-slate-500">
                       <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
                       <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">Loading admissions…</p>
                     </td>
                   </tr>
                 ) : isEmpty ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-6 py-16 text-center text-sm text-slate-500">
                       <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
                       <p className="mt-1 text-xs uppercase tracking-[0.3em] text-slate-400">
                         Adjust filters or search criteria.
@@ -648,6 +699,124 @@ const CompletedAdmissionsPage = () => {
                 >
                   Next
                 </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
+              <thead className="bg-slate-50/80 backdrop-blur-sm dark:bg-slate-900/70">
+                <tr>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Admission #</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Timestamp</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Course / Branch</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Student Name</th>
+                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Contact No</th>
+                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Quota</th>
+                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Caste</th>
+                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">EWS</th>
+                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Certificates</th>
+                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Paid</th>
+                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Reference</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
+                {isLoading || isFetching ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-16 text-center text-sm text-slate-500">
+                      <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
+                      <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">Loading admissions…</p>
+                    </td>
+                  </tr>
+                ) : isEmpty ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-16 text-center text-sm text-slate-500">
+                      <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  admissions.map((record: any) => (
+                    <tr key={record._id} className="transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60">
+                      <td className="px-6 py-4 text-sm font-bold text-blue-600 dark:text-blue-400">
+                        {record.admissionNumber}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-slate-500">
+                        {record.createdAt ? new Date(record.createdAt).toLocaleString() : '—'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{record.courseInfo?.course || '—'}</span>
+                          <span className="text-[10px] text-slate-500">{record.courseInfo?.branch || '—'}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {record.studentInfo?.name ?? '—'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                        {record.studentInfo?.phone ?? '—'}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                          {record.courseInfo?.quota || '—'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase">
+                          {record.reservation?.general || 'OC'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {record.reservation?.general === 'ews' || record.reservation?.other?.includes('EWS') ? (
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+                            ✓
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-700">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {(() => {
+                           const docs = record.documents || {};
+                           const received = Object.values(docs).filter(v => v === 'received').length;
+                           const total = Object.values(docs).length;
+                           return (
+                             <div className="flex flex-col items-center gap-1">
+                               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{received}/{total}</span>
+                               <div className="h-1 w-12 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                 <div 
+                                   className="h-full bg-blue-500" 
+                                   style={{ width: `${(received / (total || 1)) * 100}%` }}
+                                 />
+                               </div>
+                             </div>
+                           );
+                        })()}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.totalPaid || 0)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right text-xs text-slate-500 italic">
+                        {record.leadSource || 'Direct'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          
+          {pagination.pages > 1 && (
+            <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-200 p-4 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              <div>
+                Page {pagination.page} of {pagination.pages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage(prev => Math.max(prev - 1, 1))} disabled={pagination.page === 1 || isFetching}>Previous</Button>
+                <Button variant="outline" size="sm" onClick={() => setPage(prev => Math.min(prev + 1, pagination.pages))} disabled={pagination.page === pagination.pages || isFetching}>Next</Button>
               </div>
             </div>
           )}

@@ -1293,6 +1293,30 @@ export const admissionAPI = {
     const response = await api.put(`/admissions/${leadId}`, data);
     return response.data;
   },
+  exportAdmissions: async (filters?: {
+    search?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    courseId?: string;
+    branchId?: string;
+    courseName?: string;
+    branchName?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/export${query ? `?${query}` : ''}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };
 
 export const paymentAPI = {
