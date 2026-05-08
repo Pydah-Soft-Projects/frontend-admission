@@ -2,14 +2,15 @@
 
 import { ReactNode, useEffect, useState, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { DashboardShell, DashboardNavItem, HomeIcon, ListIcon, ChartBarIcon, SettingsIcon } from '@/components/layout/DashboardShell';
+import { DashboardShell, DashboardNavItem, HomeIcon, ListIcon, ChartBarIcon, SettingsIcon, BookIcon } from '@/components/layout/DashboardShell';
 import { auth } from '@/lib/auth';
 import type { User } from '@/types';
 import { Loading } from '@/components/Loading';
 
-const navItems: (DashboardNavItem & { isActivity?: boolean })[] = [
+const navItems: (DashboardNavItem & { isActivity?: boolean; roles?: string[] })[] = [
   { href: '/user/dashboard', label: 'Dashboard', icon: HomeIcon },
   { href: '/user/leads', label: 'My Leads', icon: ListIcon },
+  { href: '/user/visit-diary', label: 'Visit Diary', icon: BookIcon, roles: ['PRO'] },
   { href: '/user/call-activity', label: 'Activity', icon: ChartBarIcon, isActivity: true },
   { href: '/user/settings', label: 'Settings', icon: SettingsIcon },
 ];
@@ -22,15 +23,17 @@ export default function UserLayout({ children }: { children: ReactNode }) {
 
   const filteredNavItems = useMemo(() => {
     if (!currentUser) return navItems;
-    return navItems.map(item => {
-      if (item.isActivity) {
-        return {
-          ...item,
-          label: currentUser.roleName === 'PRO' ? 'Activity' : 'Call activity'
-        };
-      }
-      return item;
-    });
+    return navItems
+      .filter(item => !item.roles || item.roles.includes(currentUser.roleName))
+      .map(item => {
+        if (item.isActivity) {
+          return {
+            ...item,
+            label: currentUser.roleName === 'PRO' ? 'Activity' : 'Call activity'
+          };
+        }
+        return item;
+      });
   }, [currentUser]);
 
   useEffect(() => {

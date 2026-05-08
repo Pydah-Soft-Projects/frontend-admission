@@ -66,6 +66,9 @@ export const BackIcon = createIcon('M10 19l-7-7m0 0l7-7m-7 7h18');
 export const ReportIcon = createIcon(
   'M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z'
 );
+export const BookIcon = createIcon(
+  'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'
+);
 export const BellIcon = createIcon(
   'M10 2a6 6 0 0 0-6 6v3.586l-.707.707A1 1 0 0 0 4 14h12a1 1 0 0 0 .707-1.707L16 11.586V8a6 6 0 0 0-6-6zM10 18a3 3 0 0 1-3-3h6a3 3 0 0 1-3 3z'
 );
@@ -91,6 +94,8 @@ const MOBILE_TOP_BAR_ICONS: Record<string, IconComponent> = {
   'team-member': UserCircleIcon,
   analytics: ChartBarIcon,
   'team-leads': ListIcon,
+  activity: ChartBarIcon,
+  book: BookIcon,
 };
 
 export type MobileTopBarOptions = {

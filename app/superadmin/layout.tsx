@@ -7,7 +7,7 @@ import {
   DashboardNavItem,
   HomeIcon,
   ListIcon,
-  UploadIcon,
+  BookIcon,
   TemplateIcon,
   CommunicationsIcon,
   AcademicIcon,
