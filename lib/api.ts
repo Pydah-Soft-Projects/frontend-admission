@@ -681,6 +681,14 @@ export const leadAPI = {
     const response = await api.get(`/leads/analytics/me${query ? `?${query}` : ''}`);
     return response.data?.data || response.data;
   },
+  getMyAssignmentHistory: async () => {
+    const response = await api.get('/leads/analytics/me/assignments');
+    return response.data?.data || response.data;
+  },
+  getAssignmentDetailsByDate: async (date: string) => {
+    const response = await api.get(`/leads/analytics/me/assignments/details?date=${date}`);
+    return response.data?.data;
+  },
   // Public lead submission (no auth required)
   submitPublicLead: async (data: {
     hallTicketNumber?: string;

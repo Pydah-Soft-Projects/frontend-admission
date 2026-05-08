@@ -9,8 +9,9 @@ import { leadAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/Dialog';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
-import { formatSecondsToMMSS } from '@/lib/utils';
+import { formatSecondsToMMSS, cn } from '@/lib/utils';
 
 const defaultStart = format(subDays(new Date(), 30), 'yyyy-MM-dd');
 const defaultEnd = format(new Date(), 'yyyy-MM-dd');
@@ -33,6 +34,7 @@ export default function UserCallActivityPage() {
   const [user, setUser] = useState<any>(null);
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
+  const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
 
   const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
 
@@ -66,9 +68,11 @@ export default function UserCallActivityPage() {
             ? 'Summary of leads and status changes.'
             : 'Calls, SMS, and status changes for the selected date range.'}
         </p>
-        <Button size="sm" variant="outline" onClick={() => router.push('/user/dashboard')} className="!text-xs !py-1.5 !px-2.5 !min-h-8 sm:!min-h-0 sm:!text-sm sm:!py-2 sm:!px-3">
-          Back to dashboard
-        </Button>
+        <div className="flex items-center gap-2 mt-1 sm:mt-2">
+          <Button size="sm" variant="outline" onClick={() => router.push('/user/dashboard')} className="!text-[10px] !py-1 !px-2 !min-h-7 sm:!min-h-0 sm:!text-xs sm:!py-1.5 sm:!px-2.5">
+            Back to dashboard
+          </Button>
+        </div>
       </div>
     );
     return () => clearHeaderContent();
@@ -134,26 +138,37 @@ export default function UserCallActivityPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-3 sm:space-y-6 px-0 sm:px-2 pb-20 sm:pb-0">
-      {/* Row 1: Start and End date */}
-      <div className="flex flex-wrap items-end gap-2 sm:gap-4">
-        <div className="min-w-0 flex-1 sm:flex-initial sm:w-40">
-          <label className="block text-[10px] sm:text-xs font-medium text-slate-500 mb-0.5">Start date</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 min-h-9"
-          />
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        {/* Row 1: Start and End date */}
+        <div className="flex flex-wrap items-end gap-2 sm:gap-4">
+          <div className="min-w-0 flex-1 sm:flex-initial sm:w-40">
+            <label className="block text-[10px] sm:text-xs font-medium text-slate-500 mb-0.5">Start date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 min-h-9"
+            />
+          </div>
+          <div className="min-w-0 flex-1 sm:flex-initial sm:w-40">
+            <label className="block text-[10px] sm:text-xs font-medium text-slate-500 mb-0.5">End date</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 min-h-9"
+            />
+          </div>
         </div>
-        <div className="min-w-0 flex-1 sm:flex-initial sm:w-40">
-          <label className="block text-[10px] sm:text-xs font-medium text-slate-500 mb-0.5">End date</label>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 min-h-9"
-          />
-        </div>
+
+        {/* Print Button - Highly Visible */}
+        <Button 
+          onClick={() => setIsAssignmentModalOpen(true)}
+          className="bg-orange-600 hover:bg-orange-700 text-white font-semibold flex items-center gap-2 !h-10 !px-4 shadow-lg shadow-orange-500/20"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+          Print Assignment History
+        </Button>
       </div>
       {/* Row 2: Quick filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -419,6 +434,453 @@ export default function UserCallActivityPage() {
           )}
         </>
       )}
+
+      {user && (
+        <PrintAssignmentModal 
+          isOpen={isAssignmentModalOpen} 
+          onClose={() => setIsAssignmentModalOpen(false)} 
+          roleName={user.roleName}
+        />
+      )}
     </div>
+  );
+}
+
+function PrintAssignmentModal({ isOpen, onClose, roleName }: { isOpen: boolean; onClose: () => void; roleName: string }) {
+  const [history, setHistory] = useState<{ date: string; count: number }[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState<Record<string, boolean>>({
+    name: true,
+    phone: true,
+    enquiry_number: true,
+    district: true,
+    mandal: true,
+    village: true
+  });
+
+  const excludedFields = [
+    'id', 'assigned_at', 'assigned_to', 'pro_assigned_at', 'assigned_to_pro', 
+    'created_at', 'updated_at', 'needs_manual_update', 'is_active', 'is_deleted',
+    'status', 'last_called_at', 'last_called_by', 'interested_course'
+  ];
+
+  const formatHeader = (key: string) => {
+    return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      loadHistory();
+    } else {
+      setSelectedDate(null);
+      setLeads([]);
+      setAvailableColumns([]);
+    }
+  }, [isOpen]);
+
+  const loadHistory = async () => {
+    setIsHistoryLoading(true);
+    try {
+      const data = await leadAPI.getMyAssignmentHistory();
+      setHistory(data || []);
+    } catch (err) {
+      console.error('Failed to load assignment history', err);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  const handleSelectDate = async (date: string) => {
+    setSelectedDate(date);
+    setIsLoading(true);
+
+    try {
+      console.log(`Fetching assignments for date: ${date}`);
+      const response = await leadAPI.getAssignmentDetailsByDate(date);
+      console.log('Assignment API Response:', response);
+
+      // Handle all possible structures safely
+      const leadsData =
+        Array.isArray(response)
+          ? response
+          : Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.leads)
+          ? response.leads
+          : [];
+
+      console.log('Parsed Leads:', leadsData);
+      setLeads(leadsData);
+
+      // Dynamically detect available columns with preferred order
+      if (leadsData.length > 0) {
+        const keys = Object.keys(leadsData[0]).filter(k => !excludedFields.includes(k));
+        
+        const preferredOrder = ['name', 'phone', 'enquiry_number', 'district', 'mandal', 'village', 'address'];
+        const sortedKeys = [
+          ...preferredOrder.filter(k => keys.includes(k)),
+          ...keys.filter(k => !preferredOrder.includes(k))
+        ];
+        
+        setAvailableColumns(sortedKeys);
+        
+        // Ensure standard columns are checked by default if they exist
+        const initialSelection: Record<string, boolean> = {};
+        sortedKeys.forEach(k => {
+          initialSelection[k] = ['name', 'phone', 'enquiry_number', 'district', 'mandal', 'village', 'address'].includes(k);
+        });
+        setSelectedColumns(initialSelection);
+      }
+    } catch (err) {
+      console.error('Failed to load assignment details', err);
+      setLeads([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePrintClick = () => {
+    if (leads.length === 0) return;
+    setIsColumnModalOpen(true);
+  };
+
+  const handleFinalPrint = () => {
+    setIsColumnModalOpen(false);
+    
+    // Prevent multiple clicks/executions
+    if ((window as any)._isPrintingNow) return;
+    (window as any)._isPrintingNow = true;
+
+    const printContent = document.getElementById('printable-assignment-area');
+    if (!printContent) {
+      (window as any)._isPrintingNow = false;
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      (window as any)._isPrintingNow = false;
+      return;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Leads Assignment Report</title>
+          <style>
+            @page { size: auto; margin: 10mm; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #000; background: #fff; }
+            .header { border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
+            .header h1 { margin: 0; font-size: 24px; text-transform: uppercase; }
+            .header p { margin: 5px 0 0 0; font-size: 14px; color: #333; }
+            .header .right { text-align: right; }
+            .header .right p { font-size: 10px; color: #666; }
+            .header .right .total { font-size: 14px; font-weight: bold; color: #000; margin-top: 5px; }
+            
+            h2 { font-size: 18px; margin: 20px 0 10px 0; }
+            
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #000; padding: 6px 4px; text-align: left; font-size: 9px; }
+            th { background-color: #f5f5f5; font-weight: bold; }
+            tr { page-break-inside: avoid; }
+            
+            .footer { margin-top: 50px; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #eee; pt: 10px; }
+            .footer-text { font-size: 10px; color: #999; }
+            .signature { border-top: 1px solid #000; width: 200px; text-align: center; padding-top: 5px; font-size: 12px; font-weight: bold; }
+            
+            .print-hidden, .screen-only, button, .print\\:hidden { display: none !important; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>Leads Assignment Report</h1>
+              <p>Date: ${selectedDate ? format(new Date(selectedDate + 'T12:00:00'), 'MMMM d, yyyy') : 'N/A'}</p>
+            </div>
+            <div class="right">
+              <p>Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}</p>
+              <div class="total">Total Leads: ${leads.length}</div>
+            </div>
+          </div>
+
+          <h2>Assignments for ${selectedDate ? format(new Date(selectedDate + 'T12:00:00'), 'MMM d, yyyy') : 'N/A'}</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30px">S.No</th>
+                ${availableColumns.filter(k => selectedColumns[k]).map(k => `<th>${formatHeader(k)}</th>`).join('')}
+                <th style="width: 120px">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${leads.map((lead, idx) => `
+                <tr>
+                  <td style="text-align: center">${idx + 1}</td>
+                  ${availableColumns.filter(k => selectedColumns[k]).map(k => `<td>${lead[k] || '—'}</td>`).join('')}
+                  <td></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <div class="footer-text">* This is a system-generated report.</div>
+            <div class="signature">Authorized Signature</div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    
+    // Focus and print after resources load
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+      (window as any)._isPrintingNow = false;
+    }, 500);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="w-[96vw] sm:max-w-4xl max-h-[85vh] sm:max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-xl sm:rounded-lg shadow-2xl">
+        <DialogHeader className="p-4 border-b dark:border-slate-700">
+          <DialogTitle className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+            Print Assignments
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-hidden flex flex-col sm:flex-row">
+          {/* History Sidebar */}
+          <div className="w-full sm:w-64 border-b sm:border-b-0 sm:border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 sm:p-4 overflow-y-auto sm:max-h-none print:hidden flex-1 sm:flex-initial">
+            <h3 className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 sm:mb-3">Select Date</h3>
+            {isHistoryLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : history.length > 0 ? (
+              <div className="space-y-1">
+                {history.map((item) => (
+                  <button
+                    key={item.date}
+                    onClick={() => handleSelectDate(item.date)}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex justify-between items-center",
+                      selectedDate === item.date 
+                        ? "bg-orange-500 text-white font-medium" 
+                        : "hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                    )}
+                  >
+                    <span>{format(new Date(item.date + 'T12:00:00'), 'MMM d, yyyy')}</span>
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full", selectedDate === item.date ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500")}>
+                      {item.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 italic">No assignments found.</p>
+            )}
+
+            {/* Information Only Area */}
+            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+              <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/20">
+                <p className="text-[10px] leading-relaxed text-orange-800 dark:text-orange-300">
+                  Select a date from the list above to preview and prepare the assignment report. 
+                  You will be able to customize the printed columns after clicking "Print List".
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Details Preview - Hidden on mobile as per user request */}
+          <div className="hidden sm:flex flex-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-y-auto min-w-0 flex-col">
+            {!selectedDate ? (
+              <div className="h-full flex items-center justify-center text-slate-400 flex-col gap-2 p-8 text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="opacity-20"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <p className="text-sm">Select a date from the left to preview assignments.</p>
+              </div>
+            ) : isLoading ? (
+              <div className="p-6 space-y-4">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ) : (
+              <div className="p-4 sm:p-6 print:p-0">
+                <div id="printable-assignment-area" className="w-full">
+                  {/* Print Header (Visible only when printing) */}
+                  <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h1 className="text-2xl font-bold text-slate-900 uppercase">Leads Assignment Report</h1>
+                        <p className="text-sm text-slate-700 font-medium mt-1">Date: {format(new Date(selectedDate + 'T12:00:00'), 'MMMM d, yyyy')}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-500">Generated: {format(new Date(), 'MMM d, yyyy HH:mm')}</p>
+                        <p className="text-sm font-bold text-slate-800">Total Leads: {leads.length}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 flex items-center justify-between print:mb-2">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      Assignments for {format(new Date(selectedDate + 'T12:00:00'), 'MMM d, yyyy')}
+                    </h2>
+                    <span className="text-sm text-slate-500 print:hidden">{leads.length} leads</span>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                    <table className="w-full text-[10px] border-collapse border border-slate-300 dark:border-slate-700">
+                      <thead>
+                        <tr className="bg-slate-100 dark:bg-slate-800">
+                          <th className="border border-slate-300 dark:border-slate-700 p-1.5 text-left w-8">S.No</th>
+                          {availableColumns.filter(k => selectedColumns[k]).map(k => (
+                            <th key={k} className="border border-slate-300 dark:border-slate-700 p-1.5 text-left font-semibold">
+                              {formatHeader(k)}
+                            </th>
+                          ))}
+                          {selectedColumns.remarks && <th className="border border-slate-300 dark:border-slate-700 p-1.5 text-left w-20">Remarks</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.isArray(leads) && leads.map((lead, idx) => (
+                          <tr key={lead.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                            <td className="border border-slate-300 dark:border-slate-700 p-1.5 text-center">{idx + 1}</td>
+                            {availableColumns.filter(k => selectedColumns[k]).map(k => (
+                              <td key={k} className="border border-slate-300 dark:border-slate-700 p-1.5 whitespace-normal break-words max-w-[150px]">
+                                {String(lead[k] || '—')}
+                              </td>
+                            ))}
+                            {selectedColumns.remarks && <td className="border border-slate-300 dark:border-slate-700 p-1.5"></td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {leads.length === 0 && (
+                    <div className="text-center py-12 border border-t-0 border-slate-300 bg-slate-50/30">
+                      <p className="text-sm text-slate-500 italic">No lead details found for this date.</p>
+                    </div>
+                  )}
+
+                  <div className="hidden print:flex mt-12 justify-between items-end border-t border-slate-200 pt-6">
+                    <div className="text-xs text-slate-400">
+                      * This is a system-generated report.
+                    </div>
+                    <div className="text-center border-t border-slate-900 pt-1 w-48">
+                      <p className="text-xs font-bold text-slate-900">Authorized Signature</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="p-4 pb-16 sm:pb-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 sm:justify-between items-center print:hidden">
+          <p className="text-[10px] sm:text-xs text-slate-500 hidden sm:block italic">
+            * Assignments are based on the original assignment date.
+          </p>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={onClose} className="flex-1 sm:flex-initial !text-xs sm:!text-sm">
+              Close
+            </Button>
+            <Button 
+              onClick={handlePrintClick} 
+              disabled={!selectedDate || leads.length === 0}
+              className="flex-1 sm:flex-initial !text-xs sm:!text-sm bg-orange-600 hover:bg-orange-700 text-white flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+              Print List
+            </Button>
+          </div>
+        </DialogFooter>
+
+        {/* Column Selection Secondary Modal */}
+        <Dialog open={isColumnModalOpen} onOpenChange={setIsColumnModalOpen}>
+          <DialogContent className="w-[92vw] sm:max-w-md max-h-[85vh] sm:max-h-[90vh] p-0 overflow-hidden rounded-xl sm:rounded-lg shadow-2xl flex flex-col">
+            <DialogHeader className="p-4 sm:p-6 pb-2 shrink-0">
+              <DialogTitle className="text-lg sm:text-xl">Customize Report Columns</DialogTitle>
+              <p className="text-[10px] sm:text-sm text-slate-500">Select information to include in the report.</p>
+            </DialogHeader>
+
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b dark:border-slate-700">
+                <span className="text-xs sm:text-sm font-medium">Available Fields</span>
+                <button 
+                  onClick={() => {
+                    const allChecked = Object.values(selectedColumns).every(v => v);
+                    const newSelection = { ...selectedColumns };
+                    availableColumns.forEach(k => newSelection[k] = !allChecked);
+                    setSelectedColumns(newSelection);
+                  }}
+                  className="text-[10px] sm:text-xs text-orange-600 hover:underline font-semibold"
+                >
+                  Toggle All
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {availableColumns.map((colKey) => (
+                  <label 
+                    key={colKey} 
+                    className="flex items-center gap-3 cursor-pointer group p-3 sm:p-2 rounded-lg border border-slate-100 sm:border-transparent dark:border-slate-800/50 sm:dark:border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <input 
+                      type="checkbox" 
+                      checked={selectedColumns[colKey] || false}
+                      onChange={(e) => setSelectedColumns(prev => ({ ...prev, [colKey]: e.target.checked }))}
+                      className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 h-5 w-5 sm:h-4.5 sm:w-4.5 transition-all"
+                    />
+                    <span className="text-sm font-medium sm:font-normal text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors truncate">
+                      {formatHeader(colKey)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3">
+                <label className="flex items-center gap-3 cursor-pointer p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedColumns.remarks || false}
+                    onChange={(e) => setSelectedColumns(prev => ({ ...prev, remarks: e.target.checked }))}
+                    className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 h-4.5 w-4.5"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">Include Remarks Column</p>
+                    <p className="text-[10px] text-slate-500">Adds an empty column for manual notes on the printed sheet.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <DialogFooter className="p-3 sm:p-4 pb-16 sm:pb-4 bg-slate-50 dark:bg-slate-800/50 border-t dark:border-slate-700 flex gap-2 shrink-0">
+              <Button variant="ghost" onClick={() => setIsColumnModalOpen(false)} className="flex-1">
+                Back
+              </Button>
+              <Button onClick={handleFinalPrint} className="flex-1 bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-600/20">
+                Confirm & Print
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </DialogContent>
+      <style jsx global>{`
+        /* Minimal Screen Tweaks */
+        @media screen {
+          .print\:block, .print\:flex { display: none !important; }
+        }
+      `}</style>
+    </Dialog>
   );
 }

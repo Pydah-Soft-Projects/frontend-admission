@@ -49,7 +49,7 @@ export const DialogContent = ({
 
             {/* Content */}
             <div className={cn(
-                "relative z-50 w-full max-w-lg rounded-lg bg-white p-6 shadow-lg duration-200 animate-in fade-in-0 zoom-in-95",
+                "relative z-[100] w-full max-w-lg rounded-lg bg-white p-6 shadow-lg duration-200 animate-in fade-in-0 zoom-in-95",
                 "dark:bg-slate-900 dark:text-slate-100",
                 className
             )}>
