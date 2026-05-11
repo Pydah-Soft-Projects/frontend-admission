@@ -145,6 +145,7 @@ export default function ReportsPage() {
   const [expandedPerformanceUsers, setExpandedPerformanceUsers] = useState<Set<string>>(new Set());
   const [performanceSearch, setPerformanceSearch] = useState('');
   const [visitSearch, setVisitSearch] = useState('');
+  const [expandedVisitDiaryRows, setExpandedVisitDiaryRows] = useState<Set<string>>(new Set());
   const [queuedVisitLeads, setQueuedVisitLeads] = useState<{ lead: Lead; status: string }[]>([]);
   const [selectedVisitDate, setSelectedVisitDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
@@ -2167,39 +2168,95 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Simplified Filters for Visit Diary */}
       {activeTab === 'visitDiary' && (
-        <div className="flex flex-wrap items-end gap-3 mt-4 bg-orange-50/50 dark:bg-orange-900/10 p-3 rounded-xl border border-orange-100 dark:border-orange-900/20">
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest px-1">Start Date</label>
-            <Input
-              type="date"
-              value={filters.startDate}
-              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-              className="h-9 rounded-lg border-orange-200 dark:border-orange-900/30 focus:ring-orange-500 w-40"
-            />
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mt-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Start Date</label>
+              <Input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                className="h-9 rounded-lg border-slate-200 dark:border-slate-700 focus:ring-blue-500 w-40"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">End Date</label>
+              <Input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                className="h-9 rounded-lg border-slate-200 dark:border-slate-700 focus:ring-blue-500 w-40"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Filter by PRO (Optional)</label>
+               <select
+                 value={filters.userId}
+                 onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
+                 className="h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm focus:ring-blue-500 min-w-[200px]"
+               >
+                 <option value="">All PRO Officers</option>
+                 {users.filter(u => u.roleName === 'PRO').map((user: any) => (
+                   <option key={user._id} value={user._id}>{user.name}</option>
+                 ))}
+               </select>
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest px-1">End Date</label>
-            <Input
-              type="date"
-              value={filters.endDate}
-              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-              className="h-9 rounded-lg border-orange-200 dark:border-orange-900/30 focus:ring-orange-500 w-40"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-             <label className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest px-1">Filter by PRO (Optional)</label>
-             <select
-               value={filters.userId}
-               onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
-               className="h-9 rounded-lg border border-orange-200 dark:border-orange-900/30 bg-white dark:bg-slate-800 px-3 text-sm focus:ring-orange-500 min-w-[200px]"
-             >
-               <option value="">All PRO Officers</option>
-               {users.filter(u => u.roleName === 'PRO').map((user: any) => (
-                 <option key={user._id} value={user._id}>{user.name}</option>
-               ))}
-             </select>
+
+          <div className="flex items-center gap-3">
+            {visitSubTab === 'history' && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="h-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
+                onClick={() => {
+                  const csvData = (visitDiaryAnalytics?.users || []).flatMap((u: any) => 
+                    (u.visitDiaryUpdates || []).flatMap((day: any) => 
+                      day.details.map((a: any) => ({
+                        'Update Date': day.date,
+                        'PRO Name': u.name || u.userName,
+                        'Student Name': a.name,
+                        'Phone': a.phone,
+                        'Village': a.village,
+                        'Visit Status': a.visitStatus || 'Assigned'
+                      }))
+                    )
+                  );
+                  handleExport('excel', csvData, `visit-diary-report-${filters.startDate}`);
+                }}
+              >
+                <Download className="w-3.5 h-3.5 mr-2" />
+                Export Data
+              </Button>
+            )}
+
+            <div className="flex p-1 bg-slate-200/50 dark:bg-slate-700/50 rounded-xl">
+              <button
+                onClick={() => setVisitSubTab('history')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  visitSubTab === 'history' 
+                    ? "bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                History
+              </button>
+              <button
+                onClick={() => setVisitSubTab('record')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  visitSubTab === 'record' 
+                    ? "bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                <Search className="w-3.5 h-3.5" />
+                Record
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -4524,112 +4581,140 @@ export default function ReportsPage() {
       {
         activeTab === 'visitDiary' && (
           <div className="space-y-6 mt-4 animate-in fade-in duration-500">
-            {/* Sub-Tabs for Visit Diary */}
-            <div className="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl max-w-sm">
-              <button
-                onClick={() => setVisitSubTab('history')}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all",
-                  visitSubTab === 'history' 
-                    ? "bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                )}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                Visit History
-              </button>
-              <button
-                onClick={() => setVisitSubTab('record')}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all",
-                  visitSubTab === 'record' 
-                    ? "bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                )}
-              >
-                <Search className="w-3.5 h-3.5" />
-                Record Visit (on behalf)
-              </button>
-            </div>
+            {/* Main content area */}
 
             {visitSubTab === 'history' ? (
               <>
-                <Card className="p-4 bg-orange-50/30 border-orange-100 dark:bg-orange-900/10 dark:border-orange-900/20">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">PRO Visit Records</h3>
-                      <p className="text-xs text-slate-500">Showing field visit outcomes for the selected date range.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="bg-white"
-                        onClick={() => {
-                          const csvData = (userAnalyticsForUsersTab?.users || []).flatMap((u: any) => 
-                            (u.assignmentDetails || []).map((a: any) => ({
-                              'Visit Date': format(new Date(filters.startDate), 'dd MMM yyyy'),
-                              'PRO Name': u.name || u.userName,
-                              'Student Name': a.name,
-                              'Phone': a.phone,
-                              'Village': a.village,
-                              'Visit Status': a.visitStatus || 'Assigned'
-                            }))
-                          );
-                          handleExport('excel', csvData, `visit-diary-report-${filters.startDate}`);
-                        }}
-                      >
-                        Export Visit Data
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-
                 <div className="grid grid-cols-1 gap-4">
                   {isLoadingVisitDiaryAnalytics ? (
                     <ReportDashboardSkeleton />
-                  ) : visitDiaryAnalytics?.users && visitDiaryAnalytics.users.some((u: any) => (u.assignmentDetails?.length ?? 0) > 0) ? (
-                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-                      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800">
-                            <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">PRO Officer</th>
-                            <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Student Name</th>
-                            <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Contact</th>
-                            <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Location</th>
-                            <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Visit Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {visitDiaryAnalytics.users.flatMap((u: any) => 
-                            (u.assignmentDetails || []).map((a: any, idx: number) => (
-                              <tr key={`${u.userId}-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                <td className="px-4 py-3">
-                                  <div className="flex flex-col">
-                                    <span className="text-xs font-bold text-orange-600">{u.name || u.userName}</span>
-                                    <span className="text-[9px] text-slate-400 uppercase tracking-tighter">
-                                      {a.visitDate ? format(new Date(a.visitDate), 'dd MMM yyyy') : format(new Date(filters.startDate), 'dd MMM yyyy')}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-xs font-medium text-slate-900 dark:text-slate-100">{a.name}</td>
-                                <td className="px-4 py-3 text-xs text-slate-500">{a.phone}</td>
-                                <td className="px-4 py-3 text-xs text-slate-500">{a.village}</td>
-                                <td className="px-4 py-3 text-right">
-                                  <span className={cn(
-                                    "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                                    a.visitStatus === 'Interested' ? "bg-emerald-100 text-emerald-700" :
-                                    a.visitStatus === 'Not Interested' ? "bg-red-100 text-red-700" :
-                                    "bg-slate-100 text-slate-600"
-                                  )}>
-                                    {a.visitStatus || 'Assigned'}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                  ) : visitDiaryAnalytics?.users && visitDiaryAnalytics.users.some((u: any) => (u.visitDiaryUpdates?.length ?? 0) > 0) ? (
+                    <div className="space-y-4">
+                      {visitDiaryAnalytics.users.filter((u: any) => (u.visitDiaryUpdates?.length ?? 0) > 0).map((u: any) => (
+                        <Card key={u.userId} className="overflow-hidden border-slate-200 dark:border-slate-700">
+                          <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                  <span className="text-xs font-bold text-blue-600 uppercase">{u.name?.slice(0, 1)}</span>
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">{u.name || u.userName}</h4>
+                                  <p className="text-[10px] text-slate-500 uppercase tracking-widest">{u.roleName}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Updates</p>
+                                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                    {(u.visitDiaryUpdates || []).reduce((acc: number, day: any) => acc + (day.details?.length || 0), 0)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
+                              <thead className="bg-slate-50/50 dark:bg-slate-900/50">
+                                <tr>
+                                  <th className="w-10 px-4 py-2"></th>
+                                  <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Update Date</th>
+                                  <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Outcomes Breakdown</th>
+                                  <th className="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Leads</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                {(u.visitDiaryUpdates || []).map((day: any) => {
+                                  const rowKey = `${u.userId}-${day.date}`;
+                                  const isExpanded = expandedVisitDiaryRows.has(rowKey);
+                                  
+                                  return (
+                                    <React.Fragment key={rowKey}>
+                                      <tr 
+                                        className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                        onClick={() => {
+                                          const next = new Set(expandedVisitDiaryRows);
+                                          if (next.has(rowKey)) next.delete(rowKey);
+                                          else next.add(rowKey);
+                                          setExpandedVisitDiaryRows(next);
+                                        }}
+                                      >
+                                        <td className="px-4 py-3 text-center">
+                                          <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", isExpanded && "rotate-180")} />
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                            {format(new Date(day.date + 'T12:00:00'), 'dd MMM yyyy')}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {Object.entries(day.statusCounts || {}).map(([status, count]) => (
+                                              <span 
+                                                key={status}
+                                                className={cn(
+                                                  "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border",
+                                                  status === 'Interested' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                                  status === 'Not Interested' ? "bg-red-50 text-red-700 border-red-100" :
+                                                  status === 'Confirmed' ? "bg-blue-50 text-blue-700 border-blue-100" :
+                                                  "bg-slate-50 text-slate-600 border-slate-100"
+                                                )}
+                                              >
+                                                {status}: {count as number}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                          <span className="text-xs font-bold text-slate-900 dark:text-white">{day.details?.length || 0}</span>
+                                        </td>
+                                      </tr>
+                                      {isExpanded && (
+                                        <tr className="bg-slate-50/30 dark:bg-slate-900/30">
+                                          <td colSpan={4} className="px-6 py-4">
+                                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800 shadow-sm">
+                                              <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
+                                                <thead className="bg-slate-50 dark:bg-slate-900">
+                                                  <tr>
+                                                    <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Student Name</th>
+                                                    <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Phone</th>
+                                                    <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Location</th>
+                                                    <th className="px-4 py-2 text-right text-[9px] font-bold uppercase text-slate-400">Outcome</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                                                  {(day.details || []).map((lead: any, lIdx: number) => (
+                                                    <tr key={lIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30">
+                                                      <td className="px-4 py-2 text-xs font-medium text-slate-900 dark:text-slate-100">{lead.name}</td>
+                                                      <td className="px-4 py-2 text-xs text-slate-500">{lead.phone}</td>
+                                                      <td className="px-4 py-2 text-xs text-slate-400">{lead.village}</td>
+                                                      <td className="px-4 py-2 text-right">
+                                                        <span className={cn(
+                                                          "text-[9px] font-bold px-1.5 py-0.5 rounded",
+                                                          lead.visitStatus === 'Interested' ? "text-emerald-600 bg-emerald-50" :
+                                                          lead.visitStatus === 'Not Interested' ? "text-red-600 bg-red-50" :
+                                                          "text-slate-500 bg-slate-50"
+                                                        )}>
+                                                          {lead.visitStatus}
+                                                        </span>
+                                                      </td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Card>
+                      ))}
                     </div>
                   ) : (
                     <div className="py-24 text-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
