@@ -1103,7 +1103,7 @@ export default function AssignLeadsPage() {
       showToast.error('Count must be greater than zero.');
       return;
     }
-    if (!targetDate || !String(targetDate).trim()) {
+    if (!assignSlotIsPro && (!targetDate || !String(targetDate).trim())) {
       showToast.error('Target date is required (used for automated reclaim).');
       return;
     }
@@ -1116,7 +1116,7 @@ export default function AssignLeadsPage() {
       village: village || undefined,
       academicYear,
       studentGroup: studentGroup || undefined,
-      targetDate: targetDate.trim(),
+      targetDate: assignSlotIsPro ? null : targetDate.trim(),
       cycleNumber: cycleNumber !== '' ? cycleNumber : undefined,
       count,
     });
@@ -1132,7 +1132,7 @@ export default function AssignLeadsPage() {
       showToast.error('Please select a lead to assign.');
       return;
     }
-    if (!singleAssignTargetDate || !String(singleAssignTargetDate).trim()) {
+    if (!assignSlotIsPro && (!singleAssignTargetDate || !String(singleAssignTargetDate).trim())) {
       showToast.error('Target date is required (used for automated reclaim).');
       return;
     }
@@ -1140,7 +1140,7 @@ export default function AssignLeadsPage() {
     assignMutation.mutate({
       userId: selectedUserId,
       leadIds: [selectedLeadId],
-      targetDate: singleAssignTargetDate.trim(),
+      targetDate: assignSlotIsPro ? null : singleAssignTargetDate.trim(),
     });
   };
 
@@ -1166,7 +1166,7 @@ export default function AssignLeadsPage() {
       showToast.error('Count must be greater than zero.');
       return;
     }
-    if (!institutionTargetDate || !String(institutionTargetDate).trim()) {
+    if (!assignSlotIsPro && (!institutionTargetDate || !String(institutionTargetDate).trim())) {
       showToast.error('Target date is required (used for automated reclaim).');
       return;
     }
@@ -1177,7 +1177,7 @@ export default function AssignLeadsPage() {
       studentGroup: institutionStudentGroup,
       institutionName: institutionName.trim(),
       count: institutionCount,
-      targetDate: institutionTargetDate.trim(),
+      targetDate: assignSlotIsPro ? null : institutionTargetDate.trim(),
       cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
     });
   };
@@ -1807,23 +1807,23 @@ export default function AssignLeadsPage() {
                     ))}
                   </select>
                 </div>
-                <div className="min-w-0">
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    {targetDateFieldLabel} *
-                  </label>
-                  <Input
-                    type="date"
-                    value={institutionTargetDate}
-                    onChange={(e) => setInstitutionTargetDate(e.target.value)}
-                    className="w-full min-w-0 px-3 py-2 text-sm"
-                    required
-                  />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    {assignSlotIsPro
-                      ? 'Applies to the PRO assignment slot only for the selected user.'
-                      : 'Applies to the counsellor assignment slot only for the selected user.'}
-                  </p>
-                </div>
+                {!assignSlotIsPro && (
+                  <div className="min-w-0">
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      {targetDateFieldLabel} *
+                    </label>
+                    <Input
+                      type="date"
+                      value={institutionTargetDate}
+                      onChange={(e) => setInstitutionTargetDate(e.target.value)}
+                      className="w-full min-w-0 px-3 py-2 text-sm"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                      Applies to the counsellor assignment slot only for the selected user.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1882,7 +1882,7 @@ export default function AssignLeadsPage() {
                     !institutionStudentGroup ||
                     !institutionName ||
                     institutionAcademicYear === '' ||
-                    !String(institutionTargetDate).trim()
+                    (!assignSlotIsPro && !String(institutionTargetDate).trim())
                   }
                 >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign by ' + (institutionUseSchools ? 'school' : 'college')}
@@ -2258,27 +2258,31 @@ export default function AssignLeadsPage() {
                     ))}
                   </select>
                 </div>
-                <div className="min-w-0">
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    {targetDateFieldLabel} *
-                  </label>
-                  <Input
-                    type="date"
-                    value={targetDate}
-                    onChange={(e) => setTargetDate(e.target.value)}
-                    className="w-full min-w-0 px-3 py-2 text-sm"
-                    required
-                  />
-                </div>
+                {!assignSlotIsPro && (
+                  <div className="min-w-0">
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      {targetDateFieldLabel} *
+                    </label>
+                    <Input
+                      type="date"
+                      value={targetDate}
+                      onChange={(e) => setTargetDate(e.target.value)}
+                      className="w-full min-w-0 px-3 py-2 text-sm"
+                      required
+                    />
+                  </div>
+                )}
               </div>
               <p className="text-xs text-gray-500 dark:text-slate-400">
                 {targetRole === 'PRO'
                   ? 'Available leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'
                   : 'Only unassigned leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'}{' '}
-                {assignSlotIsPro
-                  ? 'This date is saved on each lead as the PRO slot only (`pro_target_date`). It does not change an existing student counsellor target date.'
-                  : 'This date is saved on each lead as the counsellor slot only (`counsellor_target_date`). It does not change an existing PRO target date.'}{' '}
-                Reclaim runs when that slot&apos;s date is due (pipeline rules apply). &quot;Assigned&quot; keeps the same cycle; &quot;Not Interested&quot; and &quot;Wrong Data&quot; advance cycle on reclaim when the lead is fully unassigned.
+                {!assignSlotIsPro && (
+                  <>
+                    This date is saved on each lead as the counsellor slot only (`counsellor_target_date`). It does not change an existing PRO target date.{' '}
+                    Reclaim runs when that slot&apos;s date is due (pipeline rules apply). &quot;Assigned&quot; keeps the same cycle; &quot;Not Interested&quot; and &quot;Wrong Data&quot; advance cycle on reclaim when the lead is fully unassigned.
+                  </>
+                )}
               </p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -2399,7 +2403,7 @@ export default function AssignLeadsPage() {
                     assignMutation.isPending ||
                     !selectedUserId ||
                     academicYear === '' ||
-                    !String(targetDate).trim()
+                    (!assignSlotIsPro && !String(targetDate).trim())
                   }
                 >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Leads'}
@@ -2536,23 +2540,23 @@ export default function AssignLeadsPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                  {targetDateFieldLabel} *
-                </label>
-                <Input
-                  type="date"
-                  value={singleAssignTargetDate}
-                  onChange={(e) => setSingleAssignTargetDate(e.target.value)}
-                  className="w-full max-w-xs px-3 py-2 text-sm"
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  {assignSlotIsPro
-                    ? 'Saved as PRO slot only; counsellor slot dates are unchanged.'
-                    : 'Saved as counsellor slot only; PRO slot dates are unchanged.'}
-                </p>
-              </div>
+              {!assignSlotIsPro && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    {targetDateFieldLabel} *
+                  </label>
+                  <Input
+                    type="date"
+                    value={singleAssignTargetDate}
+                    onChange={(e) => setSingleAssignTargetDate(e.target.value)}
+                    className="w-full max-w-xs px-3 py-2 text-sm"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    Saved as counsellor slot only; PRO slot dates are unchanged.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <Button
@@ -2561,7 +2565,7 @@ export default function AssignLeadsPage() {
                     assignMutation.isPending ||
                     !selectedUserId ||
                     !selectedLeadId ||
-                    !String(singleAssignTargetDate).trim()
+                    (!assignSlotIsPro && !String(singleAssignTargetDate).trim())
                   }
                 >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Lead'}
