@@ -398,6 +398,8 @@ export default function LeadsPage() {
         return 'bg-emerald-100 text-emerald-800';
       case 'not interested':
         return 'bg-red-100 text-red-800';
+      case 'wrong data':
+        return 'bg-orange-100 text-orange-800';
       case 'partial':
         return 'bg-yellow-100 text-yellow-800';
       case 'lost':
@@ -1720,6 +1722,7 @@ export default function LeadsPage() {
                   <option value="">Keep Current Status</option>
                   <option value="interested">Interested</option>
                   <option value="not interested">Not Interested</option>
+                  <option value="Wrong Data">Wrong Data</option>
                   <option value="partial">Partial</option>
                   <option value="Confirmed">Confirmed</option>
                   <option value="Admitted">Admitted</option>

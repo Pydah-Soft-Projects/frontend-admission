@@ -21,6 +21,7 @@ export default function VisitorsPage() {
     const [consuming, setConsuming] = useState(false);
     const [recentVisits, setRecentVisits] = useState<any[]>([]);
     const [loadingRecent, setLoadingRecent] = useState(true);
+    const [stats, setStats] = useState({ verifiedCount: 0, manualCount: 0, totalVisited: 0 });
 
     const [statusFilter, setStatusFilter] = useState('all');
 
@@ -29,6 +30,7 @@ export default function VisitorsPage() {
             const response = await visitorAPI.getRecent();
             if (response.success) {
                 setRecentVisits(response.data);
+                if (response.stats) setStats(response.stats);
             }
         } catch (error) {
             console.error('Error fetching recent visits:', error);
@@ -257,7 +259,7 @@ export default function VisitorsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                         {/* Status Filters */}
                         <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl">
-                            {['all', 'used', 'expired', 'active'].map((status) => (
+                            {['all', 'used', 'manual', 'expired', 'active'].map((status) => (
                                 <button
                                     key={status}
                                     onClick={() => setStatusFilter(status)}
@@ -283,6 +285,39 @@ export default function VisitorsPage() {
                         </button>
                     </div>
                 </div>
+
+                {/* Stats Summary Bar */}
+                {(statusFilter === 'all' || statusFilter === 'used') && !loadingRecent && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                            <div>
+                                <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Verified via Code</p>
+                                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{stats.verifiedCount}</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-800 text-emerald-500 shadow-sm">
+                                <CheckCircle2 className="w-5 h-5" />
+                            </div>
+                        </div>
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                            <div>
+                                <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">Manual Status Update</p>
+                                <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{stats.manualCount}</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-800 text-amber-500 shadow-sm">
+                                <AlertCircle className="w-5 h-5" />
+                            </div>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Total Campus Visits</p>
+                                <p className="text-2xl font-bold text-slate-700 dark:text-slate-300">{stats.totalVisited}</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-white dark:bg-slate-800 text-slate-400 shadow-sm">
+                                <Users className="w-5 h-5" />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {loadingRecent ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -337,9 +372,11 @@ export default function VisitorsPage() {
                                                         "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border",
                                                         visit.status === 'used'
                                                             ? "bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:border-emerald-900"
-                                                            : visit.status === 'expired'
-                                                                ? "bg-rose-50 border-rose-100 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900"
-                                                                : "bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-950/40 dark:border-amber-900"
+                                                            : visit.status === 'manual'
+                                                                ? "bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-800/40 dark:border-slate-700"
+                                                                : visit.status === 'expired'
+                                                                    ? "bg-rose-50 border-rose-100 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900"
+                                                                    : "bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-950/40 dark:border-amber-900"
                                                     )}>
                                                         {visit.status}
                                                     </span>
