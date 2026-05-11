@@ -28,7 +28,8 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts';
-import { Check, ChevronDown, Download, Filter, FileSpreadsheet, Calendar, Search } from 'lucide-react';
+import { Check, ChevronDown, Download, Filter, FileSpreadsheet, Calendar, Search, Printer } from 'lucide-react';
+import PrintVisitDiaryReport from '@/components/superadmin/PrintVisitDiaryReport';
 
 type TabType = 'calls' | 'conversions' | 'users' | 'abstract' | 'activityLogs' | 'visitDiary';
 
@@ -188,6 +189,8 @@ export default function ReportsPage() {
   const isPrintingPerformanceRef = useRef(false);
   /** Full-screen message while print report is fetched/built (toasts cannot repaint during long sync work). */
   const [performancePrintOverlay, setPerformancePrintOverlay] = useState<string | null>(null);
+  const [isPrintingVisitDiary, setIsPrintingVisitDiary] = useState(false);
+  const printIframeRef = useRef<HTMLIFrameElement>(null);
 
   // Unified filters for all tabs (default to today)
   const [filters, setFilters] = useState({
@@ -206,6 +209,21 @@ export default function ReportsPage() {
     abstractDistrictId: '',
     abstractMandalId: '',
   });
+
+  const handlePrintVisitDiary = useCallback(() => {
+    if (!printIframeRef.current) return;
+    
+    const iframe = printIframeRef.current;
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) return;
+
+    // Use a small delay to ensure React has rendered the portal content into the iframe
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    }, 500);
+  }, []);
+
 
   const { data: visitDiarySearchResults, isLoading: isVisitSearching } = useQuery({
     queryKey: ['visit-diary-superadmin-search', visitSearch, filters.userId],
@@ -514,6 +532,28 @@ export default function ReportsPage() {
     enabled: activeTab === 'visitDiary' && visitSubTab === 'history',
     staleTime: 300_000,
   });
+
+  const printableVisitData = useMemo(() => {
+    if (!visitDiaryAnalytics?.users) return [];
+    return visitDiaryAnalytics.users.flatMap((u: any) => {
+      const masterUser = users.find((mu: any) => (mu._id || mu.id) === (u.id || u.userId));
+      const empNo = u.emp_no || masterUser?.emp_no || '-';
+      const dept = u.department || masterUser?.department || '-';
+
+      return (u.visitDiaryUpdates || []).flatMap((day: any) => 
+        day.details.map((a: any) => ({
+          date: day.date,
+          proName: u.name || u.userName,
+          empNo: empNo,
+          department: dept,
+          studentName: a.name,
+          phone: a.phone,
+          village: a.village,
+          visitStatus: a.visitStatus || 'Assigned'
+        }))
+      );
+    });
+  }, [visitDiaryAnalytics, users]);
 
   const performanceTableUsers = useMemo(
     () => (Array.isArray(performanceUserAnalyticsData?.users) ? performanceUserAnalyticsData.users : []) as any[],
@@ -2206,29 +2246,40 @@ export default function ReportsPage() {
 
           <div className="flex items-center gap-3">
             {visitSubTab === 'history' && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="h-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
-                onClick={() => {
-                  const csvData = (visitDiaryAnalytics?.users || []).flatMap((u: any) => 
-                    (u.visitDiaryUpdates || []).flatMap((day: any) => 
-                      day.details.map((a: any) => ({
-                        'Update Date': day.date,
-                        'PRO Name': u.name || u.userName,
-                        'Student Name': a.name,
-                        'Phone': a.phone,
-                        'Village': a.village,
-                        'Visit Status': a.visitStatus || 'Assigned'
-                      }))
-                    )
-                  );
-                  handleExport('excel', csvData, `visit-diary-report-${filters.startDate}`);
-                }}
-              >
-                <Download className="w-3.5 h-3.5 mr-2" />
-                Export Data
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="h-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 dark:hover:bg-orange-900/10 dark:hover:text-orange-400 dark:hover:border-orange-900/50 transition-all duration-200"
+                  onClick={handlePrintVisitDiary}
+                >
+                  <Printer className="w-3.5 h-3.5 mr-2" />
+                  Print
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="h-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 dark:hover:bg-orange-900/10 dark:hover:text-orange-400 dark:hover:border-orange-900/50 transition-all duration-200"
+                  onClick={() => {
+                    const csvData = (visitDiaryAnalytics?.users || []).flatMap((u: any) => 
+                      (u.visitDiaryUpdates || []).flatMap((day: any) => 
+                        day.details.map((a: any) => ({
+                          'Update Date': day.date,
+                          'PRO Name': u.name || u.userName,
+                          'Student Name': a.name,
+                          'Phone': a.phone,
+                          'Village': a.village,
+                          'Visit Status': a.visitStatus || 'Assigned'
+                        }))
+                      )
+                    );
+                    handleExport('excel', csvData, `visit-diary-report-${filters.startDate}`);
+                  }}
+                >
+                  <Download className="w-3.5 h-3.5 mr-2" />
+                  Export
+                </Button>
+              </div>
             )}
 
             <div className="flex p-1 bg-slate-200/50 dark:bg-slate-700/50 rounded-xl">
@@ -4591,7 +4642,7 @@ export default function ReportsPage() {
                   ) : visitDiaryAnalytics?.users && visitDiaryAnalytics.users.some((u: any) => (u.visitDiaryUpdates?.length ?? 0) > 0) ? (
                     <div className="space-y-4">
                       {visitDiaryAnalytics.users.filter((u: any) => (u.visitDiaryUpdates?.length ?? 0) > 0).map((u: any) => (
-                        <Card key={u.userId} className="overflow-hidden border-slate-200 dark:border-slate-700">
+                        <div key={u.userId} className="overflow-hidden bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                           <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-3 border-b border-slate-100 dark:border-slate-800">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
@@ -4713,7 +4764,7 @@ export default function ReportsPage() {
                               </tbody>
                             </table>
                           </div>
-                        </Card>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -5287,6 +5338,25 @@ export default function ReportsPage() {
       }
 
     </div>
+    {/* Isolated Print Iframe for Visit Diary */}
+    <iframe
+      ref={printIframeRef}
+      style={{ position: 'absolute', width: 0, height: 0, border: 'none', visibility: 'hidden' }}
+      title="Print Visit Diary"
+    >
+      {printIframeRef.current?.contentDocument?.body && createPortal(
+        <PrintVisitDiaryReport 
+          generatedAt={format(new Date(), 'dd MMM yyyy, hh:mm a')}
+          filters={{
+            startDate: filters.startDate,
+            endDate: filters.endDate,
+            proName: filters.userId ? users.find((u: any) => u._id === filters.userId)?.name : undefined
+          }}
+          data={printableVisitData}
+        />,
+        printIframeRef.current.contentDocument.body
+      )}
+    </iframe>
     </>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { auth } from '@/lib/auth';
 import { leadAPI } from '@/lib/api';
 import { Lead } from '@/types';
@@ -14,6 +14,17 @@ import { showToast } from '@/lib/toast';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { cn } from '@/lib/utils';
+import { 
+  Calendar, 
+  Search, 
+  ChevronDown, 
+  Download, 
+  History, 
+  User, 
+  MapPin, 
+  Phone,
+  FileText
+} from 'lucide-react';
 
 interface QueuedLead {
   lead: Lead;
@@ -28,6 +39,9 @@ export default function VisitDiaryPage() {
   const [user, setUser] = useState(auth.getUser());
   const [activeTab, setActiveTab] = useState<TabType>('record');
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [historyStartDate, setHistoryStartDate] = useState<string>(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [historyEndDate, setHistoryEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [queuedLeads, setQueuedLeads] = useState<QueuedLead[]>([]);
   const [isMounted, setIsMounted] = useState(false);
@@ -80,16 +94,25 @@ export default function VisitDiaryPage() {
     enabled: activeTab === 'record' && search.trim().length >= 2,
   });
 
-  // Tab 2: History - Fetch visits for the selected date
-  const { data: historyLeads, isLoading: isHistoryLoading } = useQuery({
-    queryKey: ['visit-history', selectedDate],
+  // Tab 2: History - Fetch visits for the selected date range using analytics API
+  const { data: historyAnalytics, isLoading: isHistoryLoading } = useQuery({
+    queryKey: ['visit-history-range', historyStartDate, historyEndDate, user?.id],
     queryFn: async () => {
-      // Using the recently optimized assignment details API which returns leads for a specific date
-      const response = await leadAPI.getAssignmentDetailsByDate(selectedDate);
-      return response || [];
+      if (!user?.id) return null;
+      return await leadAPI.getUserAnalytics({
+        startDate: historyStartDate,
+        endDate: historyEndDate,
+        userId: user.id,
+        includeAssignmentDetails: true
+      });
     },
-    enabled: activeTab === 'history',
+    enabled: activeTab === 'history' && !!user?.id,
   });
+
+  const historyData = useMemo(() => {
+    const proUser = historyAnalytics?.users?.[0];
+    return proUser?.visitDiaryUpdates || [];
+  }, [historyAnalytics]);
 
   const visitStatusOptions = [
     'Assigned',
@@ -144,20 +167,20 @@ export default function VisitDiaryPage() {
   if (!isMounted || !user) return null;
 
   return (
-    <div className="mx-auto w-full max-w-2xl pb-24 px-0 sm:px-2">
+    <div className="mx-auto w-full max-w-2xl pb-24 px-3 sm:px-2">
       {/* Sticky Tab Switcher */}
-      <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-sm py-2 mb-4">
-        <div className="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl">
+      <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-sm py-2 mb-3">
+        <div className="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl shadow-sm">
           <button
             onClick={() => setActiveTab('record')}
             className={cn(
               "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all",
               activeTab === 'record' 
-                ? "bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm" 
+                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
                 : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             )}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <Search className="w-4 h-4" />
             Record Visit
           </button>
           <button
@@ -165,11 +188,11 @@ export default function VisitDiaryPage() {
             className={cn(
               "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all",
               activeTab === 'history' 
-                ? "bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm" 
+                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
                 : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             )}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg>
+            <History className="w-4 h-4" />
             History
           </button>
         </div>
@@ -178,33 +201,33 @@ export default function VisitDiaryPage() {
       {activeTab === 'record' ? (
         <div className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-300">
           {/* Date Selection */}
-          <Card className="p-4 shadow-sm border-slate-200 dark:border-slate-800">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+          <Card className="p-3 sm:p-4 shadow-sm border-slate-200 dark:border-slate-800">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">
               Visit Date
             </label>
             <Input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full h-11 rounded-xl focus:ring-orange-500 border-slate-200"
+              className="w-full h-10 sm:h-11 rounded-xl focus:ring-blue-500 border-slate-200 text-sm"
             />
           </Card>
 
           {/* Search Card */}
-          <Card className="p-4 shadow-sm border-slate-200 dark:border-slate-800">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+          <Card className="p-3 sm:p-4 shadow-sm border-slate-200 dark:border-slate-800">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">
               Search & Add Student
             </label>
-            <div className="relative mb-4">
+            <div className="relative mb-0">
               <Input
                 type="text"
                 placeholder="Name, phone or enquiry..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full h-11 pl-10 rounded-xl focus:ring-orange-500 border-slate-200"
+                className="w-full h-10 sm:h-11 pl-10 rounded-xl focus:ring-blue-500 border-slate-200 text-sm"
               />
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <Search className="w-4 h-4" />
               </div>
             </div>
 
@@ -222,7 +245,7 @@ export default function VisitDiaryPage() {
                       onClick={() => handleToggleLead(lead)}
                       className={cn(
                         "w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3",
-                        isQueued ? "border-orange-500 bg-orange-50 dark:bg-orange-900/10 shadow-sm" : "border-slate-100 dark:border-slate-800"
+                        isQueued ? "border-blue-500 bg-blue-50 dark:bg-blue-900/10 shadow-sm" : "border-slate-100 dark:border-slate-800"
                       )}
                     >
                       <div className="min-w-0">
@@ -231,7 +254,7 @@ export default function VisitDiaryPage() {
                       </div>
                       <div className={cn(
                         "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
-                        isQueued ? "bg-orange-500 border-orange-500 text-white" : "border-slate-200 dark:border-slate-700"
+                        isQueued ? "bg-blue-500 border-blue-500 text-white" : "border-slate-200 dark:border-slate-700"
                       )}>
                         {isQueued && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>}
                       </div>
@@ -246,9 +269,9 @@ export default function VisitDiaryPage() {
 
           {/* Queue Section */}
           {queuedLeads.length > 0 && (
-            <Card className="p-4 shadow-xl border-orange-200 dark:border-orange-900/30 bg-orange-50/20 dark:bg-orange-900/5 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex items-center justify-between mb-4 border-b border-orange-100 dark:border-orange-900/20 pb-2">
-                <h3 className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest">
+            <Card className="p-4 shadow-xl border-blue-200 dark:border-blue-900/30 bg-blue-50/20 dark:bg-blue-900/5 animate-in slide-in-from-bottom-4 duration-300">
+              <div className="flex items-center justify-between mb-4 border-b border-blue-100 dark:border-blue-900/20 pb-2">
+                <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
                   Visit Queue ({queuedLeads.length})
                 </h3>
                 <button onClick={() => setQueuedLeads([])} className="text-[10px] text-slate-400 underline">Clear</button>
@@ -270,7 +293,7 @@ export default function VisitDiaryPage() {
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                     <select
-                      className="w-full h-10 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-xs px-2 focus:ring-1 focus:ring-orange-500 border-none"
+                      className="w-full h-10 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-xs px-2 focus:ring-1 focus:ring-blue-500 border-none"
                       value={item.status}
                       onChange={(e) => updateQueuedStatus(item.lead._id, e.target.value)}
                     >
@@ -281,11 +304,11 @@ export default function VisitDiaryPage() {
                   </div>
                 ))}
               </div>
-
+ 
               <Button 
                 onClick={() => batchSaveMutation.mutate()}
                 disabled={batchSaveMutation.isPending}
-                className="w-full h-14 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold shadow-lg shadow-orange-600/30 text-base"
+                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-lg shadow-blue-600/30 text-base"
               >
                 {batchSaveMutation.isPending ? 'Saving...' : `Save ${queuedLeads.length} Visit Outcomes`}
               </Button>
@@ -303,86 +326,167 @@ export default function VisitDiaryPage() {
         </div>
       ) : (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
-          {/* History Filter */}
-          <Card className="p-4 shadow-sm border-slate-200 dark:border-slate-800">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-              View Visits for Date
-            </label>
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full h-11 rounded-xl border-slate-200 focus:ring-orange-500"
-            />
+          {/* History Filters */}
+          <Card className="p-3 sm:p-4 shadow-sm border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">History Range</label>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-7 px-2 text-[10px] text-blue-600 font-bold"
+                  onClick={() => {
+                    const csvData = historyData.flatMap((day: any) => 
+                      day.details.map((a: any) => ({
+                        'Date': day.date,
+                        'Student': a.name,
+                        'Phone': a.phone,
+                        'Village': a.village,
+                        'Outcome': a.visitStatus || 'Assigned'
+                      }))
+                    );
+                    const header = ['Date', 'Student', 'Phone', 'Village', 'Outcome'];
+                    const rows = csvData.map(r => [r.Date, r.Student, r.Phone, r.Village, r.Outcome]);
+                    const csvContent = [header, ...rows].map(e => e.join(",")).join("\n");
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `my-visit-history-${historyStartDate}.csv`;
+                    link.click();
+                  }}
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  Export
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <span className="text-[8px] font-bold text-slate-400 ml-1 uppercase tracking-tighter">From</span>
+                  <Input
+                    type="date"
+                    value={historyStartDate}
+                    onChange={(e) => setHistoryStartDate(e.target.value)}
+                    className="h-9 sm:h-10 rounded-xl border-slate-200 text-xs focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[8px] font-bold text-slate-400 ml-1 uppercase tracking-tighter">To</span>
+                  <Input
+                    type="date"
+                    value={historyEndDate}
+                    onChange={(e) => setHistoryEndDate(e.target.value)}
+                    className="h-9 sm:h-10 rounded-xl border-slate-200 text-xs focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
           </Card>
 
-          {/* History List */}
+          {/* History List - Grouped Style */}
           <div className="space-y-3">
             {isHistoryLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}
               </div>
-            ) : historyLeads && historyLeads.length > 0 ? (
-              <div className="grid gap-3">
-                {historyLeads.map((lead: Lead) => (
-                  <Card key={lead._id} className="p-4 border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-orange-500/50 group-hover:bg-orange-500 transition-colors" />
-                    <div className="flex justify-between items-start mb-3 pl-1">
-                      <div className="min-w-0">
-                        <h4 className="font-bold text-slate-900 dark:text-white truncate">{lead.name}</h4>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
-                          <span className="flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                            {lead.phone}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                            {lead.village}
-                          </span>
-                        </div>
-                      </div>
-                      <div className={cn(
-                        "px-2 py-1 rounded text-[10px] font-bold uppercase",
-                        lead.visitStatus === 'Interested' ? "bg-emerald-100 text-emerald-700" :
-                        lead.visitStatus === 'Not Interested' ? "bg-red-100 text-red-700" :
-                        "bg-slate-100 text-slate-600"
-                      )}>
-                        {lead.visitStatus || 'Assigned'}
-                      </div>
-                    </div>
-                    
-                    {/* Quick update option directly in history if needed */}
-                    <div className="flex gap-2 mt-3 pt-3 border-t border-slate-50 dark:border-slate-800">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 h-8 text-[10px] rounded-lg"
+            ) : historyData && historyData.length > 0 ? (
+              <div className="space-y-3">
+                {historyData.map((day: any) => {
+                  const dayKey = `pro-day-${day.date}`;
+                  const isExpanded = expandedRows.has(dayKey);
+
+                  return (
+                    <Card key={day.date} className="overflow-hidden border-slate-200 dark:border-slate-800 shadow-sm">
+                      <div 
+                        className="bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
                         onClick={() => {
-                          handleToggleLead(lead);
-                          setActiveTab('record');
+                          const next = new Set(expandedRows);
+                          if (next.has(dayKey)) next.delete(dayKey);
+                          else next.add(dayKey);
+                          setExpandedRows(next);
                         }}
                       >
-                        Edit Outcome
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="flex-1 h-8 text-[10px] rounded-lg"
-                        onClick={() => router.push(`/user/leads/${lead._id}`)}
-                      >
-                        View Profile
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0">
+                            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                              {format(new Date(day.date + 'T12:00:00'), 'EEEE')}
+                            </p>
+                            <p className="text-[10px] sm:text-[11px] text-slate-500">
+                              {format(new Date(day.date + 'T12:00:00'), 'dd MMM yyyy')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 sm:gap-4">
+                          <div className="sm:hidden">
+                             <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                               {day.details?.length || 0} Visits
+                             </span>
+                          </div>
+                          <div className="hidden sm:flex flex-wrap justify-end gap-1.5 max-w-[200px]">
+                            {Object.entries(day.statusCounts || {}).map(([status, count]) => (
+                              <span 
+                                key={status}
+                                className={cn(
+                                  "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border",
+                                  status === 'Interested' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                  status === 'Not Interested' ? "bg-red-50 text-red-700 border-red-100" :
+                                  "bg-slate-50 text-slate-600 border-slate-100"
+                                )}
+                              >
+                                {status}: {count as number}
+                              </span>
+                            ))}
+                          </div>
+                          <ChevronDown className={cn("w-4 h-4 sm:w-5 sm:h-5 text-slate-300 transition-transform", isExpanded && "rotate-180")} />
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/30 p-2 space-y-2">
+                          {(day.details || []).map((lead: any, lIdx: number) => (
+                            <div 
+                              key={lIdx} 
+                              className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{lead.name}</p>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                                    <Phone className="w-2.5 h-2.5" />
+                                    {lead.phone}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                                    <MapPin className="w-2.5 h-2.5" />
+                                    {lead.village}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className={cn(
+                                "text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0",
+                                lead.visitStatus === 'Interested' ? "text-emerald-600 bg-emerald-50" :
+                                lead.visitStatus === 'Not Interested' ? "text-red-600 bg-red-50" :
+                                "text-slate-500 bg-slate-50"
+                              )}>
+                                {lead.visitStatus}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
               </div>
             ) : (
               <div className="py-20 text-center">
                 <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                  <FileText className="w-8 h-8 text-slate-300" />
                 </div>
-                <h4 className="text-slate-400 font-medium">No visits found for this date.</h4>
-                <p className="text-xs text-slate-500 mt-1">Record a visit outcome to see it in history.</p>
+                <h4 className="text-slate-400 font-medium">No visits found for this period.</h4>
+                <p className="text-xs text-slate-500 mt-1">Adjust the dates or record a new visit outcome.</p>
               </div>
             )}
           </div>
