@@ -13,12 +13,18 @@ interface MobileBottomNavProps {
 }
 
 /** Flatten nav items: take top-level and first level of children for display. */
-export function flattenNavItemsForMobile(navItems: DashboardNavItem[]): MobileBottomNavItem[] {
+/** Flatten nav items: take top-level and first level of children for display. */
+export function flattenNavItemsForMobile(
+  navItems: DashboardNavItem[],
+  options: { filterBottomNav?: boolean } = {}
+): MobileBottomNavItem[] {
   const flat: MobileBottomNavItem[] = [];
   for (const item of navItems) {
+    if (options.filterBottomNav && item.hideInBottomNav) continue;
     if (item.children && item.children.length > 0) {
       flat.push({ href: item.href, label: item.label, icon: item.icon });
       for (const child of item.children) {
+        if (options.filterBottomNav && child.hideInBottomNav) continue;
         flat.push({ href: child.href, label: child.label, icon: child.icon });
       }
     } else {
