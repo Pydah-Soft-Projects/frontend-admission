@@ -53,15 +53,21 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
     return Array.isArray(raw) ? raw : [];
   }, [courseSettingsResponse]);
 
-  const selectedCourse = useMemo(
-    () => courseSettings.find((item) => item.course._id === form.courseId),
-    [courseSettings, form.courseId]
-  );
+  const selectedCourse = useMemo(() => {
+    const target = String(form.courseId ?? '').trim();
+    if (!target) return undefined;
+    return courseSettings.find(
+      (item) => String(item.course._id ?? '').trim() === target
+    );
+  }, [courseSettings, form.courseId]);
 
-  const selectedBranch = useMemo(
-    () => selectedCourse?.branches.find((branch) => branch._id === form.branchId),
-    [selectedCourse, form.branchId]
-  );
+  const selectedBranch = useMemo(() => {
+    const target = String(form.branchId ?? '').trim();
+    if (!target) return undefined;
+    return selectedCourse?.branches.find(
+      (branch) => String(branch._id ?? '').trim() === target
+    );
+  }, [selectedCourse, form.branchId]);
 
   const createDraftMutation = useMutation({
     mutationFn: async () => {
@@ -160,7 +166,10 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
                 <select
                   value={form.courseId}
                   onChange={(event) => {
-                    const course = courseSettings.find((item) => item.course._id === event.target.value);
+                    const target = String(event.target.value ?? '').trim();
+                    const course = courseSettings.find(
+                      (item) => String(item.course._id ?? '').trim() === target
+                    );
                     setForm((prev) => ({
                       ...prev,
                       courseId: event.target.value,

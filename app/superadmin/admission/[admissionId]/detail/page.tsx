@@ -21,6 +21,11 @@ import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
+import {
+  cleanRegistrationFieldEntries,
+  formatRegistrationFieldLabel,
+  isRegistrationImageDataUrl,
+} from '@/lib/registrationFieldsDisplay';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -47,46 +52,6 @@ const maskAadhaar = (value?: string) => {
   if (value.length <= 4) return value;
   return `${value.slice(0, 4)} ${'•'.repeat(4)} ${value.slice(-4)}`;
 };
-
-const formatRegistrationFieldLabel = (key: string): string =>
-  String(key || '')
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-const normalizeRegistrationFieldKey = (key: string): string => {
-  const normalized = String(key || '')
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .replace(/[\s-]+/g, '_')
-    .toLowerCase()
-    .trim();
-
-  const aliasToCanonical: Record<string, string> = {
-    semister: 'current_semester',
-    semester: 'current_semester',
-    current_semester: 'current_semester',
-    currentsemester: 'current_semester',
-    academic_year: 'current_year',
-    academicyear: 'current_year',
-    current_year: 'current_year',
-    currentyear: 'current_year',
-    certification_status: 'certificates_status',
-    certificates_status: 'certificates_status',
-    college_id: 'college',
-    collegeid: 'college',
-    school_or_college_id: 'college',
-    schoolorcollegeid: 'college',
-    school_or_college_name: 'college',
-    schoolorcollegename: 'college',
-  };
-
-  return aliasToCanonical[normalized] || normalized;
-};
-
-const isImageDataUrl = (value: unknown): value is string =>
-  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
 
 const ADMISSION_CANCELLED_STATUS = 'Admission Cancelled';
 
@@ -145,6 +110,7 @@ export default function AdmissionDetailPage() {
     reason: '',
     approvedBy: '',
   });
+  const [isSendSmsDialogOpen, setIsSendSmsDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admission', admissionId],
@@ -183,6 +149,29 @@ export default function AdmissionDetailPage() {
     },
     onError: (error: ApiError) => {
       showToast.error(error.response?.data?.message || 'Failed to cancel admission');
+    },
+  });
+
+  const sendAdmissionSmsMutation = useMutation({
+    mutationFn: async () => {
+      if (!admission?._id) {
+        throw new Error('Admission record is not loaded');
+      }
+      return admissionAPI.sendConfirmationSms(admission._id);
+    },
+    onSuccess: (response: { data?: { sentTo?: string; admissionNumber?: string } } | undefined) => {
+      const sentTo = response?.data?.sentTo;
+      showToast.success(
+        sentTo
+          ? `Admission confirmation SMS sent to ${sentTo}.`
+          : 'Admission confirmation SMS sent.'
+      );
+      setIsSendSmsDialogOpen(false);
+    },
+    onError: (error: ApiError) => {
+      showToast.error(
+        error.response?.data?.message || 'Failed to send admission confirmation SMS'
+      );
     },
   });
 
@@ -238,6 +227,16 @@ export default function AdmissionDetailPage() {
     },
   });
 
+  const registrationFieldEntries = useMemo<Array<[string, unknown]>>(() => {
+    const registrationFieldSource =
+      admission?.registrationFormData && Object.keys(admission.registrationFormData).length > 0
+        ? admission.registrationFormData
+        : ((joiningForRegistrationData?.data?.joining?.registrationFormData as
+            | Record<string, unknown>
+            | undefined) || {});
+    return cleanRegistrationFieldEntries(registrationFieldSource);
+  }, [admission?.registrationFormData, joiningForRegistrationData]);
+
   useEffect(() => {
     setHeaderContent(
       <div className="flex items-center justify-between w-full">
@@ -265,6 +264,15 @@ export default function AdmissionDetailPage() {
               printButtonLabel="Print application"
             />
           )}
+          {admission && !isAdmissionCancelled && admission.admissionNumber && admission.studentInfo?.phone ? (
+            <Button
+              variant="outline"
+              onClick={() => setIsSendSmsDialogOpen(true)}
+              title={`Send the DLT-approved admission confirmation SMS to ${admission.studentInfo.phone}`}
+            >
+              Send Admission SMS
+            </Button>
+          ) : null}
           {admission?.joiningId && (
             <Link href={`/superadmin/joining/${admission.joiningId}/detail`}>
               <Button variant="outline">
@@ -334,39 +342,6 @@ export default function AdmissionDetailPage() {
     }
     cancelAdmissionMutation.mutate();
   };
-
-  const registrationFieldSource =
-    admission.registrationFormData && Object.keys(admission.registrationFormData).length > 0
-      ? admission.registrationFormData
-      : ((joiningForRegistrationData?.data?.joining?.registrationFormData as Record<string, unknown> | undefined) ||
-        {});
-
-  // Keep complete data but collapse repeated aliases to avoid noisy duplicate rows.
-  const registrationFieldEntries = (() => {
-    const deduped = new Map<string, unknown>();
-    for (const [key, value] of Object.entries(registrationFieldSource)) {
-      const lk = String(key || '').toLowerCase();
-      if (lk === 'certificate_checklist') continue;
-      if (lk.startsWith('_')) continue;
-      if (value === undefined || value === null) continue;
-      if (typeof value === 'string' && value.trim() === '') continue;
-
-      const canonical = normalizeRegistrationFieldKey(key);
-      const existing = deduped.get(canonical);
-      if (existing === undefined) {
-        deduped.set(canonical, value);
-        continue;
-      }
-      if (canonical === 'college') {
-        const existingText = String(existing ?? '').trim();
-        const nextText = String(value ?? '').trim();
-        if (/^\d+$/.test(existingText) && !/^\d+$/.test(nextText)) {
-          deduped.set(canonical, value);
-        }
-      }
-    }
-    return Array.from(deduped.entries());
-  })();
 
   return (
     <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -476,6 +451,65 @@ export default function AdmissionDetailPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSendSmsDialogOpen} onOpenChange={setIsSendSmsDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Admission SMS</DialogTitle>
+            <DialogDescription>
+              Send the DLT-approved admission confirmation SMS to the student.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Recipient
+              </span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                {admission?.studentInfo?.name || '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Phone
+              </span>
+              <span className="font-mono text-slate-900 dark:text-slate-100">
+                {admission?.studentInfo?.phone || '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Admission #
+              </span>
+              <span className="font-mono text-slate-900 dark:text-slate-100">
+                {admission?.admissionNumber || '—'}
+              </span>
+            </div>
+            <p className="border-t border-slate-200 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              Template: <span className="font-mono">Admission · confirmation on approval</span> (DLT id is read live from{' '}
+              <span className="font-mono">message_templates</span>). The student name and admission number are filled into the
+              two <span className="font-mono">{'{#var#}'}</span> slots.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsSendSmsDialogOpen(false)}
+              disabled={sendAdmissionSmsMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => sendAdmissionSmsMutation.mutate()}
+              isLoading={sendAdmissionSmsMutation.isPending}
+            >
+              Send SMS
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1021,7 +1055,7 @@ export default function AdmissionDetailPage() {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   {formatRegistrationFieldLabel(key)}
                 </p>
-                {isImageDataUrl(raw) ? (
+                {isRegistrationImageDataUrl(raw) ? (
                   <img
                     src={raw}
                     alt={formatRegistrationFieldLabel(key)}

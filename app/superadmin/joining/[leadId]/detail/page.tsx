@@ -10,6 +10,11 @@ import { Joining, PaymentSummary, PaymentTransaction, Admission } from '@/types'
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
+import {
+  cleanRegistrationFieldEntries,
+  formatRegistrationFieldLabel,
+  isRegistrationImageDataUrl,
+} from '@/lib/registrationFieldsDisplay';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -37,16 +42,6 @@ const maskAadhaar = (value?: string) => {
   return `${value.slice(0, 4)} ${'•'.repeat(4)} ${value.slice(-4)}`;
 };
 
-const formatRegistrationFieldLabel = (key: string): string =>
-  String(key || '')
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-const isImageDataUrl = (value: unknown): value is string =>
-  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
 
 export default function JoiningDetailPage() {
   const params = useParams();
@@ -203,15 +198,8 @@ export default function JoiningDetailPage() {
     }));
   };
 
-  const registrationFieldEntries = Object.entries(joining.registrationFormData || {}).filter(
-    ([key, value]) => {
-      const lk = String(key || '').toLowerCase();
-      if (lk === 'certificate_checklist') return false;
-      if (lk.startsWith('_')) return false;
-      if (value === undefined || value === null) return false;
-      if (typeof value === 'string' && value.trim() === '') return false;
-      return true;
-    }
+  const registrationFieldEntries = cleanRegistrationFieldEntries(
+    joining.registrationFormData as Record<string, unknown> | undefined
   );
 
   return (
@@ -656,7 +644,7 @@ export default function JoiningDetailPage() {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   {formatRegistrationFieldLabel(key)}
                 </p>
-                {isImageDataUrl(raw) ? (
+                {isRegistrationImageDataUrl(raw) ? (
                   <img
                     src={raw}
                     alt={formatRegistrationFieldLabel(key)}

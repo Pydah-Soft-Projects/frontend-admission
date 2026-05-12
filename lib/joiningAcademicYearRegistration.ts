@@ -14,10 +14,17 @@ export function resolveTotalYearsFromCourseSettings(
   branchId?: string
 ): number | null {
   if (!courseId || !settings?.length) return null;
-  const entry = settings.find((s) => s.course._id === courseId);
+  // Coerce both sides to trimmed strings: legacy rows occasionally carry the
+  // FK as a JS number and `===` would silently miss matches.
+  const courseTarget = String(courseId).trim();
+  if (!courseTarget) return null;
+  const entry = settings.find((s) => String(s.course._id ?? '').trim() === courseTarget);
   if (!entry) return null;
   if (branchId) {
-    const b = entry.branches.find((br) => br._id === branchId);
+    const branchTarget = String(branchId).trim();
+    const b = branchTarget
+      ? entry.branches.find((br) => String(br._id ?? '').trim() === branchTarget)
+      : undefined;
     const ty = b != null && (b as { totalYears?: number | null }).totalYears;
     if (ty != null && Number.isFinite(Number(ty)) && Number(ty) > 0) {
       return Math.round(Number(ty));
