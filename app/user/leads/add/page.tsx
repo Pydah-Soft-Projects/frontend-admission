@@ -454,8 +454,9 @@ const UserAddLeadPage = () => {
                 <select
                   value={selectedFormId || ''}
                   onChange={(e) => setSelectedFormId(e.target.value || null)}
-                  className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm font-medium text-slate-600 transition focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                 >
+
                   <option value="">Manual form (no template)</option>
                   {forms.map((form: any) => (
                     <option key={form.id || form._id} value={form.id || form._id}>
@@ -485,7 +486,7 @@ const UserAddLeadPage = () => {
               )}
               {!isLoadingForm && dynamicForm && (
                 <>
-                  <div>
+                  <div className="hidden sm:block">
                     <h2 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100">
                       {dynamicForm.name}
                     </h2>
@@ -640,8 +641,9 @@ const UserAddLeadPage = () => {
                                 handleDynamicFieldChange(field.fieldName, e.target.value)
                               }
                               required={isFieldRequired}
-                              className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed"
+                              className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm font-medium text-slate-600 transition focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed"
                             >
+
                               <option value="">Select {field.fieldLabel}</option>
                               {dropdownOptions.map((option: any) => {
                                 const optionValue =
@@ -671,10 +673,11 @@ const UserAddLeadPage = () => {
                       if (field.fieldType === 'radio') {
                         return (
                           <div key={field._id}>
-                            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                            <label className="mb-2 block text-xs sm:text-sm font-medium text-gray-700 dark:text-slate-200">
                               {field.fieldLabel}{' '}
                               {isFieldRequired && <span className="text-red-500">*</span>}
                             </label>
+
                             <div className="space-y-2">
                               {field.options &&
                                 field.options.length > 0 &&
@@ -799,8 +802,9 @@ const UserAddLeadPage = () => {
                                 }
                               }}
                               required={isFieldRequired}
-                              className="block w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-2 text-sm text-slate-700 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                              className="block w-full rounded-xl border-2 border-gray-200 bg-white/80 px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm text-slate-700 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                             />
+
                             {fieldError && (
                               <p className="mt-1 text-xs sm:text-sm text-red-600">{fieldError}</p>
                             )}
@@ -837,12 +841,15 @@ const UserAddLeadPage = () => {
                             }
                             placeholder={field.placeholder || ''}
                             error={fieldError}
+                            className="text-xs sm:text-sm h-10 sm:h-12"
                           />
+
                           {field.helpText && (
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <p className="mt-1 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
                               {field.helpText}
                             </p>
                           )}
+
                         </div>
                       );
                     })}
