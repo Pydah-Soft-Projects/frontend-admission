@@ -154,7 +154,7 @@ function getPrintApplicationHtml(props: {
     body { 
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
       margin: 0; 
-      padding: 15mm 10mm; /* Padding acts as the new margin since @page margin is 0 */
+      padding: 5mm 10mm; /* Padding acts as the new margin since @page margin is 0 */
       color: #333; 
       font-size: 11px; 
       line-height: 1.3; 
@@ -163,7 +163,7 @@ function getPrintApplicationHtml(props: {
     
     .top-meta { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: 600; font-size: 10px; }
     .top-meta div { display: flex; align-items: center; gap: 5px; }
-    .top-meta .box { border: 1px solid #777; padding: 2px 10px; min-width: 80px; height: 18px; display: inline-block; text-align: center; line-height: 14px; }
+    .top-meta .box { border: 3px solid #8B2323; padding: 4px 12px; min-width: 100px; height: 22px; display: inline-block; text-align: center; line-height: 16px; font-weight: bold; background: #f9f9f9; }
 
     /* Flex container for Header and Office Use Box */
     .header-container {
@@ -175,10 +175,16 @@ function getPrintApplicationHtml(props: {
       padding-bottom: 10px;
     }
     
+    .header-logo { width: 160px; height: 100px; margin-right: 20px; flex-shrink: 0; }
+    .header-logo img { width: 100%; height: 100%; object-fit: contain; }
+    
     .header-main { 
       flex: 1;
       text-align: center; 
-      padding-left: 180px; /* Offset to keep title centered despite the box on the right */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
     }
     .header-main h1 { margin: 0; font-size: 24px; color: #8B2323; text-transform: uppercase; letter-spacing: 1px; }
     .header-main p { margin: 2px 0; font-weight: bold; font-size: 14px; }
@@ -194,10 +200,10 @@ function getPrintApplicationHtml(props: {
     .app-title-box p { margin: 0; font-size: 9px; font-weight: 600; }
 
     .section-num { font-weight: bold; margin-right: 5px; }
-    .form-row { display: flex; margin-bottom: 6px; align-items: center; }
+    .form-row { display: flex; margin-bottom: 8px; align-items: center; }
     .form-label { min-width: 130px; font-weight: 600; }
     .form-value { border-bottom: 1px dotted #333; flex: 1; padding-left: 5px; min-height: 14px; }
-    .inline-val { border-bottom: 1px dotted #333; padding: 0 5px; min-width: 50px; }
+    .inline-val { border-bottom: 1px dotted #333; padding: 0 5px; min-width: 50px; flex: 1; }
     
     .cb-group { display: flex; gap: 10px; flex-wrap: wrap; }
     .cb-item { display: flex; align-items: center; gap: 4px; margin-right: 8px; }
@@ -218,30 +224,25 @@ function getPrintApplicationHtml(props: {
     
     .declaration-section { border-radius: 15px; border: 2px solid #8B2323; padding: 5px 15px; margin-top: 15px; }
     .declaration-title { text-align: center; margin: -15px auto 5px; background: #8B2323; color: white; width: 150px; border-radius: 10px; padding: 2px; font-weight: bold; }
-    .declaration-list { list-style: disc; padding-left: 20px; font-size: 10px; }
+    .declaration-list { list-style: disc; padding-left: 20px; font-size: 12px; }
     .declaration-list li { margin-bottom: 4px; }
 
-    .signature-row { display: flex; justify-content: space-between; margin-top: 20px; font-weight: bold; padding: 0 20px; }
-    .sig-block { text-align: center; min-width: 160px; }
-    .sig-line { margin-top: 35px; border-top: 1px solid #333; padding-top: 5px; min-width: 160px; font-size: 10px; font-weight: normal; }
-    .sig-section-title { font-size: 9px; color: #8B2323; font-weight: bold; text-align: center; border-bottom: 1px solid #ddd; margin-bottom: 4px; padding-bottom: 2px; }
+    .signature-row { display: flex; justify-content: space-between; margin-top: 20px; padding: 0 20px; }
+    .sig-block { width: 180px; border: 1px solid #777; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
+    .sig-section-title { font-size: 9px; color: #8B2323; font-weight: bold; text-align: center; background: #f2f2f2; border-bottom: 1px solid #777; margin: 0; padding: 4px 0; }
+    .sig-box { height: 50px; background: #fff; }
 
     .office-use-bottom { border: 1px solid #777; margin-top: 15px; display: flex; }
-    .office-use-bottom-left { flex: 1; border-right: 1px solid #777; padding: 5px; }
-    .office-use-bottom-right { width: 350px; padding: 5px; }
+    .office-use-bottom-left { flex: 1; border-right: 1px solid #777; padding: 5px; display: flex; flex-direction: column; align-items: center; }
+    .office-use-bottom-right { width: 350px; padding: 5px; display: flex; flex-direction: column; align-items: center; }
     
-    .office-label-tag { background: #8B2323; color: white; padding: 2px 10px; border-radius: 10px; font-weight: bold; margin: -15px auto 5px; display: block; width: fit-content; }
+    .office-label-tag { background: #8B2323; color: white; padding: 4px 20px; border-radius: 10px; font-weight: bold; margin: 10px auto; display: block; width: fit-content; text-align: center; }
 
-    .footer-note { background: #8B2323; color: white; text-align: center; padding: 5px; margin-top: 10px; font-weight: bold; font-size: 11px; }
+    .footer-note { background: #FFD700; color: #8B2323; text-align: center; padding: 10px; margin-top: 10px; font-weight: bold; font-size: 12px; border: 3px solid #8B2323; border-radius: 8px; }
     
     .doc-required-section { display: flex; gap: 10px; margin-top: 10px; }
     .doc-table { flex: 1; border-collapse: collapse; }
     .doc-table th, .doc-table td { border: 1px solid #777; padding: 3px; font-size: 9px; }
-    .doc-office-box { border: 1px solid #777; width: 250px; height: 180px; position: relative; }
-    .doc-office-box .cross { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    .doc-office-box .cross::before, .doc-office-box .cross::after { content: ''; position: absolute; background: #ccc; width: 1px; height: 141%; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); }
-    .doc-office-box .cross::after { transform: translate(-50%, -50%) rotate(-45deg); }
-    .doc-office-box .text { position: absolute; top: 5px; width: 100%; text-align: center; font-weight: bold; }
 
     .m-t-10 { margin-top: 10px; }
     .bold { font-weight: bold; }
@@ -249,7 +250,7 @@ function getPrintApplicationHtml(props: {
     .font-8 { font-size: 8px; }
 
     @media print {
-      body { padding: 0; margin: 15mm 10mm; }
+      body { padding: 0; margin: 5mm 10mm; }
       .no-print { display: none; }
     }
   </style>
@@ -263,9 +264,14 @@ function getPrintApplicationHtml(props: {
     </div>
 
     <div class="header-container">
+      <div class="header-logo">
+        <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Pydah Logo" />
+      </div>
       <div class="header-main">
-        <h1>PYDAH EDUCATIONAL INSTITUTIONS</h1>
-        <p>KAKINADA</p>
+        <div>
+          <h1>PYDAH EDUCATIONAL INSTITUTIONS</h1>
+          <p>KAKINADA</p>
+        </div>
       </div>
 
       <div class="office-use-top">
@@ -366,15 +372,15 @@ function getPrintApplicationHtml(props: {
         <span class="form-value">${escapeHtml(address?.communication?.doorOrStreet?.toUpperCase())}</span>
       </div>
       <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 130px;">Land Mark..................</span>
+        <span style="min-width: 130px;">Land Mark :</span>
         <span class="form-value">${escapeHtml(address?.communication?.landmark?.toUpperCase())}</span>
-        <span style="margin-left: 10px; min-width: 120px;">Village/City/Town..................</span>
+        <span style="margin-left: 10px; min-width: 120px;">Village/City/Town :</span>
         <span class="form-value">${escapeHtml(address?.communication?.villageOrCity?.toUpperCase())}</span>
       </div>
       <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 130px;">Mandal.....................</span>
+        <span style="min-width: 130px;">Mandal :</span>
         <span class="form-value">${escapeHtml(address?.communication?.mandal?.toUpperCase())}</span>
-        <span style="margin-left: 10px; min-width: 120px;">District...............................</span>
+        <span style="margin-left: 10px; min-width: 120px;">District :</span>
         <span class="form-value">${escapeHtml(address?.communication?.district?.toUpperCase())}</span>
         <span style="margin-left: 10px; min-width: 60px;">Pin Code :</span>
         <span class="inline-val">${escapeHtml(address?.communication?.pinCode)}</span>
@@ -484,24 +490,23 @@ function getPrintApplicationHtml(props: {
     <div class="signature-row" style="margin-top: 30px; border-top: 2px solid #8B2323; padding-top: 15px;">
       <div class="sig-block">
         <div class="sig-section-title">STUDENT SIGNATURE</div>
-        <div style="height: 40px;"></div>
-        <div class="sig-line"></div>
+        <div class="sig-box"></div>
       </div>
       <div class="sig-block">
         <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
-        <div style="height: 40px;"></div>
-        <div class="sig-line"></div>
+        <div class="sig-box"></div>
       </div>
     </div>
 
     <!-- Page Break or Second Section -->
-    <div style="page-break-before: always; margin-top: 20px;"></div>
+    <div style="page-break-before: always;"></div>
+    <div style="height: 30px;"></div>
 
     <div class="top-meta">
       <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
-      <div>Pin No.........................</div>
-      <div>Course......................</div>
-      <div>Branch:......................</div>
+      <div>Pin No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
+      <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
+      <div>Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span></div>
     </div>
 
     <div class="form-row">
@@ -538,10 +543,6 @@ function getPrintApplicationHtml(props: {
           </tr>
         </tbody>
       </table>
-      <div class="doc-office-box">
-        <div class="text">For Office Use</div>
-        <div class="cross"></div>
-      </div>
     </div>
 
     <div class="declaration-section">
@@ -561,19 +562,17 @@ function getPrintApplicationHtml(props: {
     <div class="signature-row" style="border-top: 1px solid #ddd; padding-top: 10px;">
       <div class="sig-block">
         <div class="sig-section-title">STUDENT SIGNATURE</div>
-        <div style="height: 40px;"></div>
-        <div class="sig-line"></div>
+        <div class="sig-box"></div>
       </div>
       <div class="sig-block">
         <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
-        <div style="height: 40px;"></div>
-        <div class="sig-line"></div>
+        <div class="sig-box"></div>
       </div>
     </div>
 
+    <div class="office-label-tag">FOR OFFICE USE</div>
     <div class="office-use-bottom">
       <div class="office-use-bottom-left">
-        <div class="office-label-tag">FOR OFFICE USE</div>
         <div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Fee Paid Details</div>
         <table class="data-table" style="font-size: 8px;">
           <thead>
@@ -585,7 +584,7 @@ function getPrintApplicationHtml(props: {
             </tr>
           </thead>
           <tbody>
-            ${Array.from({ length: 4 }).map((_, i) => {
+            ${Array.from({ length: 5 }).map((_, i) => {
               const tx = transactions[i];
               return `
                 <tr style="height: 18px;">
@@ -609,19 +608,6 @@ function getPrintApplicationHtml(props: {
       fees to any personal account
     </div>
 
-    <!-- Signature Row — Page 2 Bottom -->
-    <div class="signature-row" style="margin-top: 20px; border-top: 2px solid #8B2323; padding-top: 15px;">
-      <div class="sig-block">
-        <div class="sig-section-title">STUDENT SIGNATURE</div>
-        <div style="height: 40px;"></div>
-        <div class="sig-line"></div>
-      </div>
-      <div class="sig-block">
-        <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
-        <div style="height: 40px;"></div>
-        <div class="sig-line"></div>
-      </div>
-    </div>
   </div>
 </body>
 </html>`;
