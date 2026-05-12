@@ -10,6 +10,7 @@ import { Joining, PaymentSummary, PaymentTransaction, Admission } from '@/types'
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
+import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import {
   cleanRegistrationFieldEntries,
   formatRegistrationFieldLabel,
@@ -781,6 +782,17 @@ export default function JoiningDetailPage() {
           )}
         </div>
       )}
+
+      {/* Fee Structure (Fee Management DB) — defaults to current year, ±3 years dropdown */}
+      <FeeStructureSection
+        course={joining.courseInfo?.course || ''}
+        branch={joining.courseInfo?.branch || ''}
+        quota={joining.courseInfo?.quota || ''}
+        batch={
+          (lead as { academicYear?: number | string } | undefined)?.academicYear ?? null
+        }
+        description="Live from the Fee Management database. Pick a batch (academic year) from the dropdown — the table updates to that year's configured fees."
+      />
     </div>
   );
 }

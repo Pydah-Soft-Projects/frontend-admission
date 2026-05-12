@@ -143,6 +143,12 @@ export interface PaymentTransaction {
   notes?: string;
   meta?: Record<string, any>;
   isAdditionalFee?: boolean;
+  // Fee-head tagging (when the payment was recorded against a specific row of the Fee Structure)
+  feeHead?: string | null;
+  feeHeadName?: string;
+  feeHeadCode?: string;
+  feeStructureBatch?: string;
+  feeStructureYear?: number | null;
   processedAt?: string;
   verifiedAt?: string;
   createdAt: string;
@@ -872,4 +878,50 @@ export interface ActivityLog {
   metadata?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+}
+
+// Fee Structure (from fee-management Mongo: feestructures + feeheads)
+export interface FeeStructureTerm {
+  termNumber: number | null;
+  percentage: number | null;
+  amount: number;
+  lateFeeAmount: number;
+  dueOffsetDays: number | null;
+  dueDescription: string;
+}
+
+export interface FeeStructure {
+  _id: string;
+  id: string;
+  category: string;
+  course: string;
+  branch: string;
+  college: string;
+  studentYear: number | null;
+  semester: number | null;
+  batch: string;
+  amount: number;
+  isScholarshipApplicable: boolean;
+  feeHead: string | null;
+  feeHeadName: string;
+  feeHeadCode: string;
+  feeHeadDescription: string;
+  terms: FeeStructureTerm[];
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface FeeStructureListFilters {
+  course?: string | null;
+  branch?: string | null;
+  college?: string | null;
+  batch?: string | null;
+  category?: string | null;
+  studentYear?: number | null;
+}
+
+export interface FeeStructureListPayload {
+  data: FeeStructure[];
+  filters: FeeStructureListFilters;
+  total: number;
 }

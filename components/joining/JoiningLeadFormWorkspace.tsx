@@ -61,6 +61,7 @@ import {
 } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
+import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 
@@ -456,6 +457,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     amount: '',
     isProcessing: false,
   });
+  // Fee head the user clicked "Pay" against in the Fee Structure section. When set, the
+  // payment modal pre-fills the row amount, displays a fee-head pill, and tags the resulting
+  // payment_transactions row via the request body so payment history shows which head was paid.
+  const [selectedFeeHead, setSelectedFeeHead] = useState<FeeHeadSelection | null>(null);
   const [publicLinkDialog, setPublicLinkDialog] = useState<{ url: string; expiresAt: string } | null>(null);
   const [publicLinkBusy, setPublicLinkBusy] = useState(false);
   const [publicSubmitted, setPublicSubmitted] = useState(false);
@@ -1812,6 +1817,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       amount: '',
       isProcessing: false,
     });
+    setSelectedFeeHead(null);
   };
 
   const openPaymentModal = (mode: 'cash' | 'online') => {
@@ -1843,6 +1849,42 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     setOpenPaymentMode(null);
   };
 
+  /**
+   * Triggered when the user clicks Cash or Cashfree on a row inside the Fee Structure section.
+   * Mirrors the existing "Payments & Transactions" section behavior:
+   * - Stores the fee-head identity so subsequent cash/cashfree submits tag the transaction.
+   * - Prefills the amount with the row's amount (clamped to the outstanding balance when one
+   *   exists and is smaller, so users never over-collect on the scheduled fee by accident).
+   * - Opens the same modal the existing section uses, in the mode the user picked.
+   */
+  const handleSelectFeeHead = (selection: FeeHeadSelection) => {
+    if (!canWritePayments) {
+      showToast.error('You have read-only access to payments');
+      return;
+    }
+    // Online lane requires Cashfree to be configured + active, same gate as the main section.
+    if (selection.mode === 'online' && !canUseCashfree) {
+      showToast.error(
+        'Cashfree configuration is not active. Update Payment Settings before collecting online.'
+      );
+      return;
+    }
+    setSelectedFeeHead(selection);
+    // Selecting a specific fee head implies a targeted payment, not a generic "additional fee".
+    setIsAdditionalFeeMode(false);
+    const rowAmount = Number(selection.amount) || 0;
+    const cappedAmount =
+      outstandingBalance && outstandingBalance > 0
+        ? Math.min(rowAmount, outstandingBalance)
+        : rowAmount;
+    setPaymentFormState({
+      amount: cappedAmount > 0 ? String(Number(cappedAmount.toFixed(2))) : '',
+      isProcessing: false,
+    });
+    setShouldPromptPayment(false);
+    setOpenPaymentMode(selection.mode);
+  };
+
   const handleCashPaymentSubmit = async () => {
     if (!canWritePayments) {
       showToast.error('You have read-only access to payments');
@@ -1866,9 +1908,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         amount: amountValue,
         currency: 'INR',
         isAdditionalFee: isAdditionalFeeMode || undefined,
+        // Tag transaction with the selected fee head (Fee Management DB) when present.
+        ...(selectedFeeHead && {
+          feeHead: selectedFeeHead.feeHeadId,
+          feeHeadName: selectedFeeHead.feeHeadName,
+          feeHeadCode: selectedFeeHead.feeHeadCode,
+          feeStructureBatch: selectedFeeHead.batch,
+          feeStructureYear: selectedFeeHead.studentYear,
+        }),
       });
 
-      showToast.success('Cash payment recorded');
+      showToast.success(
+        selectedFeeHead
+          ? `Cash payment recorded for ${selectedFeeHead.feeHeadName || 'selected fee head'}`
+          : 'Cash payment recorded'
+      );
       setOpenPaymentMode(null);
       resetPaymentForm();
       setShouldPromptPayment(false);
@@ -1922,6 +1976,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           phone: formState.studentInfo.phone || lead?.phone || '9999999999',
         },
         isAdditionalFee: isAdditionalFeeMode || undefined,
+        // Tag the Cashfree transaction with the selected fee head so reconciliation /
+        // payment history shows what was paid for. Both order rows and the eventual
+        // verification land on the same transaction row (meta is set at insert time).
+        ...(selectedFeeHead && {
+          feeHead: selectedFeeHead.feeHeadId,
+          feeHeadName: selectedFeeHead.feeHeadName,
+          feeHeadCode: selectedFeeHead.feeHeadCode,
+          feeStructureBatch: selectedFeeHead.batch,
+          feeStructureYear: selectedFeeHead.studentYear,
+          notes: {
+            feeHead: selectedFeeHead.feeHeadId,
+            feeHeadName: selectedFeeHead.feeHeadName,
+            feeHeadCode: selectedFeeHead.feeHeadCode,
+          },
+        }),
       });
 
       const orderData = orderResponse?.data;
@@ -3968,7 +4037,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               </div>
             </section>
 
-            {canAccessPaymentsModule && (
+            {/*
+             * Payment Information should always render for any joining viewer
+             * (admin / counsellor / data-entry). The write actions (Record Cash,
+             * Cashfree, Additional Fee) stay gated on `canWritePayments`. Public
+             * edit links never see the payments panel — that surface is admin-only.
+             */}
+            {!isPublicEdit && (
               <section
                 id="payment-panel"
                 className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${shouldPromptPayment
@@ -3994,41 +4069,48 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="primary"
-                      onClick={() => openPaymentModal('cash')}
-                      disabled={paymentActionsDisabled}
-                    >
-                      {isAdditionalFeeMode ? 'Record Additional Cash Payment' : 'Record Cash Payment'}
-                    </Button>
-                    <Button
-                      variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                      onClick={() => openPaymentModal('online')}
-                      disabled={!canUseCashfree || paymentActionsDisabled}
-                    >
-                      {isAdditionalFeeMode
-                        ? 'Collect Additional Fee via Cashfree'
-                        : 'Collect via Cashfree UPI / QR'}
-                    </Button>
-                    {shouldShowAdditionalFeeButton && (
+                  {canAccessPaymentsModule ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        onClick={() => openPaymentModal('cash')}
+                        disabled={paymentActionsDisabled}
+                      >
+                        {isAdditionalFeeMode ? 'Record Additional Cash Payment' : 'Record Cash Payment'}
+                      </Button>
                       <Button
                         variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                        onClick={() => {
-                          if (paymentFormState.isProcessing) return;
-                          setIsAdditionalFeeMode((prev) => {
-                            if (prev) {
-                              resetPaymentForm();
-                            }
-                            return !prev;
-                          });
-                        }}
-                        disabled={paymentFormState.isProcessing || !canWritePayments}
+                        onClick={() => openPaymentModal('online')}
+                        disabled={!canUseCashfree || paymentActionsDisabled}
                       >
-                        {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
+                        {isAdditionalFeeMode
+                          ? 'Collect Additional Fee via Cashfree'
+                          : 'Collect via Cashfree UPI / QR'}
                       </Button>
-                    )}
-                  </div>
+                      {shouldShowAdditionalFeeButton && (
+                        <Button
+                          variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
+                          onClick={() => {
+                            if (paymentFormState.isProcessing) return;
+                            setIsAdditionalFeeMode((prev) => {
+                              if (prev) {
+                                resetPaymentForm();
+                              }
+                              return !prev;
+                            });
+                          }}
+                          disabled={paymentFormState.isProcessing || !canWritePayments}
+                        >
+                          {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                      Payments module is read-only for your role. Ask a Super Admin to grant the
+                      <span className="font-semibold"> Payments </span> permission to record fees.
+                    </p>
+                  )}
                   {isAdditionalFeeMode && (
                     <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                       Additional fee mode active
@@ -4143,13 +4225,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                               className="rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm dark:border-slate-700"
                             >
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <span className="font-semibold text-slate-800 dark:text-slate-100">
                                     {modeLabel}
                                   </span>
                                   {transaction.isAdditionalFee && (
                                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
                                       Additional
+                                    </span>
+                                  )}
+                                  {(transaction.feeHeadName || transaction.feeHeadCode) && (
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
+                                      title={
+                                        transaction.feeStructureYear || transaction.feeStructureBatch
+                                          ? `Batch ${transaction.feeStructureBatch || ''} ${
+                                              transaction.feeStructureYear
+                                                ? `· Year ${transaction.feeStructureYear}`
+                                                : ''
+                                            }`.trim()
+                                          : 'Tagged fee head'
+                                      }
+                                    >
+                                      {transaction.feeHeadName || transaction.feeHeadCode}
                                     </span>
                                   )}
                                 </div>
@@ -4181,6 +4279,26 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 </div>
               </section>
+            )}
+
+            {/* Fee Structure (Fee Management DB) — visible to any joining viewer.
+                Users with payments-write permission can record a cash/Cashfree payment on
+                any row; the transaction is tagged with the chosen fee head. The per-row
+                Cash + Cashfree buttons mirror the "10. Payments & Transactions" section. */}
+            {!isPublicEdit && (
+              <FeeStructureSection
+                course={formState.courseInfo.course}
+                branch={formState.courseInfo.branch}
+                quota={formState.courseInfo.quota}
+                batch={
+                  (lead as { academicYear?: number | string } | undefined)?.academicYear ??
+                  null
+                }
+                description="Live from the Fee Management database. Pick a batch, then use Cash or Cashfree on any fee head — the payment is tagged with that head and shows up in Payments & Transactions."
+                onSelectFeeHead={canWritePayments ? handleSelectFeeHead : undefined}
+                activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
+                canUseCashfree={canUseCashfree}
+              />
             )}
 
             {/* Action Buttons at Bottom - Always visible for draft/pending status */}
@@ -4276,6 +4394,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               {isAdditionalFeeMode && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-200">
                   This transaction is marked as an additional fee. It will be tracked separately from the admission balance.
+                </div>
+              )}
+              {selectedFeeHead && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/30 dark:text-emerald-200">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      Paying for
+                    </span>
+                    <span className="font-semibold">{selectedFeeHead.label}</span>
+                    {selectedFeeHead.feeHeadCode && (
+                      <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-emerald-700 dark:bg-emerald-800/50 dark:text-emerald-100">
+                        {selectedFeeHead.feeHeadCode}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFeeHead(null)}
+                    className="text-[11px] font-semibold text-emerald-700 underline-offset-2 hover:underline disabled:opacity-60 dark:text-emerald-200"
+                    disabled={paymentFormState.isProcessing}
+                  >
+                    Clear selection
+                  </button>
                 </div>
               )}
               <div>

@@ -21,6 +21,7 @@ import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
+import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import {
   cleanRegistrationFieldEntries,
   formatRegistrationFieldLabel,
@@ -63,7 +64,26 @@ type AdmissionCancellationDetails = {
 
 type AdmissionLeadData = Record<string, unknown> & {
   enquiryNumber?: string;
+  academicYear?: number | string;
   _admissionCancellation?: AdmissionCancellationDetails;
+};
+
+const resolveBatch = (
+  admission?: Admission,
+  lead?: AdmissionLeadData
+): string | null => {
+  const rawAcademicYear = lead?.academicYear;
+  if (rawAcademicYear !== undefined && rawAcademicYear !== null && String(rawAcademicYear).trim() !== '') {
+    return String(rawAcademicYear).trim();
+  }
+  const admissionDate = admission?.admissionDate || admission?.createdAt;
+  if (admissionDate) {
+    const parsed = new Date(admissionDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return String(parsed.getFullYear());
+    }
+  }
+  return null;
 };
 
 type NestedPaymentPayload = {
@@ -1185,6 +1205,15 @@ export default function AdmissionDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Fee Structure (Fee Management DB) */}
+      <FeeStructureSection
+        course={admission.courseInfo?.course || ''}
+        branch={admission.courseInfo?.branch || ''}
+        quota={admission.courseInfo?.quota || ''}
+        batch={resolveBatch(admission, lead)}
+        description="Live from the Fee Management database (feestructures + feeheads). Matched against the student's course, branch, quota and admission batch."
+      />
     </div>
   );
 }
