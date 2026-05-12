@@ -105,6 +105,28 @@ function getPrintApplicationHtml(props: {
   const documents = application.documents ?? {};
   const siblings = (application as Joining).siblings ?? (application as Admission).siblings ?? [];
 
+  // Normalize education level value so we can match data regardless of case
+  // or separator differences (e.g. "ssc", "SSC", "inter_diploma",
+  // "inter-diploma", "Inter / Diploma"). The view dialog renders the entries
+  // directly, but the print form has fixed rows per standard, so we need
+  // robust lookup here to ensure stored values surface on the printout.
+  const normalizeLevel = (value?: string): string =>
+    String(value || '')
+      .toLowerCase()
+      .replace(/[\s/\-]+/g, '_')
+      .replace(/_+/g, '_')
+      .trim();
+
+  const findEducationByLevel = (target: string) => {
+    const wanted = normalizeLevel(target);
+    return educationHistory.find((e) => normalizeLevel(e.level) === wanted);
+  };
+
+  const matchedLevels = new Set(['ssc', 'inter_diploma', 'ug']);
+  const extraEducationEntries = educationHistory.filter(
+    (e) => !matchedLevels.has(normalizeLevel(e.level))
+  );
+
   const checkbox = (checked: boolean) => `
     <span class="cb-box ${checked ? 'checked' : ''}"></span>
   `;
@@ -439,18 +461,47 @@ function getPrintApplicationHtml(props: {
           </tr>
         </thead>
         <tbody>
-          ${['SSC', 'Inter / Diploma', 'UG'].map(std => {
-            const edu = educationHistory.find(e => e.level === (std === 'Inter / Diploma' ? 'INTERMEDIATE' : std));
+          ${[
+            { label: 'SSC', key: 'ssc' },
+            { label: 'Inter / Diploma', key: 'inter_diploma' },
+            { label: 'UG', key: 'ug' },
+          ].map(({ label, key }) => {
+            const edu = findEducationByLevel(key);
+            const institutionText = [edu?.institutionName, edu?.institutionAddress]
+              .filter(Boolean)
+              .join(', ');
             return `
               <tr style="height: 25px;">
-                <td>${std}</td>
+                <td>${label}</td>
                 <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
                 <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
-                <td style="font-size: 8px;">${escapeHtml(edu?.institutionName || '')}</td>
-                <td></td>
+                <td style="font-size: 8px;">${escapeHtml(institutionText)}</td>
+                <td>${escapeHtml(edu?.hallTicketNumber || '')}</td>
                 <td>${escapeHtml(edu?.totalMarksOrGrade || '')}</td>
                 <td></td>
+                <td>${escapeHtml(edu?.cetRank || '')}</td>
+              </tr>
+            `;
+          }).join('')}
+          ${extraEducationEntries.map((edu) => {
+            const institutionText = [edu?.institutionName, edu?.institutionAddress]
+              .filter(Boolean)
+              .join(', ');
+            const standardLabel =
+              (edu?.otherLevelLabel && edu.otherLevelLabel.trim()) ||
+              (edu?.level
+                ? String(edu.level).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+                : 'Other');
+            return `
+              <tr style="height: 25px;">
+                <td>${escapeHtml(standardLabel)}</td>
+                <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
+                <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
+                <td style="font-size: 8px;">${escapeHtml(institutionText)}</td>
+                <td>${escapeHtml(edu?.hallTicketNumber || '')}</td>
+                <td>${escapeHtml(edu?.totalMarksOrGrade || '')}</td>
                 <td></td>
+                <td>${escapeHtml(edu?.cetRank || '')}</td>
               </tr>
             `;
           }).join('')}
