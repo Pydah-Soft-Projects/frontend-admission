@@ -88,8 +88,6 @@ export default function LeadDetailPage() {
     'Wrong Data',
     'Confirmed',
     'CET Applied',
-    'Polycet applied',
-    'Eamcet applied',
     'Other cet applied',
     'Admitted only',
   ];

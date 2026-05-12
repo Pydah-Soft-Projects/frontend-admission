@@ -89,8 +89,6 @@ export default function ManagerLeadDetailPage() {
     'Not interested',
     'Confirmed',
     'CET Applied',
-    'Polycet applied',
-    'Eamcet applied',
     'Other cet applied',
     'Admitted only',
   ];

@@ -4706,9 +4706,10 @@ export default function ReportsPage() {
                                                 key={status}
                                                 className={cn(
                                                   "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border",
-                                                  status === 'Interested' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                                                  status === 'Not Interested' ? "bg-red-50 text-red-700 border-red-100" :
+                                                  status === 'Interested' || status === 'Visited' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                                  status === 'Not Interested' || status === 'Not Available' ? "bg-red-50 text-red-700 border-red-100" :
                                                   status === 'Confirmed' ? "bg-blue-50 text-blue-700 border-blue-100" :
+                                                  status === 'Scheduled Revisit' ? "bg-orange-50 text-orange-700 border-orange-100" :
                                                   "bg-slate-50 text-slate-600 border-slate-100"
                                                 )}
                                               >
@@ -4743,8 +4744,10 @@ export default function ReportsPage() {
                                                       <td className="px-4 py-2 text-right">
                                                         <span className={cn(
                                                           "text-[9px] font-bold px-1.5 py-0.5 rounded",
-                                                          lead.visitStatus === 'Interested' ? "text-emerald-600 bg-emerald-50" :
-                                                          lead.visitStatus === 'Not Interested' ? "text-red-600 bg-red-50" :
+                                                          lead.visitStatus === 'Interested' || lead.visitStatus === 'Visited' ? "text-emerald-600 bg-emerald-50" :
+                                                          lead.visitStatus === 'Not Interested' || lead.visitStatus === 'Not Available' ? "text-red-600 bg-red-50" :
+                                                          lead.visitStatus === 'Confirmed' ? "text-blue-600 bg-blue-50" :
+                                                          lead.visitStatus === 'Scheduled Revisit' ? "text-orange-600 bg-orange-50" :
                                                           "text-slate-500 bg-slate-50"
                                                         )}>
                                                           {lead.visitStatus}
@@ -4924,6 +4927,7 @@ export default function ReportsPage() {
                                 const promises = queuedVisitLeads.map(item => 
                                   leadAPI.addActivity(item.lead._id, {
                                     newStatus: item.status,
+                                    statusChannel: 'visit_status',
                                     type: 'status_change',
                                     comment: `Visit outcome recorded by Super Admin on behalf of ${users.find(u => u._id === filters.userId)?.name} for date: ${format(new Date(selectedVisitDate + 'T12:00:00'), 'MMM d, yyyy')}`
                                   })

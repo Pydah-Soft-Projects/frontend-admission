@@ -270,7 +270,7 @@ export default function VisitorsPage() {
                                             : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                     )}
                                 >
-                                    {status}
+                                    {status === 'used' ? 'verified' : status}
                                 </button>
                             ))}
                         </div>
@@ -378,7 +378,7 @@ export default function VisitorsPage() {
                                                                     ? "bg-rose-50 border-rose-100 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900"
                                                                     : "bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-950/40 dark:border-amber-900"
                                                     )}>
-                                                        {visit.status}
+                                                        {visit.status === 'used' ? 'verified' : visit.status}
                                                     </span>
                                                 </div>
                                             </td>
