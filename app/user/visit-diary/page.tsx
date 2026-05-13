@@ -118,7 +118,6 @@ export default function VisitDiaryPage() {
     'Assigned',
     'Interested',
     'Not Interested',
-    'Not Available',
     'Scheduled Revisit',
     'Wrong Data',
     'Confirmed',

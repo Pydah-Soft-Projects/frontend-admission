@@ -548,6 +548,7 @@ export default function ReportsPage() {
           department: dept,
           studentName: a.name,
           phone: a.phone,
+          mandal: a.mandal || '-',
           village: a.village,
           visitStatus: a.visitStatus || 'Assigned'
         }))

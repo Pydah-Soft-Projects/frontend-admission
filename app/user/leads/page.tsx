@@ -281,13 +281,14 @@ export default function UserLeadsPage() {
       'Assigned',
       'Interested',
       'Not Interested',
-      'Not Available',
       'Scheduled Revisit',
       'Wrong Data',
       'Confirmed',
     ];
     if (user?.roleName === 'PRO') {
-      return Array.from(new Set([...visitFromDb, ...visitDefaults])).filter(Boolean).sort();
+      return Array.from(new Set([...visitFromDb, ...visitDefaults]))
+        .filter((s) => s && s !== 'Not Available')
+        .sort();
     }
     if (user?.roleName === 'Student Counselor') {
       return Array.from(new Set([...callFromDb, ...callDefaults]))
