@@ -19,7 +19,7 @@ import {
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
-import { LayoutGrid, List, Calendar, Filter, Download } from 'lucide-react';
+import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays } from 'lucide-react';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -62,7 +62,9 @@ type ApiError = {
 const CompletedAdmissionsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'abstract' | 'detailed' | 'student-info'>('abstract');
+  const [activeTab, setActiveTab] = useState<
+    'abstract' | 'detailed' | 'student-info' | 'reference-list' | 'date-wise'
+  >('abstract');
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,6 +122,36 @@ const CompletedAdmissionsPage = () => {
   });
 
   const stats = statsData?.stats || [];
+
+  const pivotReportParams = useMemo(
+    () => ({
+      startDate: dateRange.from || undefined,
+      endDate: dateRange.to || undefined,
+      courseId: courseFilter || undefined,
+      branchId: branchFilter || undefined,
+      courseName: getCourseName(courseFilter) || undefined,
+      branchName: getBranchName(branchFilter) || undefined,
+      status: statusFilter === 'all' ? undefined : statusFilter,
+    }),
+    [dateRange.from, dateRange.to, courseFilter, branchFilter, statusFilter, getCourseName, getBranchName]
+  );
+
+  const { data: referenceStatsData, isLoading: referenceStatsLoading } = useQuery({
+    queryKey: ['admissions', 'stats', 'by-reference', pivotReportParams],
+    queryFn: async () => admissionAPI.getStatsByReference(pivotReportParams),
+    enabled: activeTab === 'reference-list',
+  });
+
+  const { data: dateWiseStatsData, isLoading: dateWiseStatsLoading } = useQuery({
+    queryKey: ['admissions', 'stats', 'by-date', pivotReportParams],
+    queryFn: async () => admissionAPI.getStatsByDate(pivotReportParams),
+    enabled: activeTab === 'date-wise',
+  });
+
+  const referenceCourses = referenceStatsData?.courses ?? [];
+  const referenceRows = referenceStatsData?.rows ?? [];
+  const dateWiseCourses = dateWiseStatsData?.courses ?? [];
+  const dateWiseRows = dateWiseStatsData?.rows ?? [];
 
   // Detailed List Query
   const queryKey = useMemo(
@@ -358,7 +390,7 @@ const CompletedAdmissionsPage = () => {
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
             {/* Tabs Switcher */}
-            <div className="flex items-center gap-1 rounded-2xl bg-slate-200/50 p-1 dark:bg-slate-800/50">
+            <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-slate-200/50 p-1 dark:bg-slate-800/50">
               <button
                 onClick={() => setActiveTab('abstract')}
                 className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
@@ -391,6 +423,28 @@ const CompletedAdmissionsPage = () => {
               >
                 <Filter className="h-4 w-4" />
                 Student Info
+              </button>
+              <button
+                onClick={() => setActiveTab('reference-list')}
+                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'reference-list'
+                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                <UserCircle className="h-4 w-4" />
+                Reference list
+              </button>
+              <button
+                onClick={() => setActiveTab('date-wise')}
+                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'date-wise'
+                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                <CalendarDays className="h-4 w-4" />
+                Date-wise
               </button>
             </div>
 
@@ -703,7 +757,7 @@ const CompletedAdmissionsPage = () => {
             </div>
           )}
         </Card>
-      ) : (
+      ) : activeTab === 'student-info' ? (
         <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
@@ -821,7 +875,193 @@ const CompletedAdmissionsPage = () => {
             </div>
           )}
         </Card>
-      )}
+      ) : activeTab === 'reference-list' ? (
+        <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
+          <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Reference list</h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Admissions completed per staff member (creator), broken down by course. Uses the course, branch, status, and date filters above.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead>
+                <tr className="bg-white dark:bg-slate-900">
+                  <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900">
+                    S. No.
+                  </th>
+                  <th className="sticky left-14 z-10 bg-white px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Department
+                  </th>
+                  <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Designation
+                  </th>
+                  {referenceCourses.map((c) => (
+                    <th
+                      key={c.courseId}
+                      title={c.courseName}
+                      className="max-w-[160px] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      <span className="line-clamp-2">{c.courseName}</span>
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
+                {referenceStatsLoading ? (
+                  <tr>
+                    <td
+                      colSpan={Math.max(5 + referenceCourses.length, 5)}
+                      className="py-16 text-center text-slate-500"
+                    >
+                      <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400">Loading reference stats…</p>
+                    </td>
+                  </tr>
+                ) : referenceRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={Math.max(5 + referenceCourses.length, 5)}
+                      className="py-16 text-center text-slate-500"
+                    >
+                      No data for the selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  referenceRows.map((row: any, idx: number) => {
+                    const rowTotal = referenceCourses.reduce(
+                      (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
+                      0
+                    );
+                    return (
+                      <tr
+                        key={row.userId ?? `ref-${idx}`}
+                        className="transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                      >
+                        <td className="sticky left-0 z-10 bg-white px-4 py-3 text-sm font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                          {idx + 1}
+                        </td>
+                        <td className="sticky left-14 z-10 bg-white px-4 py-3 text-sm font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+                          {row.name}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                          {row.department ?? '—'}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                          {row.designation ?? '—'}
+                        </td>
+                        {referenceCourses.map((c) => (
+                          <td key={c.courseId} className="px-3 py-3 text-center text-sm font-semibold text-blue-600 dark:text-blue-400">
+                            {Number(row.counts?.[c.courseId]) || 0}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-center text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {rowTotal}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : activeTab === 'date-wise' ? (
+        <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
+          <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Date-wise admissions</h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Count of admissions created on each calendar day, by course. Uses the same filters as above (including admission date range).
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead>
+                <tr className="bg-white dark:bg-slate-900">
+                  <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900">
+                    Date
+                  </th>
+                  {dateWiseCourses.map((c) => (
+                    <th
+                      key={c.courseId}
+                      title={c.courseName}
+                      className="max-w-[160px] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      <span className="line-clamp-2">{c.courseName}</span>
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
+                {dateWiseStatsLoading ? (
+                  <tr>
+                    <td
+                      colSpan={Math.max(3 + dateWiseCourses.length, 3)}
+                      className="py-16 text-center text-slate-500"
+                    >
+                      <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400">Loading date-wise stats…</p>
+                    </td>
+                  </tr>
+                ) : dateWiseRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={Math.max(3 + dateWiseCourses.length, 3)}
+                      className="py-16 text-center text-slate-500"
+                    >
+                      No data for the selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  dateWiseRows.map((row: any) => {
+                    const rowTotal = dateWiseCourses.reduce(
+                      (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
+                      0
+                    );
+                    let displayDate = row.date;
+                    try {
+                      displayDate = new Date(row.date + 'T12:00:00').toLocaleDateString(undefined, {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      });
+                    } catch {
+                      displayDate = row.date;
+                    }
+                    return (
+                      <tr
+                        key={row.date}
+                        className="transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                      >
+                        <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-3 text-sm font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+                          {displayDate}
+                        </td>
+                        {dateWiseCourses.map((c) => (
+                          <td key={c.courseId} className="px-3 py-3 text-center text-sm font-semibold text-blue-600 dark:text-blue-400">
+                            {Number(row.counts?.[c.courseId]) || 0}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-center text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {rowTotal}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 };

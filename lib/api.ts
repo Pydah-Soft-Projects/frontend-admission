@@ -1259,6 +1259,48 @@ export const admissionAPI = {
     const response = await api.get(`/admissions/stats${query ? `?${query}` : ''}`);
     return response.data?.data || response.data;
   },
+  getStatsByReference: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    courseId?: string;
+    branchId?: string;
+    courseName?: string;
+    branchName?: string;
+    status?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/stats/by-reference${query ? `?${query}` : ''}`);
+    return response.data?.data || response.data;
+  },
+  getStatsByDate: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    courseId?: string;
+    branchId?: string;
+    courseName?: string;
+    branchName?: string;
+    status?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/stats/by-date${query ? `?${query}` : ''}`);
+    return response.data?.data || response.data;
+  },
   list: async (params?: { 
     page?: number; 
     limit?: number; 
