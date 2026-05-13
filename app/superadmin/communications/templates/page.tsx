@@ -889,96 +889,102 @@ function BulkSmsReviewModal({
         ) : (
           <>
             <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/50">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Message preview (first lead)
-                </p>
-                {previewVariableStats.total > 0 ? (
-                  <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                    {previewVariableStats.filled}/{previewVariableStats.total} variables filled
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">No template variables</p>
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* Message Preview Column */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                      Message Preview
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {previewVariableStats.total > 0 && (
+                        <p className="text-[10px] font-medium text-slate-600 tabular-nums dark:text-slate-400">
+                          {previewVariableStats.filled}/{previewVariableStats.total} variables filled
+                        </p>
+                      )}
+                      {samplePreview && (
+                        <p className="text-[10px] font-medium text-slate-500 tabular-nums dark:text-slate-400">
+                          {samplePreview.length} chars
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <div className="max-h-24 md:max-h-32 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-3 text-sm italic leading-relaxed text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                      {samplePreview || <span className="text-slate-400 not-italic">No template content.</span>}
+                    </div>
+                    <div className="absolute -left-1 top-4 h-2 w-2 rotate-45 border-b border-l border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950"></div>
+                  </div>
+                </div>
+
+                {/* Global Variables Column (Visible only if present) */}
+                {globalVars.length > 0 && (
+                  <div className="w-full md:w-[35%] lg:w-[30%] shrink-0 flex flex-col">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">
+                      Global Placeholders
+                    </p>
+                    <div className="flex-1 max-h-32 md:max-h-40 overflow-y-auto pr-1 space-y-3">
+                      {globalVars.map((meta) => {
+                        const val = draft[0]?.variables[meta.index]?.value ?? '';
+                        return (
+                          <div key={meta.key} className="space-y-1">
+                            <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                              {meta.label} <span className="font-normal text-slate-400 opacity-70">(Global)</span>
+                            </label>
+                            <Input
+                              value={val}
+                              onChange={(e) => updateSharedVariable(meta.index, e.target.value)}
+                              className="h-8 text-xs font-medium"
+                              disabled={isSending}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
-              <p className="mt-2 whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-3 text-sm italic text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                {samplePreview || '—'}
-              </p>
-              {samplePreview ? (
-                <p className="mt-2 text-[11px] text-slate-500 tabular-nums dark:text-slate-400">
-                  {samplePreview.length} character{samplePreview.length === 1 ? '' : 's'} in preview
-                </p>
-              ) : null}
             </div>
 
-            {globalVars.length > 0 ? (
-              <div className="shrink-0 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Global placeholders (same value on every SMS)
-                </p>
-                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                  Marked “Global” on the template. Edit once; all recipients use this text.
-                </p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {globalVars.map((meta) => {
-                    const val = draft[0]?.variables[meta.index]?.value ?? '';
-                    return (
-                      <label
-                        key={meta.key}
-                        className="flex min-w-0 flex-col gap-1 text-xs text-slate-600 dark:text-slate-400"
-                      >
-                        <span className="font-medium text-slate-700 dark:text-slate-300">{meta.label}</span>
-                        <input
-                          type="text"
-                          value={val}
-                          onChange={(e) => updateSharedVariable(meta.index, e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                          disabled={isSending}
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-slate-950/20">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-slate-700">
-                  <thead className="sticky top-0 z-[1] bg-slate-100 dark:bg-slate-800">
+                  <thead className="sticky top-0 z-[1] bg-slate-100 dark:bg-slate-800 shadow-sm">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lead</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Numbers</th>
+                      <th className="px-4 py-2.5 text-left font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-[10px]">Recipient</th>
+                      <th className="px-4 py-2.5 text-left font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-[10px]">Numbers</th>
                       {perLeadVars.map((meta) => (
                         <th
                           key={meta.key}
-                          className="min-w-[7rem] px-2 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
+                          className="min-w-[8rem] px-3 py-2.5 text-left font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-[10px]"
                         >
                           {meta.label}
-                          <span className="mt-0.5 block font-normal normal-case text-[10px] text-slate-500">
-                            Per recipient
+                          <span className="mt-0.5 block font-medium normal-case text-[9px] text-slate-400 italic">
+                            Individual
                           </span>
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900/40">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {draft.map((row, leadIdx) => (
-                      <tr key={row.leadId}>
-                        <td className="max-w-[10rem] px-3 py-2 align-top">
-                          <div className="font-medium text-slate-900 dark:text-slate-100">{row.leadName}</div>
+                      <tr key={row.leadId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="px-4 py-2.5 align-middle">
+                          <div className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[12rem]" title={row.leadName}>
+                            {row.leadName}
+                          </div>
                         </td>
-                        <td className="max-w-[9rem] px-3 py-2 align-top font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                        <td className="px-4 py-2.5 align-middle font-mono text-[11px] text-slate-500 dark:text-slate-400">
                           {row.phoneDisplay}
                         </td>
                         {perLeadVars.map((meta) => (
-                          <td key={`${row.leadId}-${meta.key}`} className="px-2 py-1 align-top">
-                            <input
-                              type="text"
+                          <td key={`${row.leadId}-${meta.key}`} className="px-3 py-2 align-middle">
+                            <Input
                               value={row.variables[meta.index]?.value ?? ''}
                               onChange={(e) => updatePerLeadVariable(leadIdx, meta.index, e.target.value)}
-                              className="w-full min-w-[6rem] rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                              className="h-8 text-xs"
                               disabled={isSending}
+                              placeholder={`Enter ${meta.label.toLowerCase()}...`}
                             />
                           </td>
                         ))}
@@ -1088,13 +1094,14 @@ function TestTemplateSmsModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
-      <Card className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto p-6 shadow-xl">
-        <div className="flex items-start justify-between gap-2">
+      <Card className="max-h-[92vh] w-full max-w-4xl flex flex-col overflow-hidden shadow-xl">
+        {/* Header */}
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
               Test {template.category === 'whatsapp' ? 'WhatsApp' : 'SMS'}
             </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{template.name}</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Template: <span className="font-medium">{template.name}</span></p>
           </div>
           <button
             type="button"
@@ -1106,175 +1113,236 @@ function TestTemplateSmsModal({
             ✕
           </button>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Sends this template with the values below to one number using the same {template.category === 'whatsapp' ? 'WhatsApp' : 'SMS'} provider as live sends. No lead
-          record and no communication history row are created.
-        </p>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Mobile number</label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="e.g. 9876543210"
-              className="mt-1"
-              disabled={mutation.isPending}
-            />
-          </div>
 
-          {isMediaHeader && (
-            <div className="animate-in fade-in duration-300 space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Select from Gallery ({template.headerType})
-                </label>
-                {(template.mediaGallery || []).length > 0 ? (
-                  <div className="mt-1 max-h-32 overflow-y-auto space-y-1.5 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-800">
-                    {template.mediaGallery?.map((url, i) => (
-                      <div 
-                        key={i} 
-                        className={`flex items-center gap-2 p-1.5 rounded cursor-pointer transition-colors ${headerHandle === url ? 'bg-orange-100 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                        onClick={() => setHeaderHandle(url)}
-                      >
-                        <input 
-                          type="radio" 
-                          name="test-media-select" 
-                          checked={headerHandle === url}
-                          readOnly
-                          className="h-3 w-3 text-orange-600 focus:ring-orange-500"
-                        />
-                        <p className="text-[10px] font-mono truncate flex-1" title={url}>{url}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-1 text-[10px] text-slate-500 italic">No stored media found for this template.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Custom Media ID/URL
-                </label>
-                <div className="mt-1 flex gap-2">
-                  <Input
-                    value={headerHandle}
-                    onChange={(e) => setHeaderHandle(e.target.value)}
-                    placeholder="URL or Media ID"
-                    className="flex-1 font-mono text-[11px]"
-                    disabled={mutation.isPending || isUploading || hasUploaded}
-                  />
-                  <div className="relative">
-                    <input
-                      type="file"
-                      id="test-media-upload"
-                      className="hidden"
-                      accept={template.headerType === 'IMAGE' ? 'image/*' : 
-                              template.headerType === 'VIDEO' ? 'video/*' : 
-                              template.headerType === 'DOCUMENT' ? '.pdf,.doc,.docx' : '*/*'}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        
-                        setIsUploading(true);
-                        try {
-                          const formData = new FormData();
-                          formData.append('file', file);
-                          formData.append('type', template.headerType);
-                          
-                          const res = await communicationAPI.uploadWhatsAppMedia(formData);
-                          
-                          if (res.data?.id) {
-                            setHeaderHandle(res.data.id);
-                            setHasUploaded(true);
-                            showToast.success('Media uploaded to Meta successfully');
-                          } else if (res.data?.url) {
-                            setHeaderHandle(res.data.url);
-                            setHasUploaded(true);
-                            showToast.success('Media uploaded successfully');
-                          }
-                        } catch (err: any) {
-                          const msg = err.response?.data?.message || err.message || 'Failed to upload media';
-                          showToast.error(msg);
-                        } finally {
-                          setIsUploading(false);
-                        }
-                      }}
-                      disabled={mutation.isPending || isUploading}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-full"
-                      onClick={() => document.getElementById('test-media-upload')?.click()}
-                      disabled={mutation.isPending || isUploading}
-                    >
-                      {isUploading ? '...' : '📁 Upload'}
-                    </Button>
-                  </div>
-                </div>
-                <p className="mt-1 text-[10px] text-slate-500">
-                  Select a stored URL above, provide a custom Meta ID/URL, or upload a file.
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            {/* Left Column: Preview */}
+            <div className="space-y-4">
+              <div className="sticky top-0 space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Real-time Preview
                 </p>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-4 shadow-inner dark:border-slate-700 dark:bg-slate-900/60">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-3 dark:border-slate-800">
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Message Content</p>
+                    <span className="text-[10px] font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-700 text-slate-500 tabular-nums">
+                      {previewText.length} chars
+                    </span>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800 dark:text-slate-100 min-h-[100px]">
+                    {previewText ? (
+                      <span className="italic">&quot;{previewText}&quot;</span>
+                    ) : (
+                      <span className="text-slate-400 italic">No template content.</span>
+                    )}
+                  </p>
+                  {previewText.includes('[Variable]') ? (
+                    <div className="mt-4 flex gap-2 items-start rounded-lg bg-amber-50 p-2.5 dark:bg-amber-900/20">
+                      <span className="text-amber-500 mt-0.5">⚠️</span>
+                      <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                        Some placeholders are still empty. Fill them in the right panel to complete the test message.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rounded-lg bg-blue-50/50 p-3 border border-blue-100 dark:bg-blue-900/10 dark:border-blue-900/20">
+                  <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
+                    <strong>Note:</strong> Sending a test message uses live provider credits. No lead history or communication record will be created for this test.
+                  </p>
+                </div>
               </div>
             </div>
-          )}
-        </div>
-        {varRows.length > 0 ? (
-          <div className="max-h-44 space-y-2 overflow-y-auto">
-            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Placeholder values</p>
-            {varRows.map((row, i) => {
-              const label = template.variables?.[i]?.label || row.key;
-              return (
-                <div key={`${row.key}-${i}`}>
-                  <label className="text-xs text-slate-500 dark:text-slate-400">{label}</label>
-                  <Input
-                    value={row.value}
-                    onChange={(e) => updateVarRow(i, e.target.value)}
-                    className="mt-0.5"
-                    disabled={mutation.isPending}
-                  />
+
+            {/* Right Column: Configuration */}
+            <div className="space-y-6">
+              {/* Mobile Number */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Target Mobile Number</label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 9876543210"
+                  className="h-11 font-medium"
+                  disabled={mutation.isPending}
+                  icon={<span>📱</span>}
+                />
+              </div>
+
+              {/* Media Selection (WhatsApp) */}
+              {isMediaHeader && (
+                <div className="space-y-3 animate-in slide-in-from-right-2 duration-300">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Header Media ({template.headerType})
+                  </label>
+                  
+                  {/* Gallery */}
+                  {(template.mediaGallery || []).length > 0 && (
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold uppercase tracking-tight text-slate-500">Quick select from gallery</p>
+                          {template.mediaGallery?.includes(headerHandle) && !hasUploaded && (
+                            <span className="text-[9px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">Selected from Gallery</span>
+                          )}
+                        </div>
+                        <div className="max-h-32 overflow-y-auto space-y-1 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-800">
+                          {template.mediaGallery?.map((url, i) => (
+                            <div 
+                              key={i} 
+                              className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all ${headerHandle === url && !hasUploaded ? 'bg-white dark:bg-slate-800 shadow-sm border border-orange-200 dark:border-orange-900/50' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+                              onClick={() => {
+                                setHeaderHandle(url);
+                                setHasUploaded(false);
+                              }}
+                            >
+                              <div className={`h-3 w-3 rounded-full border-2 ${headerHandle === url && !hasUploaded ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`} />
+                              <p className="text-[10px] font-mono truncate flex-1 text-slate-600 dark:text-slate-400" title={url}>{url}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="relative flex items-center py-1">
+                        <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+                        <span className="flex-shrink mx-3 text-[10px] font-black tracking-widest text-slate-400 dark:text-slate-500">OR</span>
+                        <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom URL / Upload */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-tight text-slate-500">Custom Media ID or Upload</p>
+                      {hasUploaded ? (
+                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">File Uploaded</span>
+                      ) : headerHandle && !template.mediaGallery?.includes(headerHandle) ? (
+                        <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">Manual Input</span>
+                      ) : null}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={headerHandle}
+                        onChange={(e) => {
+                          setHeaderHandle(e.target.value);
+                          if (hasUploaded) setHasUploaded(false);
+                        }}
+                        placeholder="URL or Media ID"
+                        className="flex-1 font-mono text-[11px] h-10"
+                        disabled={mutation.isPending || isUploading}
+                      />
+                      <div className="relative">
+                        <input
+                          type="file"
+                          id="test-media-upload"
+                          className="hidden"
+                          accept={template.headerType === 'IMAGE' ? 'image/*' : 
+                                  template.headerType === 'VIDEO' ? 'video/*' : 
+                                  template.headerType === 'DOCUMENT' ? '.pdf,.doc,.docx' : '*/*'}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            
+                            setIsUploading(true);
+                            try {
+                              const formData = new FormData();
+                              formData.append('file', file);
+                              formData.append('type', template.headerType);
+                              
+                              const res = await communicationAPI.uploadWhatsAppMedia(formData);
+                              
+                              if (res.data?.id) {
+                                setHeaderHandle(res.data.id);
+                                setHasUploaded(true);
+                                showToast.success('Media uploaded successfully');
+                              } else if (res.data?.url) {
+                                setHeaderHandle(res.data.url);
+                                setHasUploaded(true);
+                                showToast.success('Media uploaded successfully');
+                              }
+                            } catch (err: any) {
+                              const msg = err.response?.data?.message || err.message || 'Upload failed';
+                              showToast.error(msg);
+                            } finally {
+                              setIsUploading(false);
+                            }
+                          }}
+                          disabled={mutation.isPending || isUploading}
+                        />
+                        {hasUploaded ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-10 px-3 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/10"
+                            onClick={() => {
+                              setHasUploaded(false);
+                              setHeaderHandle(template.headerHandle || '');
+                            }}
+                            disabled={mutation.isPending}
+                          >
+                            ✕ Clear
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-10 px-3 whitespace-nowrap"
+                            onClick={() => document.getElementById('test-media-upload')?.click()}
+                            disabled={mutation.isPending || isUploading}
+                          >
+                            {isUploading ? '...' : '📁 Upload'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : null}
+              )}
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-700 dark:bg-slate-900/60">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Message preview
-            </p>
-            <span className="text-[10px] text-slate-400 tabular-nums">{previewText.length} chars</span>
+              {/* Variables */}
+              {varRows.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Template Placeholders</label>
+                  <div className="space-y-3 max-h-[30vh] overflow-y-auto pr-2">
+                    {varRows.map((row, i) => {
+                      const label = template.variables?.[i]?.label || row.key;
+                      return (
+                        <div key={`${row.key}-${i}`} className="space-y-1">
+                          <label className="text-[11px] font-medium text-slate-600 dark:text-slate-400">{label}</label>
+                          <Input
+                            value={row.value}
+                            onChange={(e) => updateVarRow(i, e.target.value)}
+                            className="h-9 text-xs"
+                            placeholder={`Enter value for ${label}`}
+                            disabled={mutation.isPending}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-slate-800 dark:text-slate-100">
-            {previewText ? (
-              <span className="italic">&quot;{previewText}&quot;</span>
-            ) : (
-              <span className="text-slate-400">No template content.</span>
-            )}
-          </p>
-          {previewText.includes('[Variable]') ? (
-            <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
-              <span className="font-medium">[Variable]</span> means a placeholder is still empty — fill it before
-              sending.
-            </p>
-          ) : null}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={mutation.isPending}>
+        {/* Footer */}
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-slate-50/80 px-6 py-4 dark:border-slate-700 dark:bg-slate-900/50">
+          <Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="primary"
-            size="sm"
+            className="min-w-[120px]"
             disabled={mutation.isPending || !phone.trim()}
             onClick={() => mutation.mutate()}
           >
-            {mutation.isPending ? 'Sending…' : 'Send test'}
+            {mutation.isPending ? 'Sending…' : '🚀 Send Test Message'}
           </Button>
         </div>
       </Card>
@@ -2248,6 +2316,8 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
 
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState('');
+  const [channel, setChannel] = useState<'sms' | 'whatsapp'>('whatsapp');
+  const [statusFilter, setStatusFilter] = useState('');
   const [sendPrimary, setSendPrimary] = useState(true);
   const [sendFather, setSendFather] = useState(false);
 
@@ -2278,11 +2348,39 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     return [] as string[];
   }, [leadFilterOptionsRes]);
 
-  const { data: analyticsData, isLoading: loadingUsers } = useQuery({
+  const { callStatusOptions, visitStatusOptions, leadStatusOptions } = useMemo(() => {
+    const raw = leadFilterOptionsRes as any;
+    const normalize = (list: string[]) => {
+      const uniqueMap = new Map<string, string>();
+      (list || []).forEach((s) => {
+        if (!s) return;
+        const label = s
+          .replace(/_/g, ' ')
+          .trim()
+          .split(/\s+/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ');
+        if (!uniqueMap.has(label)) {
+          uniqueMap.set(label, s);
+        }
+      });
+      return Array.from(uniqueMap.entries())
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    };
+
+    return {
+      callStatusOptions: normalize(raw?.callStatuses),
+      visitStatusOptions: normalize(raw?.visitStatuses),
+      leadStatusOptions: normalize(raw?.leadStatuses),
+    };
+  }, [leadFilterOptionsRes]);
+
+  const { data: rosterOptionsData } = useQuery({
     queryKey: [
       'userAnalytics',
       'communications',
-      'roster',
+      'options',
       divisionFilter,
       deptFilter,
       groupFilter,
@@ -2300,6 +2398,41 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       });
       return resp?.users ?? [];
     },
+    staleTime: 120_000,
+  });
+
+  const { data: analyticsData, isLoading: loadingUsers } = useQuery({
+    queryKey: [
+      'userAnalytics',
+      'communications',
+      'roster',
+      divisionFilter,
+      deptFilter,
+      groupFilter,
+      studentGroupFilter,
+      userRosterDistrict,
+      statusFilter,
+      roleNameFilter,
+    ],
+    queryFn: async () => {
+      const isProRole = roleNameFilter.trim().toUpperCase() === 'PRO';
+      const isCounsellorRole = roleNameFilter.trim().toUpperCase() === 'STUDENT COUNSELOR';
+
+      const resp = await leadAPI.getUserAnalytics({
+        division: divisionFilter || undefined,
+        department: deptFilter || undefined,
+        group: groupFilter || undefined,
+        studentGroup: studentGroupFilter || undefined,
+        district: userRosterDistrict.trim() || undefined,
+        rosterOnly: true,
+        ...(statusFilter.trim() ? {
+          ...(isProRole ? { visitStatus: statusFilter.trim() } : 
+              isCounsellorRole ? { callStatus: statusFilter.trim() } : 
+              { leadStatus: statusFilter.trim() })
+        } : {}),
+      });
+      return resp?.users ?? [];
+    },
     /** Roster is heavy (HRMS + lead counts); avoid refetching on every tab focus. */
     staleTime: 90_000,
     gcTime: 5 * 60_000,
@@ -2307,21 +2440,16 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
   });
 
   const rosterSource: any[] = analyticsData ?? [];
+  const optionsSource: any[] = rosterOptionsData ?? [];
 
   const roleNameOptions = useMemo(() => {
     const set = new Set<string>();
-    rosterSource.forEach((u: any) => {
+    optionsSource.forEach((u: any) => {
       const r = String(u.roleName ?? u.role_name ?? '').trim();
       if (r) set.add(r);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  }, [rosterSource]);
-
-  useEffect(() => {
-    if (roleNameFilter && !roleNameOptions.includes(roleNameFilter)) {
-      setRoleNameFilter('');
-    }
-  }, [roleNameOptions, roleNameFilter]);
+  }, [optionsSource]);
 
   const users: any[] = useMemo(() => {
     let list = rosterSource;
@@ -2353,12 +2481,11 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     [users]
   );
 
-  /** Org filter option lists from full roster response (not client search subset). */
   const { divisionOptions, deptOptions, groupOptions } = useMemo(() => {
     const divs = new Set<string>();
     const depts = new Set<string>();
     const groups = new Set<string>();
-    rosterSource.forEach((u: any) => {
+    optionsSource.forEach((u: any) => {
       if (u.division && u.division !== '-') divs.add(u.division);
       if (u.department && u.department !== '-') depts.add(u.department);
       if (u.group && u.group !== '-') groups.add(u.group);
@@ -2368,7 +2495,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       deptOptions: Array.from(depts).sort(),
       groupOptions: Array.from(groups).sort(),
     };
-  }, [rosterSource]);
+  }, [optionsSource]);
 
   // Fetch a sample lead for preview when users are selected
   const { data: previewLead } = useQuery({
@@ -2387,9 +2514,9 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
   });
 
   const { data: templatesData, isLoading: loadingTemplates } = useQuery({
-    queryKey: ['activeTemplates', 'communications-user-bulk'],
+    queryKey: ['activeTemplates', 'communications-user-bulk', channel],
     queryFn: async () => {
-      const response = await communicationAPI.getActiveTemplates();
+      const response = await communicationAPI.getActiveTemplates(undefined, channel);
       const payload = (response as { data?: MessageTemplate[] })?.data ?? response;
       return Array.isArray(payload) ? payload : [];
     },
@@ -2439,6 +2566,21 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
           };
         }),
       };
+
+      if (channel === 'whatsapp') {
+        return communicationAPI.createBulkWhatsAppJob({
+          source: 'user_specific_leads',
+          templateId: tpl._id,
+          reportContext,
+          items: rows.map((row) => ({
+            leadId: row.leadId,
+            leadName: row.leadName,
+            contactNumbers: row.numbers,
+            variables: row.variables,
+          })),
+        });
+      }
+
       return communicationAPI.createBulkSmsJob({
         source: 'user_specific_leads',
         templateId: tpl._id,
@@ -2453,7 +2595,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     },
     onSuccess: (out) => {
       showToast.success(
-        `SMS job queued: ${out.totalItems} lead row(s) for «${out.templateName}». Open SMS job reports to watch live.`
+        `${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} job queued: ${out.totalItems} lead row(s) for «${out.templateName}». Open job reports to watch live.`
       );
       onBulkJobQueued?.(out.jobId);
       setSelectedUserIds([]);
@@ -2482,6 +2624,9 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     try {
       const allLeads: Lead[] = [];
       const pageSize = 500;
+      const isProRole = roleNameFilter.trim().toUpperCase() === 'PRO';
+      const isCounsellorRole = roleNameFilter.trim().toUpperCase() === 'STUDENT COUNSELOR';
+
       for (const uid of selectedUserIds) {
         let page = 1;
         for (;;) {
@@ -2491,6 +2636,11 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
             page,
             ...(studentGroupFilter.trim() ? { studentGroup: studentGroupFilter.trim() } : {}),
             ...(userRosterDistrict.trim() ? { district: userRosterDistrict.trim() } : {}),
+            ...(statusFilter.trim() ? {
+              ...(isProRole ? { visitStatus: statusFilter.trim() } : 
+                  isCounsellorRole ? { callStatus: statusFilter.trim() } : 
+                  { leadStatus: statusFilter.trim() })
+            } : {}),
           });
           const batch = resp?.leads || [];
           if (batch.length === 0) break;
@@ -2518,14 +2668,14 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
         ? users.find(u => String(u.id ?? u.userId ?? '') === selectedUserIds[0])
         : null;
       const effectiveRole = (roleNameFilter || firstSelectedUser?.roleName || '').trim().toUpperCase();
-      const isProRole = effectiveRole === 'PRO';
-      const isCounsellorRole = effectiveRole === 'STUDENT COUNSELOR';
+      const isPro = effectiveRole === 'PRO';
+      const isCounsellor = effectiveRole === 'STUDENT COUNSELOR';
 
       validLeads.forEach(l => {
         let s = '';
-        if (isProRole) {
+        if (isPro) {
           s = String(l.visitStatus || '').trim() || 'Not set';
-        } else if (isCounsellorRole) {
+        } else if (isCounsellor) {
           s = String(l.callStatus || '').trim() || 'Not set';
         } else {
           s = String(l.leadStatus || '').trim() || 'New';
@@ -2571,6 +2721,8 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
     sendPrimary,
     roleNameFilter,
     studentGroupFilter,
+    users,
+    statusFilter,
     users,
     userRosterDistrict,
   ]);
@@ -2657,7 +2809,10 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
               <select
                 className={filterSelectClass}
                 value={roleNameFilter}
-                onChange={(e) => setRoleNameFilter(e.target.value)}
+                onChange={(e) => {
+                  setRoleNameFilter(e.target.value);
+                  setStatusFilter('');
+                }}
               >
                 <option value="">All roles</option>
                 {roleNameOptions.map((opt) => (
@@ -2667,8 +2822,57 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
                 ))}
               </select>
             </label>
+            {roleNameFilter && (
+              <label className="flex min-w-[8rem] flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+                {roleNameFilter.trim().toUpperCase() === 'PRO' ? 'Visit Status' : 
+                 roleNameFilter.trim().toUpperCase() === 'STUDENT COUNSELOR' ? 'Call Status' : 'Lead Status'}
+                <select
+                  className={filterSelectClass}
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All Statuses</option>
+                  {(roleNameFilter.trim().toUpperCase() === 'PRO' ? visitStatusOptions : 
+                    roleNameFilter.trim().toUpperCase() === 'STUDENT COUNSELOR' ? callStatusOptions : 
+                    leadStatusOptions).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 xl:border-0 xl:pt-0 xl:pl-4">
+            <div className="flex flex-col gap-1.5 mr-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Category
+              </span>
+              <div className="flex h-9 items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                <button
+                  type="button"
+                  onClick={() => { setChannel('whatsapp'); setTemplateId(''); }}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                    channel === 'whatsapp'
+                      ? 'bg-white text-orange-600 shadow-sm dark:bg-slate-700 dark:text-orange-400'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setChannel('sms'); setTemplateId(''); }}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                    channel === 'sms'
+                      ? 'bg-white text-orange-600 shadow-sm dark:bg-slate-700 dark:text-orange-400'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  SMS
+                </button>
+              </div>
+            </div>
             <label className="flex min-w-[12rem] flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400">
               Template
               {loadingTemplates ? (
@@ -2690,7 +2894,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
             </label>
             <div className="flex flex-wrap items-center gap-4 pb-1 text-sm text-slate-700 dark:text-slate-300">
               <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                SMS to
+                {channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} to
               </span>
               <label className="flex cursor-pointer items-center gap-2">
                 <input type="checkbox" checked={sendPrimary} onChange={(e) => setSendPrimary(e.target.checked)} />

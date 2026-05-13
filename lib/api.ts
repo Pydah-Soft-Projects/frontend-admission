@@ -638,6 +638,9 @@ export const leadAPI = {
     bypassCache?: boolean;
     /** Heavy reports path skips when true — communications user-leads uses this for a fast roster + lead counts only. */
     rosterOnly?: boolean;
+    leadStatus?: string;
+    callStatus?: string;
+    visitStatus?: string;
     /** Dashboard overview: metrics from current `leads` assignment only (no default date window on activity). */
     currentPortfolioOnly?: boolean;
   }) => {
@@ -665,6 +668,9 @@ export const leadAPI = {
     if (params?.perfRole != null && params.perfRole !== '') queryParams.append('perfRole', params.perfRole);
     if (params?.bypassCache) queryParams.append('bypassCache', 'true');
     if (params?.rosterOnly) queryParams.append('rosterOnly', 'true');
+    if (params?.leadStatus) queryParams.append('leadStatus', params.leadStatus);
+    if (params?.callStatus) queryParams.append('callStatus', params.callStatus);
+    if (params?.visitStatus) queryParams.append('visitStatus', params.visitStatus);
     if (params?.currentPortfolioOnly) queryParams.append('currentPortfolioOnly', 'true');
     const query = queryParams.toString();
     const response = await api.get(`/leads/analytics/users${query ? `?${query}` : ''}`);
