@@ -21,6 +21,12 @@ import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
+import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
+import {
+  cleanRegistrationFieldEntries,
+  formatRegistrationFieldLabel,
+  isRegistrationImageDataUrl,
+} from '@/lib/registrationFieldsDisplay';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -48,46 +54,6 @@ const maskAadhaar = (value?: string) => {
   return `${value.slice(0, 4)} ${'•'.repeat(4)} ${value.slice(-4)}`;
 };
 
-const formatRegistrationFieldLabel = (key: string): string =>
-  String(key || '')
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-const normalizeRegistrationFieldKey = (key: string): string => {
-  const normalized = String(key || '')
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .replace(/[\s-]+/g, '_')
-    .toLowerCase()
-    .trim();
-
-  const aliasToCanonical: Record<string, string> = {
-    semister: 'current_semester',
-    semester: 'current_semester',
-    current_semester: 'current_semester',
-    currentsemester: 'current_semester',
-    academic_year: 'current_year',
-    academicyear: 'current_year',
-    current_year: 'current_year',
-    currentyear: 'current_year',
-    certification_status: 'certificates_status',
-    certificates_status: 'certificates_status',
-    college_id: 'college',
-    collegeid: 'college',
-    school_or_college_id: 'college',
-    schoolorcollegeid: 'college',
-    school_or_college_name: 'college',
-    schoolorcollegename: 'college',
-  };
-
-  return aliasToCanonical[normalized] || normalized;
-};
-
-const isImageDataUrl = (value: unknown): value is string =>
-  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
-
 const ADMISSION_CANCELLED_STATUS = 'Admission Cancelled';
 
 type AdmissionCancellationDetails = {
@@ -98,7 +64,26 @@ type AdmissionCancellationDetails = {
 
 type AdmissionLeadData = Record<string, unknown> & {
   enquiryNumber?: string;
+  academicYear?: number | string;
   _admissionCancellation?: AdmissionCancellationDetails;
+};
+
+const resolveBatch = (
+  admission?: Admission,
+  lead?: AdmissionLeadData
+): string | null => {
+  const rawAcademicYear = lead?.academicYear;
+  if (rawAcademicYear !== undefined && rawAcademicYear !== null && String(rawAcademicYear).trim() !== '') {
+    return String(rawAcademicYear).trim();
+  }
+  const admissionDate = admission?.admissionDate || admission?.createdAt;
+  if (admissionDate) {
+    const parsed = new Date(admissionDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return String(parsed.getFullYear());
+    }
+  }
+  return null;
 };
 
 type NestedPaymentPayload = {
@@ -145,6 +130,7 @@ export default function AdmissionDetailPage() {
     reason: '',
     approvedBy: '',
   });
+  const [isSendSmsDialogOpen, setIsSendSmsDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admission', admissionId],
@@ -183,6 +169,29 @@ export default function AdmissionDetailPage() {
     },
     onError: (error: ApiError) => {
       showToast.error(error.response?.data?.message || 'Failed to cancel admission');
+    },
+  });
+
+  const sendAdmissionSmsMutation = useMutation({
+    mutationFn: async () => {
+      if (!admission?._id) {
+        throw new Error('Admission record is not loaded');
+      }
+      return admissionAPI.sendConfirmationSms(admission._id);
+    },
+    onSuccess: (response: { data?: { sentTo?: string; admissionNumber?: string } } | undefined) => {
+      const sentTo = response?.data?.sentTo;
+      showToast.success(
+        sentTo
+          ? `Admission confirmation SMS sent to ${sentTo}.`
+          : 'Admission confirmation SMS sent.'
+      );
+      setIsSendSmsDialogOpen(false);
+    },
+    onError: (error: ApiError) => {
+      showToast.error(
+        error.response?.data?.message || 'Failed to send admission confirmation SMS'
+      );
     },
   });
 
@@ -238,6 +247,16 @@ export default function AdmissionDetailPage() {
     },
   });
 
+  const registrationFieldEntries = useMemo<Array<[string, unknown]>>(() => {
+    const registrationFieldSource =
+      admission?.registrationFormData && Object.keys(admission.registrationFormData).length > 0
+        ? admission.registrationFormData
+        : ((joiningForRegistrationData?.data?.joining?.registrationFormData as
+            | Record<string, unknown>
+            | undefined) || {});
+    return cleanRegistrationFieldEntries(registrationFieldSource);
+  }, [admission?.registrationFormData, joiningForRegistrationData]);
+
   useEffect(() => {
     setHeaderContent(
       <div className="flex items-center justify-between w-full">
@@ -265,6 +284,15 @@ export default function AdmissionDetailPage() {
               printButtonLabel="Print application"
             />
           )}
+          {admission && !isAdmissionCancelled && admission.admissionNumber && admission.studentInfo?.phone ? (
+            <Button
+              variant="outline"
+              onClick={() => setIsSendSmsDialogOpen(true)}
+              title={`Send the DLT-approved admission confirmation SMS to ${admission.studentInfo.phone}`}
+            >
+              Send Admission SMS
+            </Button>
+          ) : null}
           {admission?.joiningId && (
             <Link href={`/superadmin/joining/${admission.joiningId}/detail`}>
               <Button variant="outline">
@@ -335,41 +363,60 @@ export default function AdmissionDetailPage() {
     cancelAdmissionMutation.mutate();
   };
 
-  const registrationFieldSource =
-    admission.registrationFormData && Object.keys(admission.registrationFormData).length > 0
-      ? admission.registrationFormData
-      : ((joiningForRegistrationData?.data?.joining?.registrationFormData as Record<string, unknown> | undefined) ||
-        {});
-
-  // Keep complete data but collapse repeated aliases to avoid noisy duplicate rows.
-  const registrationFieldEntries = (() => {
-    const deduped = new Map<string, unknown>();
-    for (const [key, value] of Object.entries(registrationFieldSource)) {
-      const lk = String(key || '').toLowerCase();
-      if (lk === 'certificate_checklist') continue;
-      if (lk.startsWith('_')) continue;
-      if (value === undefined || value === null) continue;
-      if (typeof value === 'string' && value.trim() === '') continue;
-
-      const canonical = normalizeRegistrationFieldKey(key);
-      const existing = deduped.get(canonical);
-      if (existing === undefined) {
-        deduped.set(canonical, value);
-        continue;
-      }
-      if (canonical === 'college') {
-        const existingText = String(existing ?? '').trim();
-        const nextText = String(value ?? '').trim();
-        if (/^\d+$/.test(existingText) && !/^\d+$/.test(nextText)) {
-          deduped.set(canonical, value);
-        }
-      }
-    }
-    return Array.from(deduped.entries());
-  })();
-
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+      {/* Lead/Enquiry Details - Top Section */}
+      {lead && (
+        <div className="rounded-2xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white p-6 shadow-lg dark:border-purple-800 dark:from-purple-900/30 dark:to-slate-900/70">
+          <h2 className="text-lg font-bold text-purple-700 dark:text-purple-300 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Lead / Enquiry Information
+          </h2>
+          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4">
+            <div className="rounded-lg bg-white/60 dark:bg-slate-800/50 p-4 border border-purple-100 dark:border-purple-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-300">Enquiry No</p>
+              <p className="text-base font-bold text-purple-700 dark:text-purple-200 mt-2">{lead?.enquiryNumber || '—'}</p>
+            </div>
+            <div className="rounded-lg bg-white/60 dark:bg-slate-800/50 p-4 border border-purple-100 dark:border-purple-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-300">Lead Source</p>
+              <p className="text-sm font-semibold text-purple-700 dark:text-purple-200 mt-2 capitalize">{lead?.source || '—'}</p>
+            </div>
+            <div className="rounded-lg bg-white/60 dark:bg-slate-800/50 p-4 border border-purple-100 dark:border-purple-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-300">Created On</p>
+              <p className="text-sm font-semibold text-purple-700 dark:text-purple-200 mt-2">{formatDateTime(lead?.createdAt) || '—'}</p>
+            </div>
+            <div className="rounded-lg bg-white/60 dark:bg-slate-800/50 p-4 border border-purple-100 dark:border-purple-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-300">Last Updated</p>
+              <p className="text-sm font-semibold text-purple-700 dark:text-purple-200 mt-2">{formatDateTime(lead?.updatedAt) || '—'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Metadata Boxes */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-lg border-2 border-red-600 bg-white p-4 shadow-md dark:bg-slate-900/70">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+            Application No
+          </p>
+          <p className="mt-2 text-lg font-bold text-red-600">{lead?.enquiryNumber || '—'}</p>
+        </div>
+        <div className="rounded-lg border-2 border-gray-400 bg-white p-4 shadow-md dark:bg-slate-900/70">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+            Admission No
+          </p>
+          <p className="mt-2 text-lg font-bold text-gray-700">{admission?.admissionNumber || '—'}</p>
+        </div>
+        <div className="rounded-lg border-2 border-gray-400 bg-white p-4 shadow-md dark:bg-slate-900/70">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+            PIN No
+          </p>
+          <p className="mt-2 text-lg font-bold text-gray-700">—</p>
+        </div>
+      </div>
+
       <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
         <DialogContent className="w-[95vw] max-w-lg">
           <form onSubmit={handleCancelAdmissionSubmit} className="space-y-5">
@@ -424,6 +471,65 @@ export default function AdmissionDetailPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSendSmsDialogOpen} onOpenChange={setIsSendSmsDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Admission SMS</DialogTitle>
+            <DialogDescription>
+              Send the DLT-approved admission confirmation SMS to the student.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Recipient
+              </span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                {admission?.studentInfo?.name || '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Phone
+              </span>
+              <span className="font-mono text-slate-900 dark:text-slate-100">
+                {admission?.studentInfo?.phone || '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Admission #
+              </span>
+              <span className="font-mono text-slate-900 dark:text-slate-100">
+                {admission?.admissionNumber || '—'}
+              </span>
+            </div>
+            <p className="border-t border-slate-200 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              Template: <span className="font-mono">Admission · confirmation on approval</span> (DLT id is read live from{' '}
+              <span className="font-mono">message_templates</span>). The student name and admission number are filled into the
+              two <span className="font-mono">{'{#var#}'}</span> slots.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsSendSmsDialogOpen(false)}
+              disabled={sendAdmissionSmsMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => sendAdmissionSmsMutation.mutate()}
+              isLoading={sendAdmissionSmsMutation.isPending}
+            >
+              Send SMS
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -563,7 +669,10 @@ export default function AdmissionDetailPage() {
       {/* Parents Information */}
       {admission.parents && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 12H9m6 0a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
             Parents Information
           </h2>
           <div className="grid gap-6 md:grid-cols-2">
@@ -663,31 +772,50 @@ export default function AdmissionDetailPage() {
       {admission.address && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
-            Address Information
+            Address for Communication
           </h2>
           <div className="space-y-4">
             {admission.address.communication && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">
-                  Communication Address
-                </h3>
-                <div className="text-sm text-gray-600 dark:text-slate-400 space-y-1">
-                  {admission.address.communication.doorOrStreet && (
-                    <p>{admission.address.communication.doorOrStreet}</p>
-                  )}
-                  {admission.address.communication.landmark && (
-                    <p>{admission.address.communication.landmark}</p>
-                  )}
-                  <p>
-                    {[
-                      admission.address.communication.villageOrCity,
-                      admission.address.communication.mandal,
-                      admission.address.communication.district,
-                      admission.address.communication.pinCode,
-                    ]
-                      .filter(Boolean)
-                      .join(', ')}
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Door No / Street Name</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {admission.address.communication.doorOrStreet || '—'}
                   </p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Landmark</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                      {admission.address.communication.landmark || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Village / City / Town</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                      {admission.address.communication.villageOrCity || '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Mandal</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                      {admission.address.communication.mandal || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">District</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                      {admission.address.communication.district || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Pin Code</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                      {admission.address.communication.pinCode || '—'}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -695,10 +823,250 @@ export default function AdmissionDetailPage() {
         </div>
       )}
 
+      {/* Reservation Category */}
+      {admission.reservation && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Reservation Category
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">General Category</p>
+              <div className="flex flex-wrap gap-3">
+                {['OC', 'EWS', 'BC-A', 'BC-B', 'BC-C', 'BC-D', 'BC-E', 'SC', 'ST'].map((cat) => (
+                  <span
+                    key={cat}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                      admission.reservation.general?.toUpperCase() === cat ||
+                      (cat === 'EWS' && admission.reservation.isEws)
+                        ? 'bg-blue-100 text-blue-700 border-2 border-blue-500 dark:bg-blue-900/50 dark:text-blue-200 dark:border-blue-500'
+                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                    }`}
+                  >
+                    {cat}
+                  </span>
+                ))}
+              </div>
+            </div>
+            {admission.reservation.other && admission.reservation.other.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">Other Reservation</p>
+                <div className="flex flex-wrap gap-2">
+                  {['NCC', 'SPORTS', 'EX-SERVICEMAN', 'PH', 'OTHERS'].map((cat) => (
+                    <span
+                      key={cat}
+                      className={`px-2 py-1 rounded text-xs font-medium ${
+                        admission.reservation.other?.includes(cat)
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                      }`}
+                    >
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Qualifications */}
+      {admission.qualifications && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z" />
+            </svg>
+            Qualifications
+          </h2>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Qualified Examinations</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div className={`h-3 w-3 rounded-full ${admission.qualifications.ssc ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <span className="text-sm text-gray-700 dark:text-slate-300">SSC</span>
+                </div>
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div className={`h-3 w-3 rounded-full ${admission.qualifications.interOrDiploma ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <span className="text-sm text-gray-700 dark:text-slate-300">Intermediate / Diploma</span>
+                </div>
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div className={`h-3 w-3 rounded-full ${admission.qualifications.ug ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <span className="text-sm text-gray-700 dark:text-slate-300">UG</span>
+                </div>
+              </div>
+            </div>
+            {admission.qualifications.mediums && admission.qualifications.mediums.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Medium of Education</h3>
+                <div className="flex flex-wrap gap-2">
+                  {['English', 'Telugu', 'Others'].map((medium) => (
+                    <span
+                      key={medium}
+                      className={`px-3 py-1 rounded text-sm font-medium ${
+                        admission.qualifications.mediums?.includes(medium.toLowerCase())
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                      }`}
+                    >
+                      {medium}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Education History */}
+      {admission.educationHistory && admission.educationHistory.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z" />
+            </svg>
+            Details of School/College Last Studied
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b-2 border-gray-300 dark:border-slate-600">
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Standard</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Course / Branch</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Year Passed</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Institution Name &amp; Address</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Hall Ticket No.</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Total Marks / Grade</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">CET Rank</th>
+                </tr>
+              </thead>
+              <tbody>
+                {admission.educationHistory.map((edu, idx) => {
+                  const standardLabel =
+                    (edu.level === 'other' && edu.otherLevelLabel?.trim())
+                      ? edu.otherLevelLabel
+                      : edu.level?.replace(/_/g, ' ').toUpperCase() || '—';
+                  const institutionText = [edu.institutionName, edu.institutionAddress]
+                    .filter((part) => part && String(part).trim() !== '')
+                    .join(', ');
+                  return (
+                    <tr key={idx} className="border-b border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800/50">
+                      <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{standardLabel}</td>
+                      <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{edu.courseOrBranch || '—'}</td>
+                      <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{edu.yearOfPassing || '—'}</td>
+                      <td className="py-3 px-3 text-gray-900 dark:text-slate-100 text-xs">{institutionText || '—'}</td>
+                      <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{edu.hallTicketNumber || '—'}</td>
+                      <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{edu.totalMarksOrGrade || '—'}</td>
+                      <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{edu.cetRank || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Siblings */}
+      {admission.siblings && admission.siblings.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 12H9m6 0a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
+            Details of Siblings
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b-2 border-gray-300 dark:border-slate-600">
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300 w-24">Relation</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Name</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Standard</th>
+                  <th className="text-left py-3 px-3 font-semibold text-gray-700 dark:text-slate-300">Institution Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {admission.siblings.map((sibling, idx) => (
+                  <tr key={idx} className="border-b border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800/50">
+                    <td className="py-3 px-3 text-gray-900 dark:text-slate-100">Brother/Sister</td>
+                    <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{sibling.name || '—'}</td>
+                    <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{sibling.studyingStandard || '—'}</td>
+                    <td className="py-3 px-3 text-gray-900 dark:text-slate-100">{sibling.institutionName || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Documents Required */}
+      {admission.documents && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Documents Received
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {[
+              { id: 'ssc', label: 'S.S.C' },
+              { id: 'casteCertificate', label: 'Caste Certificate' },
+              { id: 'inter', label: 'Inter' },
+              { id: 'cetRankCard', label: 'CET Rank Card' },
+              { id: 'ugOrPgCmm', label: 'U.G - P.C / C.M.M' },
+              { id: 'cetHallTicket', label: 'CET Hall Ticket' },
+              { id: 'transferCertificate', label: 'TC' },
+              { id: 'allotmentLetter', label: 'Allotment Letter' },
+              { id: 'studyCertificate', label: 'Study Certificate' },
+              { id: 'joiningReport', label: 'Joining Report' },
+              { id: 'aadhaarCard', label: 'Aadhaar Card' },
+              { id: 'bankPassBook', label: 'Bank Pass Book' },
+              { id: 'photos', label: 'Photos(5)' },
+              { id: 'rationCard', label: 'Ration Card' },
+              { id: 'incomeCertificate', label: 'Income Certificate' },
+            ].map((doc: any) => (
+              <div
+                key={doc.id}
+                className={`p-4 rounded-lg border-2 flex items-center gap-3 ${
+                  (admission.documents as any)?.[doc.id] === 'received'
+                    ? 'bg-green-50 border-green-300 dark:bg-green-900/20 dark:border-green-700'
+                    : 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+                }`}
+              >
+                <div
+                  className={`h-4 w-4 rounded border-2 flex items-center justify-center ${
+                    (admission.documents as any)?.[doc.id] === 'received'
+                      ? 'bg-green-500 border-green-500'
+                      : 'border-gray-400'
+                  }`}
+                >
+                  {(admission.documents as any)?.[doc.id] === 'received' && (
+                    <span className="text-white text-xs font-bold">✓</span>
+                  )}
+                </div>
+                <span className="text-sm font-medium text-gray-900 dark:text-slate-100">{doc.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Registration Form Fields */}
       {registrationFieldEntries.length > 0 && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
             Registration Form Fields
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
@@ -707,7 +1075,7 @@ export default function AdmissionDetailPage() {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   {formatRegistrationFieldLabel(key)}
                 </p>
-                {isImageDataUrl(raw) ? (
+                {isRegistrationImageDataUrl(raw) ? (
                   <img
                     src={raw}
                     alt={formatRegistrationFieldLabel(key)}
@@ -727,7 +1095,10 @@ export default function AdmissionDetailPage() {
       {/* Payment Information */}
       {paymentSummary && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <svg className="h-6 w-6 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
             Payment Information
           </h2>
           <div className="grid gap-6 md:grid-cols-2">
@@ -834,6 +1205,15 @@ export default function AdmissionDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Fee Structure (Fee Management DB) */}
+      <FeeStructureSection
+        course={admission.courseInfo?.course || ''}
+        branch={admission.courseInfo?.branch || ''}
+        quota={admission.courseInfo?.quota || ''}
+        batch={resolveBatch(admission, lead)}
+        description="Live from the Fee Management database (feestructures + feeheads). Matched against the student's course, branch, quota and admission batch."
+      />
     </div>
   );
 }

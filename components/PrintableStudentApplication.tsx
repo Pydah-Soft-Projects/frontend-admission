@@ -104,6 +104,86 @@ function getPrintApplicationHtml(props: {
   const educationHistory = application.educationHistory ?? [];
   const documents = application.documents ?? {};
   const siblings = (application as Joining).siblings ?? (application as Admission).siblings ?? [];
+  const relatives = address?.relatives ?? [];
+
+  // Normalize education level value so we can match data regardless of case
+  // or separator differences (e.g. "ssc", "SSC", "inter_diploma",
+  // "inter-diploma", "Inter / Diploma"). The view dialog renders the entries
+  // directly, but the print form has fixed rows per standard, so we need
+  // robust lookup here to ensure stored values surface on the printout.
+  const normalizeLevel = (value?: string): string =>
+    String(value || '')
+      .toLowerCase()
+      .replace(/[\s/\-]+/g, '_')
+      .replace(/_+/g, '_')
+      .trim();
+
+  const findEducationByLevel = (target: string) => {
+    const wanted = normalizeLevel(target);
+    return educationHistory.find((e) => normalizeLevel(e.level) === wanted);
+  };
+
+  const matchedLevels = new Set(['ssc', 'inter_diploma', 'ug']);
+  const extraEducationEntries = educationHistory.filter(
+    (e) => !matchedLevels.has(normalizeLevel(e.level))
+  );
+
+  // Case-insensitive matcher for "Other Reservations". The joining form
+  // accepts free-text tags ("NCC", "Sports", "ph", "PWD", etc.) while the
+  // print form has fixed checkbox slots. Map intelligently so tags like
+  // "sports", "Sports", "SPORTS" all tick the SPORTS box, and recognise
+  // common synonyms (Ex-Service / Ex Serviceman -> EX-SERVICEMAN, etc.).
+  const normalizeReservation = (value?: string): string =>
+    String(value || '')
+      .toLowerCase()
+      .replace(/[\s_\-]+/g, '')
+      .trim();
+  const otherReservationsList = Array.isArray(reservation?.other)
+    ? reservation!.other!.map(normalizeReservation)
+    : [];
+  const otherReservationAliases: Record<string, string[]> = {
+    NCC: ['ncc'],
+    SPORTS: ['sports', 'sport'],
+    'EX-SERVICEMAN': ['exserviceman', 'exservice', 'exservicemen', 'esm'],
+    PH: ['ph', 'pwd', 'physicallyhandicapped', 'differentlyabled'],
+    OTHERS: ['others', 'other'],
+  };
+  const isOtherReservationChecked = (label: string): boolean => {
+    const aliases = otherReservationAliases[label] || [label.toLowerCase()];
+    return otherReservationsList.some((v) => aliases.includes(v));
+  };
+  // Any tag the user typed that doesn't fit the fixed boxes is shown next
+  // to "(If any)" so the data isn't lost on the printout.
+  const knownOtherReservationValues = new Set(
+    Object.values(otherReservationAliases).flat()
+  );
+  const extraOtherReservations = Array.isArray(reservation?.other)
+    ? reservation!.other!.filter(
+        (v) => !knownOtherReservationValues.has(normalizeReservation(v))
+      )
+    : [];
+
+  // Receipt number resolution for the Fee Paid Details table. The previous
+  // logic showed only the last 6 chars of the internal _id which is not
+  // meaningful to staff. Prefer human references in this order.
+  const getReceiptNumber = (tx?: PaymentTransaction): string => {
+    if (!tx) return '';
+    const candidate =
+      (tx as PaymentTransaction & { receiptNumber?: string }).receiptNumber ||
+      tx.referenceId ||
+      tx.cashfreeOrderId ||
+      (tx as PaymentTransaction & { transactionId?: string }).transactionId ||
+      '';
+    if (candidate) return String(candidate);
+    return tx._id ? String(tx._id).slice(-6) : '';
+  };
+  const formatTxDate = (value?: string): string => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString('en-IN');
+  };
+
 
   const checkbox = (checked: boolean) => `
     <span class="cb-box ${checked ? 'checked' : ''}"></span>
@@ -357,9 +437,9 @@ function getPrintApplicationHtml(props: {
         <span class="form-label" style="min-width: 120px;">Other Reservation :</span>
         <div class="cb-group">
           ${['NCC', 'SPORTS', 'EX-SERVICEMAN', 'PH', 'OTHERS'].map(cat => `
-            <span class="cb-item">${checkbox(!!reservation?.other?.includes(cat))} ${cat}</span>
+            <span class="cb-item">${checkbox(isOtherReservationChecked(cat))} ${cat}</span>
           `).join('')}
-          <span style="margin-left: 10px;">(If any)..................................</span>
+          <span style="margin-left: 10px;">(If any) <span style="border-bottom: 1px dotted #333; padding: 0 6px; min-width: 140px; display: inline-block;">${escapeHtml(extraOtherReservations.join(', '))}</span></span>
         </div>
       </div>
 
@@ -382,7 +462,11 @@ function getPrintApplicationHtml(props: {
         <span class="form-value">${escapeHtml(address?.communication?.mandal?.toUpperCase())}</span>
         <span style="margin-left: 10px; min-width: 120px;">District :</span>
         <span class="form-value">${escapeHtml(address?.communication?.district?.toUpperCase())}</span>
-        <span style="margin-left: 10px; min-width: 60px;">Pin Code :</span>
+      </div>
+      <div class="form-row" style="padding-left: 20px;">
+        <span style="min-width: 130px;">State :</span>
+        <span class="form-value">${escapeHtml(address?.communication?.state?.toUpperCase())}</span>
+        <span style="margin-left: 10px; min-width: 80px;">Pin Code :</span>
         <span class="inline-val">${escapeHtml(address?.communication?.pinCode)}</span>
       </div>
 
@@ -391,16 +475,47 @@ function getPrintApplicationHtml(props: {
         <span class="form-label">Full Address of any Relative / Friends</span>
       </div>
       <div class="relative-address-grid" style="margin-left: 20px;">
-        <div class="relative-box">
-          1)....................................................................................<br/>
-          .......................................................................................<br/>
-          Mobile :
-        </div>
-        <div class="relative-box">
-          2)....................................................................................<br/>
-          .......................................................................................<br/>
-          Mobile :
-        </div>
+        ${(() => {
+          const renderRelativeBox = (rel: typeof relatives[number] | undefined, idx: number) => {
+            if (!rel) {
+              return `
+                <div class="relative-box">
+                  ${idx + 1})....................................................................................<br/>
+                  .......................................................................................<br/>
+                  Mobile :
+                </div>
+              `;
+            }
+            const nameLine = [rel.name, rel.relationship ? `(${rel.relationship})` : '']
+              .filter(Boolean)
+              .join(' ');
+            const addressLine = [
+              rel.doorOrStreet,
+              rel.landmark,
+              rel.villageOrCity,
+              rel.mandal,
+              rel.district,
+              rel.state,
+              rel.pinCode,
+            ]
+              .filter((part) => part && String(part).trim() !== '')
+              .join(', ');
+            const mobile = (rel as { phone?: string; mobile?: string }).phone
+              || (rel as { phone?: string; mobile?: string }).mobile
+              || '';
+            return `
+              <div class="relative-box">
+                <div><strong>${idx + 1}) ${escapeHtml(nameLine.toUpperCase() || '')}</strong></div>
+                <div style="font-size: 9px; margin-top: 2px;">${escapeHtml(addressLine.toUpperCase())}</div>
+                <div style="margin-top: 4px;">Mobile : ${escapeHtml(mobile)}</div>
+              </div>
+            `;
+          };
+          // Always render at least 2 boxes; if more relatives, render them all
+          // so nothing captured in the joining form is lost on the printout.
+          const total = Math.max(2, relatives.length);
+          return Array.from({ length: total }).map((_, i) => renderRelativeBox(relatives[i], i)).join('');
+        })()}
       </div>
 
       <div class="form-row m-t-10">
@@ -439,18 +554,47 @@ function getPrintApplicationHtml(props: {
           </tr>
         </thead>
         <tbody>
-          ${['SSC', 'Inter / Diploma', 'UG'].map(std => {
-            const edu = educationHistory.find(e => e.level === (std === 'Inter / Diploma' ? 'INTERMEDIATE' : std));
+          ${[
+            { label: 'SSC', key: 'ssc' },
+            { label: 'Inter / Diploma', key: 'inter_diploma' },
+            { label: 'UG', key: 'ug' },
+          ].map(({ label, key }) => {
+            const edu = findEducationByLevel(key);
+            const institutionText = [edu?.institutionName, edu?.institutionAddress]
+              .filter(Boolean)
+              .join(', ');
             return `
               <tr style="height: 25px;">
-                <td>${std}</td>
+                <td>${label}</td>
                 <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
                 <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
-                <td style="font-size: 8px;">${escapeHtml(edu?.institutionName || '')}</td>
-                <td></td>
+                <td style="font-size: 8px;">${escapeHtml(institutionText)}</td>
+                <td>${escapeHtml(edu?.hallTicketNumber || '')}</td>
                 <td>${escapeHtml(edu?.totalMarksOrGrade || '')}</td>
                 <td></td>
+                <td>${escapeHtml(edu?.cetRank || '')}</td>
+              </tr>
+            `;
+          }).join('')}
+          ${extraEducationEntries.map((edu) => {
+            const institutionText = [edu?.institutionName, edu?.institutionAddress]
+              .filter(Boolean)
+              .join(', ');
+            const standardLabel =
+              (edu?.otherLevelLabel && edu.otherLevelLabel.trim()) ||
+              (edu?.level
+                ? String(edu.level).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+                : 'Other');
+            return `
+              <tr style="height: 25px;">
+                <td>${escapeHtml(standardLabel)}</td>
+                <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
+                <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
+                <td style="font-size: 8px;">${escapeHtml(institutionText)}</td>
+                <td>${escapeHtml(edu?.hallTicketNumber || '')}</td>
+                <td>${escapeHtml(edu?.totalMarksOrGrade || '')}</td>
                 <td></td>
+                <td>${escapeHtml(edu?.cetRank || '')}</td>
               </tr>
             `;
           }).join('')}
@@ -464,24 +608,35 @@ function getPrintApplicationHtml(props: {
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width: 100px;">Relation</th>
+            <th style="width: 120px;">Relation</th>
             <th>Name</th>
-            <th style="width: 100px;">Standard</th>
+            <th style="width: 110px;">Standard</th>
             <th>Name of the School/ College</th>
           </tr>
         </thead>
         <tbody>
-          ${Array.from({ length: 2 }).map((_, i) => {
-            const sib = siblings[i];
-            return `
-              <tr style="height: 25px;">
-                <td>${i === 0 ? 'Brother/Sister' : ''}</td>
-                <td>${escapeHtml(sib?.name || '')}</td>
-                <td>${escapeHtml(sib?.studyingStandard || '')}</td>
-                <td>${escapeHtml(sib?.institutionName || '')}</td>
-              </tr>
-            `;
-          }).join('')}
+          ${(() => {
+            // Render at least 2 rows even if there are no siblings (keeps the
+            // printed form looking consistent), but if more are captured we
+            // render all of them so no sibling is dropped.
+            const totalRows = Math.max(2, siblings.length);
+            return Array.from({ length: totalRows }).map((_, i) => {
+              const sib = siblings[i];
+              const relation = sib?.relation
+                ? sib.relation
+                : sib
+                  ? 'Brother/Sister'
+                  : '';
+              return `
+                <tr style="height: 25px;">
+                  <td>${escapeHtml(relation)}</td>
+                  <td>${escapeHtml(sib?.name || '')}</td>
+                  <td>${escapeHtml(sib?.studyingStandard || '')}</td>
+                  <td>${escapeHtml(sib?.institutionName || '')}</td>
+                </tr>
+              `;
+            }).join('');
+          })()}
         </tbody>
       </table>
     </div>
@@ -574,27 +729,44 @@ function getPrintApplicationHtml(props: {
     <div class="office-use-bottom">
       <div class="office-use-bottom-left">
         <div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Fee Paid Details</div>
+        ${paymentSummary ? `
+          <div style="font-size: 9px; margin-bottom: 4px; display: flex; gap: 12px; justify-content: center;">
+            <span><strong>Total:</strong> ${formatCurrency(paymentSummary.totalFee)}</span>
+            <span><strong>Paid:</strong> ${formatCurrency(paymentSummary.totalPaid)}</span>
+            <span><strong>Balance:</strong> ${formatCurrency(paymentSummary.balance)}</span>
+          </div>
+        ` : ''}
         <table class="data-table" style="font-size: 8px;">
           <thead>
             <tr>
               <th>S.no</th>
               <th>Receipt No</th>
+              <th>Date</th>
+              <th>Mode</th>
               <th>Amount Paid</th>
               <th>Remarks</th>
             </tr>
           </thead>
           <tbody>
-            ${Array.from({ length: 5 }).map((_, i) => {
-              const tx = transactions[i];
-              return `
-                <tr style="height: 18px;">
-                  <td>${i + 1}</td>
-                  <td>${escapeHtml(tx?._id?.slice(-6) || '')}</td>
-                  <td>${tx ? formatCurrency(tx.amount) : ''}</td>
-                  <td>${escapeHtml(tx?.status || '')}</td>
-                </tr>
-              `;
-            }).join('')}
+            ${(() => {
+              // Always render at least 5 rows for the printed form layout,
+              // but if there are more transactions, render all of them so
+              // none are dropped from the printout.
+              const totalRows = Math.max(5, transactions.length);
+              return Array.from({ length: totalRows }).map((_, i) => {
+                const tx = transactions[i];
+                return `
+                  <tr style="height: 18px;">
+                    <td>${i + 1}</td>
+                    <td>${escapeHtml(getReceiptNumber(tx))}</td>
+                    <td>${escapeHtml(formatTxDate(tx?.createdAt))}</td>
+                    <td>${escapeHtml(tx?.mode || '')}</td>
+                    <td>${tx ? formatCurrency(tx.amount) : ''}</td>
+                    <td>${escapeHtml(tx?.status || '')}</td>
+                  </tr>
+                `;
+              }).join('');
+            })()}
           </tbody>
         </table>
       </div>

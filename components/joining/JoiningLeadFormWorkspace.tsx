@@ -61,6 +61,7 @@ import {
 } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
+import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 
@@ -456,6 +457,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     amount: '',
     isProcessing: false,
   });
+  // Fee head the user clicked "Pay" against in the Fee Structure section. When set, the
+  // payment modal pre-fills the row amount, displays a fee-head pill, and tags the resulting
+  // payment_transactions row via the request body so payment history shows which head was paid.
+  const [selectedFeeHead, setSelectedFeeHead] = useState<FeeHeadSelection | null>(null);
   const [publicLinkDialog, setPublicLinkDialog] = useState<{ url: string; expiresAt: string } | null>(null);
   const [publicLinkBusy, setPublicLinkBusy] = useState(false);
   const [publicSubmitted, setPublicSubmitted] = useState(false);
@@ -954,29 +959,23 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   });
 
   const certificateGuidance: CertificateGuidance | null = useMemo(() => {
+    // Unwrap the `{ success, data: { … } }` envelope returned by the API (or
+    // the inline `certificateGuidance` block on the public-link bootstrap
+    // payload). Keep the guidance object even when empty so the UI can show
+    // an actionable "no rules for this level" banner instead of going silent.
+    let inner: unknown;
     if (isPublicEdit) {
-      const inner = (publicBootstrapQuery.data?.data as { certificateGuidance?: unknown } | undefined)
+      inner = (publicBootstrapQuery.data?.data as { certificateGuidance?: unknown } | undefined)
         ?.certificateGuidance;
-      if (!inner || typeof inner !== 'object') return null;
-      const g = inner as CertificateGuidance;
-      if (g.format === 'certificate_config') return g;
-      const body = String(g.body ?? '').trim();
-      if (!body) return null;
-      return g;
+    } else {
+      const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
+      inner =
+        envelope && typeof envelope === 'object' && 'data' in envelope
+          ? (envelope as { data: unknown }).data
+          : envelope;
     }
-    const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
-    const inner =
-      envelope && typeof envelope === 'object' && 'data' in envelope
-        ? (envelope as { data: unknown }).data
-        : envelope;
     if (!inner || typeof inner !== 'object') return null;
-    const g = inner as CertificateGuidance;
-    if (g.format === 'certificate_config') {
-      return g;
-    }
-    const body = String(g.body ?? '').trim();
-    if (!body) return null;
-    return g;
+    return inner as CertificateGuidance;
   }, [isPublicEdit, publicBootstrapQuery.data, certificateGuidanceResponse]);
 
   useEffect(() => {
@@ -1140,7 +1139,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     if (fromApi && String(fromApi).trim()) return;
     const cid = joiningRecord.courseInfo?.courseId;
     if (!cid) return;
-    const entry = courseSettings.find((item) => item.course._id === cid);
+    const cidTarget = String(cid).trim();
+    if (!cidTarget) return;
+    const entry = courseSettings.find((item) => String(item.course._id ?? '').trim() === cidTarget);
     const inferred =
       entry?.course?.level != null && String(entry.course.level).trim()
         ? String(entry.course.level).trim()
@@ -1155,12 +1156,199 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     });
   }, [joiningRecord?._id, joiningRecord?.courseInfo?.courseId, joiningRecord?.courseInfo?.programLevel, courseSettings]);
 
+  /**
+   * Resolve managed course / branch IDs (and the program level) by matching the
+   * lead's free-text course/branch strings against the secondary-DB catalog.
+   *
+   * Why this matters: leads carry `course_interested` as a single free-text
+   * field (no FK to the secondary DB), and the value frequently combines the
+   * course AND branch — e.g. "B.Tech CSE", "MBA Marketing", "Diploma EEE". The
+   * managed catalog, on the other hand, splits these into a course row
+   * ("B.Tech") with branches underneath ("CSE", "ECE", …). Without smarter
+   * matching the user complaint surfaces as:
+   *  - The branches dropdown stays empty because no `courseId` got picked.
+   *  - The certificate-checklist (keyed by program level) never loads.
+   *  - The "interested" lead text and the "actual" managed values diverge.
+   *
+   * Strategy:
+   *  1. Normalize both sides (lowercased, punctuation collapsed to spaces).
+   *  2. For every managed course, find the longest course-name segment that
+   *     occurs inside the lead's course/branch text. Track the leftover text.
+   *  3. Within the candidate course, try to match a branch from either the
+   *     lead's separate `branch` label OR the leftover text.
+   *  4. Pick the candidate with the best combined coverage (course match +
+   *     branch match) so "B.Tech CSE" prefers the "B.Tech" course whose "CSE"
+   *     branch also fits, rather than another course that incidentally shares
+   *     a substring.
+   */
+  useEffect(() => {
+    if (courseSettings.length === 0) return;
+    const courseLabel = (formState.courseInfo.course || '').trim();
+    const branchLabel = (formState.courseInfo.branch || '').trim();
+    const hasCourseId = Boolean((formState.courseInfo.courseId || '').toString().trim());
+    const hasBranchId = Boolean((formState.courseInfo.branchId || '').toString().trim());
+    const hasProgramLevel = Boolean((formState.courseInfo.programLevel || '').trim());
+    if (hasCourseId && hasBranchId && hasProgramLevel) return;
+    if (!courseLabel && !branchLabel && !hasCourseId) return;
+
+    const norm = (v?: string | null) =>
+      String(v ?? '')
+        .toLowerCase()
+        .replace(/[\s._\-/&,]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const courseHaystack = norm(`${courseLabel} ${branchLabel}`);
+
+    type Candidate = {
+      setting: CoursePaymentSettings;
+      courseScore: number;
+      branch?: { _id: string; name: string } | null;
+      branchScore: number;
+    };
+
+    let best: Candidate | null = null;
+
+    const considerCandidate = (candidate: Candidate) => {
+      if (!best) {
+        best = candidate;
+        return;
+      }
+      const bestTotal = best.courseScore + best.branchScore;
+      const total = candidate.courseScore + candidate.branchScore;
+      if (total > bestTotal) {
+        best = candidate;
+      } else if (total === bestTotal && candidate.branchScore > best.branchScore) {
+        best = candidate;
+      }
+    };
+
+    if (hasCourseId) {
+      // Caller already locked a courseId — only try to fill the branch / level.
+      const cidTarget = String(formState.courseInfo.courseId ?? '').trim();
+      const setting = courseSettings.find(
+        (item) => String(item.course._id ?? '').trim() === cidTarget
+      );
+      if (setting) {
+        considerCandidate({ setting, courseScore: 999, branch: null, branchScore: 0 });
+      }
+    } else {
+      for (const setting of courseSettings) {
+        const courseName = norm(setting.course.name);
+        const courseCode = norm(setting.course.code || '');
+        let courseScore = 0;
+        if (!courseName && !courseCode) continue;
+        if (courseName && courseHaystack === courseName) {
+          courseScore = courseName.length * 3 + 5;
+        } else if (courseCode && courseHaystack === courseCode) {
+          courseScore = courseCode.length * 3 + 5;
+        } else if (courseName && courseHaystack.includes(` ${courseName} `)) {
+          courseScore = courseName.length * 2 + 2;
+        } else if (courseName && (courseHaystack.startsWith(`${courseName} `) || courseHaystack.endsWith(` ${courseName}`))) {
+          courseScore = courseName.length * 2 + 1;
+        } else if (courseName && courseHaystack.includes(courseName)) {
+          courseScore = courseName.length;
+        } else if (courseCode && courseHaystack.includes(courseCode)) {
+          courseScore = courseCode.length;
+        } else if (courseName && courseName.includes(courseHaystack) && courseHaystack.length >= 3) {
+          // Lead text is a shorter abbreviation of the managed name.
+          courseScore = courseHaystack.length;
+        }
+        if (courseScore <= 0) continue;
+        considerCandidate({ setting, courseScore, branch: null, branchScore: 0 });
+      }
+    }
+
+    if (!best) return;
+
+    const bestCandidate: Candidate = best;
+
+    // Try to attach a branch under the chosen course.
+    const branchHaystack = norm(`${branchLabel} ${courseLabel}`);
+    let bestBranch: { _id: string; name: string } | null = null;
+    let bestBranchScore = 0;
+    for (const branch of bestCandidate.setting.branches) {
+      const bName = norm(branch.name);
+      const bCode = norm(branch.code || '');
+      let score = 0;
+      if (!bName && !bCode) continue;
+      if (bName && branchHaystack === bName) {
+        score = bName.length * 3 + 5;
+      } else if (bCode && branchHaystack === bCode) {
+        score = bCode.length * 3 + 5;
+      } else if (bName && branchHaystack.includes(` ${bName} `)) {
+        score = bName.length * 2 + 2;
+      } else if (bName && (branchHaystack.startsWith(`${bName} `) || branchHaystack.endsWith(` ${bName}`))) {
+        score = bName.length * 2 + 1;
+      } else if (bName && branchHaystack.includes(bName)) {
+        score = bName.length;
+      } else if (bCode && branchHaystack.includes(bCode)) {
+        score = bCode.length;
+      }
+      if (score > bestBranchScore) {
+        bestBranchScore = score;
+        bestBranch = { _id: String(branch._id), name: branch.name };
+      }
+    }
+    if (bestBranch) {
+      bestCandidate.branch = bestBranch;
+      bestCandidate.branchScore = bestBranchScore;
+    }
+
+    const matchedCourseId = String(bestCandidate.setting.course._id ?? '').trim();
+    const matchedCourseName = bestCandidate.setting.course.name;
+    const inferredLevel =
+      bestCandidate.setting.course?.level != null &&
+      String(bestCandidate.setting.course.level).trim()
+        ? String(bestCandidate.setting.course.level).trim()
+        : '';
+
+    setFormState((prev) => {
+      const next = { ...prev.courseInfo };
+      let changed = false;
+      if (!(next.courseId || '').toString().trim() && matchedCourseId) {
+        next.courseId = matchedCourseId;
+        // Preserve the original lead text in `course` if user already had a
+        // value — keeps the “interested” intent. Otherwise default to the
+        // managed name so the field is never empty.
+        if (!next.course || !norm(next.course)) {
+          next.course = matchedCourseName;
+        }
+        changed = true;
+      }
+      if (!(next.branchId || '').toString().trim() && bestCandidate.branch) {
+        next.branchId = String(bestCandidate.branch._id);
+        if (!next.branch || !norm(next.branch)) {
+          next.branch = bestCandidate.branch.name;
+        }
+        changed = true;
+      }
+      if (!(next.programLevel || '').trim() && inferredLevel) {
+        next.programLevel = inferredLevel;
+        changed = true;
+      }
+      if (!changed) return prev;
+      return { ...prev, courseInfo: next };
+    });
+  }, [
+    courseSettings,
+    formState.courseInfo.course,
+    formState.courseInfo.branch,
+    formState.courseInfo.courseId,
+    formState.courseInfo.branchId,
+    formState.courseInfo.programLevel,
+  ]);
+
   useEffect(() => {
     const pl = (formState.courseInfo.programLevel || '').trim();
     if (!pl || programLevels.length === 0) return;
     const cid = formState.courseInfo.courseId;
     if (!cid) return;
-    const entry = courseSettings.find((item) => item.course._id === cid);
+    const cidTarget = String(cid).trim();
+    if (!cidTarget) return;
+    const entry = courseSettings.find(
+      (item) => String(item.course._id ?? '').trim() === cidTarget
+    );
     const lv = entry?.course?.level != null ? String(entry.course.level).trim() : '';
     if (lv && lv !== pl) {
       setFormState((prev) => ({
@@ -1283,14 +1471,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const selectedCourseSetting = useMemo(() => {
     if (!formState.courseInfo.courseId) return undefined;
-    const setting = courseSettings.find((item) => item.course._id === formState.courseInfo.courseId);
+    // Legacy joining/admission rows may carry the FK id as a MySQL INT (number)
+    // while `courseSettings` from the secondary DB always exposes `_id` as a
+    // string. Strict equality (e.g. `"5" === 5`) would silently fail and the
+    // branches dropdown would stay empty, so compare on the string form.
+    const target = String(formState.courseInfo.courseId).trim();
+    if (!target) return undefined;
+    const setting = courseSettings.find((item) => String(item.course._id ?? '').trim() === target);
     if (!setting) return undefined;
 
     // Deduplicate branches by ID (frontend safety check)
     const uniqueBranchesMap = new Map<string, typeof setting.branches[0]>();
     setting.branches.forEach((branch) => {
-      if (!uniqueBranchesMap.has(branch._id)) {
-        uniqueBranchesMap.set(branch._id, branch);
+      const bid = String(branch._id ?? '').trim();
+      if (bid && !uniqueBranchesMap.has(bid)) {
+        uniqueBranchesMap.set(bid, branch);
       }
     });
 
@@ -1302,8 +1497,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const selectedBranchSetting = useMemo(() => {
     if (!selectedCourseSetting || !formState.courseInfo.branchId) return undefined;
+    const target = String(formState.courseInfo.branchId).trim();
+    if (!target) return undefined;
     return selectedCourseSetting.payment.branchFees.find(
-      (entry) => entry.branch?._id === formState.courseInfo.branchId
+      (entry) => String(entry.branch?._id ?? '').trim() === target
     );
   }, [selectedCourseSetting, formState.courseInfo.branchId]);
 
@@ -1499,16 +1696,32 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       return;
     }
 
-    const course = filteredCourseSettings.find((item) => item.course._id === courseId);
-    // Always store both ID and name when selecting
+    const cidTarget = String(courseId).trim();
+    // Look up the picked course in the full catalog (not just the level-filtered
+    // view) so we can also auto-fill the program level when the course's
+    // `level` is set in the secondary DB. This is what kicks off the
+    // certificate-guidance API automatically — without it, staff have to pick
+    // the level separately and the checklist sits empty.
+    const course =
+      courseSettings.find((item) => String(item.course._id ?? '').trim() === cidTarget) ||
+      filteredCourseSettings.find((item) => String(item.course._id ?? '').trim() === cidTarget);
+    const inferredLevel =
+      course?.course?.level != null && String(course.course.level).trim()
+        ? String(course.course.level).trim()
+        : '';
     setFormState((prev) => ({
       ...prev,
       courseInfo: {
         ...prev.courseInfo,
-        courseId,
-        course: course?.course?.name || '', // Store the managed course name
+        courseId: cidTarget,
+        course: course?.course?.name || '',
         branchId: undefined,
-        branch: '', // Clear branch when course changes
+        branch: '',
+        // Only overwrite an empty program level — never clobber a value the
+        // user explicitly picked. If the picked course doesn't carry a level
+        // in the secondary DB, leave the existing selection alone.
+        programLevel:
+          (prev.courseInfo.programLevel || '').trim() || inferredLevel || prev.courseInfo.programLevel,
       },
     }));
   };
@@ -1526,14 +1739,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       return;
     }
 
-    const branch = selectedCourseSetting?.branches.find((item) => item._id === branchId);
-    // Always store both ID and name when selecting
+    const bidTarget = String(branchId).trim();
+    const branch = selectedCourseSetting?.branches.find(
+      (item) => String(item._id ?? '').trim() === bidTarget
+    );
     setFormState((prev) => ({
       ...prev,
       courseInfo: {
         ...prev.courseInfo,
-        branchId,
-        branch: branch?.name || '', // Store the managed branch name
+        branchId: bidTarget,
+        branch: branch?.name || '',
       },
     }));
   };
@@ -1602,6 +1817,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       amount: '',
       isProcessing: false,
     });
+    setSelectedFeeHead(null);
   };
 
   const openPaymentModal = (mode: 'cash' | 'online') => {
@@ -1633,6 +1849,42 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     setOpenPaymentMode(null);
   };
 
+  /**
+   * Triggered when the user clicks Cash or Cashfree on a row inside the Fee Structure section.
+   * Mirrors the existing "Payments & Transactions" section behavior:
+   * - Stores the fee-head identity so subsequent cash/cashfree submits tag the transaction.
+   * - Prefills the amount with the row's amount (clamped to the outstanding balance when one
+   *   exists and is smaller, so users never over-collect on the scheduled fee by accident).
+   * - Opens the same modal the existing section uses, in the mode the user picked.
+   */
+  const handleSelectFeeHead = (selection: FeeHeadSelection) => {
+    if (!canWritePayments) {
+      showToast.error('You have read-only access to payments');
+      return;
+    }
+    // Online lane requires Cashfree to be configured + active, same gate as the main section.
+    if (selection.mode === 'online' && !canUseCashfree) {
+      showToast.error(
+        'Cashfree configuration is not active. Update Payment Settings before collecting online.'
+      );
+      return;
+    }
+    setSelectedFeeHead(selection);
+    // Selecting a specific fee head implies a targeted payment, not a generic "additional fee".
+    setIsAdditionalFeeMode(false);
+    const rowAmount = Number(selection.amount) || 0;
+    const cappedAmount =
+      outstandingBalance && outstandingBalance > 0
+        ? Math.min(rowAmount, outstandingBalance)
+        : rowAmount;
+    setPaymentFormState({
+      amount: cappedAmount > 0 ? String(Number(cappedAmount.toFixed(2))) : '',
+      isProcessing: false,
+    });
+    setShouldPromptPayment(false);
+    setOpenPaymentMode(selection.mode);
+  };
+
   const handleCashPaymentSubmit = async () => {
     if (!canWritePayments) {
       showToast.error('You have read-only access to payments');
@@ -1656,9 +1908,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         amount: amountValue,
         currency: 'INR',
         isAdditionalFee: isAdditionalFeeMode || undefined,
+        // Tag transaction with the selected fee head (Fee Management DB) when present.
+        ...(selectedFeeHead && {
+          feeHead: selectedFeeHead.feeHeadId,
+          feeHeadName: selectedFeeHead.feeHeadName,
+          feeHeadCode: selectedFeeHead.feeHeadCode,
+          feeStructureBatch: selectedFeeHead.batch,
+          feeStructureYear: selectedFeeHead.studentYear,
+        }),
       });
 
-      showToast.success('Cash payment recorded');
+      showToast.success(
+        selectedFeeHead
+          ? `Cash payment recorded for ${selectedFeeHead.feeHeadName || 'selected fee head'}`
+          : 'Cash payment recorded'
+      );
       setOpenPaymentMode(null);
       resetPaymentForm();
       setShouldPromptPayment(false);
@@ -1712,6 +1976,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           phone: formState.studentInfo.phone || lead?.phone || '9999999999',
         },
         isAdditionalFee: isAdditionalFeeMode || undefined,
+        // Tag the Cashfree transaction with the selected fee head so reconciliation /
+        // payment history shows what was paid for. Both order rows and the eventual
+        // verification land on the same transaction row (meta is set at insert time).
+        ...(selectedFeeHead && {
+          feeHead: selectedFeeHead.feeHeadId,
+          feeHeadName: selectedFeeHead.feeHeadName,
+          feeHeadCode: selectedFeeHead.feeHeadCode,
+          feeStructureBatch: selectedFeeHead.batch,
+          feeStructureYear: selectedFeeHead.studentYear,
+          notes: {
+            feeHead: selectedFeeHead.feeHeadId,
+            feeHeadName: selectedFeeHead.feeHeadName,
+            feeHeadCode: selectedFeeHead.feeHeadCode,
+          },
+        }),
       });
 
       const orderData = orderResponse?.data;
@@ -2122,18 +2401,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     // Ensure course and branch names are stored when IDs are present
     const courseInfo = { ...formState.courseInfo };
 
-    // If courseId is present, ensure course name is also present
-    if (courseInfo.courseId && !courseInfo.course) {
-      const selectedCourse = courseSettings.find((item) => item.course._id === courseInfo.courseId);
+    const courseTarget = courseInfo.courseId != null ? String(courseInfo.courseId).trim() : '';
+    const branchTarget = courseInfo.branchId != null ? String(courseInfo.branchId).trim() : '';
+
+    if (courseTarget && !courseInfo.course) {
+      const selectedCourse = courseSettings.find(
+        (item) => String(item.course._id ?? '').trim() === courseTarget
+      );
       if (selectedCourse) {
         courseInfo.course = selectedCourse.course.name;
       }
     }
 
-    // If branchId is present, ensure branch name is also present
-    if (courseInfo.branchId && !courseInfo.branch) {
-      const selectedCourse = courseSettings.find((item) => item.course._id === courseInfo.courseId);
-      const selectedBranch = selectedCourse?.branches.find((branch) => branch._id === courseInfo.branchId);
+    if (branchTarget && !courseInfo.branch && courseTarget) {
+      const selectedCourse = courseSettings.find(
+        (item) => String(item.course._id ?? '').trim() === courseTarget
+      );
+      const selectedBranch = selectedCourse?.branches.find(
+        (branch) => String(branch._id ?? '').trim() === branchTarget
+      );
       if (selectedBranch) {
         courseInfo.branch = selectedBranch.name;
       }
@@ -2552,24 +2838,87 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 These values default from the confirmed lead. Adjust if the student opted for a
                 different program.
               </p>
+              {(() => {
+                // Show what the lead actually carried over (free-text "course
+                // interested") next to the managed-DB resolved values so staff
+                // can spot mismatches. The lead-side text and the managed
+                // course/branch can diverge when the lead form stored a
+                // combined "B.Tech CSE" string while the secondary DB keeps
+                // them split into a course + branch.
+                const interestedFromLead = String(lead?.courseInterested || '').trim();
+                const resolvedCourseName = selectedCourseSetting?.course?.name || '';
+                const resolvedBranchName =
+                  selectedCourseSetting?.branches.find(
+                    (b) =>
+                      String(b._id ?? '').trim() ===
+                      String(formState.courseInfo.branchId ?? '').trim()
+                  )?.name || '';
+                if (!interestedFromLead && !resolvedCourseName && !resolvedBranchName) {
+                  return null;
+                }
+                return (
+                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-100">
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+                      {interestedFromLead ? (
+                        <div className="min-w-0">
+                          <span className="font-medium">From lead (interest):</span>{' '}
+                          <span className="font-semibold">{interestedFromLead}</span>
+                        </div>
+                      ) : null}
+                      {(resolvedCourseName || resolvedBranchName) ? (
+                        <div className="min-w-0">
+                          <span className="font-medium">Linked to managed:</span>{' '}
+                          <span className="font-semibold">
+                            {resolvedCourseName || '—'}
+                            {resolvedBranchName ? ` · ${resolvedBranchName}` : ''}
+                          </span>
+                        </div>
+                      ) : interestedFromLead ? (
+                        <div className="min-w-0 text-xs text-amber-700 dark:text-amber-300">
+                          Not yet mapped to a managed course/branch. Pick below to link it.
+                        </div>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-200/80">
+                      Managed values come from the secondary <span className="font-mono">student_database</span> (courses & course_branches).
+                    </p>
+                  </div>
+                );
+              })()}
               {isLoadingCourseSettings ? (
                 <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">
                   Loading course and branch directory…
                 </p>
               ) : courseSettings.length > 0 ? (
                 <>
-                  {programLevels.length > 0 ? (
+                  {(() => {
+                    const currentLevel = formState.courseInfo.programLevel || '';
+                    const hasLevelOptions = programLevels.length > 0;
+                    const knownOption =
+                      currentLevel &&
+                      programLevels.some(
+                        (lvl) => String(lvl).trim().toLowerCase() === currentLevel.trim().toLowerCase()
+                      );
+                    return (
                     <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6 md:items-start">
                       <div className="min-w-0">
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                           Program level
+                          <span className="ml-1 text-rose-600">*</span>
                         </label>
                         <select
-                          value={formState.courseInfo.programLevel || ''}
+                          value={currentLevel}
                           onChange={(event) => handleProgramLevelChange(event.target.value)}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                          disabled={!hasLevelOptions}
+                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                         >
-                          <option value="">Select program level</option>
+                          <option value="">
+                            {hasLevelOptions ? 'Select program level' : 'No levels configured in secondary DB'}
+                          </option>
+                          {/* Preserve a pre-existing value (e.g. inferred from a managed course) even if absent from the fresh list. */}
+                          {currentLevel && !knownOption ? (
+                            <option value={currentLevel}>{currentLevel}</option>
+                          ) : null}
                           {programLevels.map((lvl) => (
                             <option key={lvl} value={lvl}>
                               {lvl}
@@ -2577,8 +2926,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           ))}
                         </select>
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          From <span className="font-mono">student_database.courses</span> (level or metadata). Course
-                          list follows this level.
+                          From <span className="font-mono">student_database.courses</span> and{' '}
+                          <span className="font-mono">settings.certificate_config</span>.
                         </p>
                       </div>
                       <div className="min-w-0">
@@ -2705,116 +3054,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         </div>
                       ) : null}
                     </div>
-                  ) : (
-                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6 md:items-start">
-                      <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                          Select Managed Course
-                        </label>
-                        <select
-                          value={formState.courseInfo.courseId || ''}
-                          onChange={(event) => handleManagedCourseSelect(event.target.value)}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                        >
-                          <option value="">Choose a course</option>
-                          {courseSettings.map((item) => (
-                            <option key={item.course._id} value={item.course._id}>
-                              {item.course.name}
-                              {item.course.code ? ` (${item.course.code})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          Managed in Course &amp; Branch Setup. Selecting here keeps payments in sync.
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                          Select Managed Branch
-                        </label>
-                        <select
-                          value={formState.courseInfo.branchId || ''}
-                          onChange={(event) => handleManagedBranchSelect(event.target.value)}
-                          disabled={!formState.courseInfo.courseId}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
-                        >
-                          <option value="">
-                            {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
-                          </option>
-                          {(() => {
-                            if (!selectedCourseSetting) return null;
-                            const branchMap = new Map<string, Branch>();
-                            selectedCourseSetting.branches.forEach((branch) => {
-                              const branchId = branch._id;
-                              if (branchId && !branchMap.has(branchId)) {
-                                branchMap.set(branchId, branch);
-                              }
-                            });
-                            const uniqueBranches = Array.from(branchMap.values());
-                            return uniqueBranches.map((branch) => {
-                              const branchId = branch._id;
-                              return (
-                                <option key={branchId} value={branchId}>
-                                  {branch.name}
-                                  {branch.code ? ` (${branch.code})` : ''}
-                                </option>
-                              );
-                            });
-                          })()}
-                        </select>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          Branch list updates based on the selected course.
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                          Quota
-                        </label>
-                        <select
-                          value={formState.courseInfo.quota || ''}
-                          onChange={(event) => handleCourseFieldChange('quota', event.target.value)}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                        >
-                          <option value="">Select quota</option>
-                          {formState.courseInfo.quota &&
-                            !quotaOptions.includes(formState.courseInfo.quota as (typeof quotaOptions)[number]) && (
-                              <option value={formState.courseInfo.quota}>{formState.courseInfo.quota}</option>
-                            )}
-                          {quotaOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                          College
-                        </label>
-                        <select
-                          value={selectedCollegeId}
-                          onChange={(event) => handleCollegeSelect(event.target.value)}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                        >
-                          <option value="">Select college</option>
-                          {colleges.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          From secondary DB colleges list (same source family as courses).
-                        </p>
-                      </div>
-                      {admissionNumberDisplay ? (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200 md:col-span-2">
-                          Admission Number
-                          <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
+                    );
+                  })()}
                 </>
               ) : null}
               {configuredFee !== null && (
@@ -3015,6 +3256,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     </div>
                     ) : null}
                     <div>
+                      <Input
+                        label="Father Mobile Number"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        value={formState.parents.father.phone || ''}
+                        onChange={(event) =>
+                          handleParentChange(
+                            'father',
+                            'phone',
+                            event.target.value.replace(/\D/g, '')
+                          )
+                        }
+                        placeholder="10-digit mobile"
+                        maxLength={15}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                        Required for the printed application form.
+                      </p>
+                    </div>
+                    <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                         Father Aadhaar Number
                       </label>
@@ -3055,6 +3317,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                     </div>
                     ) : null}
+                    <div>
+                      <Input
+                        label="Mother Mobile Number"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        value={formState.parents.mother.phone || ''}
+                        onChange={(event) =>
+                          handleParentChange(
+                            'mother',
+                            'phone',
+                            event.target.value.replace(/\D/g, '')
+                          )
+                        }
+                        placeholder="10-digit mobile"
+                        maxLength={15}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                        Required for the printed application form.
+                      </p>
+                    </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                         Mother Aadhaar Number
@@ -3716,11 +3999,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     })}
                   </div>
                 ) : certificateGuidance?.format === 'certificate_config' ? (
-                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-                    No certificate rules matched this program level, or <span className="font-mono">certificate_config</span>{' '}
-                    is empty for it.
-                  </p>
-                ) : certificateGuidance ? (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                    <p className="font-medium">
+                      No certificate rules are configured for program level{' '}
+                      <span className="font-mono">{certificateGuidance.level || programLevelTrimmed}</span>.
+                    </p>
+                    <p className="mt-1 text-xs">
+                      Add a <span className="font-mono">"{(certificateGuidance.level || programLevelTrimmed).toLowerCase()}"</span>{' '}
+                      bucket to <span className="font-mono">student_database.settings.certificate_config</span> to populate this checklist.
+                    </p>
+                  </div>
+                ) : certificateGuidance && (certificateGuidance.format === 'html' || certificateGuidance.format === 'text') && String(certificateGuidance.body || '').trim() ? (
                   <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/50">
                     {certificateGuidance.format === 'html' ? (
                       <div
@@ -3732,14 +4021,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     )}
                   </div>
                 ) : (
-                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-                    Could not load certificate configuration.
-                  </p>
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                    <p className="font-medium">
+                      Certificate configuration is not set up in the secondary student database.
+                    </p>
+                    <p className="mt-1 text-xs">
+                      Add a row to <span className="font-mono">student_database.settings</span> with key{' '}
+                      <span className="font-mono">certificate_config</span> and a JSON value such as{' '}
+                      <span className="font-mono">{`{"diploma":[…],"ug":[…],"pg":[…]}`}</span> to drive this checklist
+                      for program level{' '}
+                      <span className="font-mono">{programLevelTrimmed}</span>.
+                    </p>
+                  </div>
                 )}
               </div>
             </section>
 
-            {canAccessPaymentsModule && (
+            {/*
+             * Payment Information should always render for any joining viewer
+             * (admin / counsellor / data-entry). The write actions (Record Cash,
+             * Cashfree, Additional Fee) stay gated on `canWritePayments`. Public
+             * edit links never see the payments panel — that surface is admin-only.
+             */}
+            {!isPublicEdit && (
               <section
                 id="payment-panel"
                 className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${shouldPromptPayment
@@ -3765,41 +4069,48 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="primary"
-                      onClick={() => openPaymentModal('cash')}
-                      disabled={paymentActionsDisabled}
-                    >
-                      {isAdditionalFeeMode ? 'Record Additional Cash Payment' : 'Record Cash Payment'}
-                    </Button>
-                    <Button
-                      variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                      onClick={() => openPaymentModal('online')}
-                      disabled={!canUseCashfree || paymentActionsDisabled}
-                    >
-                      {isAdditionalFeeMode
-                        ? 'Collect Additional Fee via Cashfree'
-                        : 'Collect via Cashfree UPI / QR'}
-                    </Button>
-                    {shouldShowAdditionalFeeButton && (
+                  {canAccessPaymentsModule ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        onClick={() => openPaymentModal('cash')}
+                        disabled={paymentActionsDisabled}
+                      >
+                        {isAdditionalFeeMode ? 'Record Additional Cash Payment' : 'Record Cash Payment'}
+                      </Button>
                       <Button
                         variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                        onClick={() => {
-                          if (paymentFormState.isProcessing) return;
-                          setIsAdditionalFeeMode((prev) => {
-                            if (prev) {
-                              resetPaymentForm();
-                            }
-                            return !prev;
-                          });
-                        }}
-                        disabled={paymentFormState.isProcessing || !canWritePayments}
+                        onClick={() => openPaymentModal('online')}
+                        disabled={!canUseCashfree || paymentActionsDisabled}
                       >
-                        {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
+                        {isAdditionalFeeMode
+                          ? 'Collect Additional Fee via Cashfree'
+                          : 'Collect via Cashfree UPI / QR'}
                       </Button>
-                    )}
-                  </div>
+                      {shouldShowAdditionalFeeButton && (
+                        <Button
+                          variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
+                          onClick={() => {
+                            if (paymentFormState.isProcessing) return;
+                            setIsAdditionalFeeMode((prev) => {
+                              if (prev) {
+                                resetPaymentForm();
+                              }
+                              return !prev;
+                            });
+                          }}
+                          disabled={paymentFormState.isProcessing || !canWritePayments}
+                        >
+                          {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                      Payments module is read-only for your role. Ask a Super Admin to grant the
+                      <span className="font-semibold"> Payments </span> permission to record fees.
+                    </p>
+                  )}
                   {isAdditionalFeeMode && (
                     <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                       Additional fee mode active
@@ -3914,13 +4225,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                               className="rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm dark:border-slate-700"
                             >
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <span className="font-semibold text-slate-800 dark:text-slate-100">
                                     {modeLabel}
                                   </span>
                                   {transaction.isAdditionalFee && (
                                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
                                       Additional
+                                    </span>
+                                  )}
+                                  {(transaction.feeHeadName || transaction.feeHeadCode) && (
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
+                                      title={
+                                        transaction.feeStructureYear || transaction.feeStructureBatch
+                                          ? `Batch ${transaction.feeStructureBatch || ''} ${
+                                              transaction.feeStructureYear
+                                                ? `· Year ${transaction.feeStructureYear}`
+                                                : ''
+                                            }`.trim()
+                                          : 'Tagged fee head'
+                                      }
+                                    >
+                                      {transaction.feeHeadName || transaction.feeHeadCode}
                                     </span>
                                   )}
                                 </div>
@@ -3952,6 +4279,26 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 </div>
               </section>
+            )}
+
+            {/* Fee Structure (Fee Management DB) — visible to any joining viewer.
+                Users with payments-write permission can record a cash/Cashfree payment on
+                any row; the transaction is tagged with the chosen fee head. The per-row
+                Cash + Cashfree buttons mirror the "10. Payments & Transactions" section. */}
+            {!isPublicEdit && (
+              <FeeStructureSection
+                course={formState.courseInfo.course}
+                branch={formState.courseInfo.branch}
+                quota={formState.courseInfo.quota}
+                batch={
+                  (lead as { academicYear?: number | string } | undefined)?.academicYear ??
+                  null
+                }
+                description="Live from the Fee Management database. Pick a batch, then use Cash or Cashfree on any fee head — the payment is tagged with that head and shows up in Payments & Transactions."
+                onSelectFeeHead={canWritePayments ? handleSelectFeeHead : undefined}
+                activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
+                canUseCashfree={canUseCashfree}
+              />
             )}
 
             {/* Action Buttons at Bottom - Always visible for draft/pending status */}
@@ -4047,6 +4394,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               {isAdditionalFeeMode && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-200">
                   This transaction is marked as an additional fee. It will be tracked separately from the admission balance.
+                </div>
+              )}
+              {selectedFeeHead && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/30 dark:text-emerald-200">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      Paying for
+                    </span>
+                    <span className="font-semibold">{selectedFeeHead.label}</span>
+                    {selectedFeeHead.feeHeadCode && (
+                      <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-emerald-700 dark:bg-emerald-800/50 dark:text-emerald-100">
+                        {selectedFeeHead.feeHeadCode}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFeeHead(null)}
+                    className="text-[11px] font-semibold text-emerald-700 underline-offset-2 hover:underline disabled:opacity-60 dark:text-emerald-200"
+                    disabled={paymentFormState.isProcessing}
+                  >
+                    Clear selection
+                  </button>
                 </div>
               )}
               <div>

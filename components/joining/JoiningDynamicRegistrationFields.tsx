@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Camera, ImagePlus } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { useLocations } from '@/lib/useLocations';
@@ -86,6 +86,45 @@ function isFixedSemesterField(field: RegistrationFormField): boolean {
   return n === 'current_semester' || n === 'currentsemester' || n === 'semester' || n === 'semister';
 }
 
+/**
+ * Detect a "Batch" / admission year field regardless of how the student-database form
+ * declares it (text input, number, dropdown, etc). When matched we override the rendering
+ * with the same year-picker as the Fee Structure section so both surfaces stay in sync.
+ */
+function isBatchField(field: RegistrationFormField): boolean {
+  const n = normKey(field.fieldName || '');
+  const l = normKey(field.fieldLabel || '');
+  return (
+    n === 'batch' ||
+    n === 'batch_year' ||
+    n === 'admission_batch' ||
+    n === 'admission_year' ||
+    n === 'joining_batch' ||
+    l === 'batch' ||
+    l === 'batch_year' ||
+    l === 'admission_batch' ||
+    l === 'admission_year'
+  );
+}
+
+/** current ± 3 years, newest first. Same window as the Fee Structure section. */
+function buildBatchYears(currentYear: number): number[] {
+  const out: number[] = [];
+  for (let offset = 3; offset >= -3; offset -= 1) out.push(currentYear + offset);
+  return out;
+}
+
+function coerceBatchYear(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric) && numeric > 1900 && numeric < 3000) {
+    return String(Math.trunc(numeric));
+  }
+  return raw;
+}
+
 function isImageDataUrl(value: unknown): value is string {
   return typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
 }
@@ -158,6 +197,33 @@ export function JoiningDynamicRegistrationFields({
   const sorted = useMemo(() => {
     return [...fields].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   }, [fields]);
+
+  // Batch year dropdown setup — same window as the Fee Structure section so both surfaces
+  // stay aligned. The user can still pick any year inside the ±3 window; values outside
+  // the window are appended so historical drafts remain editable.
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const batchBaseYears = useMemo(() => buildBatchYears(currentYear), [currentYear]);
+
+  // Auto-default any empty Batch field to the current year on first render. We track
+  // which fields we've already defaulted to avoid an effect loop or overwriting a value
+  // the user just cleared on purpose.
+  const defaultedBatchFieldsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const field of sorted) {
+      if (!isBatchField(field)) continue;
+      const key = field.fieldName;
+      if (defaultedBatchFieldsRef.current.has(key)) continue;
+      const current = coerceBatchYear(getValue(key));
+      if (!current) {
+        onChange(key, String(currentYear));
+      }
+      defaultedBatchFieldsRef.current.add(key);
+    }
+    // Only re-run when the set of rendered fields changes (e.g. form definition swap).
+    // getValue / onChange are not in deps on purpose — they're parent refs that change on
+    // every render and would cause an infinite loop here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, currentYear]);
 
   if (sorted.length === 0) return null;
 
@@ -255,6 +321,41 @@ export function JoiningDynamicRegistrationFields({
                 {field.helpText ? (
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{field.helpText}</p>
                 ) : null}
+              </div>
+            );
+          }
+
+          if (isBatchField(field)) {
+            // Match the Fee Structure section: current ± 3 years, newest first, with
+            // out-of-window values appended so legacy data stays selectable.
+            const currentValue = coerceBatchYear(fieldValue);
+            const displayValue = currentValue || String(currentYear);
+            const numericCurrent = Number(currentValue);
+            const yearOptions =
+              currentValue && Number.isFinite(numericCurrent) && !batchBaseYears.includes(numericCurrent)
+                ? [...batchBaseYears, numericCurrent].sort((a, b) => b - a)
+                : batchBaseYears;
+            return (
+              <div key={field._id || field.fieldName}>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
+                </label>
+                <select
+                  value={displayValue}
+                  onChange={(e) => onChange(field.fieldName, e.target.value)}
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                >
+                  {yearOptions.map((year) => (
+                    <option key={year} value={String(year)}>
+                      {year}
+                      {year === currentYear ? ' (current)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  {field.helpText ||
+                    'Admission batch (academic year). Defaults to the current year; pick any year in the ±3 window.'}
+                </p>
               </div>
             );
           }

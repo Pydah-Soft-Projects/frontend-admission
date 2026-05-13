@@ -1303,6 +1303,10 @@ export const admissionAPI = {
     const response = await api.post(`/admissions/id/${admissionId}/cancel`, data);
     return response.data;
   },
+  sendConfirmationSms: async (admissionId: string) => {
+    const response = await api.post(`/admissions/id/${admissionId}/send-confirmation-sms`);
+    return response.data;
+  },
   updateByLeadId: async (leadId: string, data: any) => {
     const response = await api.put(`/admissions/${leadId}`, data);
     return response.data;
@@ -1333,6 +1337,39 @@ export const admissionAPI = {
   },
 };
 
+export const feeStructureAPI = {
+  /**
+   * List fee structures from the fee-management Mongo db (feestructures collection),
+   * joined with the matching feeheads doc.
+   * Filters are optional — pass at least course/branch/category for relevant rows.
+   */
+  list: async (params?: {
+    course?: string | null;
+    branch?: string | null;
+    college?: string | null;
+    batch?: string | number | null;
+    category?: string | null;
+    quota?: string | null;
+    studentYear?: string | number | null;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/fee-structures${query ? `?${query}` : ''}`);
+    return response.data;
+  },
+  options: async () => {
+    const response = await api.get(`/fee-structures/options`);
+    return response.data;
+  },
+};
+
 export const paymentAPI = {
   listTransactions: async (params?: {
     leadId?: string;
@@ -1357,6 +1394,12 @@ export const paymentAPI = {
     currency?: string;
     notes?: string;
     isAdditionalFee?: boolean;
+    // Optional fee-head tagging from Fee Management DB
+    feeHead?: string | null;
+    feeHeadName?: string;
+    feeHeadCode?: string;
+    feeStructureBatch?: string;
+    feeStructureYear?: number | null;
   }) => {
     const response = await api.post(`/payments/cash`, data);
     return response.data;
@@ -1378,6 +1421,12 @@ export const paymentAPI = {
     };
     notes?: Record<string, any>;
     isAdditionalFee?: boolean;
+    // Optional fee-head tagging from Fee Management DB
+    feeHead?: string | null;
+    feeHeadName?: string;
+    feeHeadCode?: string;
+    feeStructureBatch?: string;
+    feeStructureYear?: number | null;
   }) => {
     const response = await api.post(`/payments/cashfree/order`, data);
     return response.data;
