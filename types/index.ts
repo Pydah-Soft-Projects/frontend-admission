@@ -497,12 +497,28 @@ export interface JoiningDocuments {
   rationCard?: JoiningDocumentStatus;
 }
 
+/** Per–fee-structure row overrides for a joining (persisted in joinings.lead_data._joiningStudentFeeDetails). */
+export interface JoiningStudentFeeLineOverride {
+  structureId: string;
+  /** Student-specific amount; omit or null to use the catalog (Fee Management) amount. */
+  amount?: number | null;
+  remarks?: string;
+}
+
+export interface JoiningStudentFeeDetails {
+  /** Batch (academic year) the overrides were last edited against — for context only. */
+  batch?: string;
+  lines: JoiningStudentFeeLineOverride[];
+}
+
 export interface Joining {
   _id: string;
   leadId?: string; // Made optional to support joinings without leads
   leadData?: any; // Snapshot of lead data stored in joining
   /** Extra answers from Form Builder fields not stored on joining columns (persisted in lead_data._joiningRegistrationExtras). */
   registrationFormData?: Record<string, unknown>;
+  /** Editable per-head fee amounts/notes for this student (persisted in lead_data._joiningStudentFeeDetails). */
+  studentFeeDetails?: JoiningStudentFeeDetails;
   status: JoiningStatus;
   courseInfo: JoiningCourseInfo;
   studentInfo: JoiningStudentInfo;

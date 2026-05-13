@@ -792,6 +792,7 @@ export default function JoiningDetailPage() {
           (lead as { academicYear?: number | string } | undefined)?.academicYear ?? null
         }
         description="Live from the Fee Management database. Pick a batch (academic year) from the dropdown — the table updates to that year's configured fees."
+        studentFeeDetails={joining.studentFeeDetails ?? { lines: [] }}
       />
     </div>
   );

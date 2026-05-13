@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { feeStructureAPI } from '@/lib/api';
-import type { FeeStructure } from '@/types';
+import type { FeeStructure, JoiningStudentFeeDetails, JoiningStudentFeeLineOverride } from '@/types';
 
 /**
  * Build the batch dropdown values: 3 past + current year + 3 future years.
@@ -121,6 +122,11 @@ export type FeeStructureSectionProps = {
    * Transactions buttons behave.
    */
   canUseCashfree?: boolean;
+  /** When true, show catalog vs student amount + remarks; changes persist with joining save (lead_data._joiningStudentFeeDetails). */
+  feeDetailsEditable?: boolean;
+  /** Current saved / in-progress overrides keyed by fee structure row id (`_id`). */
+  studentFeeDetails?: JoiningStudentFeeDetails | null;
+  onStudentFeeDetailsChange?: (next: JoiningStudentFeeDetails) => void;
 };
 
 /**
@@ -142,6 +148,9 @@ export function FeeStructureSection({
   onSelectFeeHead,
   activeFeeHeadId,
   canUseCashfree = true,
+  feeDetailsEditable = false,
+  studentFeeDetails,
+  onStudentFeeDetailsChange,
 }: FeeStructureSectionProps) {
   const resolvedCategory = useMemo(() => {
     return (category && category.trim()) || mapQuotaToCategory(quota);
@@ -222,6 +231,161 @@ export function FeeStructureSection({
     return [];
   }, [data]);
 
+  const hasEditableFees = Boolean(feeDetailsEditable && onStudentFeeDetailsChange);
+  /** Pencil first: open an edit panel, then Cash/Cashfree (joining workspace). */
+  const paymentViaEditPanel = Boolean(hasEditableFees && onSelectFeeHead);
+
+  /** Row id (`_id`) whose fee edit + payment panel is open. */
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  /** Draft values while the panel is open (committed on "Update line" or used when paying). */
+  const [editDraft, setEditDraft] = useState<{ amountStr: string; remarks: string }>({
+    amountStr: '',
+    remarks: '',
+  });
+
+  const lineOverrideByStructureId = useMemo(() => {
+    const m = new Map<string, JoiningStudentFeeLineOverride>();
+    for (const line of studentFeeDetails?.lines || []) {
+      const id = String(line.structureId || '').trim();
+      if (id) m.set(id, line);
+    }
+    return m;
+  }, [studentFeeDetails?.lines]);
+
+  const effectiveRowAmount = useCallback(
+    (row: FeeStructure) => {
+      const catalog = Number(row.amount) || 0;
+      const o = lineOverrideByStructureId.get(String(row._id));
+      if (o?.amount !== undefined && o?.amount !== null && Number.isFinite(Number(o.amount))) {
+        return Number(o.amount);
+      }
+      return catalog;
+    },
+    [lineOverrideByStructureId]
+  );
+
+  useEffect(() => {
+    if (!hasEditableFees || !onStudentFeeDetailsChange) return;
+    if (isLoading) return;
+    if (!queryEnabled || items.length === 0) return;
+    if ((studentFeeDetails?.batch || '') === selectedBatch) return;
+    setEditingRowId(null);
+    onStudentFeeDetailsChange({
+      batch: selectedBatch,
+      lines: (studentFeeDetails?.lines || []).filter((line) =>
+        items.some((it) => String(it._id) === String(line.structureId))
+      ),
+    });
+  }, [
+    hasEditableFees,
+    onStudentFeeDetailsChange,
+    isLoading,
+    queryEnabled,
+    items,
+    selectedBatch,
+    studentFeeDetails?.batch,
+  ]);
+
+  const patchStudentFeeLine = (row: FeeStructure, patch: Partial<Pick<JoiningStudentFeeLineOverride, 'amount' | 'remarks'>>) => {
+    if (!onStudentFeeDetailsChange) return;
+    const sid = String(row._id);
+    const catalog = Number(row.amount) || 0;
+    const lines = [...(studentFeeDetails?.lines || [])];
+    const idx = lines.findIndex((l) => String(l.structureId) === sid);
+    const prevLine: JoiningStudentFeeLineOverride =
+      idx >= 0
+        ? { ...lines[idx] }
+        : { structureId: sid, amount: null, remarks: '' };
+    const nextPartial = { ...prevLine, ...patch, structureId: sid };
+    const remarksStr = String(nextPartial.remarks ?? '').trim();
+    let amountVal: number | null | undefined = nextPartial.amount;
+    if (amountVal !== undefined && amountVal !== null && Number.isFinite(Number(amountVal))) {
+      amountVal = Number(amountVal);
+      if (amountVal === catalog) amountVal = null;
+    } else {
+      amountVal = null;
+    }
+    if (amountVal === null && !remarksStr) {
+      if (idx >= 0) lines.splice(idx, 1);
+    } else {
+      const merged: JoiningStudentFeeLineOverride = {
+        structureId: sid,
+        amount: amountVal ?? null,
+        remarks: remarksStr,
+      };
+      if (idx >= 0) lines[idx] = merged;
+      else lines.push(merged);
+    }
+    onStudentFeeDetailsChange({
+      batch: selectedBatch,
+      lines,
+    });
+  };
+
+  const buildSelection = useCallback(
+    (row: FeeStructure, mode: FeeHeadPaymentMode, amountOverride?: number): FeeHeadSelection => ({
+      feeHeadId: String(row._id),
+      feeHeadName: row.feeHeadName || '',
+      feeHeadCode: row.feeHeadCode || '',
+      amount:
+        amountOverride !== undefined && Number.isFinite(Number(amountOverride))
+          ? Number(amountOverride)
+          : effectiveRowAmount(row),
+      batch: selectedBatch,
+      studentYear: typeof row.studentYear === 'number' ? row.studentYear : null,
+      category: resolvedCategory || null,
+      label: [
+        row.feeHeadName || row.feeHeadCode || 'Fee head',
+        typeof row.studentYear === 'number' ? `Year ${row.studentYear}` : null,
+        selectedBatch ? `Batch ${selectedBatch}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      mode,
+    }),
+    [effectiveRowAmount, selectedBatch, resolvedCategory]
+  );
+
+  const openEditRow = (row: FeeStructure) => {
+    const sid = String(row._id);
+    if (editingRowId === sid) {
+      setEditingRowId(null);
+      return;
+    }
+    setEditingRowId(sid);
+    const o = lineOverrideByStructureId.get(sid);
+    setEditDraft({
+      // Always start with a concrete amount (catalog or override) so the input is never "undefined".
+      amountStr: String(effectiveRowAmount(row) || 0),
+      remarks: typeof o?.remarks === 'string' ? o.remarks : '',
+    });
+  };
+
+  const applyEditDraftForRow = (row: FeeStructure) => {
+    const v = editDraft.amountStr.trim();
+    const remarks = editDraft.remarks;
+    const fallback = Number(effectiveRowAmount(row)) || Number(row.amount) || 0;
+    const n = v === '' ? fallback : Number(v);
+    if (Number.isFinite(n) && n >= 0) patchStudentFeeLine(row, { amount: n, remarks });
+  };
+
+  const payFromPanel = (row: FeeStructure, mode: FeeHeadPaymentMode) => {
+    if (!onSelectFeeHead) return;
+    const catalog = Number(row.amount) || 0;
+    const v = editDraft.amountStr.trim();
+    let payAmount = catalog;
+    if (v !== '') {
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) payAmount = n;
+    }
+    patchStudentFeeLine(row, {
+      amount: payAmount,
+      remarks: editDraft.remarks,
+    });
+    onSelectFeeHead(buildSelection(row, mode, payAmount));
+    setEditingRowId(null);
+  };
+
   const grouped = useMemo(() => {
     const map = new Map<number | string, FeeStructure[]>();
     for (const item of items) {
@@ -238,8 +402,8 @@ export function FeeStructureSection({
   }, [items]);
 
   const grandTotal = useMemo(
-    () => items.reduce((sum, row) => sum + (row.amount || 0), 0),
-    [items]
+    () => items.reduce((sum, row) => sum + effectiveRowAmount(row), 0),
+    [items, effectiveRowAmount]
   );
 
   return (
@@ -266,6 +430,13 @@ export function FeeStructureSection({
             {title}
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</p>
+          {hasEditableFees ? (
+            <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+              {paymentViaEditPanel
+                ? 'Click the pencil on a row to set the student amount and notes, then use Cash or Cashfree to collect. Use Update line to save overrides without paying (included when you Save Draft).'
+                : 'Student-specific amounts and notes are saved with this joining when you Save Draft.'}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 dark:text-slate-300">
           {cleanCourse && (
@@ -331,7 +502,7 @@ export function FeeStructureSection({
             {grouped.map(([year, rows]) => {
               const yearLabel =
                 typeof year === 'number' ? `Year ${year}` : 'All Years';
-              const yearTotal = rows.reduce((sum, row) => sum + (row.amount || 0), 0);
+              const yearTotal = rows.reduce((sum, row) => sum + effectiveRowAmount(row), 0);
               const hasAnyTerms = rows.some((row) => row.terms && row.terms.length > 0);
               return (
                 <div
@@ -352,11 +523,23 @@ export function FeeStructureSection({
                         <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           <th className="px-4 py-2">Fee Head</th>
                           <th className="px-4 py-2">Code</th>
-                          <th className="px-4 py-2 text-right">Amount</th>
+                          <th className="px-4 py-2 text-right">{hasEditableFees ? 'Catalog' : 'Amount'}</th>
+                          {hasEditableFees && (
+                            <>
+                              <th className="px-4 py-2 text-right">Student (INR)</th>
+                              <th className="px-4 py-2 min-w-[140px]">Notes</th>
+                            </>
+                          )}
                           {hasAnyTerms && <th className="px-4 py-2">Terms</th>}
                           <th className="px-4 py-2 text-center">Scholarship?</th>
-                          {onSelectFeeHead && (
-                            <th className="px-4 py-2 text-right">Action</th>
+                          {(onSelectFeeHead || hasEditableFees) && (
+                            <th className="px-4 py-2 text-right">
+                              {paymentViaEditPanel
+                                ? 'Edit / pay'
+                                : hasEditableFees
+                                  ? 'Edit'
+                                  : 'Action'}
+                            </th>
                           )}
                         </tr>
                       </thead>
@@ -364,15 +547,29 @@ export function FeeStructureSection({
                         {rows.map((row) => {
                           const isActive =
                             !!activeFeeHeadId && String(activeFeeHeadId) === String(row._id);
+                          const sid = String(row._id);
+                          const isEditingRow = editingRowId === sid;
+                          const panelColSpan =
+                            3 +
+                            (hasEditableFees ? 2 : 0) +
+                            (hasAnyTerms ? 1 : 0) +
+                            1 +
+                            (onSelectFeeHead || hasEditableFees ? 1 : 0);
+                          const cashfreeTitle = canUseCashfree
+                            ? 'Collect this fee head via Cashfree UPI / QR'
+                            : 'Cashfree is not configured. Update Payment Settings to enable.';
+
                           return (
-                            <tr
-                              key={row._id}
-                              className={`border-t border-slate-100 align-top text-slate-700 transition dark:border-slate-800 dark:text-slate-200 ${
-                                isActive
-                                  ? 'bg-emerald-50/70 dark:bg-emerald-900/20'
-                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                              }`}
-                            >
+                            <Fragment key={sid}>
+                              <tr
+                                className={`border-t border-slate-100 align-top text-slate-700 transition dark:border-slate-800 dark:text-slate-200 ${
+                                  isActive
+                                    ? 'bg-emerald-50/70 dark:bg-emerald-900/20'
+                                    : isEditingRow
+                                      ? 'bg-slate-50/90 dark:bg-slate-800/50'
+                                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                                }`}
+                              >
                               <td className="px-4 py-3 font-medium">
                                 <div className="flex items-center gap-2">
                                   <span>{row.feeHeadName || '—'}</span>
@@ -392,8 +589,29 @@ export function FeeStructureSection({
                                 {row.feeHeadCode || '—'}
                               </td>
                               <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-slate-100">
-                                {formatCurrency(row.amount)}
+                                {hasEditableFees
+                                  ? formatCurrency(row.amount)
+                                  : formatCurrency(effectiveRowAmount(row))}
                               </td>
+                              {hasEditableFees && (
+                                <>
+                                  <td className="px-4 py-3 text-right font-semibold text-emerald-800 dark:text-emerald-200">
+                                    {formatCurrency(effectiveRowAmount(row))}
+                                  </td>
+                                  <td className="max-w-[11rem] px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
+                                    <span
+                                      className="line-clamp-2 break-words"
+                                      title={
+                                        lineOverrideByStructureId.get(String(row._id))?.remarks?.trim() ||
+                                        undefined
+                                      }
+                                    >
+                                      {lineOverrideByStructureId.get(String(row._id))?.remarks?.trim() ||
+                                        '—'}
+                                    </span>
+                                  </td>
+                                </>
+                              )}
                               {hasAnyTerms && (
                                 <td className="px-4 py-3">
                                   {row.terms && row.terms.length > 0 ? (
@@ -431,104 +649,205 @@ export function FeeStructureSection({
                                   </span>
                                 )}
                               </td>
-                              {onSelectFeeHead && (
+                              {(onSelectFeeHead || hasEditableFees) && (
                                 <td className="px-4 py-3 text-right">
-                                  {(() => {
-                                    /**
-                                     * Build the selection payload once per row so both buttons
-                                     * (Cash + Cashfree) emit identical fee-head identity.
-                                     * Only `mode` differs between the two.
-                                     */
-                                    const buildSelection = (
-                                      mode: FeeHeadPaymentMode
-                                    ): FeeHeadSelection => ({
-                                      feeHeadId: String(row._id),
-                                      feeHeadName: row.feeHeadName || '',
-                                      feeHeadCode: row.feeHeadCode || '',
-                                      amount: Number(row.amount) || 0,
-                                      batch: selectedBatch,
-                                      studentYear:
-                                        typeof row.studentYear === 'number'
-                                          ? row.studentYear
-                                          : null,
-                                      category: resolvedCategory || null,
-                                      label: [
-                                        row.feeHeadName || row.feeHeadCode || 'Fee head',
-                                        typeof row.studentYear === 'number'
-                                          ? `Year ${row.studentYear}`
-                                          : null,
-                                        selectedBatch ? `Batch ${selectedBatch}` : null,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(' · '),
-                                      mode,
-                                    });
-                                    const cashfreeTitle = canUseCashfree
-                                      ? 'Collect this fee head via Cashfree UPI / QR'
-                                      : 'Cashfree is not configured. Update Payment Settings to enable.';
-                                    return (
-                                      <div className="flex flex-wrap items-center justify-end gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => onSelectFeeHead(buildSelection('cash'))}
-                                          className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
-                                          aria-label={`Record cash payment for ${
-                                            row.feeHeadName || 'this fee head'
-                                          }`}
-                                          title="Record cash payment"
+                                  {hasEditableFees ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditRow(row)}
+                                      className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-200"
+                                      aria-label={`Edit student amount for ${row.feeHeadName || 'fee head'}`}
+                                      title="Edit amount and notes"
+                                    >
+                                      <Pencil className="h-4 w-4" aria-hidden />
+                                    </button>
+                                  ) : onSelectFeeHead ? (
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => onSelectFeeHead(buildSelection(row, 'cash'))}
+                                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                                        aria-label={`Record cash payment for ${
+                                          row.feeHeadName || 'this fee head'
+                                        }`}
+                                        title="Record cash payment"
+                                      >
+                                        <svg
+                                          className="h-3.5 w-3.5"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                          aria-hidden="true"
                                         >
-                                          <svg
-                                            className="h-3.5 w-3.5"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden="true"
-                                          >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              strokeWidth={2}
-                                              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8v8m0 0v2m0-10V4m-7 8a7 7 0 1014 0 7 7 0 00-14 0z"
-                                            />
-                                          </svg>
-                                          Cash
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => onSelectFeeHead(buildSelection('online'))}
-                                          disabled={!canUseCashfree}
-                                          className={`inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400/60 ${
-                                            canUseCashfree
-                                              ? 'border-blue-300 bg-white text-blue-700 hover:border-blue-400 hover:bg-blue-50 dark:border-blue-900/60 dark:bg-slate-900/70 dark:text-blue-200 dark:hover:bg-blue-950/40'
-                                              : 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-500'
-                                          }`}
-                                          aria-label={`Collect ${
-                                            row.feeHeadName || 'this fee head'
-                                          } via Cashfree`}
-                                          title={cashfreeTitle}
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8v8m0 0v2m0-10V4m-7 8a7 7 0 1014 0 7 7 0 00-14 0z"
+                                          />
+                                        </svg>
+                                        Cash
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => onSelectFeeHead(buildSelection(row, 'online'))}
+                                        disabled={!canUseCashfree}
+                                        className={`inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400/60 ${
+                                          canUseCashfree
+                                            ? 'border-blue-300 bg-white text-blue-700 hover:border-blue-400 hover:bg-blue-50 dark:border-blue-900/60 dark:bg-slate-900/70 dark:text-blue-200 dark:hover:bg-blue-950/40'
+                                            : 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-500'
+                                        }`}
+                                        aria-label={`Collect ${
+                                          row.feeHeadName || 'this fee head'
+                                        } via Cashfree`}
+                                        title={cashfreeTitle}
+                                      >
+                                        <svg
+                                          className="h-3.5 w-3.5"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                          aria-hidden="true"
                                         >
-                                          <svg
-                                            className="h-3.5 w-3.5"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden="true"
-                                          >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              strokeWidth={2}
-                                              d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"
-                                            />
-                                          </svg>
-                                          Cashfree
-                                        </button>
-                                      </div>
-                                    );
-                                  })()}
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"
+                                          />
+                                        </svg>
+                                        Cashfree
+                                      </button>
+                                    </div>
+                                  ) : null}
                                 </td>
                               )}
                             </tr>
+                            {hasEditableFees && isEditingRow && (
+                              <tr className="border-t border-emerald-100 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/25">
+                                <td colSpan={panelColSpan} className="px-4 py-4">
+                                  <div className="flex flex-col gap-4 rounded-xl border border-emerald-200 bg-white p-4 shadow-inner dark:border-emerald-900/50 dark:bg-slate-900/80">
+                                    <div className="flex flex-wrap items-end gap-4">
+                                      <div className="min-w-[10rem] flex-1">
+                                        <label
+                                          htmlFor={`fee-edit-amt-${sid}`}
+                                          className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                                        >
+                                          Student amount (INR)
+                                        </label>
+                                        <input
+                                          id={`fee-edit-amt-${sid}`}
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 dark:border-emerald-900/50 dark:bg-slate-900/80 dark:text-slate-100"
+                                          value={editDraft.amountStr}
+                                          placeholder={String(Number(row.amount) || 0)}
+                                          onChange={(event) =>
+                                            setEditDraft((d) => ({
+                                              ...d,
+                                              amountStr: event.target.value,
+                                            }))
+                                          }
+                                          aria-label={`Student amount for ${row.feeHeadName || 'fee head'}`}
+                                        />
+                                      </div>
+                                      <div className="min-w-[14rem] flex-[2]">
+                                        <label
+                                          htmlFor={`fee-edit-notes-${sid}`}
+                                          className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                                        >
+                                          Notes
+                                        </label>
+                                        <input
+                                          id={`fee-edit-notes-${sid}`}
+                                          type="text"
+                                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100"
+                                          value={editDraft.remarks}
+                                          onChange={(event) =>
+                                            setEditDraft((d) => ({
+                                              ...d,
+                                              remarks: event.target.value,
+                                            }))
+                                          }
+                                          placeholder="Concession / note"
+                                          aria-label={`Notes for ${row.feeHeadName || 'fee head'}`}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
+                                      <button
+                                        type="button"
+                                        onClick={() => applyEditDraftForRow(row)}
+                                        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-emerald-700"
+                                      >
+                                        Update line
+                                      </button>
+                                      {onSelectFeeHead ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => payFromPanel(row, 'cash')}
+                                            className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                                          >
+                                            <svg
+                                              className="h-3.5 w-3.5"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              aria-hidden="true"
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8v8m0 0v2m0-10V4m-7 8a7 7 0 1014 0 7 7 0 00-14 0z"
+                                              />
+                                            </svg>
+                                            Cash payment
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => payFromPanel(row, 'online')}
+                                            disabled={!canUseCashfree}
+                                            className={`inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400/60 ${
+                                              canUseCashfree
+                                                ? 'border-blue-300 bg-white text-blue-700 hover:border-blue-400 hover:bg-blue-50 dark:border-blue-900/60 dark:bg-slate-900/70 dark:text-blue-200 dark:hover:bg-blue-950/40'
+                                                : 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-500'
+                                            }`}
+                                            title={cashfreeTitle}
+                                          >
+                                            <svg
+                                              className="h-3.5 w-3.5"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              aria-hidden="true"
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"
+                                              />
+                                            </svg>
+                                            Cashfree
+                                          </button>
+                                        </>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingRowId(null)}
+                                        className="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400/50 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                                      >
+                                        Close
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
                           );
                         })}
                       </tbody>
@@ -540,7 +859,9 @@ export function FeeStructureSection({
 
             <div className="flex items-center justify-end gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
               <span className="font-semibold text-emerald-800 dark:text-emerald-100">
-                Total course fee (all configured years)
+                {hasEditableFees
+                  ? 'Total (student-specific amounts where set)'
+                  : 'Total course fee (all configured years)'}
               </span>
               <span className="text-lg font-bold text-emerald-900 dark:text-emerald-50">
                 {formatCurrency(grandTotal)}

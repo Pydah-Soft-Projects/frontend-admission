@@ -51,6 +51,7 @@ import {
   JoiningReservation,
   JoiningSibling,
   JoiningStatus,
+  JoiningStudentFeeDetails,
   Admission,
   Branch,
   PaymentSummary,
@@ -445,6 +446,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const [isEditMode, setIsEditMode] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
+  /** Per–fee-head student amounts/notes; persisted in joinings.lead_data._joiningStudentFeeDetails on Save Draft. */
+  const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({ lines: [] });
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [openPaymentMode, setOpenPaymentMode] = useState<'cash' | 'online' | null>(null);
@@ -729,6 +732,45 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     };
     setRegistrationExtras(next);
   }, [joiningRecord?._id, joiningRecord?.updatedAt, lead]);
+
+  useEffect(() => {
+    if (!joiningRecord?._id) return;
+    const sfd = joiningRecord.studentFeeDetails;
+    if (sfd && typeof sfd === 'object' && Array.isArray(sfd.lines)) {
+      setStudentFeeDetails({
+        batch: typeof sfd.batch === 'string' && sfd.batch.trim() ? sfd.batch.trim() : undefined,
+        lines: sfd.lines
+          .map((line) => {
+            const rawAmount = line.amount as unknown;
+            let amount: number | null = null;
+            if (rawAmount !== undefined && rawAmount !== null) {
+              if (typeof rawAmount === 'string' && rawAmount.trim() === '') {
+                amount = null;
+              } else {
+                const n =
+                  typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
+                amount = Number.isFinite(n) ? n : null;
+              }
+            }
+            return {
+              structureId: String(line.structureId || '').trim(),
+              amount,
+              remarks: typeof line.remarks === 'string' ? line.remarks : '',
+            };
+          })
+          .filter((l) => l.structureId),
+      });
+    } else {
+      setStudentFeeDetails({ lines: [] });
+    }
+  }, [joiningRecord?._id, joiningRecord?.updatedAt]);
+
+  const handleStudentFeeDetailsChange = useCallback((next: JoiningStudentFeeDetails) => {
+    setStudentFeeDetails({
+      batch: next.batch,
+      lines: Array.isArray(next.lines) ? next.lines : [],
+    });
+  }, []);
 
   const registrationLocationState = useMemo(
     () =>
@@ -2453,8 +2495,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         }
         return stripped;
       })(),
+      ...(!isPublicEdit
+        ? {
+            studentFeeDetails: {
+              batch: studentFeeDetails.batch,
+              lines: studentFeeDetails.lines || [],
+            },
+          }
+        : {}),
     };
-  }, [formState, courseSettings, registrationExtras, derivedCertificationStatus]);
+  }, [formState, courseSettings, registrationExtras, derivedCertificationStatus, isPublicEdit, studentFeeDetails]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -4298,6 +4348,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 onSelectFeeHead={canWritePayments ? handleSelectFeeHead : undefined}
                 activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
                 canUseCashfree={canUseCashfree}
+                feeDetailsEditable={canWriteJoining}
+                studentFeeDetails={studentFeeDetails}
+                onStudentFeeDetailsChange={handleStudentFeeDetailsChange}
               />
             )}
 
