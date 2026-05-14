@@ -71,6 +71,14 @@ export function isScholarshipStatusField(field: RegistrationFieldLike): boolean 
   return false;
 }
 
+/** Course & Quota values that drive automatic eligible / not-eligible registration answers. */
+export function scholarshipIntentForCourseQuota(quotaTrimmed: string): 'eligible' | 'not_eligible' | null {
+  const q = quotaTrimmed.trim();
+  if (q === 'Management') return 'not_eligible';
+  if (q === 'Convenor') return 'eligible';
+  return null;
+}
+
 function scoreOptionForIntent(
   opt: { value: string; label: string },
   intent: 'eligible' | 'not_eligible'
@@ -139,12 +147,11 @@ export function pickScholarshipRegistrationValueForQuota(
   quotaTrimmed: string,
   field: RegistrationFieldLike
 ): string | null {
-  const q = quotaTrimmed.trim();
-  if (q !== 'Management' && q !== 'Convenor') return null;
+  const intent = scholarshipIntentForCourseQuota(quotaTrimmed);
+  if (intent === null) return null;
   if (!isScholarshipStatusField(field)) return null;
 
   const ft = String(field.fieldType || '').toLowerCase();
-  const intent = q === 'Management' ? ('not_eligible' as const) : ('eligible' as const);
   const opts = normalizeRegistrationFieldOptions(field.options);
 
   if (CHOICE_TYPES.has(ft) && opts.length > 0) {
@@ -159,16 +166,15 @@ export function pickScholarshipRegistrationValueForQuota(
   return null;
 }
 
-/** All scholarship-style fields → stored values for the given quota (Management / Convenor only). */
+/** All scholarship-style fields → stored values for the given quota (Management / Convenor). */
 export function computeScholarshipRegistrationPatches(
   quotaTrimmed: string,
   fields: RegistrationFieldLike[]
 ): Record<string, string> {
-  const q = quotaTrimmed.trim();
-  if (q !== 'Management' && q !== 'Convenor') return {};
+  if (scholarshipIntentForCourseQuota(quotaTrimmed) === null) return {};
   const out: Record<string, string> = {};
   for (const raw of fields) {
-    const picked = pickScholarshipRegistrationValueForQuota(q, raw);
+    const picked = pickScholarshipRegistrationValueForQuota(quotaTrimmed, raw);
     const fn = String(raw.fieldName || '').trim();
     if (!picked || !fn) continue;
     out[fn] = picked;

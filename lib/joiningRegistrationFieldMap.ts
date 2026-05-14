@@ -18,8 +18,8 @@ export function normalizeJoiningDateOfBirthInput(value?: string): string {
 export type JoiningRegistrationFormStateLike = {
   studentInfo: { name?: string; phone?: string; gender?: string; dateOfBirth?: string };
   parents: {
-    father: { name?: string; phone?: string };
-    mother: { name?: string; phone?: string };
+    father: { name?: string; phone?: string; photo?: string };
+    mother: { name?: string; phone?: string; photo?: string };
   };
   address: {
     communication: {

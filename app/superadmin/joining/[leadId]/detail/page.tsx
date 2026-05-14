@@ -551,6 +551,16 @@ export default function JoiningDetailPage() {
                 <div className={`h-3 w-3 rounded-full ${joining.qualifications.ug ? 'bg-green-500' : 'bg-gray-300'}`} />
                 <span className="text-sm text-gray-700 dark:text-slate-300">UG</span>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700 dark:text-slate-300">Merit:</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-slate-100">
+                  {joining.qualifications.merit === true
+                    ? 'Yes'
+                    : joining.qualifications.merit === false
+                      ? 'No'
+                      : '—'}
+                </span>
+              </div>
               {joining.qualifications.mediums && joining.qualifications.mediums.length > 0 && (
                 <div className="mt-4">
                   <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">Mediums</p>

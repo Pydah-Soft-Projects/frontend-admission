@@ -749,10 +749,18 @@ export const leadAPI = {
 
 // Course & Branch API
 export const courseAPI = {
-  list: async (params?: { includeBranches?: boolean; showInactive?: boolean }) => {
+  list: async (params?: {
+    includeBranches?: boolean;
+    showInactive?: boolean;
+    /** Secondary DB `courses.college_id` filter. */
+    collegeId?: string;
+  }) => {
     const queryParams = new URLSearchParams();
     if (params?.includeBranches) queryParams.append('includeBranches', 'true');
     if (params?.showInactive) queryParams.append('showInactive', 'true');
+    if (params?.collegeId != null && String(params.collegeId).trim() !== '') {
+      queryParams.append('collegeId', String(params.collegeId).trim());
+    }
     const query = queryParams.toString();
     const response = await api.get(`/courses${query ? `?${query}` : ''}`);
     return response.data;
@@ -834,9 +842,16 @@ export const courseAPI = {
 
 // Payment Settings API
 export const paymentSettingsAPI = {
-  listCourseSettings: async (params?: { showInactive?: boolean }) => {
+  listCourseSettings: async (params?: {
+    showInactive?: boolean;
+    /** Secondary DB `courses.college_id` filter. */
+    collegeId?: string;
+  }) => {
     const queryParams = new URLSearchParams();
     if (params?.showInactive) queryParams.append('showInactive', 'true');
+    if (params?.collegeId != null && String(params.collegeId).trim() !== '') {
+      queryParams.append('collegeId', String(params.collegeId).trim());
+    }
     const query = queryParams.toString();
     const response = await api.get(`/payments/settings${query ? `?${query}` : ''}`);
     return response.data;

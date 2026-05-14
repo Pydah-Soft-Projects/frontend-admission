@@ -899,6 +899,16 @@ export default function AdmissionDetailPage() {
                   <div className={`h-3 w-3 rounded-full ${admission.qualifications.ug ? 'bg-green-500' : 'bg-gray-300'}`} />
                   <span className="text-sm text-gray-700 dark:text-slate-300">UG</span>
                 </div>
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <span className="text-sm text-gray-700 dark:text-slate-300">Merit</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {admission.qualifications.merit === true
+                      ? 'Yes'
+                      : admission.qualifications.merit === false
+                        ? 'No'
+                        : '—'}
+                  </span>
+                </div>
               </div>
             </div>
             {admission.qualifications.mediums && admission.qualifications.mediums.length > 0 && (
