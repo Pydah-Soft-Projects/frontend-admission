@@ -89,7 +89,7 @@ jobs:
             
             sudo mkdir -p \$DEPLOY_PATH/releases; \
             sudo mkdir -p \$RELEASE_PATH; \
-            sudo chown -R $(whoami):$(whoami) \$DEPLOY_PATH; \
+            sudo chown -R \$(whoami):\$(whoami) \$DEPLOY_PATH; \
             
             # Extract new deployment
             tar -xzf /tmp/deploy.tar.gz -C \$RELEASE_PATH; \
