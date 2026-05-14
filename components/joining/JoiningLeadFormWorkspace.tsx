@@ -35,8 +35,12 @@ import {
   type CertificateChecklistStoredValue,
 } from '@/lib/certificateChecklistEntry';
 import { coerceJoiningRegistrationField } from '@/lib/joiningRegistrationFieldCoerce';
+import { isJoiningStudentPortraitUploadField } from '@/lib/joiningRegistrationPhotoFields';
 import { mergeLeadIntoJoiningFormState, type LeadLike } from '@/lib/joiningLeadPrefill';
-import { computeScholarshipRegistrationPatches } from '@/lib/joiningScholarshipQuotaDefault';
+import {
+  computeScholarshipRegistrationPatches,
+  scholarshipIntentForCourseQuota,
+} from '@/lib/joiningScholarshipQuotaDefault';
 import {
   computeAcademicYearRegistrationPatches,
   resolveTotalYearsFromCourseSettings,
@@ -323,11 +327,13 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
         name: joining?.parents?.father?.name || '',
         phone: joining?.parents?.father?.phone || '',
         aadhaarNumber: joining?.parents?.father?.aadhaarNumber || '',
+        photo: joining?.parents?.father?.photo || '',
       },
       mother: {
         name: joining?.parents?.mother?.name || '',
         phone: joining?.parents?.mother?.phone || '',
         aadhaarNumber: joining?.parents?.mother?.aadhaarNumber || '',
+        photo: joining?.parents?.mother?.photo || '',
       },
     },
     reservation: {
@@ -363,6 +369,12 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       ssc: joining?.qualifications?.ssc || false,
       interOrDiploma: joining?.qualifications?.interOrDiploma || false,
       ug: joining?.qualifications?.ug || false,
+      merit:
+        joining?.qualifications?.merit === true
+          ? true
+          : joining?.qualifications?.merit === false
+            ? false
+            : null,
       mediums: resolvedMediums,
       otherMediumLabel: resolvedMediums.includes('other')
         ? joining?.qualifications?.otherMediumLabel || ''
@@ -600,7 +612,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   /** Management → not eligible; Convenor → eligible (registration fields whose name/label match scholarship). */
   useEffect(() => {
     const q = (formState.courseInfo.quota || '').trim();
-    if (q !== 'Management' && q !== 'Convenor') return;
+    if (scholarshipIntentForCourseQuota(q) === null) return;
     if (!sortedRegistrationFields.length) return;
     const patches = computeScholarshipRegistrationPatches(q, sortedRegistrationFields);
     if (!Object.keys(patches).length) return;
@@ -628,6 +640,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     () => joiningRegistrationDisplayFields.map((f: any) => coerceJoiningRegistrationField(f)),
     [joiningRegistrationDisplayFields]
   );
+
+  const studentPortraitRegistrationField = useMemo(() => {
+    return joiningRegistrationDisplayFieldsCoerced.find(
+      (f: { fieldType?: string; fieldName?: string; fieldLabel?: string }) =>
+        f.fieldType === 'file' && isJoiningStudentPortraitUploadField(f)
+    );
+  }, [joiningRegistrationDisplayFieldsCoerced]);
+
+  /** When the registration form includes a student portrait slot, submitting requires an upload. */
+  const isStudentPortraitMissing = useMemo(() => {
+    const key = String(studentPortraitRegistrationField?.fieldName || '').trim();
+    if (!key) return false;
+    const v = registrationExtras[key];
+    const s = v == null ? '' : String(v).trim();
+    return !s;
+  }, [registrationExtras, studentPortraitRegistrationField]);
 
   const registrationFormFieldsAllFilteredOut =
     sortedRegistrationFields.length > 0 && joiningRegistrationDisplayFields.length === 0;
@@ -980,18 +1008,55 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   }, [isPublicEdit, publicBootstrapQuery.data, programLevelsResponse]);
 
   const filteredCourseSettings = useMemo(() => {
+    const collegeKey = (selectedCollegeId || '').trim();
+    let list = courseSettings;
+    if (collegeKey) {
+      list = list.filter((item) => {
+        const cid =
+          item.course.collegeId !== undefined && item.course.collegeId !== null
+            ? String(item.course.collegeId).trim()
+            : '';
+        return cid === collegeKey;
+      });
+    }
     const pl = (formState.courseInfo.programLevel || '').trim();
     if (programLevels.length > 0 && !pl) {
       return [] as CoursePaymentSettings[];
     }
     if (!pl || programLevels.length === 0) {
-      return courseSettings;
+      return list;
     }
-    return courseSettings.filter((item) => {
+    return list.filter((item) => {
       const lv = item.course.level != null ? String(item.course.level).trim() : '';
       return lv === pl;
     });
-  }, [courseSettings, formState.courseInfo.programLevel, programLevels]);
+  }, [courseSettings, formState.courseInfo.programLevel, programLevels, selectedCollegeId]);
+
+  /** Managed course IDs must belong to the selected secondary college (`courses.college_id`). */
+  useEffect(() => {
+    const collegeKey = (selectedCollegeId || '').trim();
+    if (!collegeKey) return;
+    const courseId = String(formState.courseInfo.courseId || '').trim();
+    if (!courseId) return;
+    const setting = courseSettings.find(
+      (item) => String(item.course._id ?? '').trim() === courseId
+    );
+    if (!setting) return;
+    const rowCollege =
+      setting.course.collegeId !== undefined && setting.course.collegeId !== null
+        ? String(setting.course.collegeId).trim()
+        : '';
+    if (rowCollege === collegeKey) return;
+    setFormState((prev) => ({
+      ...prev,
+      courseInfo: {
+        ...prev.courseInfo,
+        courseId: undefined,
+        branchId: undefined,
+        branch: '',
+      },
+    }));
+  }, [selectedCollegeId, formState.courseInfo.courseId, courseSettings]);
 
   const programLevelTrimmed = (formState.courseInfo.programLevel || '').trim();
   const { data: certificateGuidanceResponse, isLoading: isLoadingCertificateGuidance } = useQuery({
@@ -1225,6 +1290,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
    */
   useEffect(() => {
     if (courseSettings.length === 0) return;
+    const collegeKey = (selectedCollegeId || '').trim();
+    const catalogForMatch = collegeKey
+      ? courseSettings.filter((item) => {
+          const c =
+            item.course.collegeId !== undefined && item.course.collegeId !== null
+              ? String(item.course.collegeId).trim()
+              : '';
+          return c === collegeKey;
+        })
+      : courseSettings;
+    if (collegeKey && catalogForMatch.length === 0) return;
     const courseLabel = (formState.courseInfo.course || '').trim();
     const branchLabel = (formState.courseInfo.branch || '').trim();
     const hasCourseId = Boolean((formState.courseInfo.courseId || '').toString().trim());
@@ -1268,14 +1344,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     if (hasCourseId) {
       // Caller already locked a courseId — only try to fill the branch / level.
       const cidTarget = String(formState.courseInfo.courseId ?? '').trim();
-      const setting = courseSettings.find(
+      const setting = catalogForMatch.find(
         (item) => String(item.course._id ?? '').trim() === cidTarget
       );
       if (setting) {
         considerCandidate({ setting, courseScore: 999, branch: null, branchScore: 0 });
       }
     } else {
-      for (const setting of courseSettings) {
+      for (const setting of catalogForMatch) {
         const courseName = norm(setting.course.name);
         const courseCode = norm(setting.course.code || '');
         let courseScore = 0;
@@ -1374,6 +1450,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     });
   }, [
     courseSettings,
+    selectedCollegeId,
     formState.courseInfo.course,
     formState.courseInfo.branch,
     formState.courseInfo.courseId,
@@ -2278,6 +2355,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     }));
   };
 
+  const setMeritQualification = (value: boolean | null) => {
+    setFormState((prev) => ({
+      ...prev,
+      qualifications: {
+        ...prev.qualifications,
+        merit: value,
+      },
+    }));
+  };
+
   const updateEducationHistory = (
     index: number,
     field: keyof JoiningEducationHistory,
@@ -2678,6 +2765,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const isUpdatingAdmission = updateAdmissionMutation.isPending;
 
   const canSubmit = canWriteJoining && status !== 'approved' && status !== 'pending_approval';
+  const submitBlockedByStudentPhoto =
+    status === 'draft' && Boolean(studentPortraitRegistrationField) && isStudentPortraitMissing;
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
   const isAdmissionEditable = canWriteJoining && status === 'approved';
   const admissionNumberDisplay =
@@ -3018,7 +3107,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           ))}
                         </select>
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          From secondary DB colleges list (same source family as courses).
+                          From secondary DB colleges list. Managed course/branch lists below are limited to
+                          courses linked to this college (<span className="font-mono">courses.college_id</span>).
                         </p>
                       </div>
                       {!programLevelTrimmed ? (
@@ -3092,8 +3182,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       ) : programLevelTrimmed ? (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
                           <p className="text-sm text-amber-800 dark:text-amber-200">
-                            No managed courses are tagged for this program level. Check course level values or payment
-                            configuration.
+                            {selectedCollegeId.trim()
+                              ? 'No managed courses for this program level at the selected college. Confirm courses.college_id and level in the secondary database, or pick another college.'
+                              : 'No managed courses are tagged for this program level. Check course level values or payment configuration.'}
                           </p>
                         </div>
                       ) : null}
@@ -3654,6 +3745,32 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       {item.label}
                     </label>
                   ))}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 dark:border-slate-600 dark:bg-slate-800/40">
+                    <p className="text-sm font-medium text-gray-800 dark:text-slate-200">Merit</p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Select Yes or No.</p>
+                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-700 dark:text-slate-300">
+                      <label className="inline-flex cursor-pointer items-center gap-2">
+                        <input
+                          type="radio"
+                          name="joining-merit"
+                          checked={formState.qualifications.merit === true}
+                          onChange={() => setMeritQualification(true)}
+                          className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Yes
+                      </label>
+                      <label className="inline-flex cursor-pointer items-center gap-2">
+                        <input
+                          type="radio"
+                          name="joining-merit"
+                          checked={formState.qualifications.merit === false}
+                          onChange={() => setMeritQualification(false)}
+                          className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        No
+                      </label>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -4376,10 +4493,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   {status === 'draft' && (
                     <Button
                       variant="primary"
-                      disabled={!canSubmit || isSubmitting}
+                      disabled={!canSubmit || isSubmitting || submitBlockedByStudentPhoto}
+                      title={
+                        submitBlockedByStudentPhoto
+                          ? 'Upload the student photo in Registration fields before submitting.'
+                          : undefined
+                      }
                       onClick={() => {
                         if (!canWriteJoining) {
                           showToast.error('You have read-only access to the joining desk');
+                          return;
+                        }
+                        if (submitBlockedByStudentPhoto) {
+                          showToast.error('Please upload the student photo before submitting for approval.');
                           return;
                         }
                         submitMutation.mutate();

@@ -77,6 +77,8 @@ export interface Course {
   name: string;
   code?: string;
   description?: string;
+  /** Secondary `student_database.courses.college_id` → `colleges.id` when present. */
+  collegeId?: string | null;
   /** Academic / program level from secondary `courses` (column or metadata). */
   level?: string | null;
   /** Program length in years from secondary `courses.total_years` when available. */
@@ -430,6 +432,8 @@ export interface JoiningParentInfo {
   name?: string;
   phone?: string;
   aadhaarNumber?: string;
+  /** Portrait from joining uploads: typically a data URL (`data:image/...;base64,...`), or a URL/filename string. */
+  photo?: string;
 }
 
 export interface JoiningReservation {
@@ -457,6 +461,8 @@ export interface JoiningQualifications {
   ssc?: boolean;
   interOrDiploma?: boolean;
   ug?: boolean;
+  /** Yes = true, No = false, not answered = null (persisted as SQL NULL when supported). */
+  merit?: boolean | null;
   mediums?: Array<'english' | 'telugu' | 'other'>;
   otherMediumLabel?: string;
 }

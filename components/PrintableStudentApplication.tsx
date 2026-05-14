@@ -525,6 +525,7 @@ function getPrintApplicationHtml(props: {
           <span class="cb-item">${checkbox(!!qualifications?.ssc)} SSC</span>
           <span class="cb-item">${checkbox(!!qualifications?.interOrDiploma)} Inter / Diploma</span>
           <span class="cb-item">${checkbox(!!qualifications?.ug)} UG</span>
+          <span class="cb-item">Merit: Yes ${checkbox(qualifications?.merit === true)} No ${checkbox(qualifications?.merit === false)}</span>
         </div>
       </div>
       <div class="form-row" style="padding-left: 20px;">

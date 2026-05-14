@@ -6,6 +6,11 @@ import { Input } from '@/components/ui/Input';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 import { isJoiningRegistrationCertificationStatusField } from '@/lib/joiningRegistrationFieldFilter';
+import {
+  isJoiningFatherPortraitFileField,
+  isJoiningMotherPortraitFileField,
+  isJoiningStudentPortraitUploadField,
+} from '@/lib/joiningRegistrationPhotoFields';
 
 export type RegistrationFormField = {
   _id?: string;
@@ -129,33 +134,76 @@ function isImageDataUrl(value: unknown): value is string {
   return typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
 }
 
-/** Student/applicant portrait — not parent docs or generic certificates. */
-function isStudentPhotoUploadField(field: RegistrationFormField): boolean {
-  if (field.fieldType !== 'file') return false;
-  const name = normKey(field.fieldName);
-  const label = normKey(field.fieldLabel);
-  if (
-    name.includes('father') ||
-    name.includes('mother') ||
-    name.includes('parent') ||
-    name.includes('guardian') ||
-    label.includes('father') ||
-    label.includes('mother') ||
-    label.includes('parent') ||
-    label.includes('guardian')
-  ) {
-    return false;
-  }
-  const hay = `${name} ${label}`;
-  if (hay.includes('aadhaar') || hay.includes('marksheet') || hay.includes('certificate')) return false;
-  if (name.includes('student_photo') || name.includes('studentphoto')) return true;
-  if (hay.includes('student') && (hay.includes('photo') || hay.includes('picture') || hay.includes('image'))) {
-    return true;
-  }
-  if (hay.includes('applicant') && (hay.includes('photo') || hay.includes('picture'))) return true;
-  if (hay.includes('passport') && hay.includes('photo')) return true;
-  if (hay.includes('profile') && hay.includes('photo')) return true;
-  return false;
+type PortraitSlotProps = {
+  label: string;
+  required?: boolean;
+  helpText?: string;
+  fieldName: string;
+  value: unknown;
+  onChange: (fieldName: string, value: unknown) => void;
+};
+
+function RegistrationPortraitSlot({ label, required, helpText, fieldName, value, onChange }: PortraitSlotProps) {
+  const fileLabel = String(value || '').trim();
+  const hasPreview = isImageDataUrl(value);
+  const inputId = `joining-reg-photo-${fieldName}`;
+  return (
+    <div className="flex min-w-0 flex-1 flex-col items-center rounded-xl border border-white/80 bg-white/70 p-4 shadow-inner dark:border-slate-600 dark:bg-slate-800/60">
+      <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-white bg-white/90 dark:border-slate-600 dark:bg-slate-800/90">
+        {hasPreview ? (
+          <img
+            src={String(value)}
+            alt={label}
+            className="h-full w-full object-cover"
+          />
+        ) : fileLabel ? (
+          <span className="px-2 text-center text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+            File selected
+          </span>
+        ) : (
+          <Camera className="h-9 w-9 text-blue-400 dark:text-blue-500" aria-hidden />
+        )}
+      </div>
+      <p className="mt-3 text-center text-xs font-semibold text-gray-900 dark:text-slate-100">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : <span className="font-normal text-slate-500"> (optional)</span>}
+      </p>
+      {helpText ? <p className="mt-1 text-center text-[10px] text-gray-600 dark:text-slate-400">{helpText}</p> : null}
+      {fileLabel && !hasPreview ? (
+        <p className="mt-1 max-w-full truncate text-center text-[10px] font-medium text-blue-800 dark:text-blue-300" title={fileLabel}>
+          {fileLabel}
+        </p>
+      ) : null}
+      <div className="mt-3 w-full">
+        <input
+          id={inputId}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = typeof reader.result === 'string' ? reader.result : '';
+              onChange(fieldName, result || file.name);
+            };
+            reader.onerror = () => {
+              onChange(fieldName, file.name);
+            };
+            reader.readAsDataURL(file);
+          }}
+        />
+        <label
+          htmlFor={inputId}
+          className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
+        >
+          <ImagePlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {fileLabel ? 'Change' : 'Choose'}
+        </label>
+      </div>
+    </div>
+  );
 }
 
 type Props = {
@@ -197,6 +245,21 @@ export function JoiningDynamicRegistrationFields({
   const sorted = useMemo(() => {
     return [...fields].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   }, [fields]);
+
+  /** When we render the combined student + parent portrait row, skip standalone father/mother file fields. */
+  const portraitSiblingSkip = useMemo(() => {
+    const skip = new Set<string>();
+    const hasStudentSlot = sorted.some(
+      (f) => f.fieldType === 'file' && isJoiningStudentPortraitUploadField(f)
+    );
+    if (!hasStudentSlot) return skip;
+    for (const f of sorted) {
+      if (f.fieldType === 'file' && (isJoiningFatherPortraitFileField(f) || isJoiningMotherPortraitFileField(f))) {
+        if (f.fieldName) skip.add(f.fieldName);
+      }
+    }
+    return skip;
+  }, [sorted]);
 
   // Batch year dropdown setup — same window as the Fee Structure section so both surfaces
   // stay aligned. The user can still pick any year inside the ±3 window; values outside
@@ -244,6 +307,9 @@ export function JoiningDynamicRegistrationFields({
       ) : null}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {sorted.map((field) => {
+          if (portraitSiblingSkip.has(field.fieldName)) {
+            return null;
+          }
           const rawVal = getValue(field.fieldName);
           const fieldValue =
             rawVal === undefined || rawVal === null ? '' : field.fieldType === 'checkbox' ? rawVal : String(rawVal);
@@ -501,76 +567,50 @@ export function JoiningDynamicRegistrationFields({
             );
           }
 
-          if (field.fieldType === 'file' && isStudentPhotoUploadField(field)) {
-            const fileLabel = String(fieldValue || '').trim();
-            const hasPreview = isImageDataUrl(fieldValue);
-            const inputId = `joining-reg-photo-${field.fieldName}`;
+          if (field.fieldType === 'file' && isJoiningStudentPortraitUploadField(field)) {
+            const fatherField = sorted.find((f) => isJoiningFatherPortraitFileField(f)) ?? null;
+            const motherField = sorted.find((f) => isJoiningMotherPortraitFileField(f)) ?? null;
+            const fatherKey = fatherField?.fieldName || 'father_photo';
+            const motherKey = motherField?.fieldName || 'mother_photo';
+            const fatherLabel = (fatherField?.fieldLabel || '').trim() || 'Father photo';
+            const motherLabel = (motherField?.fieldLabel || '').trim() || 'Mother photo';
+
             return (
               <div key={field._id || field.fieldName} className="md:col-span-2">
                 <div className="rounded-2xl border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50/90 to-indigo-50/60 p-6 shadow-sm dark:border-blue-600/70 dark:from-slate-900/80 dark:to-slate-900/40">
-                  <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-                    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border-2 border-white bg-white/90 shadow-inner dark:border-slate-600 dark:bg-slate-800/90">
-                      {hasPreview ? (
-                        <img
-                          src={String(fieldValue)}
-                          alt={field.fieldLabel || 'Student photo'}
-                          className="h-full w-full rounded-xl object-cover"
-                        />
-                      ) : fileLabel ? (
-                        <span className="px-2 text-center text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                          File selected
-                        </span>
-                      ) : (
-                        <Camera className="h-10 w-10 text-blue-400 dark:text-blue-500" aria-hidden />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 text-center sm:text-left">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                        {field.fieldLabel}
-                        {isFieldRequired ? <span className="text-red-500"> *</span> : null}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-600 dark:text-slate-400">
-                        Passport-style photo (JPG / PNG). Max one file; the file name is stored with the draft.
-                      </p>
-                      {fileLabel ? (
-                        <p className="mt-2 truncate text-xs font-medium text-blue-800 dark:text-blue-300" title={fileLabel}>
-                          {fileLabel}
-                        </p>
-                      ) : null}
-                      {field.helpText ? (
-                        <p className="mt-2 text-xs text-gray-500 dark:text-slate-500">{field.helpText}</p>
-                      ) : null}
-                      <div className="mt-4">
-                        <input
-                          id={inputId}
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          className="sr-only"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              const result = typeof reader.result === 'string' ? reader.result : '';
-                              // Keep compatibility with secondary DB longtext photo storage.
-                              onChange(field.fieldName, result || file.name);
-                            };
-                            reader.onerror = () => {
-                              onChange(field.fieldName, file.name);
-                            };
-                            reader.readAsDataURL(file);
-                          }}
-                        />
-                        <label
-                          htmlFor={inputId}
-                          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
-                        >
-                          <ImagePlus className="h-4 w-4 shrink-0" aria-hidden />
-                          {fileLabel ? 'Change photo' : 'Choose photo'}
-                        </label>
-                      </div>
-                    </div>
+                  <p className="mb-1 text-center text-sm font-semibold text-gray-900 dark:text-slate-100 sm:text-left">
+                    Applicant & parent photos
+                  </p>
+                  <p className="mb-4 text-center text-xs text-gray-600 dark:text-slate-400 sm:text-left">
+                    Student photo is required. Father and mother photos are optional.
+                  </p>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between md:gap-4">
+                    <RegistrationPortraitSlot
+                      label={field.fieldLabel || 'Student photo'}
+                      required
+                      helpText="Passport-style (JPG / PNG / WebP)."
+                      fieldName={field.fieldName}
+                      value={fieldValue}
+                      onChange={onChange}
+                    />
+                    <RegistrationPortraitSlot
+                      label={fatherLabel}
+                      helpText="Optional."
+                      fieldName={fatherKey}
+                      value={getValue(fatherKey)}
+                      onChange={onChange}
+                    />
+                    <RegistrationPortraitSlot
+                      label={motherLabel}
+                      helpText="Optional."
+                      fieldName={motherKey}
+                      value={getValue(motherKey)}
+                      onChange={onChange}
+                    />
                   </div>
+                  {field.helpText ? (
+                    <p className="mt-3 text-center text-xs text-gray-500 dark:text-slate-500 sm:text-left">{field.helpText}</p>
+                  ) : null}
                 </div>
               </div>
             );
