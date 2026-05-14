@@ -21,7 +21,7 @@ import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
-import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
+import { AdmissionStepTwoPanel } from '@/components/admission/AdmissionStepTwoPanel';
 import {
   cleanRegistrationFieldEntries,
   formatRegistrationFieldLabel,
@@ -270,7 +270,30 @@ export default function AdmissionDetailPage() {
             {admission?.status && ` • ${formatAdmissionStatus(admission.status)}`}
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          {admission && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={isAdmissionCancelled || !admission.joiningId}
+              title={
+                isAdmissionCancelled
+                  ? 'Admission cancelled — Step 2 is not available'
+                  : admission.joiningId
+                    ? 'Scroll to certificate checklist and fee lines on this page'
+                    : 'No joining record linked — Step 2 is available once a joining is linked'
+              }
+              onClick={() => {
+                if (isAdmissionCancelled || !admission.joiningId) return;
+                document
+                  .getElementById('admission-step-two')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              Step 2
+            </Button>
+          )}
           {admission && (
             <PrintableStudentApplication
               application={admission}
@@ -1216,14 +1239,16 @@ export default function AdmissionDetailPage() {
         </div>
       )}
 
-      {/* Fee Structure (Fee Management DB) */}
-      <FeeStructureSection
-        course={admission.courseInfo?.course || ''}
-        branch={admission.courseInfo?.branch || ''}
-        quota={admission.courseInfo?.quota || ''}
-        batch={resolveBatch(admission, lead)}
-        description="Live from the Fee Management database (feestructures + feeheads). Matched against the student's course, branch, quota and admission batch."
-      />
+      {admission.joiningId && admission._id && !isAdmissionCancelled ? (
+        <AdmissionStepTwoPanel
+          joiningId={admission.joiningId}
+          admissionId={admission._id}
+          course={admission.courseInfo?.course || ''}
+          branch={admission.courseInfo?.branch || ''}
+          quota={admission.courseInfo?.quota || ''}
+          batch={resolveBatch(admission, lead)}
+        />
+      ) : null}
     </div>
   );
 }
