@@ -1060,8 +1060,8 @@ export default function UserLeadDetailPage() {
     }
 
     return Array.from(map.entries()).map(([num, labels]) => ({
-      label: labels.join(' & ') + (labels.length > 1 ? ' Nos' : ' No'),
-      number: num
+      number: num,
+      label: labels.join(' / ')
     }));
   }, [lead]);
 
@@ -3465,9 +3465,19 @@ export default function UserLeadDetailPage() {
                               }}
                               className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
                             />
-                            <div className="min-w-0">
+                            <div className="flex-1 min-w-0">
                               <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter truncate">{opt.label}</p>
-                              <p className="text-[10px] sm:text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{opt.number}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[10px] sm:text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{opt.number}</p>
+                                {(communicationStatsMap.get(opt.number)?.whatsappCount || 0) > 0 && (
+                                  <div className="flex items-center gap-1 px-1 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800">
+                                    <svg className="w-2.5 h-2.5 text-emerald-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Verified</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </label>
                         ))}

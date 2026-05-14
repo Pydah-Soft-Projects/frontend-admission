@@ -1023,9 +1023,16 @@ export const communicationAPI = {
     const response = await api.post(`/communications/lead/${leadId}/whatsapp`, data);
     return response.data;
   },
+  verifyWhatsAppContact: async (phone: string) => {
+    const response = await api.get(`/communications/whatsapp/verify?phone=${phone}`);
+    return response.data as {
+      success: boolean;
+      data: { status: 'valid' | 'invalid' | 'unknown'; waId?: string; input?: string };
+    };
+  },
   getHistory: async (
     leadId: string,
-    params?: { page?: number; limit?: number; type?: 'call' | 'sms' }
+    params?: { page?: number; limit?: number; type?: 'call' | 'sms' | 'whatsapp' }
   ) => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', String(params.page));
