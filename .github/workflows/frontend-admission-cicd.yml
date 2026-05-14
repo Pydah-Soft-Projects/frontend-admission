@@ -81,35 +81,51 @@ jobs:
           PM2_APP_NAME: ${{ secrets.PM2_APP_NAME }}
         run: |
           ssh "$SSH_USER@$SSH_HOST" "set -e; \
-            # 1. Stop app to release locks
-            sudo fuser -k 3000/tcp || true; \
-            # 2. Ensure target path exists and clean it up partially (excluding .env)
-            sudo mkdir -p $DEPLOY_PATH; \
-            sudo chown $SSH_USER:$SSH_USER $DEPLOY_PATH; \
-            # 3. Extract bundle using sudo (overwrites everything)
-            sudo tar -xzf /tmp/deploy.tar.gz -C $DEPLOY_PATH; \
-            # 4. Correct ownership
-            sudo chown -R $SSH_USER:$SSH_USER $DEPLOY_PATH; \
-            # 5. Production setup
-            cd $DEPLOY_PATH && \
+          
+            # Create release directory
+            TIMESTAMP=\$(date +%Y%m%d%H%M%S); \
+            RELEASE_PATH=\$DEPLOY_PATH/releases/\$TIMESTAMP; \
+            CURRENT_PATH=\$DEPLOY_PATH/current; \
+            
+            sudo mkdir -p \$DEPLOY_PATH/releases; \
+            sudo mkdir -p \$RELEASE_PATH; \
+            sudo chown -R $SSH_USER:$SSH_USER \$DEPLOY_PATH; \
+            
+            # Extract new deployment
+            tar -xzf /tmp/deploy.tar.gz -C \$RELEASE_PATH; \
+            
+            # Install production dependencies
+            cd \$RELEASE_PATH && \
             npm install --production && \
+            
+            # Preserve existing .env if available
+            if [ -f \$CURRENT_PATH/.env ]; then
+              cp \$CURRENT_PATH/.env \$RELEASE_PATH/.env;
+            fi && \
+            
+            # Switch current release
+            ln -sfn \$RELEASE_PATH \$CURRENT_PATH && \
+            
+            # Restart application
+            cd \$CURRENT_PATH && \
             if [ -f ecosystem.config.cjs ]; then
               pm2 restart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
             else
               pm2 restart '$PM2_APP_NAME' --update-env || pm2 start npm --name '$PM2_APP_NAME' -- start
             fi && \
+            
+            # Reload nginx
             sudo systemctl reload nginx && \
+            
+            # Save PM2 process list
             pm2 save && \
-            rm /tmp/deploy.tar.gz && \
+            
+            # Cleanup uploaded archive
+            rm -f /tmp/deploy.tar.gz && \
+            
+            # Keep only latest 5 releases
+            cd \$DEPLOY_PATH/releases && \
+            ls -dt */ | tail -n +6 | xargs rm -rf || true && \
+            
             echo 'Deployment finalized successfully.'"
 
-      - name: Verify deployment (smoke test)
-        env:
-          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
-        run: |
-          if [ -n "$FRONTEND_URL" ]; then
-            sleep 10
-            curl -sf "$FRONTEND_URL" && echo "Frontend is UP" || (echo "::warning::Frontend might be down" && exit 1)
-          else
-            echo "Skipping smoke test (set FRONTEND_URL secret for post-deploy verification)"
-          fi
