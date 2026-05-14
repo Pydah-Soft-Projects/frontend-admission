@@ -28,7 +28,7 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts';
-import { Check, ChevronDown, Download, Filter, FileSpreadsheet, Calendar, Search, Printer } from 'lucide-react';
+import { Check, ChevronDown, Download, Filter, FileSpreadsheet, Calendar, Search, Printer, Edit3, XCircle, Users, MessageSquare, PhoneCall, History, RefreshCw, ChevronRight, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import PrintVisitDiaryReport from '@/components/superadmin/PrintVisitDiaryReport';
 
 type TabType = 'calls' | 'conversions' | 'users' | 'abstract' | 'activityLogs' | 'visitDiary';
@@ -141,7 +141,7 @@ export default function ReportsPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('calls');
   const [callSubTab, setCallSubTab] = useState<'daily' | 'performance'>('daily');
-  const [visitSubTab, setVisitSubTab] = useState<'record' | 'history'>('history');
+  const [visitSubTab, setVisitSubTab] = useState<'record' | 'history' | 'edit' | 'leave'>('history');
   const [expandedDailyUsers, setExpandedDailyUsers] = useState<Set<string>>(new Set());
   const [expandedPerformanceUsers, setExpandedPerformanceUsers] = useState<Set<string>>(new Set());
   const [performanceSearch, setPerformanceSearch] = useState('');
@@ -149,6 +149,27 @@ export default function ReportsPage() {
   const [expandedVisitDiaryRows, setExpandedVisitDiaryRows] = useState<Set<string>>(new Set());
   const [queuedVisitLeads, setQueuedVisitLeads] = useState<{ lead: Lead; status: string }[]>([]);
   const [selectedVisitDate, setSelectedVisitDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [visitEdits, setVisitEdits] = useState<Record<string, { status: string; comment: string }>>({});
+  const [isSavingVisits, setIsSavingVisits] = useState(false);
+
+  const PRO_VISIT_STATUSES = [
+    'Interested',
+    'Not Interested',
+    'Visited',
+    'Wrong Data',
+    'Confirmed',
+    'Scheduled Revisit',
+    'Assigned'
+  ];
+
+  const normalizeVisitStatus = (status: string) => {
+    const s = String(status || '').trim();
+    if (!s || /^not\s*set$/i.test(s)) return 'Assigned';
+    const hit = PRO_VISIT_STATUSES.find(known => known.toLowerCase() === s.toLowerCase());
+    return hit || 'Assigned';
+  };
+
+
 
 
   /** Default to Student Counselor so the heavy summary loads a smaller cohort first. */
@@ -208,6 +229,16 @@ export default function ReportsPage() {
     abstractStateId: '',
     abstractDistrictId: '',
     abstractMandalId: '',
+  });
+
+  const { data: proLeaves, isLoading: isLoadingProLeaves } = useQuery({
+    queryKey: ['proLeaves', filters.userId, filters.startDate, filters.endDate],
+    queryFn: () => reportAPI.getProLeaves({
+      userId: filters.userId || undefined,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    enabled: activeTab === 'visitDiary' && (visitSubTab === 'history' || visitSubTab === 'leave'),
   });
 
   const handlePrintVisitDiary = useCallback(() => {
@@ -529,7 +560,7 @@ export default function ReportsPage() {
         userId: filters.userId || undefined,
         includeAssignmentDetails: true,
       }),
-    enabled: activeTab === 'visitDiary' && visitSubTab === 'history',
+    enabled: activeTab === 'visitDiary' && (visitSubTab === 'history' || visitSubTab === 'edit'),
     staleTime: 300_000,
   });
 
@@ -540,8 +571,19 @@ export default function ReportsPage() {
       const empNo = u.emp_no || masterUser?.emp_no || '-';
       const dept = u.department || masterUser?.department || '-';
 
-      return (u.visitDiaryUpdates || []).flatMap((day: any) => 
-        day.details.map((a: any) => ({
+      return (u.visitDiaryUpdates || []).flatMap((day: any) => {
+        if (day.isOnLeave) {
+          return [{
+            date: day.date,
+            proName: u.name || u.userName,
+            empNo: empNo,
+            department: dept,
+            isOnLeave: true,
+            leaveReason: day.leaveReason,
+            visitStatus: 'On Leave'
+          }];
+        }
+        return (day.details || []).map((a: any) => ({
           date: day.date,
           proName: u.name || u.userName,
           empNo: empNo,
@@ -550,9 +592,10 @@ export default function ReportsPage() {
           phone: a.phone,
           mandal: a.mandal || '-',
           village: a.village,
-          visitStatus: a.visitStatus || 'Assigned'
-        }))
-      );
+          visitStatus: a.visitStatus || 'Assigned',
+          logId: a.logId
+        }));
+      });
     });
   }, [visitDiaryAnalytics, users]);
 
@@ -2307,6 +2350,30 @@ export default function ReportsPage() {
               >
                 <Search className="w-3.5 h-3.5" />
                 Record
+              </button>
+              <button
+                onClick={() => setVisitSubTab('edit')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  visitSubTab === 'edit' 
+                    ? "bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                Edit
+              </button>
+              <button
+                onClick={() => setVisitSubTab('leave')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  visitSubTab === 'leave' 
+                    ? "bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Leave
               </button>
             </div>
           </div>
@@ -4745,13 +4812,13 @@ export default function ReportsPage() {
                                                       <td className="px-4 py-2 text-right">
                                                         <span className={cn(
                                                           "text-[9px] font-bold px-1.5 py-0.5 rounded",
-                                                          lead.visitStatus === 'Interested' || lead.visitStatus === 'Visited' ? "text-emerald-600 bg-emerald-50" :
-                                                          lead.visitStatus === 'Not Interested' || lead.visitStatus === 'Not Available' ? "text-red-600 bg-red-50" :
-                                                          lead.visitStatus === 'Confirmed' ? "text-blue-600 bg-blue-50" :
-                                                          lead.visitStatus === 'Scheduled Revisit' ? "text-orange-600 bg-orange-50" :
+                                                          normalizeVisitStatus(lead.visitStatus) === 'Interested' || normalizeVisitStatus(lead.visitStatus) === 'Visited' ? "text-emerald-600 bg-emerald-50" :
+                                                          normalizeVisitStatus(lead.visitStatus) === 'Not Interested' || normalizeVisitStatus(lead.visitStatus) === 'Wrong Data' ? "text-red-600 bg-red-50" :
+                                                          normalizeVisitStatus(lead.visitStatus) === 'Confirmed' ? "text-blue-600 bg-blue-50" :
+                                                          normalizeVisitStatus(lead.visitStatus) === 'Scheduled Revisit' ? "text-orange-600 bg-orange-50" :
                                                           "text-slate-500 bg-slate-50"
                                                         )}>
-                                                          {lead.visitStatus}
+                                                          {normalizeVisitStatus(lead.visitStatus)}
                                                         </span>
                                                       </td>
                                                     </tr>
@@ -4782,6 +4849,385 @@ export default function ReportsPage() {
                   )}
                 </div>
               </>
+            ) : visitSubTab === 'edit' ? (
+              <div className="space-y-4">
+                {isLoadingVisitDiaryAnalytics ? (
+                  <ReportDashboardSkeleton />
+                ) : visitDiaryAnalytics?.users && visitDiaryAnalytics.users.some((u: any) => (u.visitDiaryUpdates?.length ?? 0) > 0) ? (
+                  <div className="space-y-4">
+                    {visitDiaryAnalytics.users.filter((u: any) => (u.visitDiaryUpdates?.length ?? 0) > 0).map((u: any) => (
+                      <div key={`edit-${u.userId}`} className="overflow-hidden bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                                <span className="text-xs font-bold text-orange-600 uppercase">{u.name?.slice(0, 1)}</span>
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">{u.name || u.userName}</h4>
+                                <p className="text-[10px] text-slate-500 uppercase tracking-widest">{u.roleName}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {(u.visitDiaryUpdates || []).map((day: any) => {
+                            const rowKey = `edit-${u.userId}-${day.date}`;
+                            const isExpanded = expandedVisitDiaryRows.has(rowKey);
+                            const hasChanges = day.details.some((lead: any) => visitEdits[`${lead.leadId}`]);
+
+                            return (
+                              <div key={rowKey} className="flex flex-col">
+                                <div 
+                                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                  onClick={() => {
+                                    const next = new Set(expandedVisitDiaryRows);
+                                    if (next.has(rowKey)) next.delete(rowKey);
+                                    else next.add(rowKey);
+                                    setExpandedVisitDiaryRows(next);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", isExpanded && "rotate-180")} />
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                      {format(new Date(day.date + 'T12:00:00'), 'dd MMM yyyy')}
+                                    </span>
+                                    {hasChanges && (
+                                      <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold animate-pulse">
+                                        Pending Changes
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{day.details?.length || 0} Leads</span>
+                                    {isExpanded && hasChanges && (
+                                      <Button 
+                                        size="xs" 
+                                        className="h-7 px-3 bg-orange-500 hover:bg-orange-600 text-white border-0"
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          try {
+                                            setIsSavingVisits(true);
+                                            showToast.loading(`Saving changes for ${day.date}...`);
+                                            
+                                            const changesToSave = day.details
+                                              .filter((lead: any) => visitEdits[`${lead.leadId}`])
+                                              .map((lead: any) => ({
+                                                leadId: lead.leadId,
+                                                status: visitEdits[`${lead.leadId}`].status,
+                                                comment: visitEdits[`${lead.leadId}`].comment,
+                                                visitDate: day.date
+                                              }));
+
+                                            const promises = changesToSave.map((change: any) => 
+                                              leadAPI.addActivity(change.leadId, {
+                                                newStatus: change.status,
+                                                statusChannel: 'visit_status',
+                                                type: 'status_change',
+                                                comment: change.comment || `Visit status updated by Super Admin (Audit Edit) for ${format(new Date(day.date + 'T12:00:00'), 'MMM d, yyyy')}. Original update by ${u.name}.`
+                                              })
+                                            );
+
+                                            await Promise.all(promises);
+                                            showToast.success('Changes saved successfully');
+                                            
+                                            // Clear edits for these logs
+                                            const nextEdits = { ...visitEdits };
+                                            day.details.forEach((lead: any) => delete nextEdits[`${lead.leadId}`]);
+                                            setVisitEdits(nextEdits);
+                                            
+                                            queryClient.invalidateQueries({ queryKey: ['userAnalyticsVisitDiary'] });
+                                          } catch (err) {
+                                            showToast.error('Failed to save changes');
+                                          } finally {
+                                            setIsSavingVisits(false);
+                                          }
+                                        }}
+                                        disabled={isSavingVisits}
+                                      >
+                                        Save Changes
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {isExpanded && (
+                                  <div className="px-4 pb-4 bg-slate-50/30 dark:bg-slate-900/30">
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800 shadow-sm">
+                                      <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
+                                        <thead className="bg-slate-50 dark:bg-slate-900">
+                                          <tr>
+                                            <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Student Name</th>
+                                            <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400 w-32">Visit Status</th>
+                                            <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Audit Comment</th>
+                                            <th className="px-4 py-2 text-right text-[9px] font-bold uppercase text-slate-400 w-20">Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                                          {(day.details || []).map((lead: any, lIdx: number) => {
+                                            const edit = visitEdits[`${lead.leadId}`];
+                                            const currentStatus = normalizeVisitStatus(edit?.status || lead.visitStatus);
+                                            
+                                            return (
+                                              <tr key={lead.logId || lead.leadId || lIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30">
+                                                <td className="px-4 py-2">
+                                                  <div className="flex flex-col">
+                                                    <span className="text-xs font-medium text-slate-900 dark:text-slate-100">{lead.name}</span>
+                                                    <span className="text-[10px] text-slate-400">{lead.phone}</span>
+                                                  </div>
+                                                </td>
+                                                <td className="px-4 py-2">
+                                                  <select
+                                                    value={currentStatus}
+                                                    onChange={(e) => {
+                                                      setVisitEdits(prev => ({
+                                                        ...prev,
+                                                        [`${lead.leadId}`]: { 
+                                                          status: e.target.value, 
+                                                          comment: prev[`${lead.leadId}`]?.comment || '' 
+                                                        }
+                                                      }));
+                                                    }}
+                                                    className={cn(
+                                                      "text-[10px] font-bold px-1.5 py-1 rounded border-0 focus:ring-1 focus:ring-blue-500 bg-slate-50 dark:bg-slate-900",
+                                                      currentStatus === 'Interested' || currentStatus === 'Visited' ? "text-emerald-600" :
+                                                      currentStatus === 'Not Interested' || currentStatus === 'Not Available' ? "text-red-600" :
+                                                      currentStatus === 'Confirmed' ? "text-blue-600" :
+                                                      currentStatus === 'Scheduled Revisit' ? "text-orange-600" :
+                                                      "text-slate-500"
+                                                    )}
+                                                  >
+                                                    {PRO_VISIT_STATUSES.map(s => (
+                                                      <option key={s} value={s}>{s}</option>
+                                                    ))}
+                                                  </select>
+                                                </td>
+                                                <td className="px-4 py-2">
+                                                  <Input 
+                                                    placeholder="Add audit note..."
+                                                    value={edit?.comment || ''}
+                                                    onChange={(e) => {
+                                                      setVisitEdits(prev => ({
+                                                        ...prev,
+                                                        [`${lead.leadId}`]: { 
+                                                          status: currentStatus, 
+                                                          comment: e.target.value 
+                                                        }
+                                                      }));
+                                                    }}
+                                                    className="h-7 text-[10px] bg-transparent border-slate-100 dark:border-slate-700 focus:border-blue-400"
+                                                  />
+                                                </td>
+                                                <td className="px-4 py-2 text-right">
+                                                  {edit && (
+                                                    <Button 
+                                                      size="xs" 
+                                                      variant="ghost" 
+                                                      className="h-6 w-6 p-0 text-slate-400 hover:text-red-500"
+                                                      onClick={() => {
+                                                        const next = { ...visitEdits };
+                                                        delete next[`${lead.leadId}`];
+                                                        setVisitEdits(next);
+                                                      }}
+                                                    >
+                                                      <XCircle className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-24 text-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Edit3 className="w-8 h-8 text-slate-300" />
+                    </div>
+                    <h4 className="text-slate-900 dark:text-white font-bold">No Records to Edit</h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-[280px] mx-auto">Select a date range or PRO officer with visit history to begin editing outcomes.</p>
+                  </div>
+                )}
+              </div>
+            ) : visitSubTab === 'leave' ? (
+              <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Mark Leave Form */}
+                  <Card className="p-6 h-fit border-slate-200 dark:border-slate-800 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <Calendar className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Mark Leave</h3>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest">PRO Attendance</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block px-1">Select PRO</label>
+                        <select
+                          className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          value={filters.userId || ''}
+                          onChange={(e) => setFilters(prev => ({ ...prev, userId: e.target.value }))}
+                        >
+                          <option value="">Select an Officer</option>
+                          {users.filter((u: any) => String(u.roleName || u.role_name).toUpperCase() === 'PRO').map((u: any) => (
+                            <option key={u.id || u._id} value={u.id || u._id}>{u.name || u.user_name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block px-1">Leave Date</label>
+                        <Input
+                          type="date"
+                          value={selectedVisitDate}
+                          onChange={(e) => setSelectedVisitDate(e.target.value)}
+                          className="h-10 text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block px-1">Reason (Optional)</label>
+                        <Input
+                          placeholder="Ex: Medical, Personal..."
+                          value={visitEdits['leave-reason']?.comment || ''}
+                          onChange={(e) => setVisitEdits(prev => ({ ...prev, 'leave-reason': { status: '', comment: e.target.value } }))}
+                          className="h-10 text-xs"
+                        />
+                      </div>
+
+                      <Button
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 mt-2"
+                        disabled={!filters.userId || !selectedVisitDate || isSavingVisits}
+                        onClick={async () => {
+                          try {
+                            setIsSavingVisits(true);
+                            showToast.loading('Marking leave...');
+                            await reportAPI.markProLeave({
+                              userId: filters.userId,
+                              date: selectedVisitDate,
+                              reason: visitEdits['leave-reason']?.comment || ''
+                            });
+                            showToast.success('Leave marked successfully');
+                            setVisitEdits(prev => {
+                              const next = { ...prev };
+                              delete next['leave-reason'];
+                              return next;
+                            });
+                            queryClient.invalidateQueries({ queryKey: ['proLeaves'] });
+                            queryClient.invalidateQueries({ queryKey: ['userAnalyticsVisitDiary'] });
+                          } catch (err) {
+                            showToast.error('Failed to mark leave');
+                          } finally {
+                            setIsSavingVisits(false);
+                          }
+                        }}
+                      >
+                        {isSavingVisits ? 'Processing...' : 'Mark as On Leave'}
+                      </Button>
+                    </div>
+                  </Card>
+
+                  {/* Leave History Table */}
+                  <div className="lg:col-span-2">
+                    <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent Leave Records</h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Showing Last 30 Days</span>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
+                          <thead className="bg-slate-50/50 dark:bg-slate-900/50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Officer</th>
+                              <th className="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Date</th>
+                              <th className="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Reason</th>
+                              <th className="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                            {isLoadingProLeaves ? (
+                              <tr>
+                                <td colSpan={4} className="px-6 py-8 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                    <span className="text-xs text-slate-500 font-medium">Loading records...</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : proLeaves?.length > 0 ? (
+                              proLeaves.map((leave: any) => (
+                                <tr key={leave.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                  <td className="px-6 py-4">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-7 w-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                                        {leave.user_name?.slice(0, 1)}
+                                      </div>
+                                      <span className="text-xs font-bold text-slate-900 dark:text-white">{leave.user_name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                      {format(new Date(leave.leave_date + 'T12:00:00'), 'dd MMM yyyy')}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className="text-xs text-slate-500 italic">{leave.reason || 'No reason specified'}</span>
+                                  </td>
+                                  <td className="px-6 py-4 text-right">
+                                    <Button
+                                      size="xs"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                      onClick={async () => {
+                                        if (!confirm('Are you sure you want to remove this leave record?')) return;
+                                        try {
+                                          showToast.loading('Deleting record...');
+                                          await reportAPI.deleteProLeave(leave.id);
+                                          showToast.success('Record deleted');
+                                          queryClient.invalidateQueries({ queryKey: ['proLeaves'] });
+                                          queryClient.invalidateQueries({ queryKey: ['userAnalyticsVisitDiary'] });
+                                        } catch (err) {
+                                          showToast.error('Failed to delete');
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="px-6 py-12 text-center">
+                                  <p className="text-xs text-slate-500">No leave records found for the selected period.</p>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                 {!filters.userId ? (

@@ -61,16 +61,16 @@ export default function PrintVisitDiaryReport({
       groups[pro].records.push(item);
     });
 
-    // Sort records within each PRO group: Mandal -> Village -> Date
+    // Sort records within each PRO group: Date -> Mandal -> Village
     Object.values(groups).forEach(group => {
       group.records.sort((a, b) => {
+        const dateComp = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (dateComp !== 0) return dateComp;
+
         const mandalComp = (a.mandal || '').localeCompare(b.mandal || '');
         if (mandalComp !== 0) return mandalComp;
         
-        const villageComp = (a.village || '').localeCompare(b.village || '');
-        if (villageComp !== 0) return villageComp;
-        
-        return new Date(a.date).getTime() - new Date(b.date).getTime();
+        return (a.village || '').localeCompare(b.village || '');
       });
     });
     
@@ -139,23 +139,31 @@ export default function PrintVisitDiaryReport({
               </thead>
               <tbody>
                 {proData.records.map((row, idx) => (
-                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'transparent' : '#f8fafc' }}>
+                  <tr key={idx} style={{ backgroundColor: row.isOnLeave ? '#fff7ed' : (idx % 2 === 0 ? 'transparent' : '#f8fafc') }}>
                     <td style={{ ...thTdStyle, textAlign: 'center', color: '#000' }}>{idx + 1}</td>
                     <td style={thTdStyle}>{format(new Date(row.date + 'T12:00:00'), 'dd MMM yy')}</td>
-                    <td style={thTdStyle}><strong>{row.studentName}</strong></td>
-                    <td style={thTdStyle}>{row.phone}</td>
-                    <td style={thTdStyle}>{row.mandal}</td>
-                    <td style={thTdStyle}>{row.village}</td>
-                    <td style={thTdStyle}>
-                      <span style={{ 
-                        fontWeight: 'bold', 
-                        color: row.visitStatus === 'Interested' ? '#059669' : 
-                               row.visitStatus === 'Not Interested' ? '#dc2626' : 
-                               row.visitStatus === 'Confirmed' ? '#2563eb' : '#475569'
-                      }}>
-                        {row.visitStatus}
-                      </span>
-                    </td>
+                    {row.isOnLeave ? (
+                      <td colSpan={5} style={{ ...thTdStyle, color: '#c2410c', fontWeight: 'bold', fontSize: '11px' }}>
+                        ON LEAVE {row.leaveReason ? `— ${row.leaveReason}` : ''}
+                      </td>
+                    ) : (
+                      <>
+                        <td style={thTdStyle}><strong>{row.studentName}</strong></td>
+                        <td style={thTdStyle}>{row.phone}</td>
+                        <td style={thTdStyle}>{row.mandal}</td>
+                        <td style={thTdStyle}>{row.village}</td>
+                        <td style={thTdStyle}>
+                          <span style={{ 
+                            fontWeight: 'bold', 
+                            color: row.visitStatus === 'Interested' ? '#059669' : 
+                                   row.visitStatus === 'Not Interested' ? '#dc2626' : 
+                                   row.visitStatus === 'Confirmed' ? '#2563eb' : '#475569'
+                          }}>
+                            {row.visitStatus}
+                          </span>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
