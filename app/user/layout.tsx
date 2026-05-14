@@ -10,7 +10,7 @@ import { Loading } from '@/components/Loading';
 const navItems: (DashboardNavItem & { isActivity?: boolean; roles?: string[] })[] = [
   { href: '/user/dashboard', label: 'Dashboard', icon: HomeIcon },
   { href: '/user/leads', label: 'My Leads', icon: ListIcon },
-  { href: '/user/whatsapp/chat', label: 'WhatsApp Chat', icon: CommunicationsIcon },
+  { href: '/user/whatsapp/chat', label: 'WhatsApp Chat', icon: CommunicationsIcon, hideInBottomNav: true },
   { href: '/user/leads/add', label: 'Add Enquiry', icon: UserPlusIcon, hideInBottomNav: true },
   { href: '/user/visit-diary', label: 'Visit Diary', icon: BookIcon, roles: ['PRO'] },
 
@@ -77,7 +77,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
   return (
     <DashboardShell
       navItems={filteredNavItems}
-      title="Admissions Team"
+      title="WhatsApp Replies"
       description="Stay on top of your leads, follow-ups, and conversions."
       role={currentUser?.designation || 'Counsellor'}
       roleName={currentUser?.roleName}
