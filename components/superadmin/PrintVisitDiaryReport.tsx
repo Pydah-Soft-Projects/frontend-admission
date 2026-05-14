@@ -22,7 +22,7 @@ const tableStyle: React.CSSProperties = {
 };
 
 const thTdStyle: React.CSSProperties = {
-  border: '1px solid #e2e8f0',
+  border: '1px solid #000',
   padding: '6px 8px',
   textAlign: 'left',
 };
@@ -41,14 +41,39 @@ export default function PrintVisitDiaryReport({
   filters,
   data,
 }: Props) {
-  // Group data by PRO Name
+  // Group data by PRO Name and sort within each group
   const groupedData = useMemo(() => {
-    const groups: Record<string, any[]> = {};
+    const groups: Record<string, { 
+      empNo: string; 
+      department: string; 
+      records: any[];
+    }> = {};
+    
     data.forEach(item => {
       const pro = item.proName || 'Unassigned';
-      if (!groups[pro]) groups[pro] = [];
-      groups[pro].push(item);
+      if (!groups[pro]) {
+        groups[pro] = {
+          empNo: item.empNo || '-',
+          department: item.department || '-',
+          records: []
+        };
+      }
+      groups[pro].records.push(item);
     });
+
+    // Sort records within each PRO group: Date -> Mandal -> Village
+    Object.values(groups).forEach(group => {
+      group.records.sort((a, b) => {
+        const dateComp = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (dateComp !== 0) return dateComp;
+
+        const mandalComp = (a.mandal || '').localeCompare(b.mandal || '');
+        if (mandalComp !== 0) return mandalComp;
+        
+        return (a.village || '').localeCompare(b.village || '');
+      });
+    });
+    
     return groups;
   }, [data]);
 
@@ -72,8 +97,8 @@ export default function PrintVisitDiaryReport({
       </div>
 
       {Object.keys(groupedData).length > 0 ? (
-        Object.entries(groupedData).map(([proName, records], groupIdx) => (
-          <div key={groupIdx} style={{ pageBreakInside: 'avoid', marginBottom: '30px' }}>
+        Object.entries(groupedData).map(([proName, proData], proIdx) => (
+          <div key={proIdx} style={{ marginBottom: '30px' }}>
             <div style={{ 
               backgroundColor: '#f1f5f9', 
               padding: '6px 10px', 
@@ -81,21 +106,22 @@ export default function PrintVisitDiaryReport({
               marginBottom: '8px',
               display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              border: '1px solid #e2e8f0'
             }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
                 <h2 style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', color: '#1e293b' }}>
                   {proName}
                 </h2>
                 <span style={{ fontSize: '10px', color: '#64748b', backgroundColor: '#fff', padding: '1px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                  Emp No: {records[0]?.empNo || '-'}
+                  Emp No: {proData.empNo}
                 </span>
                 <span style={{ fontSize: '10px', color: '#64748b', backgroundColor: '#fff', padding: '1px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                  Dept: {records[0]?.department || '-'}
+                  Dept: {proData.department}
                 </span>
               </div>
-              <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 'medium' }}>
-                {records.length} Visits
+              <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 'bold' }}>
+                {proData.records.length} Visits
               </span>
             </div>
 
@@ -103,31 +129,41 @@ export default function PrintVisitDiaryReport({
               <thead>
                 <tr>
                   <th style={{ ...headerThStyle, width: '30px' }}>#</th>
-                  <th style={{ ...headerThStyle, width: '80px' }}>Date</th>
+                  <th style={{ ...headerThStyle, width: '70px' }}>Date</th>
                   <th style={headerThStyle}>Student Name</th>
                   <th style={headerThStyle}>Phone</th>
+                  <th style={headerThStyle}>Mandal</th>
                   <th style={headerThStyle}>Village/Location</th>
-                  <th style={{ ...headerThStyle, width: '110px' }}>Visit Status</th>
+                  <th style={{ ...headerThStyle, width: '100px' }}>Visit Status</th>
                 </tr>
               </thead>
               <tbody>
-                {records.map((row, idx) => (
-                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'transparent' : '#f8fafc' }}>
-                    <td style={thTdStyle}>{idx + 1}</td>
-                    <td style={thTdStyle}>{format(new Date(row.date + 'T12:00:00'), 'dd MMM yyyy')}</td>
-                    <td style={thTdStyle}><strong>{row.studentName}</strong></td>
-                    <td style={thTdStyle}>{row.phone}</td>
-                    <td style={thTdStyle}>{row.village}</td>
-                    <td style={thTdStyle}>
-                      <span style={{ 
-                        fontWeight: 'bold', 
-                        color: row.visitStatus === 'Interested' ? '#059669' : 
-                               row.visitStatus === 'Not Interested' ? '#dc2626' : 
-                               row.visitStatus === 'Confirmed' ? '#2563eb' : '#475569'
-                      }}>
-                        {row.visitStatus}
-                      </span>
-                    </td>
+                {proData.records.map((row, idx) => (
+                  <tr key={idx} style={{ backgroundColor: row.isOnLeave ? '#fff7ed' : (idx % 2 === 0 ? 'transparent' : '#f8fafc') }}>
+                    <td style={{ ...thTdStyle, textAlign: 'center', color: '#000' }}>{idx + 1}</td>
+                    <td style={thTdStyle}>{format(new Date(row.date + 'T12:00:00'), 'dd MMM yy')}</td>
+                    {row.isOnLeave ? (
+                      <td colSpan={5} style={{ ...thTdStyle, color: '#c2410c', fontWeight: 'bold', fontSize: '11px' }}>
+                        ON LEAVE {row.leaveReason ? `— ${row.leaveReason}` : ''}
+                      </td>
+                    ) : (
+                      <>
+                        <td style={thTdStyle}><strong>{row.studentName}</strong></td>
+                        <td style={thTdStyle}>{row.phone}</td>
+                        <td style={thTdStyle}>{row.mandal}</td>
+                        <td style={thTdStyle}>{row.village}</td>
+                        <td style={thTdStyle}>
+                          <span style={{ 
+                            fontWeight: 'bold', 
+                            color: row.visitStatus === 'Interested' ? '#059669' : 
+                                   row.visitStatus === 'Not Interested' ? '#dc2626' : 
+                                   row.visitStatus === 'Confirmed' ? '#2563eb' : '#475569'
+                          }}>
+                            {row.visitStatus}
+                          </span>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

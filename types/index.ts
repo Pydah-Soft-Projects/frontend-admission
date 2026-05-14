@@ -13,12 +13,12 @@ export interface User {
   _id: string;
   name: string;
   email: string;
-  mobileNumber?: string;
-  hrms_id?: string;
-  emp_no?: string;
+  mobileNumber?: string | null;
+  hrms_id?: string | null;
+  emp_no?: string | null;
   roleName: RoleName;
   designation?: string;
-  permissions?: Record<string, ModulePermission>;
+  permissions?: Record<string, any>;
   managedBy?: string | User;
   previousRoleName?: string;
   isManager?: boolean;
@@ -50,7 +50,7 @@ export interface CreateUserData {
   password: string;
   roleName: RoleName;
   designation?: string;
-  permissions?: Record<string, ModulePermission>;
+  permissions?: Record<string, any>;
   hrms_id?: string;
   emp_no?: string;
 }
@@ -58,17 +58,17 @@ export interface CreateUserData {
 export interface UpdateUserData {
   name?: string;
   email?: string;
-  mobileNumber?: string;
+  mobileNumber?: string | null;
   roleName?: RoleName;
   designation?: string;
   password?: string;
-  permissions?: Record<string, ModulePermission>;
+  permissions?: Record<string, any>;
   isActive?: boolean;
   isManager?: boolean;
   managedBy?: string | null;
   unassignLeads?: boolean;
-  hrms_id?: string;
-  emp_no?: string;
+  hrms_id?: string | null;
+  emp_no?: string | null;
 }
 
 // Course & Branch Types

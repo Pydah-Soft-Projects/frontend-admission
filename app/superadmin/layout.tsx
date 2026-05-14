@@ -60,7 +60,7 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
   { href: '/superadmin/communications/templates', label: 'Communications', icon: CommunicationsIcon, permissionKey: 'communications' },
   { href: '/superadmin/form-builder', label: 'Lead Form Builder', icon: TemplateIcon, permissionKey: 'formBuilder' },
   { href: '/superadmin/master-data', label: 'Districts & Mandals', icon: AcademicIcon, permissionKey: 'masterData' },
-  { href: '/superadmin/utm-builder', label: 'UTM Builder', icon: TemplateIcon, permissionKey: 'leads' },
+  { href: '/superadmin/utm-builder', label: 'UTM Builder', icon: TemplateIcon, permissionKey: 'utmBuilder' },
   { href: '/superadmin/visitors', label: 'Visitors', icon: UserIcon, permissionKey: 'visitors' },
   { href: '/superadmin/reports', label: 'Reports', icon: ReportIcon, permissionKey: 'reports' },
   { href: '/superadmin/profile', label: 'Profile & Settings', icon: UserIcon, permissionKey: 'dashboard' },
