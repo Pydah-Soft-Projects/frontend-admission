@@ -35,6 +35,9 @@ interface WhatsAppMessage {
   sent_at: string;
 }
 
+
+
+
 export default function WhatsAppChatPage() {
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
