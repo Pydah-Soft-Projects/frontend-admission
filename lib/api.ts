@@ -1210,6 +1210,14 @@ export const joiningAPI = {
     const response = await api.post(`/joinings/${leadId}`, data);
     return response.data;
   },
+  /** Approved joinings only: merge certificate registration extras + student fee lines into joining/admission lead_data. */
+  patchStepTwo: async (
+    leadId: string,
+    data: { registrationFormData?: Record<string, unknown>; studentFeeDetails?: unknown }
+  ) => {
+    const response = await api.patch(`/joinings/${leadId}/step-two`, data);
+    return response.data;
+  },
   submit: async (leadId: string) => {
     const response = await api.post(`/joinings/${leadId}/submit`);
     return response.data;

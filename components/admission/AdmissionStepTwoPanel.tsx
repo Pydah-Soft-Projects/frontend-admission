@@ -1,0 +1,307 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@/components/ui/Button';
+import { joiningAPI, courseAPI } from '@/lib/api';
+import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
+import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
+import { showToast } from '@/lib/toast';
+import { useModulePermission } from '@/components/layout/DashboardShell';
+import {
+  buildCertificateChecklistStoredValue,
+  certificateChecklistValuesEqual,
+  computeCertificationStatusFromChecklist,
+  listCertificateItemOptions,
+  parseCertificateChecklistEntry,
+  type CertificateChecklistStoredValue,
+} from '@/lib/certificateChecklistEntry';
+import { stripJoiningRedundantRegistrationExtras } from '@/lib/joiningRegistrationFieldFilter';
+import type {
+  CertificateGuidance,
+  Joining,
+  JoiningDocumentStatus,
+  JoiningStudentFeeDetails,
+} from '@/types';
+
+type AdmissionStepTwoPanelProps = {
+  joiningId: string;
+  admissionId: string;
+  course: string;
+  branch: string;
+  quota: string;
+  batch: string | null;
+  disabled?: boolean;
+};
+
+export function AdmissionStepTwoPanel({
+  joiningId,
+  admissionId,
+  course,
+  branch,
+  quota,
+  batch,
+  disabled = false,
+}: AdmissionStepTwoPanelProps) {
+  const queryClient = useQueryClient();
+  const joiningPerm = useModulePermission('joining');
+  const canWrite = joiningPerm.canWrite && !disabled;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['joining', joiningId],
+    queryFn: async () => joiningAPI.getByLeadId(joiningId),
+    enabled: Boolean(joiningId),
+  });
+
+  const joining = (data?.data?.joining ?? null) as Joining | null;
+
+  const programLevelTrimmed = (joining?.courseInfo?.programLevel || '').trim();
+
+  const { data: certificateGuidanceResponse, isLoading: isLoadingCertificateGuidance } = useQuery({
+    queryKey: ['courses', 'certificate-guidance', programLevelTrimmed, 'admission-step-two'],
+    enabled: Boolean(programLevelTrimmed),
+    queryFn: async () => courseAPI.getCertificateGuidance(programLevelTrimmed),
+  });
+
+  const certificateGuidance: CertificateGuidance | null = useMemo(() => {
+    const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
+    const inner =
+      envelope && typeof envelope === 'object' && 'data' in envelope
+        ? (envelope as { data: unknown }).data
+        : envelope;
+    if (!inner || typeof inner !== 'object') return null;
+    return inner as CertificateGuidance;
+  }, [certificateGuidanceResponse]);
+
+  const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
+  const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({
+    lines: [],
+    batch: '',
+  });
+
+  useEffect(() => {
+    if (!joining) return;
+    const rf = joining.registrationFormData;
+    setRegistrationExtras(rf && typeof rf === 'object' && !Array.isArray(rf) ? { ...rf } : {});
+    const sfd = joining.studentFeeDetails;
+    if (sfd && typeof sfd === 'object') {
+      setStudentFeeDetails({
+        batch: (sfd.batch != null ? String(sfd.batch) : '') || '',
+        lines: Array.isArray(sfd.lines) ? [...sfd.lines] : [],
+      });
+    } else {
+      setStudentFeeDetails({ lines: [], batch: '' });
+    }
+  }, [joining?._id, joining?.updatedAt]);
+
+  useEffect(() => {
+    const items = certificateGuidance?.items;
+    if (!items?.length || certificateGuidance?.format !== 'certificate_config') {
+      return;
+    }
+    setRegistrationExtras((prev) => {
+      const prevRaw = prev.certificate_checklist;
+      const prevMap =
+        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
+          ? (prevRaw as Record<string, unknown>)
+          : {};
+      const nextMap: Record<string, CertificateChecklistStoredValue> = {};
+      for (const item of items) {
+        const id = String(item.id || item.name || '').trim();
+        if (!id) continue;
+        const opts = listCertificateItemOptions(item);
+        const prevEntry = parseCertificateChecklistEntry(prevMap[id]);
+        if (opts.length > 0) {
+          const valid = new Set(opts.map((o) => o.encoded));
+          const option =
+            prevEntry.option && valid.has(prevEntry.option)
+              ? prevEntry.option
+              : opts[0]!.encoded;
+          nextMap[id] = { status: prevEntry.status, option };
+        } else {
+          nextMap[id] = prevEntry.status;
+        }
+      }
+      const prevKeys = Object.keys(prevMap).sort().join(',');
+      const nextKeys = Object.keys(nextMap).sort().join(',');
+      if (prevKeys === nextKeys) {
+        let allMatch = true;
+        for (const k of Object.keys(nextMap)) {
+          if (!certificateChecklistValuesEqual(prevMap[k], nextMap[k])) {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch) return prev;
+      }
+      return { ...prev, certificate_checklist: nextMap };
+    });
+  }, [certificateGuidance?.format, certificateGuidance?.items]);
+
+  const certificateChecklistParsed = useMemo(() => {
+    const raw = registrationExtras.certificate_checklist;
+    const out: Record<string, { status: JoiningDocumentStatus; option?: string }> = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return out;
+    }
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      out[k] = parseCertificateChecklistEntry(v);
+    }
+    return out;
+  }, [registrationExtras.certificate_checklist]);
+
+  const derivedCertificationStatus = useMemo((): 'Verified' | 'Unverified' | null => {
+    if (certificateGuidance?.format !== 'certificate_config' || !certificateGuidance.items?.length) {
+      return null;
+    }
+    return computeCertificationStatusFromChecklist(
+      certificateGuidance.items,
+      registrationExtras.certificate_checklist
+    );
+  }, [certificateGuidance, registrationExtras.certificate_checklist]);
+
+  const updateCertificateChecklistStatus = useCallback(
+    (itemId: string, value: JoiningDocumentStatus, hasOptions: boolean) => {
+      const id = String(itemId || '').trim();
+      if (!id) return;
+      setRegistrationExtras((prev) => {
+        const raw = prev.certificate_checklist;
+        const cur =
+          raw && typeof raw === 'object' && !Array.isArray(raw)
+            ? { ...(raw as Record<string, CertificateChecklistStoredValue>) }
+            : {};
+        const prevEntry = parseCertificateChecklistEntry(cur[id]);
+        cur[id] = buildCertificateChecklistStoredValue(hasOptions, value, prevEntry.option);
+        return { ...prev, certificate_checklist: cur };
+      });
+    },
+    []
+  );
+
+  const updateCertificateChecklistOption = useCallback((itemId: string, encoded: string) => {
+    const id = String(itemId || '').trim();
+    if (!id) return;
+    setRegistrationExtras((prev) => {
+      const raw = prev.certificate_checklist;
+      const cur =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? { ...(raw as Record<string, CertificateChecklistStoredValue>) }
+          : {};
+      const prevEntry = parseCertificateChecklistEntry(cur[id]);
+      cur[id] = { status: prevEntry.status, option: encoded.trim() || undefined };
+      return { ...prev, certificate_checklist: cur };
+    });
+  }, []);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
+      const registrationFormData =
+        derivedCertificationStatus !== null
+          ? {
+              ...stripped,
+              certification_status: derivedCertificationStatus,
+              certificates_status: derivedCertificationStatus,
+            }
+          : stripped;
+      return joiningAPI.patchStepTwo(joiningId, {
+        registrationFormData,
+        studentFeeDetails: {
+          batch: studentFeeDetails.batch,
+          lines: studentFeeDetails.lines || [],
+        },
+      });
+    },
+    onSuccess: async () => {
+      showToast.success('Certificate checklist and fee lines saved');
+      await queryClient.invalidateQueries({ queryKey: ['joining', joiningId] });
+      await queryClient.invalidateQueries({ queryKey: ['admission', admissionId] });
+      await queryClient.invalidateQueries({ queryKey: ['joining', 'registration-form-data', joiningId] });
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      showToast.error(error.response?.data?.message || 'Failed to save');
+    },
+  });
+
+  if (!joiningId) return null;
+
+  if (isLoading && !joining) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white/90 p-8 text-center text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
+        Loading joining data for Step 2…
+      </div>
+    );
+  }
+
+  if (isError || !joining) {
+    return (
+      <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-6 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200">
+        Could not load the linked joining record. Open the joining workspace to verify the link.
+      </div>
+    );
+  }
+
+  if (joining.status !== 'approved') {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-6 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        Step 2 unlocks after the joining is <span className="font-semibold">approved</span>. Current status:{' '}
+        <span className="font-mono">{joining.status}</span>.
+      </div>
+    );
+  }
+
+  return (
+    <section
+      id="admission-step-two"
+      className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+            Step 2
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Certificate checklist &amp; fee lines
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+            Program rules come from <span className="font-mono">student_database.settings</span> (
+            <span className="font-mono">certificate_config</span>) for the program level on the joining
+            record. Per-head fee overrides are stored on the joining and mirrored to this admission snapshot.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="primary"
+          disabled={!canWrite || saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? 'Saving…' : 'Save certificate & fee lines'}
+        </Button>
+      </div>
+
+      <CertificateInformationChecklistBlock
+        variant="admission-step-two"
+        radioNameSuffix="-admission-step2"
+        derivedCertificationStatus={derivedCertificationStatus}
+        programLevelTrimmed={programLevelTrimmed}
+        isLoadingCertificateGuidance={isLoadingCertificateGuidance}
+        certificateGuidance={certificateGuidance}
+        certificateChecklistParsed={certificateChecklistParsed}
+        onChecklistOptionChange={updateCertificateChecklistOption}
+        onChecklistStatusChange={updateCertificateChecklistStatus}
+      />
+
+      <FeeStructureSection
+        title="Fee structure & student line items"
+        course={course}
+        branch={branch}
+        quota={quota}
+        batch={batch}
+        feeDetailsEditable={canWrite}
+        studentFeeDetails={studentFeeDetails}
+        onStudentFeeDetailsChange={canWrite ? setStudentFeeDetails : undefined}
+        description="Match fee heads from the Fee Management database. Editable amounts and remarks are saved with the joining and copied to this admission record when you save Step 2."
+      />
+    </section>
+  );
+}

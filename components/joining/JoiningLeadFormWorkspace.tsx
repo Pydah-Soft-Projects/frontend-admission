@@ -35,7 +35,6 @@ import {
   type CertificateChecklistStoredValue,
 } from '@/lib/certificateChecklistEntry';
 import { coerceJoiningRegistrationField } from '@/lib/joiningRegistrationFieldCoerce';
-import { isJoiningStudentPortraitUploadField } from '@/lib/joiningRegistrationPhotoFields';
 import { mergeLeadIntoJoiningFormState, type LeadLike } from '@/lib/joiningLeadPrefill';
 import {
   computeScholarshipRegistrationPatches,
@@ -63,10 +62,12 @@ import {
   PaymentTransaction,
   CashfreeConfigPreview,
   CertificateGuidance,
+  Lead,
 } from '@/types';
 import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
+import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 
@@ -128,6 +129,7 @@ const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: strin
 const mediumOptionValues = new Set(mediumOptions.map((option) => option.value));
 
 const documentStatusOptions: JoiningDocumentStatus[] = ['pending', 'received'];
+
 const FIXED_REGISTRATION_ACADEMIC_YEAR = '2026';
 const FIXED_REGISTRATION_SEMESTER = '1-1';
 
@@ -641,22 +643,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     [joiningRegistrationDisplayFields]
   );
 
-  const studentPortraitRegistrationField = useMemo(() => {
-    return joiningRegistrationDisplayFieldsCoerced.find(
-      (f: { fieldType?: string; fieldName?: string; fieldLabel?: string }) =>
-        f.fieldType === 'file' && isJoiningStudentPortraitUploadField(f)
-    );
-  }, [joiningRegistrationDisplayFieldsCoerced]);
-
-  /** When the registration form includes a student portrait slot, submitting requires an upload. */
-  const isStudentPortraitMissing = useMemo(() => {
-    const key = String(studentPortraitRegistrationField?.fieldName || '').trim();
-    if (!key) return false;
-    const v = registrationExtras[key];
-    const s = v == null ? '' : String(v).trim();
-    return !s;
-  }, [registrationExtras, studentPortraitRegistrationField]);
-
   const registrationFormFieldsAllFilteredOut =
     sortedRegistrationFields.length > 0 && joiningRegistrationDisplayFields.length === 0;
 
@@ -792,13 +778,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       setStudentFeeDetails({ lines: [] });
     }
   }, [joiningRecord?._id, joiningRecord?.updatedAt]);
-
-  const handleStudentFeeDetailsChange = useCallback((next: JoiningStudentFeeDetails) => {
-    setStudentFeeDetails({
-      batch: next.batch,
-      lines: Array.isArray(next.lines) ? next.lines : [],
-    });
-  }, []);
 
   const registrationLocationState = useMemo(
     () =>
@@ -2554,6 +2533,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       }
     }
 
+    const isApprovedAdmission = status === 'approved';
+
     return {
       courseInfo,
       studentInfo: mergeJoiningStudentInfoFromExtras(
@@ -2571,27 +2552,39 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       educationHistory: formState.educationHistory,
       siblings: formState.siblings,
       documents: formState.documents,
-      registrationFormData: (() => {
-        const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
-        if (derivedCertificationStatus !== null) {
-          return {
-            ...stripped,
-            certification_status: derivedCertificationStatus,
-            certificates_status: derivedCertificationStatus,
-          };
-        }
-        return stripped;
-      })(),
-      ...(!isPublicEdit
-        ? {
-            studentFeeDetails: {
-              batch: studentFeeDetails.batch,
-              lines: studentFeeDetails.lines || [],
-            },
-          }
-        : {}),
+      ...(isApprovedAdmission
+        ? {}
+        : {
+            registrationFormData: (() => {
+              const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
+              if (derivedCertificationStatus !== null) {
+                return {
+                  ...stripped,
+                  certification_status: derivedCertificationStatus,
+                  certificates_status: derivedCertificationStatus,
+                };
+              }
+              return stripped;
+            })(),
+            ...(!isPublicEdit
+              ? {
+                  studentFeeDetails: {
+                    batch: studentFeeDetails.batch,
+                    lines: studentFeeDetails.lines || [],
+                  },
+                }
+              : {}),
+          }),
     };
-  }, [formState, courseSettings, registrationExtras, derivedCertificationStatus, isPublicEdit, studentFeeDetails]);
+  }, [
+    formState,
+    courseSettings,
+    registrationExtras,
+    derivedCertificationStatus,
+    isPublicEdit,
+    studentFeeDetails,
+    status,
+  ]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -2765,10 +2758,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const isUpdatingAdmission = updateAdmissionMutation.isPending;
 
   const canSubmit = canWriteJoining && status !== 'approved' && status !== 'pending_approval';
-  const submitBlockedByStudentPhoto =
-    status === 'draft' && Boolean(studentPortraitRegistrationField) && isStudentPortraitMissing;
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
   const isAdmissionEditable = canWriteJoining && status === 'approved';
+  /** After approval: admin sees summary, payments, and fee table on this joining page; cert/fees live on admission. */
+  const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
   const admissionNumberDisplay =
     meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
   const isBusy = isLoading || (isAdmissionEditable && isLoadingAdmission && !admissionRecord);
@@ -3990,17 +3983,45 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     9. Documents Checklist
                   </h2>
                   <p className="text-sm text-gray-500">
-                    Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
-                    Certificate are tracked under <span className="font-medium">Certificate information checklist</span>{' '}
-                    (from student database settings).
+                    {showAdminPostAdmissionStep3 ? (
+                      <>
+                        Mark each document as received. The program-level{' '}
+                        <span className="font-medium">Certificate information checklist</span> (from student database
+                        settings) is completed on the{' '}
+                        {admissionRecord?._id ? (
+                          <Link
+                            href={`/superadmin/admission/${admissionRecord._id}/detail#admission-step-two`}
+                            className="font-semibold text-blue-700 underline underline-offset-2 dark:text-blue-300"
+                          >
+                            admission record
+                          </Link>
+                        ) : (
+                          <span className="font-medium">admission record</span>
+                        )}
+                        .
+                      </>
+                    ) : isPublicEdit ? (
+                      <>
+                        Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
+                        Certificate are tracked under <span className="font-medium">Certificate information checklist</span>{' '}
+                        (from student database settings).
+                      </>
+                    ) : (
+                      <>
+                        Mark each document as received. The program-level{' '}
+                        <span className="font-medium">Certificate information checklist</span> is edited on the{' '}
+                        <span className="font-medium">admission record</span> after approval — set program level in
+                        Course &amp; Quota first so rules can load there.
+                      </>
+                    )}
                   </p>
                 </div>
                 <PrintableDocumentChecklist
                   documentLabels={documentsChecklistForPrint.labels}
                   documents={documentsChecklistForPrint.docs as Record<string, 'pending' | 'received' | undefined>}
                   title="Documents Checklist"
-                  studentName={formState.studentInfo.name || (lead as any)?.name || undefined}
-                  enquiryNumber={(lead as any)?.enquiryNumber || undefined}
+                  studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
+                  enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}
                   printButtonLabel="Print checklist"
                   className="shrink-0"
                 />
@@ -4042,186 +4063,193 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ))}
               </div>
 
-              <div className="mt-10 border-t border-slate-200 pt-8 dark:border-slate-700">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">
-                  Certificate information checklist
-                </h3>
-                {derivedCertificationStatus !== null && (
-                  <p className="mt-2 text-sm text-gray-700 dark:text-slate-300">
-                    <span className="font-medium text-gray-900 dark:text-slate-100">Certification status</span>
-                    {': '}
-                    <span
-                      className={
-                        derivedCertificationStatus === 'Verified'
-                          ? 'ml-1 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
-                          : 'ml-1 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200'
-                      }
-                    >
-                      {derivedCertificationStatus}
-                    </span>
-                  </p>
-                )}
-                <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                  From <span className="font-mono">student_database.settings</span> (<span className="font-mono">certificate_config</span>
-                  ) for the program level selected in Course &amp; Quota. Status is saved with the joining draft.
-                </p>
-                {!programLevelTrimmed ? (
-                  <p className="mt-4 text-sm text-amber-700 dark:text-amber-300">
-                    Select a program level in Course &amp; Quota to load this checklist.
-                  </p>
-                ) : isLoadingCertificateGuidance ? (
-                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">Loading certificate rules…</p>
-                ) : certificateGuidance?.format === 'certificate_config' &&
-                  certificateGuidance.items &&
-                  certificateGuidance.items.length > 0 ? (
-                  <div className="mt-6 grid gap-4 md:grid-cols-2">
-                    {certificateGuidance.items
-                      .filter((item) => String(item.id || item.name || '').trim())
-                      .map((item) => {
-                      const itemId = String(item.id || item.name || '').trim();
-                      const certOpts = listCertificateItemOptions(item);
-                      const hasCertOptions = certOpts.length > 0;
-                      const parsed = certificateChecklistParsed[itemId] ?? {
-                        status: 'pending' as JoiningDocumentStatus,
-                      };
-                      const status = parsed.status === 'received' ? 'received' : 'pending';
-                      const selectedEncoded =
-                        hasCertOptions &&
-                        parsed.option &&
-                        certOpts.some((o) => o.encoded === parsed.option)
-                          ? parsed.option!
-                          : hasCertOptions
-                            ? certOpts[0]!.encoded
-                            : undefined;
-                      return (
-                        <div
-                          key={itemId}
-                          className="flex flex-col gap-2 rounded-xl border border-indigo-200/80 bg-indigo-50/40 px-4 py-3 shadow-sm dark:border-indigo-900/50 dark:bg-indigo-950/30"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{item.name}</p>
-                            <span
-                              className={
-                                item.required
-                                  ? 'shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800 dark:bg-rose-900/50 dark:text-rose-200'
-                                  : 'shrink-0 rounded-full bg-slate-200/90 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-600 dark:text-slate-200'
-                              }
-                            >
-                              {item.required ? 'Required' : 'Optional'}
-                            </span>
-                          </div>
-                          {hasCertOptions ? (
-                            <div className="flex flex-wrap gap-2">
-                              {certOpts.map(({ encoded, label }) => (
-                                <label
-                                  key={encoded}
-                                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition ${
-                                    selectedEncoded === encoded
-                                      ? 'border-indigo-500 bg-white text-indigo-950 shadow-sm ring-1 ring-indigo-300 dark:border-indigo-400 dark:bg-indigo-900/40 dark:text-indigo-50 dark:ring-indigo-600'
-                                      : 'border-indigo-200/80 bg-white/70 text-indigo-900 hover:border-indigo-400 dark:border-indigo-800 dark:bg-slate-800/60 dark:text-indigo-100 dark:hover:border-indigo-500'
-                                  }`}
-                                >
-                                  <input
-                                    type="radio"
-                                    name={`cert-option-${itemId}`}
-                                    value={encoded}
-                                    checked={selectedEncoded === encoded}
-                                    onChange={() => updateCertificateChecklistOption(itemId, encoded)}
-                                    className="h-3 w-3 border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                  />
-                                  <span>{label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          ) : null}
-                          <div className="mt-1 flex justify-end gap-3 border-t border-indigo-200/60 pt-2 dark:border-indigo-800/50">
-                            {documentStatusOptions.map((statusOption) => (
-                              <label
-                                key={`${itemId}-${statusOption}`}
-                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${status === statusOption
-                                  ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
-                                  : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-600 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
-                                  }`}
-                              >
-                                <input
-                                  type="radio"
-                                  name={`cert-checklist-${itemId}`}
-                                  value={statusOption}
-                                  checked={status === statusOption}
-                                  onChange={() =>
-                                    updateCertificateChecklistStatus(
-                                      itemId,
-                                      statusOption,
-                                      hasCertOptions
-                                    )
-                                  }
-                                  className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : certificateGuidance?.format === 'certificate_config' ? (
-                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                    <p className="font-medium">
-                      No certificate rules are configured for program level{' '}
-                      <span className="font-mono">{certificateGuidance.level || programLevelTrimmed}</span>.
-                    </p>
-                    <p className="mt-1 text-xs">
-                      Add a <span className="font-mono">"{(certificateGuidance.level || programLevelTrimmed).toLowerCase()}"</span>{' '}
-                      bucket to <span className="font-mono">student_database.settings.certificate_config</span> to populate this checklist.
-                    </p>
-                  </div>
-                ) : certificateGuidance && (certificateGuidance.format === 'html' || certificateGuidance.format === 'text') && String(certificateGuidance.body || '').trim() ? (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/50">
-                    {certificateGuidance.format === 'html' ? (
-                      <div
-                        className="certificate-guidance-html max-w-none [&_ul]:list-disc [&_ul]:pl-5"
-                        dangerouslySetInnerHTML={{ __html: certificateGuidance.body || '' }}
-                      />
-                    ) : (
-                      <div className="whitespace-pre-wrap">{certificateGuidance.body}</div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                    <p className="font-medium">
-                      Certificate configuration is not set up in the secondary student database.
-                    </p>
-                    <p className="mt-1 text-xs">
-                      Add a row to <span className="font-mono">student_database.settings</span> with key{' '}
-                      <span className="font-mono">certificate_config</span> and a JSON value such as{' '}
-                      <span className="font-mono">{`{"diploma":[…],"ug":[…],"pg":[…]}`}</span> to drive this checklist
-                      for program level{' '}
-                      <span className="font-mono">{programLevelTrimmed}</span>.
-                    </p>
-                  </div>
-                )}
-              </div>
+              {isPublicEdit && (
+                <CertificateInformationChecklistBlock
+                  variant="below-documents"
+                  derivedCertificationStatus={derivedCertificationStatus}
+                  programLevelTrimmed={programLevelTrimmed}
+                  isLoadingCertificateGuidance={isLoadingCertificateGuidance}
+                  certificateGuidance={certificateGuidance}
+                  certificateChecklistParsed={certificateChecklistParsed}
+                  onChecklistOptionChange={updateCertificateChecklistOption}
+                  onChecklistStatusChange={updateCertificateChecklistStatus}
+                />
+              )}
             </section>
 
-            {/*
-             * Payment Information should always render for any joining viewer
-             * (admin / counsellor / data-entry). The write actions (Record Cash,
-             * Cashfree, Additional Fee) stay gated on `canWritePayments`. Public
-             * edit links never see the payments panel — that surface is admin-only.
-             */}
-            {!isPublicEdit && (
+            {showAdminPostAdmissionStep3 ? (
               <section
-                id="payment-panel"
-                className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${shouldPromptPayment
-                  ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
-                  : ''
-                  }`}
+                id="joining-post-admission-payments"
+                className="space-y-8 rounded-2xl border-2 border-emerald-200/80 bg-gradient-to-b from-emerald-50/40 to-white/95 p-6 shadow-lg shadow-emerald-100/30 backdrop-blur dark:border-emerald-900/50 dark:from-emerald-950/20 dark:to-slate-900/70 dark:shadow-none"
               >
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                    After admission
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    Verification summary &amp; payments
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+                    Admission is confirmed. Review the summary below, then use{' '}
+                    <span className="font-semibold">Update Admission</span> for any remaining admission fields. Certificate
+                    checklist and per-head fee line edits are on the{' '}
+                    {admissionRecord?._id ? (
+                      <Link
+                        href={`/superadmin/admission/${admissionRecord._id}/detail#admission-step-two`}
+                        className="font-semibold text-emerald-800 underline underline-offset-2 dark:text-emerald-200"
+                      >
+                        admission record
+                      </Link>
+                    ) : (
+                      <span className="font-semibold">admission record</span>
+                    )}
+                    ; record cash or online payments in this workspace using the section below.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Recorded application summary
+                  </h3>
+                  <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Program &amp; quota
+                      </dt>
+                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+                        {(formState.courseInfo.programLevel || '—') +
+                          ' · ' +
+                          (formState.courseInfo.quota || '—') +
+                          ' · ' +
+                          (formState.courseInfo.course || '—') +
+                          (formState.courseInfo.branch ? ` · ${formState.courseInfo.branch}` : '')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Student
+                      </dt>
+                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+                        {(formState.studentInfo.name || (lead as Lead | undefined)?.name || '—') +
+                          (formState.studentInfo.phone ? ` · ${formState.studentInfo.phone}` : '')}
+                        {(formState.studentInfo.gender || formState.studentInfo.dateOfBirth) &&
+                          ` · ${[formState.studentInfo.gender, formState.studentInfo.dateOfBirth].filter(Boolean).join(' · ')}`}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Parents
+                      </dt>
+                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+                        Father: {formState.parents.father.name || '—'} ({formState.parents.father.phone || '—'})
+                        <br />
+                        Mother: {formState.parents.mother.name || '—'} ({formState.parents.mother.phone || '—'})
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Reservation
+                      </dt>
+                      <dd className="mt-0.5 uppercase text-slate-800 dark:text-slate-200">
+                        {String(formState.reservation.general || '—').toUpperCase()}
+                        {formState.reservation.isEws ? ' · EWS: Yes' : ' · EWS: No'}
+                        {(formState.reservation.other || []).length > 0
+                          ? ` · Other: ${(formState.reservation.other || []).join(', ')}`
+                          : ''}
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Communication address
+                      </dt>
+                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+                        {[
+                          formState.address.communication.doorOrStreet,
+                          formState.address.communication.landmark,
+                          formState.address.communication.villageOrCity,
+                          formState.address.communication.mandal,
+                          formState.address.communication.district,
+                          formState.address.communication.state,
+                          formState.address.communication.pinCode,
+                        ]
+                          .filter((p) => p && String(p).trim())
+                          .join(', ') || '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Qualifications
+                      </dt>
+                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+                        {[
+                          formState.qualifications.ssc && 'SSC',
+                          formState.qualifications.interOrDiploma && 'Inter/Diploma',
+                          formState.qualifications.ug && 'UG',
+                        ]
+                          .filter(Boolean)
+                          .join(', ') || '—'}
+                        {formState.qualifications.merit === true
+                          ? ' · Merit: Yes'
+                          : formState.qualifications.merit === false
+                            ? ' · Merit: No'
+                            : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Education history
+                      </dt>
+                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+                        {formState.educationHistory.length}{' '}
+                        {formState.educationHistory.length === 1 ? 'entry' : 'entries'}
+                        {formState.educationHistory[0]?.institutionName
+                          ? ` · Latest: ${formState.educationHistory[0].institutionName}`
+                          : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Siblings
+                      </dt>
+                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+                        {formState.siblings.length} recorded
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Document checklist (paper files)
+                      </dt>
+                      <dd className="mt-0.5 flex flex-wrap gap-2 text-slate-800 dark:text-slate-200">
+                        {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
+                          .filter(([key]) => !DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key))
+                          .map(([key, label]) => (
+                            <span
+                              key={key}
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                (formState.documents[key] || 'pending') === 'received'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                              }`}
+                            >
+                              {label}: {(formState.documents[key] || 'pending') === 'received' ? 'Received' : 'Pending'}
+                            </span>
+                          ))}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <section
+                  id="payment-panel"
+                  className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${shouldPromptPayment
+                    ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
+                    : ''
+                    }`}
+                >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                      10. Payments &amp; Transactions
+                      Payments &amp; Transactions
                     </h2>
                     <p className="text-sm text-gray-500 dark:text-slate-400">
                       Collect admission fees in parts or full. Every transaction updates the balance and is
@@ -4446,13 +4474,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 </div>
               </section>
-            )}
 
-            {/* Fee Structure (Fee Management DB) — visible to any joining viewer.
-                Users with payments-write permission can record a cash/Cashfree payment on
-                any row; the transaction is tagged with the chosen fee head. The per-row
-                Cash + Cashfree buttons mirror the "10. Payments & Transactions" section. */}
-            {!isPublicEdit && (
+              {/* Fee heads (read-only overrides) — payments use row actions; edit amounts on the admission record. */}
               <FeeStructureSection
                 course={formState.courseInfo.course}
                 branch={formState.courseInfo.branch}
@@ -4461,15 +4484,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   (lead as { academicYear?: number | string } | undefined)?.academicYear ??
                   null
                 }
-                description="Live from the Fee Management database. Pick a batch, then use Cash or Cashfree on any fee head — the payment is tagged with that head and shows up in Payments & Transactions."
+                description="Live from the Fee Management database. Pick a batch, then use Cash or Cashfree on any fee head — the payment is tagged with that head and shows up above. Edit per-head amounts on the admission record."
                 onSelectFeeHead={canWritePayments ? handleSelectFeeHead : undefined}
                 activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
                 canUseCashfree={canUseCashfree}
-                feeDetailsEditable={canWriteJoining}
+                feeDetailsEditable={false}
                 studentFeeDetails={studentFeeDetails}
-                onStudentFeeDetailsChange={handleStudentFeeDetailsChange}
               />
-            )}
+            </section>
+            ) : null}
 
             {/* Action Buttons at Bottom - Always visible for draft/pending status */}
             {!isAdmissionEditable && status !== 'approved' && (
@@ -4493,19 +4516,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   {status === 'draft' && (
                     <Button
                       variant="primary"
-                      disabled={!canSubmit || isSubmitting || submitBlockedByStudentPhoto}
-                      title={
-                        submitBlockedByStudentPhoto
-                          ? 'Upload the student photo in Registration fields before submitting.'
-                          : undefined
-                      }
+                      disabled={!canSubmit || isSubmitting}
                       onClick={() => {
                         if (!canWriteJoining) {
                           showToast.error('You have read-only access to the joining desk');
-                          return;
-                        }
-                        if (submitBlockedByStudentPhoto) {
-                          showToast.error('Please upload the student photo before submitting for approval.');
                           return;
                         }
                         submitMutation.mutate();

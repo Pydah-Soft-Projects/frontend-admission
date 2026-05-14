@@ -582,13 +582,12 @@ export function JoiningDynamicRegistrationFields({
                     Applicant & parent photos
                   </p>
                   <p className="mb-4 text-center text-xs text-gray-600 dark:text-slate-400 sm:text-left">
-                    Student photo is required. Father and mother photos are optional.
+                    Student, father, and mother photos are all optional.
                   </p>
                   <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between md:gap-4">
                     <RegistrationPortraitSlot
                       label={field.fieldLabel || 'Student photo'}
-                      required
-                      helpText="Passport-style (JPG / PNG / WebP)."
+                      helpText="Passport-style (JPG / PNG / WebP), optional."
                       fieldName={field.fieldName}
                       value={fieldValue}
                       onChange={onChange}
