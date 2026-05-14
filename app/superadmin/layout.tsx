@@ -57,6 +57,7 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
     ],
   },
   { href: '/superadmin/users', label: 'User Management', icon: UserIcon, permissionKey: 'users' },
+  { href: '/superadmin/whatsapp/chat', label: 'WhatsApp Chat', icon: CommunicationsIcon, permissionKey: 'communications' },
   { href: '/superadmin/communications/templates', label: 'Communications', icon: CommunicationsIcon, permissionKey: 'communications' },
   { href: '/superadmin/form-builder', label: 'Lead Form Builder', icon: TemplateIcon, permissionKey: 'formBuilder' },
   { href: '/superadmin/master-data', label: 'Districts & Mandals', icon: AcademicIcon, permissionKey: 'masterData' },
