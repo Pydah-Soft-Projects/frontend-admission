@@ -11,7 +11,8 @@ export type PermissionModuleKey =
   | 'reports'
   | 'formBuilder'
   | 'masterData'
-  | 'visitors';
+  | 'visitors'
+  | 'utmBuilder';
 
 export interface PermissionModuleDefinition {
   key: PermissionModuleKey;
@@ -53,7 +54,12 @@ export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
   {
     key: 'formBuilder',
     label: 'Lead Form Builder',
-    description: 'Create and manage dynamic forms for lead generation and UTM Builder.',
+    description: 'Create and manage dynamic forms for lead generation.',
+  },
+  {
+    key: 'utmBuilder',
+    label: 'UTM URL Builder',
+    description: 'Generate and track marketing campaign links with UTM parameters.',
   },
   {
     key: 'masterData',

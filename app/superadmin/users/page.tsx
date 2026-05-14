@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { userAPI, managerAPI } from '@/lib/api';
+import { userAPI, managerAPI, leadAPI } from '@/lib/api';
 import type { User, ModulePermission, RoleName } from '@/types';
 import * as XLSX from 'xlsx';
 import { Card } from '@/components/ui/Card';
@@ -138,6 +138,17 @@ const UserManagementPage = () => {
   const [editPermissionState, setEditPermissionState] = useState<
     Record<PermissionModuleKey, ModulePermission>
   >(createEmptyPermissions());
+  const [allowedSourcesState, setAllowedSourcesState] = useState<string[]>([]);
+  const [editAllowedSourcesState, setEditAllowedSourcesState] = useState<string[]>([]);
+
+  const { data: filterOptionsData } = useQuery({
+    queryKey: ['leadFilterOptions'],
+    queryFn: () => leadAPI.getFilterOptions(),
+  });
+  const allSources = useMemo(() => {
+    return (filterOptionsData?.data?.sources || []) as string[];
+  }, [filterOptionsData]);
+
   const [hrmsSearchTerm, setHrmsSearchTerm] = useState('');
   const [hrmsResults, setHrmsResults] = useState<any[]>([]);
   const [isSearchingHrms, setIsSearchingHrms] = useState(false);
@@ -553,6 +564,11 @@ const UserManagementPage = () => {
       }
 
       payload.permissions = selectedPermissions;
+    }
+
+    if (allowedSourcesState.length > 0) {
+      if (!payload.permissions) payload.permissions = {};
+      payload.permissions.allowedSources = allowedSourcesState;
     }
 
     createMutation.mutate(payload);
@@ -1167,8 +1183,10 @@ const UserManagementPage = () => {
                           }
                         });
                         setEditPermissionState(seeded);
+                        setEditAllowedSourcesState(selectedUserDetail.permissions?.allowedSources || []);
                       } else {
                         setEditPermissionState(createEmptyPermissions());
+                        setEditAllowedSourcesState(selectedUserDetail.permissions?.allowedSources || []);
                       }
                       setShowEditUser(true);
                       // Keep detail modal open or close it? 
@@ -1400,6 +1418,44 @@ const UserManagementPage = () => {
                   {/* Designation field removed as per requirement */}
                 </div>
 
+                {formState.roleName !== 'Sub Super Admin' && (
+                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                        Lead Source Permissions
+                      </h3>
+                      <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+                        Restrict this user to only see leads from these sources. Leave all unchecked to show all leads.
+                      </p>
+                    </div>
+                    <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[40vh] bg-white rounded-xl p-3 border border-white/70 dark:bg-slate-900/80 dark:border-slate-700/60">
+                      {allSources.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-2">No sources found in database.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {allSources.map((source) => (
+                            <label key={source} className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                checked={allowedSourcesState.includes(source)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setAllowedSourcesState(prev => [...prev, source]);
+                                  } else {
+                                    setAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                  }
+                                }}
+                              />
+                              {source}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {formState.roleName === 'Sub Super Admin' && (
                   <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20 sm:col-span-2 lg:col-span-1">
                     <div className="space-y-1">
@@ -1458,6 +1514,35 @@ const UserManagementPage = () => {
                                     Read &amp; Write
                                   </Button>
                                 </div>
+                                {module.key === 'leads' && (
+                                  <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
+                                    <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">
+                                      Allowed Lead Sources
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                      {allSources.map((source) => (
+                                        <label key={source} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            checked={allowedSourcesState.includes(source)}
+                                            onChange={(e) => {
+                                              if (e.target.checked) {
+                                                setAllowedSourcesState(prev => [...prev, source]);
+                                              } else {
+                                                setAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                              }
+                                            }}
+                                          />
+                                          {source}
+                                        </label>
+                                      ))}
+                                      {allSources.length === 0 && (
+                                        <p className="text-[10px] text-slate-400 italic">No sources found.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[10px] font-medium uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500">
@@ -1480,6 +1565,7 @@ const UserManagementPage = () => {
                   onClick={() => {
                     setShowCreateUser(false);
                     setPermissionState(createEmptyPermissions());
+                    setAllowedSourcesState([]);
                     setFormState({ name: '', email: '', mobileNumber: '', password: '', roleName: 'Student Counselor', designation: '', hrms_id: '', emp_no: '' });
                   }}
                   disabled={createMutation.isPending}
@@ -1526,10 +1612,10 @@ const UserManagementPage = () => {
                 const payload: Parameters<typeof userAPI.update>[1] = {
                   name: editFormState.name.trim(),
                   email: editFormState.email.trim(),
-                  mobileNumber: editFormState.mobileNumber?.trim() || undefined,
+                  mobileNumber: editFormState.mobileNumber?.trim() || null,
                   roleName: editFormState.roleName,
-                  hrms_id: editFormState.hrms_id || undefined,
-                  emp_no: editFormState.emp_no || undefined,
+                  hrms_id: editFormState.hrms_id || null,
+                  emp_no: editFormState.emp_no || null,
                 };
 
                 if (editFormState.password) {
@@ -1561,6 +1647,17 @@ const UserManagementPage = () => {
                   }
 
                   payload.permissions = selectedPermissions;
+                }
+
+                if (editAllowedSourcesState.length > 0) {
+                  if (!payload.permissions) payload.permissions = {};
+                  payload.permissions.allowedSources = editAllowedSourcesState;
+                } else if (payload.permissions) {
+                   // If they unchecked everything, ensure we clear it on backend
+                   // Actually, if we don't send it, sanitizePermissions won't include it.
+                   // But wait, sanitizePermissions only includes what's there.
+                   // If we want to CLEAR it, we should send an empty array.
+                   payload.permissions.allowedSources = [];
                 }
 
                 updateUserMutation.mutate({ userId: editingUser._id, data: payload });
@@ -1711,6 +1808,44 @@ const UserManagementPage = () => {
                   {/* Designation field removed as per requirement */}
                 </div>
 
+                {editFormState.roleName !== 'Sub Super Admin' && (
+                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                        Lead Source Permissions
+                      </h3>
+                      <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+                        Restrict this user to only see leads from these sources. Leave all unchecked to show all leads.
+                      </p>
+                    </div>
+                    <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[40vh] bg-white rounded-xl p-3 border border-white/70 dark:bg-slate-900/80 dark:border-slate-700/60">
+                      {allSources.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-2">No sources found in database.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {allSources.map((source) => (
+                            <label key={source} className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                checked={editAllowedSourcesState.includes(source)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setEditAllowedSourcesState(prev => [...prev, source]);
+                                  } else {
+                                    setEditAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                  }
+                                }}
+                              />
+                              {source}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {editFormState.roleName === 'Sub Super Admin' && (
                   <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20 sm:col-span-2 lg:col-span-1">
                     <div className="space-y-1">
@@ -1798,6 +1933,35 @@ const UserManagementPage = () => {
                                     Read &amp; Write
                                   </Button>
                                 </div>
+                                {module.key === 'leads' && (
+                                  <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
+                                    <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">
+                                      Allowed Lead Sources
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                      {allSources.map((source) => (
+                                        <label key={source} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            checked={editAllowedSourcesState.includes(source)}
+                                            onChange={(e) => {
+                                              if (e.target.checked) {
+                                                setEditAllowedSourcesState(prev => [...prev, source]);
+                                              } else {
+                                                setEditAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                              }
+                                            }}
+                                          />
+                                          {source}
+                                        </label>
+                                      ))}
+                                      {allSources.length === 0 && (
+                                        <p className="text-[10px] text-slate-400 italic">No sources found.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[10px] font-medium uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500">
