@@ -298,6 +298,9 @@ export function JoiningDraftSmsModal({
       if (successCount === totalCount) showToast.success(`All ${successCount} message(s) sent successfully!`);
       else showToast.success(`${successCount}/${totalCount} message(s) sent successfully`);
       queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communications'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining-in-progress'] });
+      void queryClient.invalidateQueries({ queryKey: ['confirmed-leads'] });
       setSmsData({ selectedNumbers: [], selectedTemplates: {}, languageFilter: 'all' });
       onClose();
     },

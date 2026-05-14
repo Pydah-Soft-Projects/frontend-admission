@@ -553,7 +553,16 @@ export interface Joining {
   /** List/detail when API joins or embeds lead summary (e.g. enquiry # on pipeline). */
   lead?: Pick<
     Lead,
-    'name' | 'phone' | 'enquiryNumber' | 'hallTicketNumber' | 'leadStatus'
+    | 'name'
+    | 'phone'
+    | 'enquiryNumber'
+    | 'hallTicketNumber'
+    | 'leadStatus'
+    | 'courseInterested'
+    | 'mandal'
+    | 'district'
+    | 'quota'
+    | 'fatherPhone'
   >;
 }
 

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { leadAPI, joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
+import { SendJoiningFormModal } from '@/components/joining/SendJoiningFormModal';
 import { Lead } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -17,6 +18,7 @@ import { History, MessageSquare, FileCheck } from 'lucide-react';
 const ConfirmedLeadsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const { canWrite: canWriteJoining } = useModulePermission('joining');
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,6 +27,7 @@ const ConfirmedLeadsPage = () => {
     admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
     joiningOnlineAdmissionMode: true;
   } | null>(null);
+  const [isSendJoiningModalOpen, setIsSendJoiningModalOpen] = useState(false);
 
   const sendAdmissionSmsMutation = useMutation({
     mutationFn: (leadId: string) => joiningAPI.createPublicEditLink(leadId),
@@ -45,6 +48,9 @@ const ConfirmedLeadsPage = () => {
         joiningOnlineAdmissionMode: true,
       });
       showToast.success('Public link created (copied). Review the SMS, then send.');
+      void queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining-in-progress'] });
+      void queryClient.invalidateQueries({ queryKey: ['confirmed-leads'] });
     },
     onError: (e: unknown) => {
       const err = e as { response?: { data?: { message?: string } }; message?: string };
@@ -101,11 +107,14 @@ const ConfirmedLeadsPage = () => {
               setPage(1);
             }}
           />
-          <Link href="/superadmin/joining/new" className="sm:ml-auto sm:shrink-0">
-            <Button variant="outline" className="whitespace-nowrap">
-              Add Joining Form (staff)
-            </Button>
-          </Link>
+          <Button
+            type="button"
+            variant="outline"
+            className="whitespace-nowrap sm:ml-auto sm:shrink-0"
+            onClick={() => setIsSendJoiningModalOpen(true)}
+          >
+            Add Joining Form (staff)
+          </Button>
         </div>
       </Card>
 
@@ -246,6 +255,8 @@ const ConfirmedLeadsPage = () => {
         joiningOnlineAdmissionMode={Boolean(smsSession?.joiningOnlineAdmissionMode)}
         onClose={() => setSmsSession(null)}
       />
+
+      <SendJoiningFormModal open={isSendJoiningModalOpen} onClose={() => setIsSendJoiningModalOpen(false)} />
     </div>
   );
 };

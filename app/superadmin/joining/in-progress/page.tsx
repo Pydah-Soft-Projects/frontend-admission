@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
@@ -24,6 +24,7 @@ const defaultStatuses: JoiningStatus[] = ['draft', 'pending_approval'];
 
 const JoiningInProgressPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,6 +53,8 @@ const JoiningInProgressPage = () => {
         joiningOnlineAdmissionMode: true,
       });
       showToast.success('Public link created. Review the message, then send SMS.');
+      void queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining-in-progress'] });
     },
     onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
       showToast.error(error?.response?.data?.message || error?.message || 'Could not create public link');
@@ -78,6 +81,7 @@ const JoiningInProgressPage = () => {
         limit,
         search: searchTerm || undefined,
         status: selectedStatuses,
+        requireEnquiry: true,
       });
       return response.data;
     },

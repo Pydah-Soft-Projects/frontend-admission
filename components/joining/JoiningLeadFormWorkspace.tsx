@@ -2761,8 +2761,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const hasManagedCourseAndBranch = useMemo(() => {
     const c = String(formState.courseInfo.courseId ?? '').trim();
     const b = String(formState.courseInfo.branchId ?? '').trim();
-    return Boolean(c && b);
-  }, [formState.courseInfo.courseId, formState.courseInfo.branchId]);
+    if (!c || !b) return false;
+    if (isPublicEdit) {
+      return true;
+    }
+    const q = String(formState.courseInfo.quota ?? '').trim();
+    const college = String(selectedCollegeId ?? '').trim();
+    return Boolean(q && college);
+  }, [
+    formState.courseInfo.courseId,
+    formState.courseInfo.branchId,
+    formState.courseInfo.quota,
+    selectedCollegeId,
+    isPublicEdit,
+  ]);
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
   const isAdmissionEditable = canWriteJoining && status === 'approved';
   /** After approval: admin sees summary, payments, and fee table on this joining page; cert/fees live on admission. */
@@ -2777,7 +2789,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       return;
     }
     if (!hasManagedCourseAndBranch) {
-      showToast.error('Select a managed course and branch before updating the admission record.');
+      showToast.error(
+        'Select college, quota, managed course, and managed branch under Course & Quota before updating the admission record.'
+      );
       return;
     }
     updateAdmissionMutation.mutate(payloadForSave);
@@ -2946,7 +2960,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   title={
                     hasManagedCourseAndBranch
                       ? undefined
-                      : 'Select managed course and branch in Course & Quota before saving.'
+                      : 'Select college, quota, managed course, and managed branch in Course & Quota before saving.'
                   }
                 >
                   {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
@@ -2982,7 +2996,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               </h2>
               <p className="text-sm text-gray-500">
                 These values default from the confirmed lead. Adjust if the student opted for a
-                different program.
+                different program. <span className="font-medium text-slate-700 dark:text-slate-300">College, quota,</span>{' '}
+                managed course, and managed branch are all required before submit or approval (staff).
               </p>
               {(() => {
                 // Show what the lead actually carried over (free-text "course
@@ -3079,6 +3094,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       <div className="min-w-0">
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                           Quota
+                          <span className="ml-1 text-rose-600">*</span>
                         </label>
                         <select
                           value={formState.courseInfo.quota || ''}
@@ -3100,6 +3116,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       <div className="min-w-0">
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                           College
+                          <span className="ml-1 text-rose-600">*</span>
                         </label>
                         <select
                           value={selectedCollegeId}
@@ -3284,6 +3301,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         onChange={handleRegistrationFieldChange}
                         selectedState={registrationLocationState}
                         selectedDistrict={registrationLocationDistrict}
+                        photoUploadContext={{
+                          baseSlug:
+                            formState.studentInfo.name ||
+                            (typeof lead?.name === 'string' ? lead.name : '') ||
+                            (typeof lead?.enquiryNumber === 'string' ? String(lead.enquiryNumber) : ''),
+                          displayName:
+                            String(
+                              formState.studentInfo.name || lead?.name || lead?.enquiryNumber || 'Student'
+                            ).trim() || 'Student',
+                        }}
                       />
                     </div>
                   ) : (
@@ -4515,8 +4542,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               <div className="sticky bottom-0 z-10 rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
                 {!isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval') && (
                   <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                    Managed <strong>course</strong> and <strong>branch</strong> are required — choose both under{' '}
-                    <strong>Course &amp; Quota</strong> before submitting or approving.
+                    <strong>College</strong>, <strong>quota</strong>, managed <strong>course</strong>, and managed{' '}
+                    <strong>branch</strong> are required — set all of them under <strong>Course &amp; Quota</strong> before
+                    submitting or approving.
                   </p>
                 )}
                 <div className="flex flex-wrap items-center justify-end gap-3">
@@ -4546,7 +4574,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       title={
                         isPublicEdit || hasManagedCourseAndBranch
                           ? undefined
-                          : 'Select managed course and branch under Course & Quota first.'
+                          : 'Select college, quota, managed course, and managed branch under Course & Quota first.'
                       }
                       onClick={() => {
                         if (!canWriteJoining) {
@@ -4554,7 +4582,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           return;
                         }
                         if (!isPublicEdit && !hasManagedCourseAndBranch) {
-                          showToast.error('Select a managed course and branch before submitting for approval.');
+                          showToast.error(
+                            'Select college, quota, managed course, and managed branch before submitting for approval.'
+                          );
                           return;
                         }
                         submitMutation.mutate();
@@ -4570,7 +4600,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       title={
                         hasManagedCourseAndBranch
                           ? undefined
-                          : 'Select managed course and branch under Course & Quota before approving.'
+                          : 'Select college, quota, managed course, and managed branch under Course & Quota before approving.'
                       }
                       onClick={() => {
                         if (!canWriteJoining) {
@@ -4578,7 +4608,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           return;
                         }
                         if (!hasManagedCourseAndBranch) {
-                          showToast.error('Select a managed course and branch before approving.');
+                          showToast.error(
+                            'Select college, quota, managed course, and managed branch before approving.'
+                          );
                           return;
                         }
                         approveMutation.mutate();

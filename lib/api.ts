@@ -1198,6 +1198,8 @@ export const joiningAPI = {
     limit?: number;
     search?: string;
     leadStatus?: string;
+    /** When true, only joinings with an enquiry on the lead or `lead_data.enquiryNumber` (joining desk). */
+    requireEnquiry?: boolean;
   }) => {
     const queryParams = new URLSearchParams();
     if (params) {

@@ -32,18 +32,34 @@ const getStatusBadge = (status?: string) => {
   return statusColors[key] || 'bg-slate-100 text-slate-600';
 };
 
-/** Managed course + branch (secondary DB ids) must be set before pipeline approval. */
+/** Managed course + branch + quota + college must be set before pipeline approval (staff). */
+function joiningRegistrationHasCollege(j: Joining): boolean {
+  const r = j.registrationFormData;
+  if (!r || typeof r !== 'object') return false;
+  const o = r as Record<string, unknown>;
+  for (const k of ['college_id', 'collegeId', 'school_or_college_id', 'schoolOrCollegeId'] as const) {
+    const v = o[k];
+    if (v !== undefined && v !== null && String(v).trim()) return true;
+  }
+  const byName = o.school_or_college_name ?? o.college;
+  if (typeof byName === 'string' && byName.trim()) return true;
+  return false;
+}
+
 const joiningHasManagedCourseAndBranch = (joining: Joining): boolean => {
   const c = String(joining.courseInfo?.courseId ?? '').trim();
   const b = String(joining.courseInfo?.branchId ?? '').trim();
-  return Boolean(c && b);
+  const q = String(joining.courseInfo?.quota ?? '').trim();
+  if (!c || !b || !q) return false;
+  return joiningRegistrationHasCollege(joining);
 };
 
 const JoiningPipelinePage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const [page, setPage] = useState(1);
-  const [limit] = useState(20);
+  const [limit, setLimit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'draft' | 'pending'>('draft');
   const [isSendJoiningModalOpen, setIsSendJoiningModalOpen] = useState(false);
   const [smsSession, setSmsSession] = useState<{
@@ -53,19 +69,26 @@ const JoiningPipelinePage = () => {
   } | null>(null);
   const { getCourseName, getBranchName } = useCourseLookup();
 
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 400);
+    return () => window.clearTimeout(id);
+  }, [searchTerm]);
+
   const { data, isLoading, isFetching } = useQuery<JoiningListResponse>({
-    queryKey: ['joining-pipeline', page, limit, searchTerm, activeTab],
+    queryKey: ['joining-pipeline', page, limit, debouncedSearch, activeTab],
     queryFn: async () => {
       const statusValue = activeTab === 'pending' ? 'pending_approval' : 'draft';
       const response = await joiningAPI.list({
         page,
         limit,
-        search: searchTerm || undefined,
+        search: debouncedSearch || undefined,
         status: statusValue,
+        requireEnquiry: true,
       });
       return response;
     },
     placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
   });
 
   const payload = data?.data ?? {
@@ -76,6 +99,7 @@ const JoiningPipelinePage = () => {
   const pagination = payload.pagination ?? { page: 1, pages: 1, total: 0, limit };
   
   const isEmpty = !isLoading && joinings.length === 0;
+  const showTableLoading = isLoading;
   const queryClient = useQueryClient();
 
   const mintLinkForSmsMutation = useMutation({
@@ -96,6 +120,8 @@ const JoiningPipelinePage = () => {
         joiningOnlineAdmissionMode: true,
       });
       showToast.success('Public link created. Review the message, then send SMS.');
+      void queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining-in-progress'] });
     },
     onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
       showToast.error(error?.response?.data?.message || error?.message || 'Could not create public link');
@@ -154,11 +180,14 @@ const JoiningPipelinePage = () => {
             >
               Send Joining Form
             </Button>
-            <Link href="/superadmin/joining/new">
-              <Button variant="primary" className="whitespace-nowrap">
-                Add Joining Form
-              </Button>
-            </Link>
+            <Button
+              type="button"
+              variant="primary"
+              className="whitespace-nowrap"
+              onClick={() => setIsSendJoiningModalOpen(true)}
+            >
+              Add Joining Form
+            </Button>
             <button
               type="button"
               onClick={() => {
@@ -189,12 +218,42 @@ const JoiningPipelinePage = () => {
             </button>
           </div>
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            Total {activeTab === 'pending' ? 'pending' : 'in progress'}: <span className="font-semibold text-blue-600 dark:text-blue-300">{pagination.total}</span>
+            Total {activeTab === 'pending' ? 'pending' : 'in progress'}:{' '}
+            <span className="font-semibold text-blue-600 dark:text-blue-300">{pagination.total}</span>
+            {pagination.pages > 1 ? (
+              <span className="ml-2 text-slate-400">
+                (page {pagination.page} of {pagination.pages})
+              </span>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
+              Rows per page
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value) || 20);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+              >
+                {[20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       </Card>
 
-      <Card className="overflow-hidden border border-white/60 shadow-lg shadow-blue-100/30 dark:border-slate-800/70 dark:shadow-none">
+      <Card className="relative overflow-hidden border border-white/60 shadow-lg shadow-blue-100/30 dark:border-slate-800/70 dark:shadow-none">
+        {isFetching && !isLoading ? (
+          <div className="border-b border-slate-200/80 bg-blue-50/80 px-4 py-2 text-center text-xs font-medium text-blue-700 dark:border-slate-800 dark:bg-blue-950/40 dark:text-blue-200">
+            Updating list…
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
             <thead className="bg-slate-50/80 backdrop-blur-sm dark:bg-slate-900/70">
@@ -242,7 +301,7 @@ const JoiningPipelinePage = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
-              {isLoading || isFetching ? (
+              {showTableLoading ? (
                 <tr>
                   <td colSpan={activeTab === 'pending' ? 7 : 7} className="px-6 py-16 text-center text-sm text-slate-500">
                     <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
@@ -326,7 +385,7 @@ const JoiningPipelinePage = () => {
                               '—'}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                            {joining.courseInfo?.quota || '—'}
+                            {joining.courseInfo?.quota || joining.lead?.quota || joining.leadData?.quota || '—'}
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${paymentStatusClass}`}>
@@ -379,7 +438,7 @@ const JoiningPipelinePage = () => {
                               title={
                                 joiningHasManagedCourseAndBranch(joining)
                                   ? undefined
-                                  : 'Open the joining form and select managed course and branch under Course & Quota before approving.'
+                                  : 'Open the joining form and set college, quota, managed course, and managed branch under Course & Quota before approving.'
                               }
                               onClick={() => {
                                 approveMutation.mutate(joining.leadId || joining._id);
@@ -423,6 +482,54 @@ const JoiningPipelinePage = () => {
             </tbody>
           </table>
         </div>
+        {pagination.total > 0 ? (
+          <div className="flex flex-col gap-3 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Showing{' '}
+              <span className="font-medium">
+                {joinings.length === 0 ? 0 : (page - 1) * limit + 1}–{(page - 1) * limit + joinings.length}
+              </span>{' '}
+              of <span className="font-medium">{pagination.total}</span>
+            </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1 || isFetching}
+                onClick={() => setPage(1)}
+              >
+                First
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1 || isFetching}
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              >
+                Previous
+              </Button>
+              <span className="px-2 text-sm text-slate-600 dark:text-slate-300">
+                Page {pagination.page} of {pagination.pages}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= pagination.pages || isFetching}
+                onClick={() => setPage((prev) => Math.min(prev + 1, pagination.pages))}
+              >
+                Next
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= pagination.pages || isFetching}
+                onClick={() => setPage(pagination.pages)}
+              >
+                Last
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <JoiningDraftSmsModal
@@ -437,28 +544,6 @@ const JoiningPipelinePage = () => {
         open={isSendJoiningModalOpen}
         onClose={() => setIsSendJoiningModalOpen(false)}
       />
-
-      {pagination.pages > 1 && (
-        <div className="mt-6 flex items-center justify-end gap-3">
-          <Button
-            variant="secondary"
-            disabled={page <= 1 || isFetching}
-            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-slate-600 dark:text-slate-300">
-            Page {pagination.page} of {pagination.pages}
-          </span>
-          <Button
-            variant="secondary"
-            disabled={page >= pagination.pages || isFetching}
-            onClick={() => setPage((prev) => Math.min(prev + 1, pagination.pages))}
-          >
-            Next
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

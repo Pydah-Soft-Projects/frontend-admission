@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { joiningAPI, paymentSettingsAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
@@ -17,7 +17,10 @@ type FormState = {
   courseId: string;
   branchId: string;
   courseInterested: string;
+  quota: string;
 };
+
+const quotaOptions = ['Management', 'Convenor', 'Not Applicable'] as const;
 
 type Props = {
   open: boolean;
@@ -31,11 +34,13 @@ const initialForm: FormState = {
   courseId: '',
   branchId: '',
   courseInterested: '',
+  quota: '',
 };
 
 const onlyDigits = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 
 export function SendJoiningFormModal({ open, onClose }: Props) {
+  const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(initialForm);
   const [smsSession, setSmsSession] = useState<{
     leadId: string;
@@ -80,6 +85,7 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
         courseId: selectedCourse?.course._id,
         branchId: selectedBranch?._id,
         branch: selectedBranch?.name,
+        quota: form.quota.trim(),
         programLevel:
           selectedCourse?.course.level != null ? String(selectedCourse.course.level) : undefined,
       });
@@ -91,6 +97,10 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
         showToast.error('Draft was created but the public link could not be resolved.');
         return;
       }
+      void queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining-in-progress'] });
+      void queryClient.invalidateQueries({ queryKey: ['confirmed-leads'] });
+      void queryClient.invalidateQueries({ queryKey: ['leads'] });
       setSmsSession({
         leadId: data.leadId,
         admissionPublicLink: {
@@ -108,11 +118,20 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
     },
   });
 
+  const hasBranches = Boolean(selectedCourse?.branches?.length);
+  const courseOk =
+    String(form.courseId || '').trim() !== '' ||
+    (courseSettings.length === 0 && form.courseInterested.trim() !== '');
+  const branchOk = !hasBranches || String(form.branchId || '').trim() !== '';
+  const quotaOk = String(form.quota || '').trim() !== '';
+
   const canSubmit =
     form.studentName.trim() &&
     onlyDigits(form.studentPhone).length === 10 &&
     onlyDigits(form.fatherPhone).length === 10 &&
-    (selectedCourse?.course.name || form.courseInterested.trim());
+    courseOk &&
+    branchOk &&
+    quotaOk;
 
   return (
     <>
@@ -161,7 +180,7 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Course Interested
+                  College / course <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.courseId}
@@ -180,7 +199,7 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
                   className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                   disabled={isLoadingCourses}
                 >
-                  <option value="">{isLoadingCourses ? 'Loading courses...' : 'Choose a course'}</option>
+                  <option value="">{isLoadingCourses ? 'Loading courses...' : 'Select college / course'}</option>
                   {courseSettings.map((item) => (
                     <option key={item.course._id} value={item.course._id}>
                       {item.course.name}
@@ -190,9 +209,10 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
                 {courseSettings.length === 0 && !isLoadingCourses ? (
                   <Input
                     className="mt-3"
+                    label="College / course name"
                     value={form.courseInterested}
                     onChange={(event) => setForm((prev) => ({ ...prev, courseInterested: event.target.value }))}
-                    placeholder="Type course name"
+                    placeholder="Type college or course name"
                   />
                 ) : null}
               </div>
@@ -200,14 +220,14 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
               {selectedCourse?.branches?.length ? (
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Branch
+                    Branch <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={form.branchId}
                     onChange={(event) => setForm((prev) => ({ ...prev, branchId: event.target.value }))}
                     className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                   >
-                    <option value="">Choose a branch</option>
+                    <option value="">Select branch</option>
                     {selectedCourse.branches.map((branch) => (
                       <option key={branch._id} value={branch._id}>
                         {branch.name}
@@ -216,6 +236,24 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
                   </select>
                 </div>
               ) : null}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Quota <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.quota}
+                  onChange={(event) => setForm((prev) => ({ ...prev, quota: event.target.value }))}
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                >
+                  <option value="">Select quota</option>
+                  {quotaOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-end gap-3">

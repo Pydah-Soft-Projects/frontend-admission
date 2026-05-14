@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from 'react';
 import { Camera, ImagePlus } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { useLocations } from '@/lib/useLocations';
@@ -11,6 +11,7 @@ import {
   isJoiningMotherPortraitFileField,
   isJoiningStudentPortraitUploadField,
 } from '@/lib/joiningRegistrationPhotoFields';
+import { JoiningCameraCaptureButton } from '@/components/joining/JoiningCameraCaptureButton';
 
 export type RegistrationFormField = {
   _id?: string;
@@ -134,19 +135,134 @@ function isImageDataUrl(value: unknown): value is string {
   return typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value.trim());
 }
 
+/** Safe ASCII-ish slug for filenames (student name, etc.). */
+function slugifyForFileName(raw: string, max = 40): string {
+  const s = String(raw || '')
+    .trim()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+  const out = s.slice(0, max).replace(/^_+|_+$/g, '');
+  return out || 'student';
+}
+
+function stemFromLabel(label: string, fieldName: string, max = 36): string {
+  const raw = String(label || fieldName || 'photo').trim();
+  return slugifyForFileName(raw, max);
+}
+
+function extensionFromMime(mime: string): string {
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('png')) return 'png';
+  if (m.includes('webp')) return 'webp';
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
+  return 'jpg';
+}
+
+function buildRenamedImageFile(
+  file: File,
+  photoBaseSlug: string,
+  fieldStem: string,
+  source: 'camera' | 'gallery'
+): File {
+  const fromMime = extensionFromMime(file.type);
+  const fromName = file.name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+  const rawExt = fromMime || fromName || 'jpg';
+  const safeExt = ['png', 'webp', 'jpg', 'jpeg'].includes(rawExt) ? (rawExt === 'jpeg' ? 'jpg' : rawExt) : 'jpg';
+  const finalName = `${photoBaseSlug}_${fieldStem}_${source}_${Date.now()}.${safeExt}`;
+  const mime = file.type && file.type.startsWith('image/') ? file.type : `image/${safeExt === 'jpg' ? 'jpeg' : safeExt}`;
+  try {
+    return new File([file], finalName, { type: mime, lastModified: file.lastModified });
+  } catch {
+    return file;
+  }
+}
+
+type ReadImageMeta = {
+  photoBaseSlug: string;
+  fieldLabel: string;
+  fieldName: string;
+  source: 'camera' | 'gallery';
+  onSuccessMeta?: (meta: { fileName: string }) => void;
+};
+
+function readImageFileToFormValue(
+  file: File,
+  fieldName: string,
+  onChange: (fieldName: string, value: unknown) => void,
+  meta?: ReadImageMeta
+) {
+  const toRead =
+    meta != null
+      ? buildRenamedImageFile(file, meta.photoBaseSlug, stemFromLabel(meta.fieldLabel, meta.fieldName), meta.source)
+      : file;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = typeof reader.result === 'string' ? reader.result : '';
+    meta?.onSuccessMeta?.({ fileName: toRead.name });
+    onChange(fieldName, result || toRead.name);
+  };
+  reader.onerror = () => {
+    onChange(fieldName, toRead.name);
+  };
+  reader.readAsDataURL(toRead);
+}
+
 type PortraitSlotProps = {
   label: string;
   required?: boolean;
   helpText?: string;
   fieldName: string;
+  fieldLabelForFile: string;
   value: unknown;
   onChange: (fieldName: string, value: unknown) => void;
+  photoBaseSlug: string;
+  subjectDisplayName: string;
+  /**
+   * Hint for the **Camera** control only (`capture` on file input). Gallery uses no capture so users can pick existing photos.
+   * Front camera suits student selfies; environment suits photographing another person (e.g. parent).
+   */
+  cameraFacing?: 'user' | 'environment';
 };
 
-function RegistrationPortraitSlot({ label, required, helpText, fieldName, value, onChange }: PortraitSlotProps) {
+function RegistrationPortraitSlot({
+  label,
+  required,
+  helpText,
+  fieldName,
+  fieldLabelForFile,
+  value,
+  onChange,
+  photoBaseSlug,
+  subjectDisplayName,
+  cameraFacing = 'user',
+}: PortraitSlotProps) {
   const fileLabel = String(value || '').trim();
   const hasPreview = isImageDataUrl(value);
-  const inputId = `joining-reg-photo-${fieldName}`;
+  const [lastSavedFilename, setLastSavedFilename] = useState<string | null>(null);
+  useEffect(() => {
+    if (!value || !isImageDataUrl(value)) setLastSavedFilename(null);
+  }, [value]);
+
+  const galleryInputId = `joining-reg-photo-gal-${fieldName}`;
+  const inputNameGal = `joining_registration_photo_${fieldName}_gallery`;
+
+  const pick =
+    (source: 'camera' | 'gallery'): ChangeEventHandler<HTMLInputElement> =>
+    (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      readImageFileToFormValue(file, fieldName, onChange, {
+        photoBaseSlug,
+        fieldLabel: fieldLabelForFile,
+        fieldName,
+        source,
+        onSuccessMeta: ({ fileName }) => setLastSavedFilename(fileName),
+      });
+    };
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center rounded-xl border border-white/80 bg-white/70 p-4 shadow-inner dark:border-slate-600 dark:bg-slate-800/60">
       <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-white bg-white/90 dark:border-slate-600 dark:bg-slate-800/90">
@@ -174,32 +290,44 @@ function RegistrationPortraitSlot({ label, required, helpText, fieldName, value,
           {fileLabel}
         </p>
       ) : null}
-      <div className="mt-3 w-full">
+      {lastSavedFilename ? (
+        <p className="mt-1 max-w-full truncate text-center text-[10px] text-slate-600 dark:text-slate-400" title={lastSavedFilename}>
+          Saved as <span className="font-mono font-medium text-slate-800 dark:text-slate-200">{lastSavedFilename}</span>
+        </p>
+      ) : null}
+      <div className="mt-3 flex w-full flex-col gap-2">
+        <JoiningCameraCaptureButton
+          facing={cameraFacing}
+          aria-label={`Take ${label} with camera — ${subjectDisplayName}`}
+          buttonClassName="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
+          onCapture={(file) =>
+            readImageFileToFormValue(file, fieldName, onChange, {
+              photoBaseSlug,
+              fieldLabel: fieldLabelForFile,
+              fieldName,
+              source: 'camera',
+              onSuccessMeta: ({ fileName }) => setLastSavedFilename(fileName),
+            })
+          }
+        >
+          <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {fileLabel ? 'Retake (camera)' : 'Take photo'}
+        </JoiningCameraCaptureButton>
         <input
-          id={inputId}
+          id={galleryInputId}
+          name={inputNameGal}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*"
           className="sr-only"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-              const result = typeof reader.result === 'string' ? reader.result : '';
-              onChange(fieldName, result || file.name);
-            };
-            reader.onerror = () => {
-              onChange(fieldName, file.name);
-            };
-            reader.readAsDataURL(file);
-          }}
+          aria-label={`Upload ${label} from gallery — ${subjectDisplayName}`}
+          onChange={pick('gallery')}
         />
         <label
-          htmlFor={inputId}
-          className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
+          htmlFor={galleryInputId}
+          className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:focus:ring-offset-slate-900"
         >
           <ImagePlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {fileLabel ? 'Change' : 'Choose'}
+          {fileLabel ? 'Change (gallery)' : 'Upload'}
         </label>
       </div>
     </div>
@@ -216,6 +344,14 @@ type Props = {
   /** State / district names for location dropdowns (from parent merged address + extras). */
   selectedState: string;
   selectedDistrict: string;
+  /**
+   * Student (or applicant) identity for naming camera files and accessible labels.
+   * `baseSlug` is typically the raw name; it is slugified inside this component.
+   */
+  photoUploadContext?: {
+    baseSlug: string;
+    displayName: string;
+  };
 };
 
 export function JoiningDynamicRegistrationFields({
@@ -226,6 +362,7 @@ export function JoiningDynamicRegistrationFields({
   onChange,
   selectedState,
   selectedDistrict,
+  photoUploadContext,
 }: Props) {
   const { stateNames, districtNames, mandalNames } = useLocations({
     stateName: selectedState || undefined,
@@ -241,6 +378,15 @@ export function JoiningDynamicRegistrationFields({
   const hasSelectedGroup = Boolean(studentGroup);
   const { schools, colleges, isLoading: institutionsLoading } = useInstitutions();
   const activeInstitutions = useSchoolsList ? schools : colleges;
+
+  const photoBaseSlug = useMemo(
+    () => slugifyForFileName(photoUploadContext?.baseSlug ?? ''),
+    [photoUploadContext?.baseSlug]
+  );
+  const subjectDisplayName = useMemo(() => {
+    const d = String(photoUploadContext?.displayName || '').trim();
+    return d || 'Student';
+  }, [photoUploadContext?.displayName]);
 
   const sorted = useMemo(() => {
     return [...fields].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
@@ -582,29 +728,43 @@ export function JoiningDynamicRegistrationFields({
                     Applicant & parent photos
                   </p>
                   <p className="mb-4 text-center text-xs text-gray-600 dark:text-slate-400 sm:text-left">
-                    Student, father, and mother photos are all optional.
+                    Student, father, and mother photos are all optional. <strong>Take photo</strong> opens the live
+                    camera in a small window; <strong>Upload</strong> picks from your gallery. Files use the student
+                    prefix <span className="font-mono">{photoBaseSlug}</span>.
                   </p>
                   <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between md:gap-4">
                     <RegistrationPortraitSlot
                       label={field.fieldLabel || 'Student photo'}
-                      helpText="Passport-style (JPG / PNG / WebP), optional."
+                      helpText="Passport-style image, optional — camera or gallery."
                       fieldName={field.fieldName}
+                      fieldLabelForFile={field.fieldLabel || 'Student photo'}
                       value={fieldValue}
                       onChange={onChange}
+                      photoBaseSlug={photoBaseSlug}
+                      subjectDisplayName={subjectDisplayName}
+                      cameraFacing="user"
                     />
                     <RegistrationPortraitSlot
                       label={fatherLabel}
-                      helpText="Optional."
+                      helpText="Optional — camera or gallery."
                       fieldName={fatherKey}
+                      fieldLabelForFile={fatherLabel}
                       value={getValue(fatherKey)}
                       onChange={onChange}
+                      photoBaseSlug={photoBaseSlug}
+                      subjectDisplayName={subjectDisplayName}
+                      cameraFacing="environment"
                     />
                     <RegistrationPortraitSlot
                       label={motherLabel}
-                      helpText="Optional."
+                      helpText="Optional — camera or gallery."
                       fieldName={motherKey}
+                      fieldLabelForFile={motherLabel}
                       value={getValue(motherKey)}
                       onChange={onChange}
+                      photoBaseSlug={photoBaseSlug}
+                      subjectDisplayName={subjectDisplayName}
+                      cameraFacing="environment"
                     />
                   </div>
                   {field.helpText ? (
@@ -616,28 +776,64 @@ export function JoiningDynamicRegistrationFields({
           }
 
           if (field.fieldType === 'file') {
+            const galId = `joining-reg-file-gal-${field.fieldName}`;
+            const onGalleryPick: ChangeEventHandler<HTMLInputElement> = (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              readImageFileToFormValue(file, field.fieldName, onChange, {
+                photoBaseSlug,
+                fieldLabel: field.fieldLabel || field.fieldName,
+                fieldName: field.fieldName,
+                source: 'gallery',
+              });
+            };
             return (
               <div key={field._id || field.fieldName} className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
-                <input
-                  type="file"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const result = typeof reader.result === 'string' ? reader.result : '';
-                      onChange(field.fieldName, result || file.name);
-                    };
-                    reader.onerror = () => {
-                      onChange(field.fieldName, file.name);
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                  className="w-full text-sm text-gray-700 dark:text-slate-300"
-                />
+                <p className="mb-2 text-xs text-gray-500 dark:text-slate-400">
+                  Images only — <strong>Take photo</strong> opens the live camera; <strong>Upload</strong> picks from your
+                  gallery or files. New photos use the student file prefix <span className="font-mono">{photoBaseSlug}</span>.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <JoiningCameraCaptureButton
+                    facing="environment"
+                    aria-label={`Take photo for ${field.fieldLabel} — ${subjectDisplayName}`}
+                    buttonClassName="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
+                    onCapture={(file) =>
+                      readImageFileToFormValue(file, field.fieldName, onChange, {
+                        photoBaseSlug,
+                        fieldLabel: field.fieldLabel || field.fieldName,
+                        fieldName: field.fieldName,
+                        source: 'camera',
+                      })
+                    }
+                  >
+                    <Camera className="h-3.5 w-3.5" aria-hidden />
+                    Take photo
+                  </JoiningCameraCaptureButton>
+                  <input
+                    id={galId}
+                    name={`joining_registration_file_${field.fieldName}_gallery`}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    aria-label={`Upload file for ${field.fieldLabel} — ${subjectDisplayName}`}
+                    onChange={onGalleryPick}
+                  />
+                  <label
+                    htmlFor={galId}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                    Upload
+                  </label>
+                </div>
+                {field.helpText ? (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">{field.helpText}</p>
+                ) : null}
               </div>
             );
           }
