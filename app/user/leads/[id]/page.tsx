@@ -90,6 +90,15 @@ export default function UserLeadDetailPage() {
     selectedTemplates: {} as Record<string, { template: MessageTemplate; variables: Record<string, string> }>,
     languageFilter: 'all' as string,
   });
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsAppData, setWhatsAppData] = useState({
+    selectedNumbers: [] as string[],
+    templateId: '',
+    selectedMediaUrl: '',
+    variables: {} as Record<string, string>,
+    languageFilter: 'all' as string,
+  });
+  const [showTemplateView, setShowTemplateView] = useState(false);
 
   // Visitor Code State
   const [showVisitorCodeModal, setShowVisitorCodeModal] = useState(false);
@@ -596,6 +605,9 @@ export default function UserLeadDetailPage() {
         group.calls.push(comm);
       } else if (comm.type === 'sms') {
         group.sms.push(comm);
+      } else if (comm.type === 'whatsapp') {
+        if (!group.whatsapp) group.whatsapp = [];
+        group.whatsapp.push(comm);
       }
     });
 
@@ -608,6 +620,11 @@ export default function UserLeadDetailPage() {
 
       // Sort SMS by date (oldest first for sequence numbering)
       const sortedSms = [...group.sms].sort((a, b) =>
+        new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+      );
+
+      // Sort WhatsApp by date
+      const sortedWhatsapp = [...(group.whatsapp || [])].sort((a, b) =>
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
 
@@ -664,7 +681,37 @@ export default function UserLeadDetailPage() {
             status: comm.status,
           },
         });
+        // Add WhatsApp with sequence numbers
+      sortedWhatsapp.forEach((comm, index) => {
+        const sequenceNumber = index + 1;
+        const ordinal = sequenceNumber === 1 ? '1st' :
+          sequenceNumber === 2 ? '2nd' :
+            sequenceNumber === 3 ? '3rd' :
+              `${sequenceNumber}th`;
+
+        const messageText = comm.template?.renderedContent ||
+          comm.template?.originalContent ||
+          'WhatsApp message sent';
+        const templateName = comm.template?.name || 'WhatsApp Template';
+
+        items.push({
+          id: `whatsapp-${comm._id}`,
+          type: 'whatsapp',
+          date: comm.sentAt,
+          title: `${ordinal} WhatsApp - ${contactNumber}`,
+          description: `Template: ${templateName}\n${messageText}`,
+          performedBy: (comm.sentBy && typeof comm.sentBy === 'object') ? comm.sentBy.name : undefined,
+          metadata: {
+            contactNumber: contactNumber,
+            sequenceNumber: sequenceNumber,
+            templateName: templateName,
+            messageText: messageText,
+            templateId: comm.template?.templateId,
+            status: comm.status,
+          },
+        });
       });
+    });
     });
 
     // 4. Activity logs (status changes, comments, field updates)
@@ -716,7 +763,7 @@ export default function UserLeadDetailPage() {
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
     if (user?.roleName === 'PRO') {
-      return sorted.filter((item) => item.type !== 'call' && item.type !== 'sms');
+      return sorted.filter((item) => item.type !== 'call' && item.type !== 'sms' && item.type !== 'whatsapp');
     }
     return sorted;
   }, [lead, activityLogs, communications, user?.roleName]);
@@ -979,22 +1026,43 @@ export default function UserLeadDetailPage() {
     enabled: showSmsModal,
   });
 
+  // Fetch active templates for WhatsApp
+  const { data: whatsappTemplatesData, isLoading: isLoadingWhatsAppTemplates } = useQuery({
+    queryKey: ['activeWhatsAppTemplates', whatsAppData.languageFilter],
+    queryFn: async () => {
+      const response = await communicationAPI.getActiveTemplates(whatsAppData.languageFilter !== 'all' ? whatsAppData.languageFilter : undefined);
+      const all = response.data || response;
+      return Array.isArray(all) ? all.filter((t: MessageTemplate) => t.category === 'whatsapp') : [];
+    },
+    enabled: showWhatsAppModal,
+  });
+
+  const whatsappTemplates: MessageTemplate[] = Array.isArray(whatsappTemplatesData) ? whatsappTemplatesData : [];
+
   const templates: MessageTemplate[] = Array.isArray(templatesData) ? templatesData : templatesData?.data || [];
 
-  // Get available phone numbers from lead
+  // Get available phone numbers from lead (Deduplicated)
   const contactOptions = useMemo(() => {
     if (!lead) return [];
-    const options: { label: string; number: string }[] = [];
+    const map = new Map<string, string[]>();
+    
     if (lead.phone) {
-      options.push({ label: 'Primary Phone', number: lead.phone });
+      const n = lead.phone.trim();
+      if (n) map.set(n, [...(map.get(n) || []), 'Primary']);
     }
     if (lead.fatherPhone) {
-      options.push({ label: 'Father Phone', number: lead.fatherPhone });
+      const n = lead.fatherPhone.trim();
+      if (n) map.set(n, [...(map.get(n) || []), 'Father']);
     }
     if (lead.alternateMobile) {
-      options.push({ label: 'Alternate Mobile', number: lead.alternateMobile });
+      const n = lead.alternateMobile.trim();
+      if (n) map.set(n, [...(map.get(n) || []), 'Alt']);
     }
-    return options;
+
+    return Array.from(map.entries()).map(([num, labels]) => ({
+      label: labels.join(' & ') + (labels.length > 1 ? ' Nos' : ' No'),
+      number: num
+    }));
   }, [lead]);
 
   // Get available template languages
@@ -1076,6 +1144,34 @@ export default function UserLeadDetailPage() {
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to send SMS');
+    },
+  });
+
+  const whatsappMutation = useMutation({
+    mutationFn: async (data: {
+      templateId: string;
+      contactNumbers: string[];
+      variables?: Record<string, string>;
+      headerHandle?: string;
+    }) => {
+      const response = await communicationAPI.sendWhatsApp(leadId, data);
+      return response.data || response;
+    },
+    onSuccess: () => {
+      showToast.success('WhatsApp message sent successfully');
+      setShowWhatsAppModal(false);
+      setWhatsAppData({
+        selectedNumbers: [],
+        templateId: '',
+        selectedMediaUrl: '',
+        variables: {},
+        languageFilter: 'all',
+      });
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communications'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communicationStats'] });
+    },
+    onError: (e: any) => {
+      showToast.error(e.response?.data?.message || e.message || 'Failed to send WhatsApp message');
     },
   });
 
@@ -1350,21 +1446,44 @@ export default function UserLeadDetailPage() {
               </svg>
             </button>
             {user.roleName !== 'PRO' && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (lead) {
-                    setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
-                    setShowSmsModal(true);
-                  }
-                }}
-                className="flex items-center justify-center size-10 rounded-xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white shadow-sm"
-                aria-label="SMS"
-              >
-                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (lead) {
+                      setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
+                      setShowSmsModal(true);
+                    }
+                  }}
+                  className="flex items-center justify-center size-10 rounded-xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white shadow-sm"
+                  aria-label="SMS"
+                >
+                  <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (lead) {
+                      setWhatsAppData({ 
+                        selectedNumbers: contactOptions.map(o => o.number), 
+                        templateId: '', 
+                        selectedMediaUrl: '',
+                        variables: {},
+                        languageFilter: 'all' 
+                      });
+                      setShowWhatsAppModal(true);
+                    }
+                  }}
+                  className="flex items-center justify-center size-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white shadow-sm"
+                  aria-label="WhatsApp"
+                >
+                  <svg className="size-5" fill="currentColor" viewBox="0 0 448 512">
+                    <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+                  </svg>
+                </button>
+              </>
             )}
 
             <button
@@ -1384,17 +1503,6 @@ export default function UserLeadDetailPage() {
             >
               <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowEditModal(true)}
-              className="flex items-center justify-center size-10 rounded-xl bg-slate-600 hover:bg-slate-700 active:scale-95 text-white shadow-sm"
-              aria-label="Edit Lead"
-            >
-              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </button>
 
@@ -1461,7 +1569,19 @@ export default function UserLeadDetailPage() {
                     {(lead.name || '?').charAt(0)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-base sm:text-lg font-bold text-white drop-shadow-sm wrap-break-word">{lead.name}</h2>
+                    <h2 className="text-base sm:text-lg font-bold text-white drop-shadow-sm wrap-break-word flex items-center gap-2">
+                      {lead.name}
+                      <button
+                        type="button"
+                        onClick={() => setShowEditModal(true)}
+                        className="p-1 rounded-md hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                        aria-label="Edit Lead"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002-2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    </h2>
                     <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <p className="text-xs sm:text-sm font-medium text-white/95 break-all flex items-center gap-1.5">
                         <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1620,21 +1740,44 @@ export default function UserLeadDetailPage() {
                 Call
               </button>
               {user.roleName !== 'PRO' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (lead) {
-                      setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
-                      setShowSmsModal(true);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 dark:bg-purple-900/20 dark:border-purple-800 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs sm:text-sm font-medium"
-                >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  SMS
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (lead) {
+                        setSmsData({ selectedNumbers: contactOptions.map(o => o.number), selectedTemplates: {}, languageFilter: 'all' });
+                        setShowSmsModal(true);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 dark:bg-purple-900/20 dark:border-purple-800 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs sm:text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    SMS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (lead) {
+                        setWhatsAppData({ 
+                          selectedNumbers: contactOptions.map(o => o.number), 
+                          templateId: '', 
+                          selectedMediaUrl: '',
+                          variables: {},
+                          languageFilter: 'all' 
+                        });
+                        setShowWhatsAppModal(true);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 448 512">
+                      <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+                    </svg>
+                    WhatsApp
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1654,16 +1797,6 @@ export default function UserLeadDetailPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 {statusButtonLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowEditModal(true)}
-                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-800 dark:hover:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs sm:text-sm font-medium"
-              >
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit
               </button>
               <button
                 type="button"
@@ -1735,6 +1868,7 @@ export default function UserLeadDetailPage() {
                   const stats = communicationStatsMap.get(option.number);
                   const callCount = stats?.callCount || 0;
                   const smsCount = stats?.smsCount || 0;
+                  const whatsappCount = (stats as any)?.whatsappCount || 0;
                   const templateUsage = stats?.templateUsage || [];
                   return (
                     <div
@@ -1755,6 +1889,12 @@ export default function UserLeadDetailPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                           </svg>
                           <span className="font-medium text-slate-800 dark:text-slate-200">{smsCount}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1" title="WhatsApp">
+                          <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 448 512">
+                            <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+                          </svg>
+                          <span className="font-medium text-slate-800 dark:text-slate-200">{whatsappCount}</span>
                         </span>
                         {templateUsage.length > 0 && (
                           <span className="text-slate-400 dark:text-slate-500">{templateUsage.length} template{templateUsage.length !== 1 ? 's' : ''}</span>
@@ -1786,6 +1926,25 @@ export default function UserLeadDetailPage() {
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWhatsAppData({ 
+                              selectedNumbers: [option.number], 
+                              templateId: '', 
+                              selectedMediaUrl: '',
+                              variables: {},
+                              languageFilter: 'all' 
+                            });
+                            setShowWhatsAppModal(true);
+                          }}
+                          className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
+                          aria-label="WhatsApp"
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 448 512">
+                            <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
                           </svg>
                         </button>
                       </div>
@@ -1889,8 +2048,9 @@ export default function UserLeadDetailPage() {
                       {timelineItems.map((item, index) => {
                         const isCall = item.type === 'call';
                         const isSms = item.type === 'sms';
-                        const dotColor = isCall ? 'bg-green-500' : isSms ? 'bg-purple-500' : 'bg-blue-500';
-                        const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : 'border-blue-500';
+                        const isWhatsapp = item.type === 'whatsapp';
+                        const dotColor = isCall ? 'bg-green-500' : isSms ? 'bg-purple-500' : isWhatsapp ? 'bg-emerald-500' : 'bg-blue-500';
+                        const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : isWhatsapp ? 'border-emerald-500' : 'border-blue-500';
 
                         return (
                           <div key={item.id} className="relative pl-4 sm:pl-6 pb-2 last:pb-0">
@@ -1905,6 +2065,10 @@ export default function UserLeadDetailPage() {
                               ) : isSms ? (
                                 <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                              ) : isWhatsapp ? (
+                                <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" fill="currentColor" viewBox="0 0 448 512">
+                                  <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
                                 </svg>
                               ) : (
                                 <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
@@ -1979,8 +2143,36 @@ export default function UserLeadDetailPage() {
                                 </div>
                               )}
 
+                              {/* WhatsApp details */}
+                              {isWhatsapp && (
+                                <div className="space-y-1">
+                                  {item.metadata?.templateName && (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400">Template:</span>
+                                      <span className="text-[11px] text-gray-700 dark:text-slate-200">{item.metadata.templateName}</span>
+                                      {item.metadata?.status && (
+                                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${item.metadata.status === 'success' || item.metadata.status === 'accepted'
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                          : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                          }`}>
+                                          {item.metadata.status === 'success' || item.metadata.status === 'accepted' ? 'Sent' : 'Failed'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {item.metadata?.messageText && (
+                                    <div className="bg-white dark:bg-slate-700 rounded p-2 border border-emerald-200 dark:border-emerald-800">
+                                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-0.5 font-medium">WhatsApp Message:</p>
+                                      <p className="text-xs text-gray-700 dark:text-slate-200 whitespace-pre-wrap line-clamp-3">
+                                        {item.metadata.messageText}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Other types (Status Changes handled above, this handles general updates) */}
-                              {!isCall && !isSms && (
+                              {!isCall && !isSms && !isWhatsapp && (
                                 <div className="text-sm text-gray-700 dark:text-slate-200">
                                   {/* If it's a field update with details */}
                                   {item.type === 'field_update' && item.metadata?.fieldUpdate?.changes ? (
@@ -3222,7 +3414,265 @@ export default function UserLeadDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* WhatsApp Modal */}
+      {showWhatsAppModal && lead && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="flex min-h-full w-full items-center justify-center py-4">
+            <Card noPadding className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+              <div className="flex shrink-0 items-start justify-between border-b border-slate-200 dark:border-slate-700 p-3 sm:p-6 bg-slate-50 dark:bg-slate-800/50">
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" fill="currentColor" viewBox="0 0 448 512">
+                      <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+                    </svg>
+                    Send WhatsApp
+                  </h2>
+                  <p className="text-[10px] sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    Send to <span className="font-semibold text-slate-700 dark:text-slate-300">{lead.name}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWhatsAppModal(false)}
+                  className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:text-slate-500 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
 
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div className="space-y-6">
+                    {/* Recipients Selection */}
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recipients</label>
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                        {contactOptions.map((opt) => (
+                          <label key={opt.number} className={cn(
+                            "relative flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl border-2 transition-all cursor-pointer",
+                            whatsAppData.selectedNumbers.includes(opt.number)
+                              ? "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/20 shadow-sm"
+                              : "bg-white border-slate-200 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700"
+                          )}>
+                            <input 
+                              type="checkbox"
+                              checked={whatsAppData.selectedNumbers.includes(opt.number)}
+                              onChange={(e) => {
+                                const nums = e.target.checked 
+                                  ? [...whatsAppData.selectedNumbers, opt.number]
+                                  : whatsAppData.selectedNumbers.filter(n => n !== opt.number);
+                                setWhatsAppData(prev => ({ ...prev, selectedNumbers: nums }));
+                              }}
+                              className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter truncate">{opt.label}</p>
+                              <p className="text-[10px] sm:text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{opt.number}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Template Selection */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Message Template</label>
+                        {whatsAppData.templateId && (
+                          <button
+                            type="button"
+                            onClick={() => setShowTemplateView(true)}
+                            className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 uppercase underline decoration-2 underline-offset-2"
+                          >
+                            View Template
+                          </button>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <select 
+                          className="w-full rounded-xl border-2 border-slate-200 p-2 sm:p-3 text-xs sm:text-sm font-medium focus:border-emerald-500 focus:ring-emerald-500 dark:bg-slate-800 dark:border-slate-700"
+                          value={whatsAppData.templateId}
+                          onChange={(e) => {
+                            const tId = e.target.value;
+                            const t = whatsappTemplates.find(x => x.id === tId);
+                            setWhatsAppData(prev => ({ 
+                              ...prev, 
+                              templateId: tId,
+                              selectedMediaUrl: t?.headerHandle || '',
+                              variables: {} 
+                            }));
+                          }}
+                        >
+                          <option value="">Select a Template</option>
+                          {whatsappTemplates.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Variables & Media (Only if template selected) */}
+                    {whatsAppData.templateId && (() => {
+                      const template = whatsappTemplates.find(t => t.id === whatsAppData.templateId);
+                      if (!template) return null;
+                      
+                      return (
+                        <div className="space-y-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                          {/* Media Selection if applicable */}
+                          {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.headerType) && (
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Header Media ({template.headerType})</label>
+                              <select 
+                                className="w-full rounded-xl border-2 border-slate-200 p-2 sm:p-3 text-xs sm:text-sm font-medium focus:border-emerald-500 focus:ring-emerald-500 dark:bg-slate-800 dark:border-slate-700"
+                                value={whatsAppData.selectedMediaUrl}
+                                onChange={(e) => setWhatsAppData(prev => ({ ...prev, selectedMediaUrl: e.target.value }))}
+                              >
+                                <option value="">Select Media</option>
+                                {(template.mediaGallery || []).map((media, mIdx) => {
+                                  const mObj = typeof media === 'string' ? { name: 'Media ' + (mIdx+1), url: media } : media;
+                                  return (
+                                    <option key={mIdx} value={mObj.url}>{mObj.name}</option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Dynamic Variables */}
+                          {template.variableCount > 0 && (
+                            <div className="space-y-3">
+                              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Template Variables</label>
+                              <div className="space-y-3">
+                                {Array.from({ length: template.variableCount }).map((_, vIdx) => {
+                                  const key = String(vIdx + 1);
+                                  return (
+                                    <div key={key}>
+                                      <label className="text-[10px] font-bold text-slate-400 mb-1 block">VARIABLE {key}</label>
+                                      <input 
+                                        type="text"
+                                        placeholder={`Value for {{${key}}}`}
+                                        className="w-full rounded-lg border-2 border-slate-100 p-2 text-xs focus:border-emerald-500 dark:bg-slate-800 dark:border-slate-700"
+                                        value={whatsAppData.variables[key] || ''}
+                                        onChange={(e) => setWhatsAppData(prev => ({
+                                          ...prev,
+                                          variables: { ...prev.variables, [key]: e.target.value }
+                                        }))}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+
+              <div className="shrink-0 p-3 sm:p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-row items-center justify-end gap-2 sm:gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowWhatsAppModal(false)}
+                  disabled={whatsappMutation.isPending}
+                  className="flex-1 sm:flex-none text-xs sm:text-sm h-9 sm:h-10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 flex-1 sm:flex-none px-4 sm:px-8 text-xs sm:text-sm h-9 sm:h-10"
+                  disabled={
+                    whatsappMutation.isPending || 
+                    !whatsAppData.templateId || 
+                    whatsAppData.selectedNumbers.length === 0
+                  }
+                  onClick={() => {
+                    const t = whatsappTemplates.find(x => x.id === whatsAppData.templateId);
+                    if (!t) return;
+                    
+                    whatsappMutation.mutate({
+                      templateId: t.name,
+                      contactNumbers: whatsAppData.selectedNumbers,
+                      variables: whatsAppData.variables,
+                      headerHandle: whatsAppData.selectedMediaUrl
+                    });
+                  }}
+                >
+                  {whatsappMutation.isPending ? 'Sending...' : 'Send Now'}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Template Content Preview Popup */}
+      {showTemplateView && (
+        <Dialog open={showTemplateView} onOpenChange={setShowTemplateView}>
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="flex min-h-full w-full items-center justify-center py-4">
+              <Card noPadding className="w-full max-w-md max-h-[85vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="flex shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-700 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50">
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Template Preview
+                  </h3>
+                  <button onClick={() => setShowTemplateView(false)} className="p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                  {(() => {
+                    const t = whatsappTemplates.find(x => x.id === whatsAppData.templateId);
+                    if (!t) return <p className="text-sm text-slate-500 italic">No template selected</p>;
+                    
+                    return (
+                      <>
+                        <div className="space-y-0.5">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Template Name</p>
+                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{t.name}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Message Content</p>
+                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-800">
+                            <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-medium">
+                              {t.content}
+                            </p>
+                          </div>
+                        </div>
+                        {t.headerText && (
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Header Text</p>
+                            <p className="text-xs text-slate-600 dark:text-slate-400">{t.headerText}</p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                <div className="shrink-0 p-3 sm:p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-end">
+                  <Button 
+                    variant="primary" 
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 w-full sm:w-auto"
+                    onClick={() => setShowTemplateView(false)}
+                  >
+                    Got it
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }
