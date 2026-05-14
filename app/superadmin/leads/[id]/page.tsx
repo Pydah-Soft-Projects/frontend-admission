@@ -80,6 +80,14 @@ export default function LeadDetailPage() {
     selectedTemplates: {} as Record<string, { template: MessageTemplate; variables: Record<string, string> }>,
     languageFilter: 'all' as string,
   });
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsAppData, setWhatsAppData] = useState({
+    selectedNumbers: [] as string[],
+    templateId: '',
+    selectedMediaUrl: '',
+    variables: {} as Record<string, string>,
+    languageFilter: 'all' as string,
+  });
 
   // Status options (lead pipeline stage – only these allowed for status update)
   const statusOptions = [
@@ -703,6 +711,43 @@ export default function LeadDetailPage() {
   }, [communicationStats]);
 
   // SMS mutation - send templates to multiple numbers
+  // Fetch WhatsApp templates
+  const { data: whatsappTemplatesData, isLoading: isWALoadingTemplates } = useQuery({
+    queryKey: ['whatsappTemplates'],
+    queryFn: async () => {
+      const response = await communicationAPI.getWhatsAppTemplates();
+      return response.data || response || [];
+    },
+    staleTime: 300000,
+  });
+
+  const whatsappTemplates: MessageTemplate[] = Array.isArray(whatsappTemplatesData) ? whatsappTemplatesData : (whatsappTemplatesData as any)?.templates || [];
+
+  // Fetch Media Handles/IDs for templates
+  const { data: mediaListData, isLoading: isLoadingMedia } = useQuery({
+    queryKey: ['whatsappMedia'],
+    queryFn: async () => {
+      const response = await communicationAPI.getMediaIds();
+      return response.data || response || [];
+    },
+    staleTime: 300000,
+  });
+
+  const mediaList: Array<{ _id: string; handle: string; filename?: string; type?: string }> = Array.isArray(mediaListData) ? mediaListData : (mediaListData as any)?.media || [];
+
+  const availableWALanguages = useMemo(() => {
+    const langs = new Set<string>();
+    whatsappTemplates.forEach((t) => {
+      if (t.language) langs.add(t.language.toLowerCase());
+    });
+    return Array.from(langs);
+  }, [whatsappTemplates]);
+
+  const filteredWhatsAppTemplates = useMemo(() => {
+    if (whatsAppData.languageFilter === 'all') return whatsappTemplates;
+    return whatsappTemplates.filter((t) => t.language?.toLowerCase() === whatsAppData.languageFilter);
+  }, [whatsappTemplates, whatsAppData.languageFilter]);
+
   const smsMutation = useMutation({
     mutationFn: async (data: {
       contactNumbers: string[];
@@ -729,6 +774,65 @@ export default function LeadDetailPage() {
       showToast.error(error.response?.data?.message || 'Failed to send SMS');
     },
   });
+
+  const whatsAppMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await communicationAPI.sendWhatsApp(leadId, data);
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communications'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'communicationStats'] });
+      showToast.success('WhatsApp message sent successfully');
+      setShowWhatsAppModal(false);
+      setWhatsAppData({ selectedNumbers: [], templateId: '', selectedMediaUrl: '', variables: {}, languageFilter: 'all' });
+    },
+    onError: (error: any) => {
+      showToast.error(error.response?.data?.message || 'Failed to send WhatsApp');
+    },
+  });
+
+  const buildDefaultWATemplateValues = (template: MessageTemplate) => {
+    const vals: Record<string, string> = {};
+    const variables = template.variables || [];
+
+    // Initialize with empty strings or default mappings if we had any (like student name)
+    if (variables.length > 0) {
+      variables.forEach((v) => {
+        let defaultVal = '';
+        const key = (v.key || '').toLowerCase();
+        if (key.includes('name') && lead) defaultVal = lead.name || '';
+        vals[v.key] = defaultVal;
+      });
+    } else {
+      for (let i = 1; i <= template.variableCount; i++) {
+        vals[`var${i}`] = '';
+      }
+    }
+    return vals;
+  };
+
+  const renderWhatsAppPreview = (template: MessageTemplate, values: Record<string, string>) => {
+    if (!template.content) return '';
+    let preview = template.content;
+    const variables = template.variables || [];
+
+    if (variables.length > 0) {
+      variables.forEach((v) => {
+        const val = values[v.key] || `[${v.label || v.key}]`;
+        // Replace all occurrences of {{key}}
+        const regex = new RegExp(`\\{\\{${v.key}\\}\\}`, 'g');
+        preview = preview.replace(regex, val);
+      });
+    } else {
+      // Fallback for numbered variables {{1}}, {{2}}
+      for (let i = 1; i <= template.variableCount; i++) {
+        const val = values[`var${i}`] || `[Variable ${i}]`;
+        const regex = new RegExp(`\\{\\{${i}\\}\\}`, 'g');
+        preview = preview.replace(regex, val);
+      }
+    }
+    return preview;
+  };
 
   // Handlers
   const handleSave = async (e: React.FormEvent) => {
@@ -1391,7 +1495,7 @@ export default function LeadDetailPage() {
                           }}
                           className="w-full sm:w-auto text-xs sm:text-sm"
                         >
-                          Call {option.label}
+                          Call
                         </Button>
                         <Button
                           variant="primary"
@@ -1406,7 +1510,24 @@ export default function LeadDetailPage() {
                           }}
                           className="w-full sm:w-auto text-xs sm:text-sm"
                         >
-                          Send Message
+                          SMS
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setWhatsAppData({
+                              selectedNumbers: [option.number],
+                              templateId: '',
+                              selectedMediaUrl: '',
+                              variables: {},
+                              languageFilter: 'all'
+                            });
+                            setShowWhatsAppModal(true);
+                          }}
+                          className="w-full sm:w-auto text-xs sm:text-sm border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                        >
+                          WhatsApp
                         </Button>
                       </div>
                     </div>
@@ -2612,6 +2733,376 @@ export default function LeadDetailPage() {
                   }
                 >
                   {smsMutation.isPending ? 'Sending...' : 'Send Message'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+      {/* WhatsApp Modal */}
+      {showWhatsAppModal && lead && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 rounded-lg dark:bg-emerald-900/30">
+                  <svg className="w-6 h-6 text-emerald-600" fill="currentColor" viewBox="0 0 448 512">
+                    <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">WhatsApp Messaging</h2>
+                  <p className="text-sm text-gray-500">Send rich templates and media to your leads.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowWhatsAppModal(false);
+                  setWhatsAppData({ selectedNumbers: [], templateId: '', selectedMediaUrl: '', variables: {}, languageFilter: 'all' });
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                disabled={whatsAppMutation.isPending}
+              >
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Left: Configuration */}
+              <div className="lg:col-span-7 space-y-6">
+                {/* Recipients Section */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Recipients</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {contactOptions.map((option) => (
+                      <label
+                        key={option.number}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 cursor-pointer transition-all ${whatsAppData.selectedNumbers.includes(option.number)
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                          : 'bg-white border-gray-200 hover:border-gray-300'
+                          }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={whatsAppData.selectedNumbers.includes(option.number)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setWhatsAppData(prev => ({
+                                ...prev,
+                                selectedNumbers: [...prev.selectedNumbers, option.number]
+                              }));
+                            } else {
+                              setWhatsAppData(prev => ({
+                                ...prev,
+                                selectedNumbers: prev.selectedNumbers.filter(n => n !== option.number)
+                              }));
+                            }
+                          }}
+                          className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold">{option.label}</span>
+                          <span className="text-xs opacity-75">{option.number}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Template Selection */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Template Selection</h3>
+                    <select
+                      className="text-sm border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
+                      value={whatsAppData.languageFilter}
+                      onChange={(e) => setWhatsAppData(prev => ({ ...prev, languageFilter: e.target.value, templateId: '', variables: {} }))}
+                    >
+                      <option value="all">All Languages</option>
+                      {availableWALanguages.map(lang => (
+                        <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {isWALoadingTemplates ? (
+                      <div className="col-span-full py-8 flex flex-col items-center justify-center space-y-3">
+                        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-sm text-gray-500">Loading templates...</p>
+                      </div>
+                    ) : filteredWhatsAppTemplates.length === 0 ? (
+                      <div className="col-span-full py-8 text-center text-gray-500 italic">
+                        No WhatsApp templates found.
+                      </div>
+                    ) : (
+                      filteredWhatsAppTemplates.map((template) => (
+                        <button
+                          key={template._id}
+                          type="button"
+                          onClick={() => {
+                            setWhatsAppData(prev => ({
+                              ...prev,
+                              templateId: template._id,
+                              variables: buildDefaultWATemplateValues(template),
+                              selectedMediaUrl: template.headerType !== 'NONE' ? prev.selectedMediaUrl : ''
+                            }));
+                          }}
+                          className={`p-3 rounded-xl border-2 text-left transition-all hover:shadow-md ${whatsAppData.templateId === template._id
+                            ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
+                            : 'border-gray-100 bg-white hover:border-gray-200'
+                            }`}
+                        >
+                          <div className="font-bold text-gray-900 line-clamp-1">{template.name}</div>
+                          <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
+                            <span className="uppercase">{template.language}</span>
+                            <span>•</span>
+                            <span>{template.headerType}</span>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Variables & Media */}
+                {whatsAppData.templateId && (
+                  <div className="space-y-6 pt-4 border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-300">
+                    {/* Media Handle Selection - Only if template has media header */}
+                    {(() => {
+                      const selectedTemplate = whatsappTemplates.find(t => t._id === whatsAppData.templateId);
+                      if (selectedTemplate && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplate.headerType)) {
+                        return (
+                          <div className="space-y-3">
+                            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              Media Header ({selectedTemplate.headerType})
+                            </h3>
+                            {isLoadingMedia ? (
+                              <div className="animate-pulse flex space-x-4">
+                                <div className="flex-1 space-y-4 py-1">
+                                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                                  <div className="h-10 bg-gray-100 rounded"></div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 gap-2">
+                                <select
+                                  className="w-full rounded-xl border-gray-300 focus:ring-emerald-500 focus:border-emerald-500"
+                                  value={whatsAppData.selectedMediaUrl}
+                                  onChange={(e) => setWhatsAppData(prev => ({ ...prev, selectedMediaUrl: e.target.value }))}
+                                >
+                                  <option value="">Select a media file...</option>
+                                  {mediaList
+                                    .filter(m => {
+                                      if (selectedTemplate.headerType === 'IMAGE') return m.type?.includes('image');
+                                      if (selectedTemplate.headerType === 'VIDEO') return m.type?.includes('video');
+                                      if (selectedTemplate.headerType === 'DOCUMENT') return m.type?.includes('pdf') || m.type?.includes('application');
+                                      return true;
+                                    })
+                                    .map(media => (
+                                      <option key={media._id} value={media.handle}>
+                                        {media.filename || media.handle}
+                                      </option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-gray-400 italic">
+                                  Add more media handles in Communications &rarr; Media Manager
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* Dynamic Variables */}
+                    {(() => {
+                      const selectedTemplate = whatsappTemplates.find(t => t._id === whatsAppData.templateId);
+                      const variables = selectedTemplate?.variables || [];
+                      const count = selectedTemplate?.variableCount || 0;
+
+                      if (count > 0) {
+                        return (
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-gray-700">Dynamic Placeholders</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {variables.length > 0 ? (
+                                variables.map((v) => (
+                                  <div key={v.key}>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">{v.label || v.key}</label>
+                                    <Input
+                                      value={whatsAppData.variables[v.key] || ''}
+                                      onChange={(e) => setWhatsAppData(prev => ({
+                                        ...prev,
+                                        variables: { ...prev.variables, [v.key]: e.target.value }
+                                      }))}
+                                      placeholder={v.defaultValue || 'Enter value...'}
+                                      className="rounded-lg"
+                                    />
+                                  </div>
+                                ))
+                              ) : (
+                                Array.from({ length: count }).map((_, i) => (
+                                  <div key={`var${i + 1}`}>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Variable {i + 1}</label>
+                                    <Input
+                                      value={whatsAppData.variables[`var${i + 1}`] || ''}
+                                      onChange={(e) => setWhatsAppData(prev => ({
+                                        ...prev,
+                                        variables: { ...prev.variables, [`var${i + 1}`]: e.target.value }
+                                      }))}
+                                      placeholder="Enter value..."
+                                      className="rounded-lg"
+                                    />
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Real-time Preview Card */}
+              <div className="lg:col-span-5">
+                <div className="sticky top-0">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Message Preview</h3>
+                  <div className="relative rounded-3xl overflow-hidden shadow-xl border border-gray-100 aspect-[9/16] max-w-[300px] mx-auto bg-[#E5DDD5]">
+                    {/* WhatsApp-like header */}
+                    <div className="bg-[#075E54] p-3 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-white text-xs font-bold">{lead.name}</div>
+                        <div className="text-white/60 text-[10px]">Online</div>
+                      </div>
+                    </div>
+
+                    {/* Chat Bubble Area */}
+                    <div className="p-4 space-y-4 h-full overflow-y-auto">
+                      {whatsAppData.templateId ? (
+                        <div className="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm relative max-w-[90%] animate-in zoom-in-95 duration-200">
+                          {/* Media Header Preview */}
+                          {(() => {
+                            const template = whatsappTemplates.find(t => t._id === whatsAppData.templateId);
+                            if (template && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.headerType)) {
+                              return (
+                                <div className="mb-2 bg-gray-100 rounded-lg aspect-video flex items-center justify-center overflow-hidden border border-gray-50">
+                                  {template.headerType === 'IMAGE' && (
+                                    <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+                                    </svg>
+                                  )}
+                                  {template.headerType === 'VIDEO' && (
+                                    <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                                    </svg>
+                                  )}
+                                  {template.headerType === 'DOCUMENT' && (
+                                    <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                                    </svg>
+                                  )}
+                                  {whatsAppData.selectedMediaUrl && (
+                                    <div className="absolute inset-0 bg-emerald-500/10 flex items-center justify-center">
+                                      <span className="text-[10px] font-bold text-emerald-700 bg-white/80 px-2 py-1 rounded shadow-sm">
+                                        Media Attached
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+
+                          {/* Text Body */}
+                          <div className="text-xs text-gray-800 leading-relaxed">
+                            {(() => {
+                              const template = whatsappTemplates.find(t => t._id === whatsAppData.templateId);
+                              return template ? renderWhatsAppPreview(template, whatsAppData.variables) : '';
+                            })()}
+                          </div>
+
+                          {/* Time & Tick */}
+                          <div className="mt-1 flex justify-end items-center gap-1">
+                            <span className="text-[9px] text-gray-400">12:00 PM</span>
+                            <div className="flex -space-x-1">
+                              <svg className="w-3 h-3 text-[#4FC3F7]" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M21 7L9 19l-5.5-5.5 1.41-1.41L9 16.17 19.59 5.59 21 7z" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-center px-4">
+                          <p className="text-gray-400 text-xs italic">Select a template to see how it will look on {lead.name}'s phone</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center gap-4 pt-6 border-t border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Recipients:</span>
+                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">
+                  {whatsAppData.selectedNumbers.length} selected
+                </span>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowWhatsAppModal(false)}
+                  disabled={whatsAppMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[140px]"
+                  disabled={
+                    !whatsAppData.templateId ||
+                    whatsAppData.selectedNumbers.length === 0 ||
+                    whatsAppMutation.isPending ||
+                    (whatsappTemplates.find(t => t._id === whatsAppData.templateId)?.headerType !== 'NONE' && !whatsAppData.selectedMediaUrl)
+                  }
+                  onClick={() => {
+                    const selectedTemplate = whatsappTemplates.find(t => t._id === whatsAppData.templateId);
+                    if (!selectedTemplate) return;
+
+                    whatsAppMutation.mutate({
+                      templateId: selectedTemplate.templateId,
+                      contactNumbers: whatsAppData.selectedNumbers,
+                      variables: whatsAppData.variables,
+                      headerHandle: whatsAppData.selectedMediaUrl || undefined
+                    });
+                  }}
+                >
+                  {whatsAppMutation.isPending ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Sending...</span>
+                    </div>
+                  ) : (
+                    'Send WhatsApp'
+                  )}
                 </Button>
               </div>
             </div>

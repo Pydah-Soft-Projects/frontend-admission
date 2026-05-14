@@ -1023,9 +1023,25 @@ export const communicationAPI = {
     const response = await api.post(`/communications/lead/${leadId}/whatsapp`, data);
     return response.data;
   },
+  async verifyWhatsAppContact(phone: string) {
+    const response = await api.get('/communications/whatsapp/verify', { params: { phone } });
+    return response.data;
+  },
+  async getWhatsAppConversations() {
+    const response = await api.get('/communications/whatsapp/conversations');
+    return response.data;
+  },
+  async getWhatsAppMessages(conversationId: string) {
+    const response = await api.get(`/communications/whatsapp/conversations/${conversationId}/messages`);
+    return response.data;
+  },
+  async sendWhatsAppChatReply(conversationId: string, text: string) {
+    const response = await api.post(`/communications/whatsapp/conversations/${conversationId}/reply`, { text });
+    return response.data;
+  },
   getHistory: async (
     leadId: string,
-    params?: { page?: number; limit?: number; type?: 'call' | 'sms' }
+    params?: { page?: number; limit?: number; type?: 'call' | 'sms' | 'whatsapp' }
   ) => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', String(params.page));

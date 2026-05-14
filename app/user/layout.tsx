@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { DashboardShell, DashboardNavItem, HomeIcon, ListIcon, ChartBarIcon, SettingsIcon, BookIcon, UserPlusIcon } from '@/components/layout/DashboardShell';
+import { DashboardShell, DashboardNavItem, HomeIcon, ListIcon, ChartBarIcon, SettingsIcon, BookIcon, UserPlusIcon, CommunicationsIcon } from '@/components/layout/DashboardShell';
 import { auth } from '@/lib/auth';
 import type { User } from '@/types';
 import { Loading } from '@/components/Loading';
@@ -10,6 +10,7 @@ import { Loading } from '@/components/Loading';
 const navItems: (DashboardNavItem & { isActivity?: boolean; roles?: string[] })[] = [
   { href: '/user/dashboard', label: 'Dashboard', icon: HomeIcon },
   { href: '/user/leads', label: 'My Leads', icon: ListIcon },
+  { href: '/user/whatsapp/chat', label: 'WhatsApp Chat', icon: CommunicationsIcon },
   { href: '/user/leads/add', label: 'Add Enquiry', icon: UserPlusIcon, hideInBottomNav: true },
   { href: '/user/visit-diary', label: 'Visit Diary', icon: BookIcon, roles: ['PRO'] },
 
