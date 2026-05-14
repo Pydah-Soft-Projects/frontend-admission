@@ -319,6 +319,7 @@ export interface MessageTemplate {
   headerType?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
   headerText?: string;
   headerHandle?: string;
+  mediaGallery?: Array<{ name: string; url: string }>;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

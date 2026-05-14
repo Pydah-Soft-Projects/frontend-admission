@@ -29,7 +29,7 @@ type TemplateFormState = {
   headerType?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
   headerText?: string;
   headerHandle?: string;
-  mediaGallery?: string[];
+  mediaGallery?: Array<{ name: string; url: string }>;
 };
 
 const DEFAULT_FORM_STATE: TemplateFormState = {
@@ -111,7 +111,9 @@ const TemplateModal = ({
         headerType: (initialData as any).headerType || 'TEXT',
         headerText: (initialData as any).headerText || '',
         headerHandle: (initialData as any).headerHandle || '',
-        mediaGallery: (initialData as any).mediaGallery || [],
+        mediaGallery: Array.isArray((initialData as any).mediaGallery) 
+          ? (initialData as any).mediaGallery.map((m: any) => typeof m === 'string' ? { name: 'Legacy Media', url: m } : m)
+          : [],
       };
     }
     return { 
@@ -436,27 +438,47 @@ const TemplateModal = ({
                           {(formState.mediaGallery || []).length === 0 && (
                             <p className="text-xs text-slate-500 italic">No media URLs stored yet. Add one below.</p>
                           )}
-                          {formState.mediaGallery?.map((url, i) => (
-                            <div key={i} className={`flex items-center gap-3 p-2 rounded border transition-colors ${formState.headerHandle === url ? 'bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-900/50' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
+                          {formState.mediaGallery?.map((media, i) => (
+                            <div key={i} className={`flex items-center gap-3 p-2 rounded border transition-all ${formState.headerHandle === media.url ? 'bg-orange-50/80 border-orange-200 dark:bg-orange-950/30 dark:border-orange-900/50 ring-1 ring-orange-500/10' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
                               <input 
                                 type="radio" 
+                                id={`media-opt-${i}`}
                                 name="active-media-select" 
-                                checked={formState.headerHandle === url}
-                                onChange={() => setFormState(prev => ({ ...prev, headerHandle: url }))}
-                                className="h-4 w-4 text-orange-600 focus:ring-orange-500"
+                                checked={formState.headerHandle === media.url}
+                                onChange={() => setFormState(prev => ({ ...prev, headerHandle: media.url }))}
+                                className="h-4 w-4 text-orange-600 focus:ring-orange-500 cursor-pointer"
                               />
                               <div className="flex-1 min-w-0">
-                                <p className="text-[10px] font-mono truncate text-slate-600 dark:text-slate-400" title={url}>{url}</p>
+                                <input 
+                                  type="text"
+                                  className="w-full bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500/50 rounded px-1 -ml-1 mb-0.5 transition-all hover:bg-slate-100/50 dark:hover:bg-slate-700/50"
+                                  value={media.name}
+                                  onChange={(e) => {
+                                    const newName = e.target.value;
+                                    setFormState(prev => ({
+                                      ...prev,
+                                      mediaGallery: prev.mediaGallery?.map((m, idx) => idx === i ? { ...m, name: newName } : m)
+                                    }));
+                                  }}
+                                  placeholder="Enter name (e.g. Brochure)"
+                                />
+                                <p 
+                                  className="text-[9px] font-mono truncate text-slate-500 dark:text-slate-400 cursor-pointer" 
+                                  title={media.url}
+                                  onClick={() => setFormState(prev => ({ ...prev, headerHandle: media.url }))}
+                                >
+                                  {media.url}
+                                </p>
                               </div>
                               <button 
                                 type="button" 
-                                className="text-xs text-red-500 hover:text-red-700 p-1"
+                                className="text-xs text-red-500 hover:text-red-700 p-1 transition-colors"
                                 onClick={() => {
                                   const nextGallery = formState.mediaGallery?.filter((_, idx) => idx !== i) || [];
                                   setFormState(prev => ({ 
                                     ...prev, 
                                     mediaGallery: nextGallery,
-                                    headerHandle: prev.headerHandle === url ? (nextGallery[0] || '') : prev.headerHandle
+                                    headerHandle: prev.headerHandle === media.url ? (nextGallery[0]?.url || '') : prev.headerHandle
                                   }));
                                 }}
                               >
@@ -466,47 +488,62 @@ const TemplateModal = ({
                           ))}
                         </div>
 
-                        <div className="flex gap-2 pt-2">
-                          <div className="flex-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                          <Input 
+                            placeholder="Media Name (e.g. Brochure)" 
+                            className="text-xs h-8"
+                            id="new-media-name"
+                          />
+                          <div className="flex gap-2">
                             <Input 
-                              placeholder="Paste new Media ID or URL..." 
-                              className="text-xs h-8"
+                              placeholder="Media ID or URL..." 
+                              className="text-xs h-8 flex-1"
                               id="new-media-input"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
-                                  const btn = document.getElementById('add-media-btn');
-                                  btn?.click();
+                                  document.getElementById('add-media-btn')?.click();
                                 }
                               }}
                             />
+                            <Button 
+                              id="add-media-btn"
+                              variant="secondary" 
+                              size="sm" 
+                              className="h-8 px-3"
+                              onClick={() => {
+                                const nameInput = document.getElementById('new-media-name') as HTMLInputElement;
+                                const urlInput = document.getElementById('new-media-input') as HTMLInputElement;
+                                const name = nameInput.value.trim();
+                                const url = urlInput.value.trim();
+                                
+                                if (!name || !url) {
+                                  showToast.error('Name and URL are required');
+                                  return;
+                                }
+                                
+                                if (formState.mediaGallery?.some(m => m.url === url)) {
+                                  showToast.error('URL already in gallery');
+                                  return;
+                                }
+                                
+                                setFormState(prev => {
+                                  const nextGallery = [...(prev.mediaGallery || []), { name, url }];
+                                  return {
+                                    ...prev,
+                                    mediaGallery: nextGallery,
+                                    headerHandle: prev.headerHandle || url
+                                  };
+                                });
+                                
+                                nameInput.value = '';
+                                urlInput.value = '';
+                                nameInput.focus();
+                              }}
+                            >
+                              Add
+                            </Button>
                           </div>
-                          <Button 
-                            id="add-media-btn"
-                            variant="secondary" 
-                            size="sm" 
-                            className="h-8 px-3"
-                            onClick={() => {
-                              const input = document.getElementById('new-media-input') as HTMLInputElement;
-                              const val = input.value.trim();
-                              if (!val) return;
-                              if (formState.mediaGallery?.includes(val)) {
-                                showToast.error('URL already in gallery');
-                                return;
-                              }
-                              setFormState(prev => {
-                                const nextGallery = [...(prev.mediaGallery || []), val];
-                                return {
-                                  ...prev,
-                                  mediaGallery: nextGallery,
-                                  headerHandle: prev.headerHandle || val
-                                };
-                              });
-                              input.value = '';
-                            }}
-                          >
-                            Add
-                          </Button>
                         </div>
                         <p className="text-[9px] text-slate-500">
                           Select the radio button to set the active media for this template.
@@ -1093,8 +1130,8 @@ function TestTemplateSmsModal({
                         ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.headerType);
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
-      <Card className="max-h-[92vh] w-full max-w-4xl flex flex-col overflow-hidden shadow-xl">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 md:p-6">
+      <Card className="max-h-screen md:max-h-[92vh] w-full max-w-6xl flex flex-col overflow-hidden shadow-xl">
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
           <div>
@@ -1183,22 +1220,25 @@ function TestTemplateSmsModal({
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <p className="text-[10px] font-bold uppercase tracking-tight text-slate-500">Quick select from gallery</p>
-                          {template.mediaGallery?.includes(headerHandle) && !hasUploaded && (
+                          {template.mediaGallery?.some(m => m.url === headerHandle) && !hasUploaded && (
                             <span className="text-[9px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">Selected from Gallery</span>
                           )}
                         </div>
                         <div className="max-h-32 overflow-y-auto space-y-1 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-800">
-                          {template.mediaGallery?.map((url, i) => (
+                          {template.mediaGallery?.map((media, i) => (
                             <div 
                               key={i} 
-                              className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all ${headerHandle === url && !hasUploaded ? 'bg-white dark:bg-slate-800 shadow-sm border border-orange-200 dark:border-orange-900/50' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+                              className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all ${headerHandle === media.url && !hasUploaded ? 'bg-white dark:bg-slate-800 shadow-sm border border-orange-200 dark:border-orange-900/50' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
                               onClick={() => {
-                                setHeaderHandle(url);
+                                setHeaderHandle(media.url);
                                 setHasUploaded(false);
                               }}
                             >
-                              <div className={`h-3 w-3 rounded-full border-2 ${headerHandle === url && !hasUploaded ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`} />
-                              <p className="text-[10px] font-mono truncate flex-1 text-slate-600 dark:text-slate-400" title={url}>{url}</p>
+                              <div className={`h-3 w-3 rounded-full border-2 ${headerHandle === media.url && !hasUploaded ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{media.name}</p>
+                                <p className="text-[9px] font-mono truncate text-slate-500 dark:text-slate-400" title={media.url}>{media.url}</p>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1218,7 +1258,7 @@ function TestTemplateSmsModal({
                       <p className="text-[10px] font-bold uppercase tracking-tight text-slate-500">Custom Media ID or Upload</p>
                       {hasUploaded ? (
                         <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">File Uploaded</span>
-                      ) : headerHandle && !template.mediaGallery?.includes(headerHandle) ? (
+                      ) : headerHandle && !template.mediaGallery?.some(m => m.url === headerHandle) ? (
                         <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">Manual Input</span>
                       ) : null}
                     </div>
@@ -1930,6 +1970,7 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
           district: districtFilter.trim() || null,
           selectedUsers: [],
         },
+        headerHandle: channel === 'whatsapp' ? selectedMediaUrl : undefined,
         items: rows.map((row) => ({
           leadId: row.leadId,
           leadName: row.leadName,
@@ -2008,6 +2049,20 @@ function SendToLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string)
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Variables default per lead; you can edit them in the review step before sending.
           </p>
+          {channel === 'whatsapp' && selectedTemplate && (selectedTemplate.mediaGallery?.length || 0) > 0 && (
+            <div className="mt-2 space-y-1.5 animate-in slide-in-from-top-1 duration-200">
+              <label className="text-[10px] font-bold uppercase tracking-tight text-slate-500">Select Media to Send</label>
+              <select
+                className="w-full max-w-md rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 focus:border-orange-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                value={selectedMediaUrl}
+                onChange={(e) => setSelectedMediaUrl(e.target.value)}
+              >
+                {selectedTemplate.mediaGallery?.map((m) => (
+                  <option key={m.url} value={m.url}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 dark:border-slate-700 xl:border-0 xl:pt-0">
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -2542,7 +2597,12 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
   const [smsReviewStatusBreakdown, setSmsReviewStatusBreakdown] = useState<Record<string, number>>({});
   const [smsReviewInvalidCount, setSmsReviewInvalidCount] = useState(0);
   const [isPreparingSmsReview, setIsPreparingSmsReview] = useState(false);
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState('');
   const smsPrepareGenRef = useRef(0);
+
+  useEffect(() => {
+    setSelectedMediaUrl(selectedTemplate?.headerHandle || '');
+  }, [selectedTemplate]);
 
   const confirmSendMutation = useMutation({
     mutationFn: async (rows: SmsReviewRow[]) => {
@@ -2572,6 +2632,7 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
           source: 'user_specific_leads',
           templateId: tpl._id,
           reportContext,
+          headerHandle: selectedMediaUrl,
           items: rows.map((row) => ({
             leadId: row.leadId,
             leadName: row.leadName,
@@ -2659,11 +2720,9 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
       }
       const targetLeads = allLeads.filter(leadHasRecipient).slice(0, MAX_SMS_BULK_LEADS);
       
-      // Calculate status breakdown of leads that actually have valid recipients
       const breakdown: Record<string, number> = {};
       const validLeads = allLeads.filter(leadHasRecipient);
 
-      // Determine effective role for status labels (prefer roleNameFilter, then first selected user's role)
       const firstSelectedUser = selectedUserIds.length > 0 
         ? users.find(u => String(u.id ?? u.userId ?? '') === selectedUserIds[0])
         : null;
@@ -2892,6 +2951,20 @@ function UserLeadsTab({ onBulkJobQueued }: { onBulkJobQueued?: (jobId: string) =
                 </select>
               )}
             </label>
+            {channel === 'whatsapp' && selectedTemplate && (selectedTemplate.mediaGallery?.length || 0) > 0 && (
+              <label className="flex min-w-[10rem] flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-400 animate-in slide-in-from-top-1 duration-200">
+                Media to Send
+                <select
+                  className={`${filterSelectClass} h-[38px]`}
+                  value={selectedMediaUrl}
+                  onChange={(e) => setSelectedMediaUrl(e.target.value)}
+                >
+                  {selectedTemplate.mediaGallery?.map((m) => (
+                    <option key={m.url} value={m.url}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="flex flex-wrap items-center gap-4 pb-1 text-sm text-slate-700 dark:text-slate-300">
               <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 {channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} to
