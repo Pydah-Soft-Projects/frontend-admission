@@ -3446,7 +3446,7 @@ export default function UserLeadDetailPage() {
                     {/* Recipients Selection */}
                     <div className="space-y-3">
                       <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recipients</label>
-                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                         {contactOptions.map((opt) => (
                           <label key={opt.number} className={cn(
                             "relative flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl border-2 transition-all cursor-pointer",
