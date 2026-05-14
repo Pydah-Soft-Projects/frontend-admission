@@ -7,7 +7,7 @@ import { joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
 import { SendJoiningFormModal } from '@/components/joining/SendJoiningFormModal';
-import { JoiningListResponse } from '@/types';
+import { JoiningListResponse, Joining } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -30,6 +30,13 @@ const getStatusBadge = (status?: string) => {
   if (!status) return 'bg-slate-100 text-slate-600';
   const key = status.toLowerCase();
   return statusColors[key] || 'bg-slate-100 text-slate-600';
+};
+
+/** Managed course + branch (secondary DB ids) must be set before pipeline approval. */
+const joiningHasManagedCourseAndBranch = (joining: Joining): boolean => {
+  const c = String(joining.courseInfo?.courseId ?? '').trim();
+  const b = String(joining.courseInfo?.branchId ?? '').trim();
+  return Boolean(c && b);
 };
 
 const JoiningPipelinePage = () => {
@@ -365,7 +372,15 @@ const JoiningPipelinePage = () => {
                             <Button
                               variant="primary"
                               size="sm"
-                              disabled={approveMutation.isPending}
+                              disabled={
+                                approveMutation.isPending ||
+                                !joiningHasManagedCourseAndBranch(joining)
+                              }
+                              title={
+                                joiningHasManagedCourseAndBranch(joining)
+                                  ? undefined
+                                  : 'Open the joining form and select managed course and branch under Course & Quota before approving.'
+                              }
                               onClick={() => {
                                 approveMutation.mutate(joining.leadId || joining._id);
                               }}

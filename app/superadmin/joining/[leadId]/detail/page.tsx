@@ -49,7 +49,7 @@ export default function JoiningDetailPage() {
   const router = useRouter();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const leadId = Array.isArray(params?.leadId) ? params.leadId[0] : params?.leadId;
-  const { getCourseName, getBranchName } = useCourseLookup();
+  const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
 
   const [revealedAadhaars, setRevealedAadhaars] = useState<{
     student: boolean;
@@ -148,6 +148,7 @@ export default function JoiningDetailPage() {
               admissionNumber={admission?.admissionNumber}
               courseName={joining.courseInfo?.course || getCourseName(joining.courseInfo?.courseId) || undefined}
               branchName={joining.courseInfo?.branch || getBranchName(joining.courseInfo?.branchId) || undefined}
+              collegeName={getCollegeNameForCourse(joining.courseInfo?.courseId) || undefined}
               paymentSummary={paymentSummary ?? undefined}
               transactions={transactions}
               title="Student Application"
@@ -171,7 +172,19 @@ export default function JoiningDetailPage() {
       </div>
     );
     return () => clearHeaderContent();
-  }, [joining, lead, leadId, setHeaderContent, clearHeaderContent]);
+  }, [
+    joining,
+    lead,
+    leadId,
+    admission,
+    paymentSummary,
+    transactions,
+    getCourseName,
+    getBranchName,
+    getCollegeNameForCourse,
+    setHeaderContent,
+    clearHeaderContent,
+  ]);
 
   if (isLoading) {
     return (

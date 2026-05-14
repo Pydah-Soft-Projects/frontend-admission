@@ -2758,6 +2758,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const isUpdatingAdmission = updateAdmissionMutation.isPending;
 
   const canSubmit = canWriteJoining && status !== 'approved' && status !== 'pending_approval';
+  const hasManagedCourseAndBranch = useMemo(() => {
+    const c = String(formState.courseInfo.courseId ?? '').trim();
+    const b = String(formState.courseInfo.branchId ?? '').trim();
+    return Boolean(c && b);
+  }, [formState.courseInfo.courseId, formState.courseInfo.branchId]);
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
   const isAdmissionEditable = canWriteJoining && status === 'approved';
   /** After approval: admin sees summary, payments, and fee table on this joining page; cert/fees live on admission. */
@@ -2769,6 +2774,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const handleSaveAdmissionRecord = () => {
     if (!canWriteJoining) {
       showToast.error('You have read-only access to the joining desk');
+      return;
+    }
+    if (!hasManagedCourseAndBranch) {
+      showToast.error('Select a managed course and branch before updating the admission record.');
       return;
     }
     updateAdmissionMutation.mutate(payloadForSave);
@@ -2931,9 +2940,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               <>
                 <Button
                   variant="primary"
-                  disabled={isUpdatingAdmission || isBusy || !canWriteJoining}
+                  disabled={isUpdatingAdmission || isBusy || !canWriteJoining || !hasManagedCourseAndBranch}
                   onClick={handleSaveAdmissionRecord}
                   className="group inline-flex items-center gap-2"
+                  title={
+                    hasManagedCourseAndBranch
+                      ? undefined
+                      : 'Select managed course and branch in Course & Quota before saving.'
+                  }
                 >
                   {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
                   <svg
@@ -3115,6 +3129,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           <div className="min-w-0">
                             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                               Select Managed Course
+                              <span className="ml-1 text-rose-600">*</span>
                             </label>
                             <select
                               value={formState.courseInfo.courseId || ''}
@@ -3136,6 +3151,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           <div className="min-w-0">
                             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                               Select Managed Branch
+                              <span className="ml-1 text-rose-600">*</span>
                             </label>
                             <select
                               value={formState.courseInfo.branchId || ''}
@@ -4497,6 +4513,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             {/* Action Buttons at Bottom - Always visible for draft/pending status */}
             {!isAdmissionEditable && status !== 'approved' && (
               <div className="sticky bottom-0 z-10 rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+                {!isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval') && (
+                  <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                    Managed <strong>course</strong> and <strong>branch</strong> are required — choose both under{' '}
+                    <strong>Course &amp; Quota</strong> before submitting or approving.
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   {status === 'draft' && !isPublicEdit && (
                     <Button
@@ -4516,10 +4538,23 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   {status === 'draft' && (
                     <Button
                       variant="primary"
-                      disabled={!canSubmit || isSubmitting}
+                      disabled={
+                        !canSubmit ||
+                        isSubmitting ||
+                        (!isPublicEdit && !hasManagedCourseAndBranch)
+                      }
+                      title={
+                        isPublicEdit || hasManagedCourseAndBranch
+                          ? undefined
+                          : 'Select managed course and branch under Course & Quota first.'
+                      }
                       onClick={() => {
                         if (!canWriteJoining) {
                           showToast.error('You have read-only access to the joining desk');
+                          return;
+                        }
+                        if (!isPublicEdit && !hasManagedCourseAndBranch) {
+                          showToast.error('Select a managed course and branch before submitting for approval.');
                           return;
                         }
                         submitMutation.mutate();
@@ -4531,10 +4566,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   {canApprove && (
                     <Button
                       variant="primary"
-                      disabled={isApproving}
+                      disabled={isApproving || !hasManagedCourseAndBranch}
+                      title={
+                        hasManagedCourseAndBranch
+                          ? undefined
+                          : 'Select managed course and branch under Course & Quota before approving.'
+                      }
                       onClick={() => {
                         if (!canWriteJoining) {
                           showToast.error('You have read-only access to the joining desk');
+                          return;
+                        }
+                        if (!hasManagedCourseAndBranch) {
+                          showToast.error('Select a managed course and branch before approving.');
                           return;
                         }
                         approveMutation.mutate();

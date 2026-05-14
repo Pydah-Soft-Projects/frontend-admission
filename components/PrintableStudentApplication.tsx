@@ -19,6 +19,25 @@ function escapeHtml(text: string | undefined): string {
     .replace(/'/g, '&#39;');
 }
 
+/** Safe for double-quoted HTML attributes (e.g. img src). */
+function escapeHtmlAttribute(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;');
+}
+
+/** Only allow values suitable for print iframe img src (avoid HTML injection). */
+function safeImageSrcForPrint(url?: string | null): string | null {
+  const s = String(url ?? '').trim();
+  if (!s) return null;
+  if (/^data:image\//i.test(s)) return s;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('/')) return s;
+  return null;
+}
+
 function formatCurrency(amount?: number | null): string {
   if (amount === undefined || amount === null || Number.isNaN(amount)) return '—';
   try {
@@ -50,6 +69,8 @@ export interface PrintableStudentApplicationProps {
   paymentSummary?: PaymentSummary | null;
   /** Recent transactions for print */
   transactions?: PaymentTransaction[];
+  /** College display name (e.g. from course lookup); replaces generic header text. */
+  collegeName?: string;
   /** Title shown at top of print */
   title?: string;
   /** Label for the print button */
@@ -82,6 +103,7 @@ function getPrintApplicationHtml(props: {
   paymentSummary?: PaymentSummary | null;
   transactions?: PaymentTransaction[];
   printedDate: string;
+  collegeName?: string;
 }): string {
   const {
     application,
@@ -93,6 +115,7 @@ function getPrintApplicationHtml(props: {
     paymentSummary,
     transactions = [],
     printedDate,
+    collegeName,
   } = props;
 
   const student = application.studentInfo;
@@ -105,6 +128,17 @@ function getPrintApplicationHtml(props: {
   const documents = application.documents ?? {};
   const siblings = (application as Joining).siblings ?? (application as Admission).siblings ?? [];
   const relatives = address?.relatives ?? [];
+
+  const headerCollegeTitle = (collegeName || '').trim()
+    ? (collegeName || '').trim().toUpperCase()
+    : '—';
+
+  const fatherPhotoSrc = safeImageSrcForPrint(parents?.father?.photo);
+  const motherPhotoSrc = safeImageSrcForPrint(parents?.mother?.photo);
+  const parentPhotoCell = (src: string | null) =>
+    src
+      ? `<img src="${escapeHtmlAttribute(src)}" alt="" class="parent-photo-img" />`
+      : `<span class="parent-photo-empty">—</span>`;
 
   // Normalize education level value so we can match data regardless of case
   // or separator differences (e.g. "ssc", "SSC", "inter_diploma",
@@ -329,6 +363,15 @@ function getPrintApplicationHtml(props: {
     .text-red { color: #8B2323; }
     .font-8 { font-size: 8px; }
 
+    .parent-photo-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; padding-left: 20px; }
+    .parent-photo-label { min-width: 72px; font-weight: 600; font-size: 10px; padding-top: 4px; }
+    .parent-photo-thumb { border: 1px solid #777; width: 88px; height: 104px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fafafa; }
+    .parent-photo-img { max-width: 100%; max-height: 100%; object-fit: cover; }
+    .parent-photo-empty { font-size: 9px; color: #999; }
+
+    .fee-print-page { page-break-before: always; break-before: page; }
+    .fee-print-page .office-use-bottom { break-inside: avoid; page-break-inside: avoid; }
+
     @media print {
       body { padding: 0; margin: 5mm 10mm; }
       .no-print { display: none; }
@@ -349,13 +392,13 @@ function getPrintApplicationHtml(props: {
       </div>
       <div class="header-main">
         <div>
-          <h1>PYDAH EDUCATIONAL INSTITUTIONS</h1>
-          <p>KAKINADA</p>
+          <h1>${escapeHtml(headerCollegeTitle)}</h1>
         </div>
       </div>
 
       <div class="office-use-top">
         <div class="title">For Office Use</div>
+        <div><span>College :</span> <span>${escapeHtml((collegeName || '').trim() || '—')}</span></div>
         <div><span>Course :</span> <span>${escapeHtml(courseName || course?.course)}</span></div>
         <div><span>Branch :</span> <span>${escapeHtml(branchName || course?.branch)}</span></div>
         <div><span>Quota :</span> <span>${escapeHtml(course?.quota)}</span></div>
@@ -407,6 +450,10 @@ function getPrintApplicationHtml(props: {
         <span style="min-width: 80px; margin-left: 20px;">Mobile :</span>
         <span class="inline-val">${escapeHtml(parents?.father?.phone)}</span>
       </div>
+      <div class="parent-photo-row">
+        <span class="parent-photo-label">Father photo :</span>
+        <div class="parent-photo-thumb">${parentPhotoCell(fatherPhotoSrc)}</div>
+      </div>
       <div class="form-row">
         <span style="width: 20px;"></span>
         <span class="form-label">Nationality :</span>
@@ -422,6 +469,10 @@ function getPrintApplicationHtml(props: {
         <span class="inline-val">${escapeHtml(parents?.mother?.aadhaarNumber)}</span>
         <span style="min-width: 80px; margin-left: 20px;">Mobile :</span>
         <span class="inline-val">${escapeHtml(parents?.mother?.phone)}</span>
+      </div>
+      <div class="parent-photo-row">
+        <span class="parent-photo-label">Mother photo :</span>
+        <div class="parent-photo-thumb">${parentPhotoCell(motherPhotoSrc)}</div>
       </div>
 
       <div class="form-row m-t-10">
@@ -661,6 +712,7 @@ function getPrintApplicationHtml(props: {
     <div class="top-meta">
       <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
       <div>Pin No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
+      <div>College: <span style="border-bottom: 1px dotted #333; min-width: 120px; display: inline-block;">${escapeHtml((collegeName || '').trim() || '—')}</span></div>
       <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
       <div>Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span></div>
     </div>
@@ -726,6 +778,7 @@ function getPrintApplicationHtml(props: {
       </div>
     </div>
 
+    <div class="fee-print-page">
     <div class="office-label-tag">FOR OFFICE USE</div>
     <div class="office-use-bottom">
       <div class="office-use-bottom-left">
@@ -780,6 +833,7 @@ function getPrintApplicationHtml(props: {
       Do not pay the fees without receipt. Do not transfer/deposit College<br/>
       fees to any personal account
     </div>
+    </div>
 
   </div>
 </body>
@@ -799,6 +853,7 @@ export function PrintableStudentApplication({
   branchName,
   paymentSummary,
   transactions,
+  collegeName,
   title = DEFAULT_TITLE,
   printButtonLabel = 'Print application',
   className,
@@ -819,6 +874,7 @@ export function PrintableStudentApplication({
       paymentSummary: paymentSummary ?? null,
       transactions: transactions ?? [],
       printedDate: '',
+      collegeName,
     });
     const iframe = document.createElement('iframe');
     iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;overflow:hidden;');
@@ -865,6 +921,7 @@ export function PrintableStudentApplication({
     branchName,
     paymentSummary,
     transactions,
+    collegeName,
     onPrintOpen,
     onPrintClose,
   ]);

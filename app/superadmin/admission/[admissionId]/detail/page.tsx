@@ -114,7 +114,7 @@ export default function AdmissionDetailPage() {
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const admissionId = Array.isArray(params?.admissionId) ? params.admissionId[0] : params?.admissionId;
-  const { getCourseName, getBranchName } = useCourseLookup();
+  const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
 
   const [revealedAadhaars, setRevealedAadhaars] = useState<{
     student: boolean;
@@ -301,6 +301,7 @@ export default function AdmissionDetailPage() {
               admissionNumber={admission.admissionNumber}
               courseName={admission.courseInfo?.course || getCourseName(admission.courseInfo?.courseId) || undefined}
               branchName={admission.courseInfo?.branch || getBranchName(admission.courseInfo?.branchId) || undefined}
+              collegeName={getCollegeNameForCourse(admission.courseInfo?.courseId) || undefined}
               paymentSummary={paymentSummary ?? undefined}
               transactions={transactions}
               title="Student Application"
@@ -341,8 +342,7 @@ export default function AdmissionDetailPage() {
     isAdmissionCancelled,
     paymentSummary,
     transactions,
-    getCourseName,
-    getBranchName,
+    getCollegeNameForCourse,
     setHeaderContent,
     clearHeaderContent,
   ]);
