@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 import { isJoiningRegistrationCertificationStatusField } from '@/lib/joiningRegistrationFieldFilter';
+import { isJoiningRegistrationBatchField } from '@/lib/joiningAcademicYearRegistration';
 import {
   isJoiningFatherPortraitFileField,
   isJoiningMotherPortraitFileField,
@@ -98,19 +99,7 @@ function isFixedSemesterField(field: RegistrationFormField): boolean {
  * with the same year-picker as the Fee Structure section so both surfaces stay in sync.
  */
 function isBatchField(field: RegistrationFormField): boolean {
-  const n = normKey(field.fieldName || '');
-  const l = normKey(field.fieldLabel || '');
-  return (
-    n === 'batch' ||
-    n === 'batch_year' ||
-    n === 'admission_batch' ||
-    n === 'admission_year' ||
-    n === 'joining_batch' ||
-    l === 'batch' ||
-    l === 'batch_year' ||
-    l === 'admission_batch' ||
-    l === 'admission_year'
-  );
+  return isJoiningRegistrationBatchField(field.fieldName || '', field.fieldLabel || '');
 }
 
 /** current ± 3 years, newest first. Same window as the Fee Structure section. */
@@ -345,6 +334,15 @@ type Props = {
   selectedState: string;
   selectedDistrict: string;
   /**
+   * Locked intake year / semester for non–B.Tech programs (calendar year + 1-1).
+   * B.Tech: year is only a display default when empty; real value comes from `getValue`.
+   */
+  fixedRegistrationAcademicYear: string;
+  fixedRegistrationSemester: string;
+  /** B.Tech: allow current vs prior academic year; semester stays fixed (2-1). */
+  isBtechJoining?: boolean;
+  btechYearOptions?: Array<{ value: string; label: string }>;
+  /**
    * Student (or applicant) identity for naming camera files and accessible labels.
    * `baseSlug` is typically the raw name; it is slugified inside this component.
    */
@@ -362,6 +360,10 @@ export function JoiningDynamicRegistrationFields({
   onChange,
   selectedState,
   selectedDistrict,
+  fixedRegistrationAcademicYear,
+  fixedRegistrationSemester,
+  isBtechJoining = false,
+  btechYearOptions,
   photoUploadContext,
 }: Props) {
   const { stateNames, districtNames, mandalNames } = useLocations({
@@ -609,12 +611,17 @@ export function JoiningDynamicRegistrationFields({
           }
 
           if (field.fieldType === 'dropdown') {
-            const dropdownOptions = isFixedAcademicYearField(field)
-              ? [{ value: '2026', label: '2026' }]
+            const btechYearPick =
+              Boolean(isBtechJoining && isFixedAcademicYearField(field) && btechYearOptions?.length);
+            const dropdownOptions = btechYearPick
+              ? (btechYearOptions as Array<{ value: string; label: string }>)
+              : isFixedAcademicYearField(field)
+              ? [{ value: fixedRegistrationAcademicYear, label: fixedRegistrationAcademicYear }]
               : isFixedSemesterField(field)
-              ? [{ value: '1-1', label: '1-1' }]
+              ? [{ value: fixedRegistrationSemester, label: fixedRegistrationSemester }]
               : normalizeFieldOptions(field.options);
-            const forceDisabled = isFixedAcademicYearField(field) || isFixedSemesterField(field);
+            const forceDisabled =
+              (isFixedAcademicYearField(field) || isFixedSemesterField(field)) && !btechYearPick;
             return (
               <div key={field._id || field.fieldName}>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -622,10 +629,12 @@ export function JoiningDynamicRegistrationFields({
                 </label>
                 <select
                   value={
-                    isFixedAcademicYearField(field)
-                      ? '2026'
+                    btechYearPick
+                      ? String(fieldValue || fixedRegistrationAcademicYear)
+                      : isFixedAcademicYearField(field)
+                      ? fixedRegistrationAcademicYear
                       : isFixedSemesterField(field)
-                      ? '1-1'
+                      ? fixedRegistrationSemester
                       : String(fieldValue)
                   }
                   onChange={(e) => onChange(field.fieldName, e.target.value)}
@@ -641,6 +650,13 @@ export function JoiningDynamicRegistrationFields({
                 </select>
                 {field.helpText ? (
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{field.helpText}</p>
+                ) : null}
+                {btechYearPick ? (
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                    Current year → semester <span className="font-medium">1-1</span> (regular). Prior year →{' '}
+                    <span className="font-medium">lateral entry</span> and semester <span className="font-medium">2-1</span>
+                    ; remarks update automatically.
+                  </p>
                 ) : null}
                 {forceDisabled ? (
                   <p className="mt-1 text-xs text-blue-600 dark:text-blue-300">
