@@ -88,8 +88,8 @@ jobs:
             CURRENT_PATH=\$DEPLOY_PATH/current; \
             
             sudo mkdir -p \$DEPLOY_PATH/releases; \
-            sudo mkdir -p \$RELEASE_PATH; \
-            sudo chown -R \$SSH_USER:\$SSH_USER \$DEPLOY_PATH; \
+             sudo mkdir -p \$RELEASE_PATH; \
+             sudo chown -R $SSH_USER:$SSH_USER \$DEPLOY_PATH; \
             
             # Extract new deployment
             tar -xzf /tmp/deploy.tar.gz -C \$RELEASE_PATH; \
