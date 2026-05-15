@@ -433,39 +433,58 @@ const TemplateModal = ({
 
                     {formState.headerType !== 'TEXT' && formState.headerType !== 'NONE' && (
                       <div className="space-y-3">
-                        <label className="block text-[10px] uppercase font-bold text-gray-500">Stored Media URLs (Gallery)</label>
+                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-2">Select Active Media</label>
+                        {(formState.mediaGallery || []).length === 0 ? (
+                          <p className="text-xs text-slate-500 italic mb-4">No media URLs stored yet. Add one below.</p>
+                        ) : (
+                          <div className="relative mb-4">
+                            <select
+                              className="w-full h-10 px-3 pr-10 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all shadow-sm appearance-none cursor-pointer"
+                              value={formState.headerHandle || ""}
+                              onChange={(e) => setFormState(prev => ({ ...prev, headerHandle: e.target.value }))}
+                              style={{
+                                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'right 0.75rem center',
+                                backgroundSize: '1rem'
+                              }}
+                            >
+                              <option value="" disabled>-- Choose active media --</option>
+                              {formState.mediaGallery?.map((media, i) => (
+                                <option key={i} value={media.url}>
+                                  {media.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <label className="block text-[10px] uppercase font-bold text-gray-500 mb-2">Manage Gallery (Rename/Delete)</label>
                         <div className="max-h-40 overflow-y-auto space-y-2 pr-2">
-                          {(formState.mediaGallery || []).length === 0 && (
-                            <p className="text-xs text-slate-500 italic">No media URLs stored yet. Add one below.</p>
-                          )}
                           {formState.mediaGallery?.map((media, i) => (
-                            <div key={i} className={`flex items-center gap-3 p-2 rounded border transition-all ${formState.headerHandle === media.url ? 'bg-orange-50/80 border-orange-200 dark:bg-orange-950/30 dark:border-orange-900/50 ring-1 ring-orange-500/10' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
-                              <input 
-                                type="radio" 
-                                id={`media-opt-${i}`}
-                                name="active-media-select" 
-                                checked={formState.headerHandle === media.url}
-                                onChange={() => setFormState(prev => ({ ...prev, headerHandle: media.url }))}
-                                className="h-4 w-4 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                              />
+                            <div key={i} className={`flex items-center gap-3 p-2 rounded border transition-all ${formState.headerHandle === media.url ? 'bg-orange-50/50 border-orange-200 dark:bg-orange-900/10 dark:border-orange-900/50 ring-1 ring-orange-500/10' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
                               <div className="flex-1 min-w-0">
-                                <input 
-                                  type="text"
-                                  className="w-full bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500/50 rounded px-1 -ml-1 mb-0.5 transition-all hover:bg-slate-100/50 dark:hover:bg-slate-700/50"
-                                  value={media.name}
-                                  onChange={(e) => {
-                                    const newName = e.target.value;
-                                    setFormState(prev => ({
-                                      ...prev,
-                                      mediaGallery: prev.mediaGallery?.map((m, idx) => idx === i ? { ...m, name: newName } : m)
-                                    }));
-                                  }}
-                                  placeholder="Enter name (e.g. Brochure)"
-                                />
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <input 
+                                    type="text"
+                                    className="flex-1 bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500/50 rounded px-1 -ml-1 transition-all hover:bg-slate-100/50 dark:hover:bg-slate-700/50"
+                                    value={media.name}
+                                    onChange={(e) => {
+                                      const newName = e.target.value;
+                                      setFormState(prev => ({
+                                        ...prev,
+                                        mediaGallery: prev.mediaGallery?.map((m, idx) => idx === i ? { ...m, name: newName } : m)
+                                      }));
+                                    }}
+                                    placeholder="Enter name (e.g. Brochure)"
+                                  />
+                                  {formState.headerHandle === media.url && (
+                                    <span className="text-[8px] font-black uppercase text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded-full">Active</span>
+                                  )}
+                                </div>
                                 <p 
-                                  className="text-[9px] font-mono truncate text-slate-500 dark:text-slate-400 cursor-pointer" 
+                                  className="text-[9px] font-mono truncate text-slate-500 dark:text-slate-400" 
                                   title={media.url}
-                                  onClick={() => setFormState(prev => ({ ...prev, headerHandle: media.url }))}
                                 >
                                   {media.url}
                                 </p>
@@ -546,7 +565,7 @@ const TemplateModal = ({
                           </div>
                         </div>
                         <p className="text-[9px] text-slate-500">
-                          Select the radio button to set the active media for this template.
+                          Use the dropdown above to select the active media. Add new URLs or Media IDs here to expand your gallery.
                         </p>
                       </div>
                     )}
@@ -1224,23 +1243,43 @@ function TestTemplateSmsModal({
                             <span className="text-[9px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded animate-in fade-in zoom-in duration-300">Selected from Gallery</span>
                           )}
                         </div>
-                        <div className="max-h-32 overflow-y-auto space-y-1 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-800">
-                          {template.mediaGallery?.map((media, i) => (
-                            <div 
-                              key={i} 
-                              className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-all ${headerHandle === media.url && !hasUploaded ? 'bg-white dark:bg-slate-800 shadow-sm border border-orange-200 dark:border-orange-900/50' : 'hover:bg-white/50 dark:hover:bg-slate-800/50 border border-transparent'}`}
-                              onClick={() => {
-                                setHeaderHandle(media.url);
+                        <div className="space-y-2">
+                          <select
+                            className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 transition-all shadow-sm cursor-pointer appearance-none"
+                            value={hasUploaded ? "" : (template.mediaGallery?.some(m => m.url === headerHandle) ? headerHandle : "")}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val) {
+                                setHeaderHandle(val);
                                 setHasUploaded(false);
-                              }}
-                            >
-                              <div className={`h-3 w-3 rounded-full border-2 ${headerHandle === media.url && !hasUploaded ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{media.name}</p>
-                                <p className="text-[9px] font-mono truncate text-slate-500 dark:text-slate-400" title={media.url}>{media.url}</p>
+                              }
+                            }}
+                            style={{
+                              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                              backgroundRepeat: 'no-repeat',
+                              backgroundPosition: 'right 1rem center',
+                              backgroundSize: '1.25rem'
+                            }}
+                          >
+                            <option value="" disabled>-- Choose from gallery --</option>
+                            {template.mediaGallery?.map((media, i) => (
+                              <option key={i} value={media.url}>
+                                {media.name}
+                              </option>
+                            ))}
+                          </select>
+                          
+                          {headerHandle && template.mediaGallery?.some(m => m.url === headerHandle) && !hasUploaded && (
+                            <div className="flex items-center justify-between px-1">
+                              <p className="text-[9px] font-mono text-slate-400 truncate max-w-[250px]" title={headerHandle}>
+                                URL: {headerHandle}
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)] animate-pulse"></span>
+                                <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-tight">Gallery Selected</span>
                               </div>
                             </div>
-                          ))}
+                          )}
                         </div>
                       </div>
 
