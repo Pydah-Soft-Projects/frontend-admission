@@ -131,6 +131,7 @@ export default function PrintVisitDiaryReport({
                   <th style={{ ...headerThStyle, width: '30px' }}>#</th>
                   <th style={{ ...headerThStyle, width: '70px' }}>Date</th>
                   <th style={headerThStyle}>Student Name</th>
+                  <th style={{ ...headerThStyle, width: '45px' }}>Visit No</th>
                   <th style={headerThStyle}>Phone</th>
                   <th style={headerThStyle}>Mandal</th>
                   <th style={headerThStyle}>Village/Location</th>
@@ -149,6 +150,7 @@ export default function PrintVisitDiaryReport({
                     ) : (
                       <>
                         <td style={thTdStyle}><strong>{row.studentName}</strong></td>
+                        <td style={{ ...thTdStyle, fontWeight: 'bold', color: '#2563eb' }}>V-{row.visitNumber}</td>
                         <td style={thTdStyle}>{row.phone}</td>
                         <td style={thTdStyle}>{row.mandal}</td>
                         <td style={thTdStyle}>{row.village}</td>

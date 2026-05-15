@@ -593,6 +593,7 @@ export default function ReportsPage() {
           mandal: a.mandal || '-',
           village: a.village,
           visitStatus: a.visitStatus || 'Assigned',
+          visitNumber: a.visitNumber || 1,
           logId: a.logId
         }));
       });
@@ -4798,6 +4799,7 @@ export default function ReportsPage() {
                                                 <thead className="bg-slate-50 dark:bg-slate-900">
                                                   <tr>
                                                     <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Student Name</th>
+                                                    <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Visit No</th>
                                                     <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Phone</th>
                                                     <th className="px-4 py-2 text-left text-[9px] font-bold uppercase text-slate-400">Location</th>
                                                     <th className="px-4 py-2 text-right text-[9px] font-bold uppercase text-slate-400">Outcome</th>
@@ -4807,6 +4809,7 @@ export default function ReportsPage() {
                                                   {(day.details || []).map((lead: any, lIdx: number) => (
                                                     <tr key={lIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30">
                                                       <td className="px-4 py-2 text-xs font-medium text-slate-900 dark:text-slate-100">{lead.name}</td>
+                                                      <td className="px-4 py-2 text-xs font-bold text-blue-600 dark:text-blue-400">V-{lead.visitNumber}</td>
                                                       <td className="px-4 py-2 text-xs text-slate-500">{lead.phone}</td>
                                                       <td className="px-4 py-2 text-xs text-slate-400">{lead.village}</td>
                                                       <td className="px-4 py-2 text-right">
