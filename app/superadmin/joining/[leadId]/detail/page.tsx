@@ -144,7 +144,10 @@ export default function JoiningDetailPage() {
           {joining && (
             <PrintableStudentApplication
               application={joining}
-              enquiryNumber={lead?.enquiryNumber}
+              enquiryNumber={
+                lead?.enquiryNumber ||
+                (joining?.leadData as { enquiryNumber?: string } | undefined)?.enquiryNumber
+              }
               admissionNumber={admission?.admissionNumber}
               courseName={joining.courseInfo?.course || getCourseName(joining.courseInfo?.courseId) || undefined}
               branchName={joining.courseInfo?.branch || getBranchName(joining.courseInfo?.branchId) || undefined}

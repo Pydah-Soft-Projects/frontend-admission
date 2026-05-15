@@ -297,7 +297,7 @@ export default function AdmissionDetailPage() {
           {admission && (
             <PrintableStudentApplication
               application={admission}
-              enquiryNumber={lead?.enquiryNumber}
+              enquiryNumber={lead?.enquiryNumber ?? admission?.enquiryNumber}
               admissionNumber={admission.admissionNumber}
               courseName={admission.courseInfo?.course || getCourseName(admission.courseInfo?.courseId) || undefined}
               branchName={admission.courseInfo?.branch || getBranchName(admission.courseInfo?.branchId) || undefined}

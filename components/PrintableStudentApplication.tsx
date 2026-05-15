@@ -4,6 +4,8 @@ import { useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import type { Joining, Admission, PaymentSummary, PaymentTransaction, JoiningDocuments } from '@/types';
 
+type ApplicationData = Joining | Admission;
+
 function escapeHtml(text: string | undefined): string {
   const s = text ?? '';
   if (typeof document !== 'undefined') {
@@ -38,6 +40,91 @@ function safeImageSrcForPrint(url?: string | null): string | null {
   return null;
 }
 
+/** Application / enquiry number shown in the print header (prop, then admission field, then embedded lead). */
+function pickEnquiryFromRegistrationFormData(reg: Record<string, unknown> | undefined): string {
+  if (!reg || typeof reg !== 'object') return '';
+  const keys = [
+    'enquiryNumber',
+    'enquiry_number',
+    'EnquiryNumber',
+    'application_number',
+    'applicationNumber',
+  ] as const;
+  for (const k of keys) {
+    const v = reg[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+function resolveApplicationNumberForPrint(
+  application: ApplicationData,
+  enquiryNumberProp?: string
+): string {
+  const fromProp = String(enquiryNumberProp ?? '').trim();
+  if (fromProp) return fromProp;
+  const adm = application as Admission;
+  if (typeof adm.enquiryNumber === 'string' && adm.enquiryNumber.trim()) {
+    return adm.enquiryNumber.trim();
+  }
+  const admLd = adm.leadData as { enquiryNumber?: string; enquiry_number?: string } | undefined;
+  const fromAdmLd = String(admLd?.enquiryNumber ?? admLd?.enquiry_number ?? '').trim();
+  if (fromAdmLd) return fromAdmLd;
+  const fromAdmReg = pickEnquiryFromRegistrationFormData(
+    adm.registrationFormData as Record<string, unknown> | undefined
+  );
+  if (fromAdmReg) return fromAdmReg;
+
+  const join = application as Joining;
+  const fromLead = String(join.lead?.enquiryNumber ?? '').trim();
+  if (fromLead) return fromLead;
+  const ld = join.leadData as { enquiryNumber?: string; enquiry_number?: string } | undefined;
+  const fromLeadData =
+    String(ld?.enquiryNumber ?? ld?.enquiry_number ?? '').trim();
+  if (fromLeadData) return fromLeadData;
+  const fromReg = pickEnquiryFromRegistrationFormData(
+    join.registrationFormData as Record<string, unknown> | undefined
+  );
+  if (fromReg) return fromReg;
+  return '';
+}
+
+const STUDENT_PHOTO_REG_KEYS = [
+  'student_photo',
+  'studentPhoto',
+  'applicant_photo',
+  'applicantPhoto',
+  'passport_photo',
+  'passportPhoto',
+];
+
+function pickStudentPortraitForPrint(application: ApplicationData): string | null {
+  const reg = application.registrationFormData;
+  if (reg && typeof reg === 'object') {
+    for (const k of STUDENT_PHOTO_REG_KEYS) {
+      const v = reg[k];
+      if (typeof v === 'string' && v.trim()) {
+        const ok = safeImageSrcForPrint(v);
+        if (ok) return ok;
+      }
+    }
+    for (const [k, v] of Object.entries(reg)) {
+      if (typeof v !== 'string' || !v.trim()) continue;
+      const key = k.toLowerCase().replace(/\s+/g, '_');
+      if (key.includes('father') || key.includes('mother') || key.includes('parent')) continue;
+      if (
+        (key.includes('student') || key.includes('applicant')) &&
+        (key.includes('photo') || key.includes('picture') || key.includes('image'))
+      ) {
+        const ok = safeImageSrcForPrint(v);
+        if (ok) return ok;
+      }
+    }
+  }
+  const si = application.studentInfo as { photo?: string } | undefined;
+  return safeImageSrcForPrint(si?.photo);
+}
+
 function formatCurrency(amount?: number | null): string {
   if (amount === undefined || amount === null || Number.isNaN(amount)) return '—';
   try {
@@ -51,8 +138,6 @@ function formatDateTime(value?: string): string {
   if (!value) return '—';
   return new Date(value).toLocaleString();
 }
-
-type ApplicationData = Joining | Admission;
 
 export interface PrintableStudentApplicationProps {
   /** Joining or Admission (same shape for application content) */
@@ -133,12 +218,14 @@ function getPrintApplicationHtml(props: {
     ? (collegeName || '').trim().toUpperCase()
     : '—';
 
+  const applicationNumberDisplay = resolveApplicationNumberForPrint(application, enquiryNumber);
   const fatherPhotoSrc = safeImageSrcForPrint(parents?.father?.photo);
   const motherPhotoSrc = safeImageSrcForPrint(parents?.mother?.photo);
-  const parentPhotoCell = (src: string | null) =>
+  const studentPhotoSrc = pickStudentPortraitForPrint(application);
+  const portraitPhotoCell = (src: string | null) =>
     src
-      ? `<img src="${escapeHtmlAttribute(src)}" alt="" class="parent-photo-img" />`
-      : `<span class="parent-photo-empty">—</span>`;
+      ? `<img src="${escapeHtmlAttribute(src)}" alt="" class="portrait-img" />`
+      : `<span class="portrait-empty">—</span>`;
 
   // Normalize education level value so we can match data regardless of case
   // or separator differences (e.g. "ssc", "SSC", "inter_diploma",
@@ -219,10 +306,6 @@ function getPrintApplicationHtml(props: {
   };
 
 
-  const checkbox = (checked: boolean) => `
-    <span class="cb-box ${checked ? 'checked' : ''}"></span>
-  `;
-
   const renderDobBoxes = (dob?: string) => {
     if (!dob) return '<div class="dob-grid">' + Array(8).fill('<span></span>').join('') + '</div>';
     // Assuming YYYY-MM-DD or similar
@@ -236,6 +319,7 @@ function getPrintApplicationHtml(props: {
     return `<div class="dob-grid">${str.split('').map(char => `<span>${char}</span>`).join('')}</div>`;
   };
 
+  /** All document slots for print summary (received vs not received). */
   const docList: Array<{ id: keyof JoiningDocuments; label: string }> = [
     { id: 'ssc', label: 'S.S.C' },
     { id: 'casteCertificate', label: 'Caste Certificate' },
@@ -254,9 +338,63 @@ function getPrintApplicationHtml(props: {
     { id: 'incomeCertificate', label: 'Income Certificate' },
   ];
 
-  // Split docs into two columns for the table
-  const leftDocs = docList.slice(0, 8);
-  const rightDocs = docList.slice(8);
+  const receivedDocLabels = docList
+    .filter((d) => documents[d.id] === 'received')
+    .map((d) => d.label);
+  const notReceivedDocLabels = docList
+    .filter((d) => documents[d.id] !== 'received')
+    .map((d) => d.label);
+
+  const displayGenderText = (() => {
+    const g = String(student?.gender || '').trim().toLowerCase();
+    if (g === 'male') return 'Male';
+    if (g === 'female') return 'Female';
+    const raw = String(student?.gender || '').trim();
+    return raw || '';
+  })();
+
+  const displayReservationCategoryText = (() => {
+    const parts: string[] = [];
+    const gen = String(reservation?.general || '').trim().toUpperCase();
+    if (gen) parts.push(gen);
+    if (reservation?.isEws && gen !== 'EWS') parts.push('EWS');
+    return parts.length ? parts.join(' + ') : '';
+  })();
+
+  const displayOtherReservationText = (() => {
+    const tags = (['NCC', 'SPORTS', 'EX-SERVICEMAN', 'PH', 'OTHERS'] as const)
+      .filter((cat) => isOtherReservationChecked(cat))
+      .join(', ');
+    const extra = extraOtherReservations.length ? extraOtherReservations.join(', ') : '';
+    if (tags && extra) return `${tags}; ${extra}`;
+    return tags || extra || '';
+  })();
+
+  const displayQualifiedExamText = (() => {
+    const levels: string[] = [];
+    if (qualifications?.ssc) levels.push('SSC');
+    if (qualifications?.interOrDiploma) levels.push('Inter / Diploma');
+    if (qualifications?.ug) levels.push('UG');
+    return levels.length ? levels.join(', ') : '';
+  })();
+
+  const displayMeritText = (() => {
+    if (qualifications?.merit === true) return 'Yes';
+    if (qualifications?.merit === false) return 'No';
+    return '';
+  })();
+
+  const displayMediumText = (() => {
+    const mediums = qualifications?.mediums ?? [];
+    const parts: string[] = [];
+    if (mediums.includes('english')) parts.push('English');
+    if (mediums.includes('telugu')) parts.push('Telugu');
+    if (mediums.includes('other')) {
+      const o = String(qualifications?.otherMediumLabel || '').trim();
+      parts.push(o ? `Other (${o})` : 'Other');
+    }
+    return parts.length ? parts.join(', ') : '';
+  })();
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -275,7 +413,7 @@ function getPrintApplicationHtml(props: {
     }
     .page { position: relative; }
     
-    .top-meta { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: 600; font-size: 10px; }
+    .top-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; row-gap: 6px; margin-bottom: 10px; font-weight: 600; font-size: 10px; }
     .top-meta div { display: flex; align-items: center; gap: 5px; }
     .top-meta .box { border: 3px solid #8B2323; padding: 4px 12px; min-width: 100px; height: 22px; display: inline-block; text-align: center; line-height: 16px; font-weight: bold; background: #f9f9f9; }
 
@@ -318,16 +456,39 @@ function getPrintApplicationHtml(props: {
     .form-label { min-width: 130px; font-weight: 600; }
     .form-value { border-bottom: 1px dotted #333; flex: 1; padding-left: 5px; min-height: 14px; }
     .inline-val { border-bottom: 1px dotted #333; padding: 0 5px; min-width: 50px; flex: 1; }
-    
-    .cb-group { display: flex; gap: 10px; flex-wrap: wrap; }
-    .cb-item { display: flex; align-items: center; gap: 4px; margin-right: 8px; }
-    .cb-box { width: 12px; height: 12px; border: 1px solid #333; display: inline-block; position: relative; }
-    .cb-box.checked::after { content: '✓'; position: absolute; top: -3px; left: 1px; font-size: 10px; font-weight: bold; }
-    
+    .selected-inline { font-weight: 600; padding-left: 5px; min-height: 14px; flex: 1; border-bottom: 1px dotted #333; }
     .dob-grid { display: flex; gap: 2px; }
     .dob-grid span { border: 1px solid #333; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
 
-    .photo-box { border: 1px solid #777; width: 100px; height: 120px; display: flex; align-items: center; justify-content: center; position: absolute; right: 0; top: 150px; font-weight: bold; color: #777; }
+    .photos-inline-row {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 18px;
+      margin: 8px 0 14px 0;
+      flex-wrap: nowrap;
+    }
+    .photos-inline-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+    .photos-inline-label { font-size: 9px; font-weight: 600; color: #333; text-align: center; max-width: 96px; line-height: 1.15; }
+    .portrait-thumb {
+      border: 1px solid #777;
+      width: 88px;
+      height: 104px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #fafafa;
+    }
+    .portrait-img { max-width: 100%; max-height: 100%; object-fit: cover; }
+    .portrait-empty { font-size: 9px; color: #999; }
 
     .relative-address-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px; }
     .relative-box { border: 1px solid #777; padding: 5px; height: 60px; }
@@ -335,13 +496,39 @@ function getPrintApplicationHtml(props: {
     table.data-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
     table.data-table th, table.data-table td { border: 1px solid #777; padding: 4px; text-align: left; }
     table.data-table th { background: #f2f2f2; font-size: 9px; }
+    table.data-table thead { display: table-header-group; }
+
+    /* Siblings + page-1 signatures: keep together (see @media print for hard page start). */
+    .print-siblings-signature-block {
+      display: block;
+    }
+    .education-table { break-inside: auto; page-break-inside: auto; }
     
-    .declaration-section { border-radius: 15px; border: 2px solid #8B2323; padding: 5px 15px; margin-top: 15px; }
+    .declaration-section {
+      border-radius: 15px;
+      border: 2px solid #8B2323;
+      padding: 5px 15px;
+      margin-top: 15px;
+      break-after: auto;
+      page-break-after: auto;
+      break-inside: auto;
+      page-break-inside: auto;
+    }
     .declaration-title { text-align: center; margin: -15px auto 5px; background: #8B2323; color: white; width: 150px; border-radius: 10px; padding: 2px; font-weight: bold; }
     .declaration-list { list-style: disc; padding-left: 20px; font-size: 12px; }
     .declaration-list li { margin-bottom: 4px; }
 
-    .signature-row { display: flex; justify-content: space-between; margin-top: 20px; padding: 0 20px; }
+    .signature-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+      padding: 0 20px;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      break-before: auto;
+      page-break-before: auto;
+      clear: both;
+    }
     .sig-block { width: 180px; border: 1px solid #777; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
     .sig-section-title { font-size: 9px; color: #8B2323; font-weight: bold; text-align: center; background: #f2f2f2; border-bottom: 1px solid #777; margin: 0; padding: 4px 0; }
     .sig-box { height: 50px; background: #fff; }
@@ -363,25 +550,52 @@ function getPrintApplicationHtml(props: {
     .text-red { color: #8B2323; }
     .font-8 { font-size: 8px; }
 
-    .parent-photo-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; padding-left: 20px; }
-    .parent-photo-label { min-width: 72px; font-weight: 600; font-size: 10px; padding-top: 4px; }
-    .parent-photo-thumb { border: 1px solid #777; width: 88px; height: 104px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fafafa; }
-    .parent-photo-img { max-width: 100%; max-height: 100%; object-fit: cover; }
-    .parent-photo-empty { font-size: 9px; color: #999; }
-
-    .fee-print-page { page-break-before: always; break-before: page; }
-    .fee-print-page .office-use-bottom { break-inside: avoid; page-break-inside: avoid; }
+    /* Keep declaration + signatures + fee as one flow so nothing overlaps when the fee
+       table wraps; avoid forcing a blank page between signatures and fee. */
+    .fee-print-page { page-break-before: auto; break-before: auto; }
+    .print-doc-fee-block { break-inside: auto; page-break-inside: auto; }
+    .office-use-bottom { break-inside: auto; page-break-inside: auto; }
+    .fee-print-page .footer-note { break-inside: avoid; page-break-inside: avoid; }
 
     @media print {
       body { padding: 0; margin: 5mm 10mm; }
       .no-print { display: none; }
+      .education-table tbody tr { break-inside: auto; page-break-inside: auto; }
+
+      /*
+        Chrome often ignores break-inside:avoid when the block does not fit the *remaining*
+        space on a page — the last fragment (signatures) then jumps alone to the next page.
+        Starting this block on a fresh page guarantees room so the table + signatures stay together.
+      */
+      .print-siblings-signature-block {
+        break-before: page;
+        page-break-before: always;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .print-siblings-signature-block .siblings-table,
+      .print-siblings-signature-block .siblings-table thead,
+      .print-siblings-signature-block .siblings-table tbody,
+      .print-siblings-signature-block .signature-row {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+
+      .print-declaration-signatures {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .print-declaration-signatures .signature-row {
+        page-break-before: avoid;
+        break-before: avoid;
+      }
     }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="top-meta">
-      <div>Application No: <span class="box text-red">${escapeHtml(enquiryNumber || '')}</span></div>
+      <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
       <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
       <div>PIN No: <span class="box"></span></div>
     </div>
@@ -408,6 +622,10 @@ function getPrintApplicationHtml(props: {
     <div class="app-title-box">
       <h2>APPLICATION FOR ADMISSION</h2>
       <p>(PLEASE FILL THE FORM IN CAPITAL LETTERS)</p>
+      <p style="margin: 8px 0 0; font-size: 11px; font-weight: 700; color: #8B2323;">
+        Application / Enquiry No.:
+        <span style="border: 2px solid #8B2323; padding: 2px 14px; margin-left: 6px; display: inline-block; min-width: 90px; background: #f9f9f9;">${escapeHtml(applicationNumberDisplay || '—')}</span>
+      </p>
     </div>
 
     <div class="form-section">
@@ -429,15 +647,25 @@ function getPrintApplicationHtml(props: {
       <div class="form-row">
         <span class="section-num">2.</span>
         <span class="form-label">Gender :</span>
-        <div class="cb-group" style="min-width: 150px;">
-          <span class="cb-item">${checkbox(student?.gender?.toLowerCase() === 'male')} Male</span>
-          <span class="cb-item">${checkbox(student?.gender?.toLowerCase() === 'female')} Female</span>
-        </div>
-        <span class="form-label" style="min-width: 150px;">Date of Birth (As Per SSC) :</span>
+        <span class="selected-inline">${escapeHtml(displayGenderText || '—')}</span>
+        <span class="form-label" style="min-width: 150px; margin-left: 12px;">Date of Birth (As Per SSC) :</span>
         ${renderDobBoxes(student?.dateOfBirth)}
       </div>
 
-      <div class="photo-box">Photo</div>
+      <div class="photos-inline-row" aria-label="Applicant portraits">
+        <div class="photos-inline-item">
+          <div class="portrait-thumb">${portraitPhotoCell(studentPhotoSrc)}</div>
+          <span class="photos-inline-label">Student photo</span>
+        </div>
+        <div class="photos-inline-item">
+          <div class="portrait-thumb">${portraitPhotoCell(fatherPhotoSrc)}</div>
+          <span class="photos-inline-label">Father photo</span>
+        </div>
+        <div class="photos-inline-item">
+          <div class="portrait-thumb">${portraitPhotoCell(motherPhotoSrc)}</div>
+          <span class="photos-inline-label">Mother photo</span>
+        </div>
+      </div>
 
       <div class="form-row">
         <span class="section-num">3.</span>
@@ -449,10 +677,6 @@ function getPrintApplicationHtml(props: {
         <span class="inline-val">${escapeHtml(parents?.father?.aadhaarNumber)}</span>
         <span style="min-width: 80px; margin-left: 20px;">Mobile :</span>
         <span class="inline-val">${escapeHtml(parents?.father?.phone)}</span>
-      </div>
-      <div class="parent-photo-row">
-        <span class="parent-photo-label">Father photo :</span>
-        <div class="parent-photo-thumb">${parentPhotoCell(fatherPhotoSrc)}</div>
       </div>
       <div class="form-row">
         <span style="width: 20px;"></span>
@@ -470,28 +694,15 @@ function getPrintApplicationHtml(props: {
         <span style="min-width: 80px; margin-left: 20px;">Mobile :</span>
         <span class="inline-val">${escapeHtml(parents?.mother?.phone)}</span>
       </div>
-      <div class="parent-photo-row">
-        <span class="parent-photo-label">Mother photo :</span>
-        <div class="parent-photo-thumb">${parentPhotoCell(motherPhotoSrc)}</div>
-      </div>
 
       <div class="form-row m-t-10">
         <span class="section-num">4.</span>
         <span class="form-label" style="min-width: 150px;">Reservation Category :</span>
-        <div class="cb-group">
-          ${['OC', 'EWS', 'BC-A', 'BC-B', 'BC-C', 'BC-D', 'BC-E', 'SC', 'ST'].map(cat => `
-            <span class="cb-item">${checkbox(!!(reservation?.general?.toUpperCase() === cat || (cat === 'EWS' && reservation?.isEws)))} ${cat}</span>
-          `).join('')}
-        </div>
+        <span class="selected-inline">${escapeHtml(displayReservationCategoryText || '—')}</span>
       </div>
       <div class="form-row" style="padding-left: 20px;">
         <span class="form-label" style="min-width: 120px;">Other Reservation :</span>
-        <div class="cb-group">
-          ${['NCC', 'SPORTS', 'EX-SERVICEMAN', 'PH', 'OTHERS'].map(cat => `
-            <span class="cb-item">${checkbox(isOtherReservationChecked(cat))} ${cat}</span>
-          `).join('')}
-          <span style="margin-left: 10px;">(If any) <span style="border-bottom: 1px dotted #333; padding: 0 6px; min-width: 140px; display: inline-block;">${escapeHtml(extraOtherReservations.join(', '))}</span></span>
-        </div>
+        <span class="selected-inline">${escapeHtml(displayOtherReservationText || '—')}</span>
       </div>
 
       <div class="form-row m-t-10">
@@ -572,27 +783,22 @@ function getPrintApplicationHtml(props: {
       <div class="form-row m-t-10">
         <span class="section-num">7.</span>
         <span class="form-label" style="min-width: 180px;">Details of Qualified Examination :</span>
-        <div class="cb-group">
-          <span class="cb-item">${checkbox(!!qualifications?.ssc)} SSC</span>
-          <span class="cb-item">${checkbox(!!qualifications?.interOrDiploma)} Inter / Diploma</span>
-          <span class="cb-item">${checkbox(!!qualifications?.ug)} UG</span>
-          <span class="cb-item">Merit: Yes ${checkbox(qualifications?.merit === true)} No ${checkbox(qualifications?.merit === false)}</span>
-        </div>
+        <span class="selected-inline">${escapeHtml(displayQualifiedExamText || '—')}</span>
+      </div>
+      <div class="form-row" style="padding-left: 20px;">
+        <span class="form-label" style="min-width: 120px;">Merit :</span>
+        <span class="selected-inline">${escapeHtml(displayMeritText || '—')}</span>
       </div>
       <div class="form-row" style="padding-left: 20px;">
         <span class="form-label" style="min-width: 180px;">Medium of Qualified Examination :</span>
-        <div class="cb-group">
-          <span class="cb-item">${checkbox(!!qualifications?.mediums?.includes('english'))} English</span>
-          <span class="cb-item">${checkbox(!!qualifications?.mediums?.includes('telugu'))} Telugu</span>
-          <span class="cb-item">${checkbox(false)} Others(If any) ........................................</span>
-        </div>
+        <span class="selected-inline">${escapeHtml(displayMediumText || '—')}</span>
       </div>
 
       <div class="form-row m-t-10">
         <span class="section-num">8.</span>
         <span class="form-label">Details of the School/College Last Studied :</span>
       </div>
-      <table class="data-table">
+      <table class="data-table education-table">
         <thead>
           <tr>
             <th>Standard</th>
@@ -652,12 +858,14 @@ function getPrintApplicationHtml(props: {
           }).join('')}
         </tbody>
       </table>
+    </div>
 
+    <div class="print-siblings-signature-block">
       <div class="form-row m-t-10">
         <span class="section-num">9.</span>
         <span class="form-label">Details of the Siblings</span>
       </div>
-      <table class="data-table">
+      <table class="data-table siblings-table">
         <thead>
           <tr>
             <th style="width: 120px;">Relation</th>
@@ -691,27 +899,25 @@ function getPrintApplicationHtml(props: {
           })()}
         </tbody>
       </table>
+
+      <div class="signature-row page-one-signatures" style="margin-top: 16px; border-top: 2px solid #8B2323; padding-top: 10px;">
+        <div class="sig-block">
+          <div class="sig-section-title">STUDENT SIGNATURE</div>
+          <div class="sig-box"></div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
+          <div class="sig-box"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- Signature Row — Page 1 Bottom -->
-    <div class="signature-row" style="margin-top: 30px; border-top: 2px solid #8B2323; padding-top: 15px;">
-      <div class="sig-block">
-        <div class="sig-section-title">STUDENT SIGNATURE</div>
-        <div class="sig-box"></div>
-      </div>
-      <div class="sig-block">
-        <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
-        <div class="sig-box"></div>
-      </div>
-    </div>
-
-    <!-- Page Break or Second Section -->
-    <div style="page-break-before: always;"></div>
-    <div style="height: 30px;"></div>
-
+    <div class="print-continuation">
     <div class="top-meta">
+      <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
+      <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
       <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
-      <div>Pin No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
+      <div>PIN No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
       <div>College: <span style="border-bottom: 1px dotted #333; min-width: 120px; display: inline-block;">${escapeHtml((collegeName || '').trim() || '—')}</span></div>
       <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
       <div>Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span></div>
@@ -721,38 +927,22 @@ function getPrintApplicationHtml(props: {
       <span class="section-num">10.</span>
       <span class="form-label">List of Documents Required</span>
     </div>
-    <div class="doc-required-section">
-      <table class="doc-table">
-        <thead>
-          <tr>
-            <th>s.no</th>
-            <th>Particulars</th>
-            <th>Yes/ No</th>
-            <th>s.no</th>
-            <th>Particulars</th>
-            <th>Yes/ No</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${Array.from({ length: 8 }).map((_, i) => `
-            <tr>
-              <td style="text-align: center;">${i + 1}.</td>
-              <td>${escapeHtml(leftDocs[i]?.label || '')}</td>
-              <td style="text-align: center;">${leftDocs[i] ? (documents[leftDocs[i].id] === 'received' ? 'Yes' : 'No') : ''}</td>
-              <td style="text-align: center;">${i + 9}.</td>
-              <td>${escapeHtml(rightDocs[i]?.label || '')}</td>
-              <td style="text-align: center;">${rightDocs[i] ? (documents[rightDocs[i].id] === 'received' ? 'Yes' : 'No') : ''}</td>
-            </tr>
-          `).join('')}
-          <tr>
-            <td colspan="6" style="background: #f2f2f2; font-weight: bold; padding: 5px;">
-              NOTE : 2 Sets of Xerox copies of the certificates from 1 to 6
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="doc-required-section" style="flex-direction: column; gap: 6px;">
+      <div class="form-row" style="padding-left: 20px; margin-bottom: 4px;">
+        <span class="form-label" style="min-width: 160px;">Received (Yes) :</span>
+        <span class="selected-inline">${escapeHtml(receivedDocLabels.join(', ') || '—')}</span>
+      </div>
+      <div class="form-row" style="padding-left: 20px; margin-bottom: 8px;">
+        <span class="form-label" style="min-width: 160px;">Not received (No) :</span>
+        <span class="selected-inline">${escapeHtml(notReceivedDocLabels.join(', ') || '—')}</span>
+      </div>
+      <div style="background: #f2f2f2; font-weight: bold; padding: 6px 10px; font-size: 9px; border: 1px solid #777;">
+        NOTE : 2 Sets of Xerox copies of the certificates from 1 to 6
+      </div>
     </div>
 
+    <div class="print-doc-fee-block">
+    <div class="print-declaration-signatures">
     <div class="declaration-section">
       <div class="declaration-title">DECLARATION</div>
       <ul class="declaration-list">
@@ -776,6 +966,7 @@ function getPrintApplicationHtml(props: {
         <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
         <div class="sig-box"></div>
       </div>
+    </div>
     </div>
 
     <div class="fee-print-page">
@@ -832,6 +1023,8 @@ function getPrintApplicationHtml(props: {
     <div class="footer-note">
       Do not pay the fees without receipt. Do not transfer/deposit College<br/>
       fees to any personal account
+    </div>
+    </div>
     </div>
     </div>
 

@@ -677,6 +677,10 @@ export interface Admission {
   updatedAt: string;
   createdBy?: User | string;
   updatedBy?: User | string;
+  /** Excel Reference 1 (from lead_data.reference1 on list API). */
+  referenceName?: string;
+  /** Lead source / quota label on list API. */
+  leadSource?: string;
 }
 
 export interface AdmissionListResponse {

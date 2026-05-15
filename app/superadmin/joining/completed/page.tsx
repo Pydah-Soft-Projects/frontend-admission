@@ -516,7 +516,7 @@ const CompletedAdmissionsPage = () => {
             </div>
             
             <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">From Date</label>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission From</label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -529,7 +529,7 @@ const CompletedAdmissionsPage = () => {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">To Date</label>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission To</label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -853,8 +853,8 @@ const CompletedAdmissionsPage = () => {
                           {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.totalPaid || 0)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right text-xs text-slate-500 italic">
-                        {record.leadSource || 'Direct'}
+                      <td className="px-6 py-4 text-right text-xs text-slate-600 dark:text-slate-400">
+                        {record.referenceName?.trim() || record.leadSource || '—'}
                       </td>
                     </tr>
                   ))
@@ -880,7 +880,7 @@ const CompletedAdmissionsPage = () => {
           <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
             <h3 className="font-semibold text-slate-900 dark:text-slate-100">Reference list</h3>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Admissions completed per staff member (creator), broken down by course. Uses the course, branch, status, and date filters above.
+              Admissions grouped by student Reference 1 (from each admission record), broken down by course. Uses the course, branch, status, and admission date filters above.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -891,13 +891,7 @@ const CompletedAdmissionsPage = () => {
                     S. No.
                   </th>
                   <th className="sticky left-14 z-10 bg-white px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900">
-                    Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Department
-                  </th>
-                  <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Designation
+                    Reference
                   </th>
                   {referenceCourses.map((c) => (
                     <th
@@ -917,7 +911,7 @@ const CompletedAdmissionsPage = () => {
                 {referenceStatsLoading ? (
                   <tr>
                     <td
-                      colSpan={Math.max(5 + referenceCourses.length, 5)}
+                      colSpan={Math.max(3 + referenceCourses.length, 3)}
                       className="py-16 text-center text-slate-500"
                     >
                       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
@@ -927,7 +921,7 @@ const CompletedAdmissionsPage = () => {
                 ) : referenceRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={Math.max(5 + referenceCourses.length, 5)}
+                      colSpan={Math.max(3 + referenceCourses.length, 3)}
                       className="py-16 text-center text-slate-500"
                     >
                       No data for the selected filters.
@@ -935,13 +929,15 @@ const CompletedAdmissionsPage = () => {
                   </tr>
                 ) : (
                   referenceRows.map((row: any, idx: number) => {
-                    const rowTotal = referenceCourses.reduce(
-                      (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
-                      0
-                    );
+                    const rowTotal =
+                      Number(row.total) ||
+                      referenceCourses.reduce(
+                        (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
+                        0
+                      );
                     return (
                       <tr
-                        key={row.userId ?? `ref-${idx}`}
+                        key={row.referenceKey ?? `ref-${idx}`}
                         className="transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
                       >
                         <td className="sticky left-0 z-10 bg-white px-4 py-3 text-sm font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-300">
@@ -949,12 +945,6 @@ const CompletedAdmissionsPage = () => {
                         </td>
                         <td className="sticky left-14 z-10 bg-white px-4 py-3 text-sm font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
                           {row.name}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                          {row.department ?? '—'}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                          {row.designation ?? '—'}
                         </td>
                         {referenceCourses.map((c) => (
                           <td key={c.courseId} className="px-3 py-3 text-center text-sm font-semibold text-blue-600 dark:text-blue-400">
@@ -977,7 +967,7 @@ const CompletedAdmissionsPage = () => {
           <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
             <h3 className="font-semibold text-slate-900 dark:text-slate-100">Date-wise admissions</h3>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Count of admissions created on each calendar day, by course. Uses the same filters as above (including admission date range).
+              Count of admissions on each calendar day by course, using each student&apos;s admission date (not last updated). Uses the same filters as above.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -1023,10 +1013,12 @@ const CompletedAdmissionsPage = () => {
                   </tr>
                 ) : (
                   dateWiseRows.map((row: any) => {
-                    const rowTotal = dateWiseCourses.reduce(
-                      (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
-                      0
-                    );
+                    const rowTotal =
+                      Number(row.total) ||
+                      dateWiseCourses.reduce(
+                        (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
+                        0
+                      );
                     let displayDate = row.date;
                     try {
                       displayDate = new Date(row.date + 'T12:00:00').toLocaleDateString(undefined, {
