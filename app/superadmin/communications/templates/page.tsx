@@ -1434,6 +1434,7 @@ type SmsBulkListJob = {
   source: string;
   reportContext?: SmsBulkJobReportContext | null;
   templateName: string | null;
+  category?: 'sms' | 'whatsapp';
   status: string;
   displayStatus?: string;
   workRemaining?: number;
@@ -1535,6 +1536,7 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Users</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Group</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Template</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Type</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Status</th>
               <th className="px-3 py-2 text-right text-xs font-semibold text-slate-500">Progress</th>
               <th className="w-0 whitespace-nowrap px-2 py-2 text-right text-xs font-semibold text-slate-500"> </th>
@@ -1543,7 +1545,7 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {polledJobs.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
                   No jobs yet. Send a bulk SMS from the other tabs to see activity here.
                 </td>
               </tr>
@@ -1602,6 +1604,17 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                         {j.templateName || '—'}
                       </td>
                       <td className="px-3 py-2 text-xs">
+                        {j.category === 'whatsapp' ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                            WhatsApp
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                            SMS
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
                         <span
                           className={
                             disp === 'incomplete'
@@ -1640,7 +1653,7 @@ function SmsBulkReportsTab({ highlightJobId, onClearHighlight }: { highlightJobI
                     </tr>
                     {isOpen ? (
                       <tr className="bg-slate-50/70 dark:bg-slate-900/30">
-                        <td colSpan={9} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
+                        <td colSpan={10} className="border-b border-slate-200 p-0 align-top dark:border-slate-800">
                           <div className="space-y-3 px-3 py-3 sm:px-4 sm:py-3.5">
                             {canResume ? (
                               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
