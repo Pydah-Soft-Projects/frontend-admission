@@ -41,8 +41,17 @@ import {
   scholarshipIntentForCourseQuota,
 } from '@/lib/joiningScholarshipQuotaDefault';
 import {
+  buildBtechIntakeAutoRemark,
+  buildBtechJoiningYearOptions,
+  buildJoiningRegistrationFixedGate,
+  clampApplicationCalendarYear,
   computeAcademicYearRegistrationPatches,
+  listRegistrationRemarkFieldNames,
+  normalizeBtechIntakeYearString,
+  resolveBtechSemesterFromLateral,
   resolveTotalYearsFromCourseSettings,
+  sanitizeJoiningRegistrationBatchFieldValue,
+  type JoiningRegistrationFixedGate,
 } from '@/lib/joiningAcademicYearRegistration';
 import { showToast } from '@/lib/toast';
 import {
@@ -129,9 +138,6 @@ const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: strin
 const mediumOptionValues = new Set(mediumOptions.map((option) => option.value));
 
 const documentStatusOptions: JoiningDocumentStatus[] = ['pending', 'received'];
-
-const FIXED_REGISTRATION_ACADEMIC_YEAR = '2026';
-const FIXED_REGISTRATION_SEMESTER = '1-1';
 
 const normalizeDateInput = (value?: string) => {
   if (!value) return '';
@@ -460,6 +466,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const [isEditMode, setIsEditMode] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
+  /** Latest workflow-fixed registration year/semester (B.Tech vs others); synced after course catalog context resolves. */
+  const joiningFixedRegistrationRef = useRef<JoiningRegistrationFixedGate>(
+    buildJoiningRegistrationFixedGate({ courseName: '', courseCode: '' })
+  );
   /** Per–fee-head student amounts/notes; persisted in joinings.lead_data._joiningStudentFeeDetails on Save Draft. */
   const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({ lines: [] });
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
@@ -643,6 +653,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     [joiningRegistrationDisplayFields]
   );
 
+  const joiningRemarkFieldNames = useMemo(
+    () => listRegistrationRemarkFieldNames(sortedRegistrationFields as Array<{ fieldName?: string; fieldLabel?: string }>),
+    [sortedRegistrationFields]
+  );
+  const joiningRemarkFieldNamesRef = useRef<string[]>([]);
+  joiningRemarkFieldNamesRef.current = joiningRemarkFieldNames;
+
   const registrationFormFieldsAllFilteredOut =
     sortedRegistrationFields.length > 0 && joiningRegistrationDisplayFields.length === 0;
 
@@ -687,65 +704,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const hideJoiningDistrict = regHasDyn && registrationDynHas(['address_district', 'district']);
   const hideJoiningMandal = regHasDyn && registrationDynHas(['address_mandal', 'mandal']);
   const hideJoiningPin = regHasDyn && registrationDynHas(['pincode', 'pin_code', 'address_pin_code']);
-
-  useEffect(() => {
-    if (!joiningRecord?._id) return;
-    const saved = joiningRecord.registrationFormData;
-    const ld = (joiningRecord.leadData || {}) as Record<string, unknown>;
-    const dyn = ld.dynamicFields || ld.dynamic_fields;
-    const merged: Record<string, unknown> = {
-      ...(dyn && typeof dyn === 'object' ? (dyn as Record<string, unknown>) : {}),
-      ...(saved && typeof saved === 'object' ? saved : {}),
-    };
-    const cleaned = { ...merged };
-    Object.keys(cleaned).forEach((k) => {
-      if (isJoiningRegistrationFieldMapped(k)) delete cleaned[k];
-    });
-    let next = stripJoiningRedundantRegistrationExtras(cleaned);
-    const leadSnap = lead as LeadLike | undefined;
-    // Academic year: always mirror the lead’s intake year on this workspace (single source of truth).
-    if (leadSnap?.academicYear != null && !Number.isNaN(Number(leadSnap.academicYear))) {
-      const y = String(leadSnap.academicYear);
-      next = { ...next, academic_year: y, academicYear: y };
-    }
-    // Upload / intake batch from lead (UUID) — common registration field names.
-    const uploadBid =
-      leadSnap?.uploadBatchId != null && String(leadSnap.uploadBatchId).trim() !== ''
-        ? String(leadSnap.uploadBatchId).trim()
-        : '';
-    if (uploadBid) {
-      next = {
-        ...next,
-        upload_batch_id: uploadBid,
-        uploadBatchId: uploadBid,
-        batch_id: uploadBid,
-        batchId: uploadBid,
-        batch: uploadBid,
-        upload_batch: uploadBid,
-      };
-    }
-    if (leadSnap?.studentGroup && String(leadSnap.studentGroup).trim()) {
-      const sg = String(leadSnap.studentGroup).trim();
-      if (next.student_group === undefined && next.studentGroup === undefined) {
-        next = { ...next, student_group: sg };
-      }
-    }
-    if (next.student_status === undefined && next.studentStatus === undefined) {
-      next = { ...next, student_status: 'Regular' };
-    }
-    next = {
-      ...next,
-      academic_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
-      academicYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
-      current_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
-      currentYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
-      current_semester: FIXED_REGISTRATION_SEMESTER,
-      currentSemester: FIXED_REGISTRATION_SEMESTER,
-      semester: FIXED_REGISTRATION_SEMESTER,
-      semister: FIXED_REGISTRATION_SEMESTER,
-    };
-    setRegistrationExtras(next);
-  }, [joiningRecord?._id, joiningRecord?.updatedAt, lead]);
 
   useEffect(() => {
     if (!joiningRecord?._id) return;
@@ -801,13 +759,50 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       n === 'current_year' ||
       n === 'currentyear'
     ) {
+      const g = joiningFixedRegistrationRef.current;
+      if (g.isBtech) {
+        const raw = String(value ?? '').trim();
+        const num = Number(raw);
+        const cy = g.calendarYear;
+        const picked = num === cy ? String(cy) : num === cy - 1 ? String(cy - 1) : String(cy);
+        const lateral = Number(picked) === cy - 1;
+        const sem = resolveBtechSemesterFromLateral(lateral);
+        const remark = buildBtechIntakeAutoRemark({
+          lateral,
+          selectedYear: Number(picked),
+          calendarYear: cy,
+          semester: sem,
+        });
+        setRegistrationExtras((prev) => {
+          const next: Record<string, unknown> = {
+            ...prev,
+            [fieldName]: picked,
+            academic_year: picked,
+            academicYear: picked,
+            current_year: picked,
+            currentYear: picked,
+            current_semester: sem,
+            currentSemester: sem,
+            semester: sem,
+            semister: sem,
+            student_status: lateral ? 'Lateral' : 'Regular',
+            studentStatus: lateral ? 'Lateral' : 'Regular',
+          };
+          for (const rk of joiningRemarkFieldNamesRef.current) {
+            next[rk] = remark;
+          }
+          return next;
+        });
+        return;
+      }
+      const y = g.standardIntakeYear;
       setRegistrationExtras((prev) => ({
         ...prev,
-        [fieldName]: FIXED_REGISTRATION_ACADEMIC_YEAR,
-        academic_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
-        academicYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
-        current_year: FIXED_REGISTRATION_ACADEMIC_YEAR,
-        currentYear: FIXED_REGISTRATION_ACADEMIC_YEAR,
+        [fieldName]: y,
+        academic_year: y,
+        academicYear: y,
+        current_year: y,
+        currentYear: y,
       }));
       return;
     }
@@ -817,13 +812,33 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       n === 'semester' ||
       n === 'semister'
     ) {
+      const g = joiningFixedRegistrationRef.current;
+      if (g.isBtech) {
+        setRegistrationExtras((prev) => {
+          const { lateral } = normalizeBtechIntakeYearString(
+            prev.academic_year ?? prev.academicYear,
+            g.calendarYear
+          );
+          const sem = resolveBtechSemesterFromLateral(lateral);
+          return {
+            ...prev,
+            [fieldName]: sem,
+            current_semester: sem,
+            currentSemester: sem,
+            semester: sem,
+            semister: sem,
+          };
+        });
+        return;
+      }
+      const sem = g.standardSemester;
       setRegistrationExtras((prev) => ({
         ...prev,
-        [fieldName]: FIXED_REGISTRATION_SEMESTER,
-        current_semester: FIXED_REGISTRATION_SEMESTER,
-        currentSemester: FIXED_REGISTRATION_SEMESTER,
-        semester: FIXED_REGISTRATION_SEMESTER,
-        semister: FIXED_REGISTRATION_SEMESTER,
+        [fieldName]: sem,
+        current_semester: sem,
+        currentSemester: sem,
+        semester: sem,
+        semister: sem,
       }));
       return;
     }
@@ -927,6 +942,197 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     });
   }, [isPublicEdit, publicBootstrapQuery.data, courseSettingsResponse]);
 
+  const joiningRegistrationCourseContext = useMemo(() => {
+    const cid = String(formState.courseInfo.courseId || '').trim();
+    const fromSettings = cid
+      ? courseSettings.find((item) => String(item.course._id ?? '').trim() === cid)
+      : undefined;
+    const catalogName =
+      (fromSettings?.course?.name && String(fromSettings.course.name).trim()) ||
+      String(formState.courseInfo.course || '').trim();
+    const catalogCode =
+      fromSettings?.course?.code != null ? String(fromSettings.course.code).trim() : '';
+    const gate = buildJoiningRegistrationFixedGate({
+      courseName: catalogName,
+      courseCode: catalogCode,
+    });
+    const btechYearOptions = gate.isBtech ? buildBtechJoiningYearOptions(gate.calendarYear) : [];
+    const fixed = {
+      year: gate.isBtech ? String(gate.calendarYear) : gate.standardIntakeYear,
+      semester: gate.isBtech ? gate.btechRegularSemester : gate.standardSemester,
+    };
+    return {
+      catalogName,
+      catalogCode,
+      ...gate,
+      btechYearOptions,
+      fixed,
+    };
+  }, [courseSettings, formState.courseInfo.courseId, formState.courseInfo.course]);
+
+  joiningFixedRegistrationRef.current = {
+    isBtech: joiningRegistrationCourseContext.isBtech,
+    calendarYear: joiningRegistrationCourseContext.calendarYear,
+    standardIntakeYear: joiningRegistrationCourseContext.standardIntakeYear,
+    standardSemester: joiningRegistrationCourseContext.standardSemester,
+    btechRegularSemester: joiningRegistrationCourseContext.btechRegularSemester,
+    btechLateralSemester: joiningRegistrationCourseContext.btechLateralSemester,
+  };
+
+  const btechRegistrationSemester = useMemo(() => {
+    const gate = joiningRegistrationCourseContext;
+    if (!gate.isBtech) return gate.standardSemester;
+    const { lateral } = normalizeBtechIntakeYearString(
+      registrationExtras.academic_year ?? registrationExtras.academicYear,
+      gate.calendarYear
+    );
+    return resolveBtechSemesterFromLateral(lateral);
+  }, [
+    joiningRegistrationCourseContext.isBtech,
+    joiningRegistrationCourseContext.calendarYear,
+    joiningRegistrationCourseContext.standardSemester,
+    registrationExtras.academic_year,
+    registrationExtras.academicYear,
+  ]);
+
+  useEffect(() => {
+    if (!joiningRecord?._id) return;
+    const saved = joiningRecord.registrationFormData;
+    const ld = (joiningRecord.leadData || {}) as Record<string, unknown>;
+    const dyn = ld.dynamicFields || ld.dynamic_fields;
+    const merged: Record<string, unknown> = {
+      ...(dyn && typeof dyn === 'object' ? (dyn as Record<string, unknown>) : {}),
+      ...(saved && typeof saved === 'object' ? saved : {}),
+    };
+    const cleaned = { ...merged };
+    Object.keys(cleaned).forEach((k) => {
+      if (isJoiningRegistrationFieldMapped(k)) delete cleaned[k];
+    });
+    let next = stripJoiningRedundantRegistrationExtras(cleaned);
+    const leadSnap = lead as LeadLike | undefined;
+    // Non–B.Tech: mirror lead intake on auxiliary keys. B.Tech uses calendar current vs prior-year rule only.
+    if (
+      !joiningRegistrationCourseContext.isBtech &&
+      leadSnap?.academicYear != null &&
+      !Number.isNaN(Number(leadSnap.academicYear))
+    ) {
+      const y = String(leadSnap.academicYear);
+      next = { ...next, academic_year: y, academicYear: y };
+    }
+    const uploadBid =
+      leadSnap?.uploadBatchId != null && String(leadSnap.uploadBatchId).trim() !== ''
+        ? String(leadSnap.uploadBatchId).trim()
+        : '';
+    if (uploadBid) {
+      next = {
+        ...next,
+        upload_batch_id: uploadBid,
+        uploadBatchId: uploadBid,
+        batch_id: uploadBid,
+        batchId: uploadBid,
+        batch: uploadBid,
+        upload_batch: uploadBid,
+      };
+    }
+    if (leadSnap?.studentGroup && String(leadSnap.studentGroup).trim()) {
+      const sg = String(leadSnap.studentGroup).trim();
+      if (next.student_group === undefined && next.studentGroup === undefined) {
+        next = { ...next, student_group: sg };
+      }
+    }
+    if (next.student_status === undefined && next.studentStatus === undefined) {
+      next = { ...next, student_status: 'Regular' };
+    }
+    const gate = joiningRegistrationCourseContext;
+    if (gate.isBtech) {
+      const { year, lateral } = normalizeBtechIntakeYearString(
+        next.academic_year ?? next.academicYear,
+        gate.calendarYear
+      );
+      const sem = resolveBtechSemesterFromLateral(lateral);
+      const remark = buildBtechIntakeAutoRemark({
+        lateral,
+        selectedYear: Number(year),
+        calendarYear: gate.calendarYear,
+        semester: sem,
+      });
+      next = {
+        ...next,
+        academic_year: year,
+        academicYear: year,
+        current_year: year,
+        currentYear: year,
+        current_semester: sem,
+        currentSemester: sem,
+        semester: sem,
+        semister: sem,
+        student_status: lateral ? 'Lateral' : 'Regular',
+        studentStatus: lateral ? 'Lateral' : 'Regular',
+      };
+      for (const rk of joiningRemarkFieldNames) {
+        next[rk] = remark;
+      }
+    } else {
+      const { year, semester } = gate.fixed;
+      next = {
+        ...next,
+        academic_year: year,
+        academicYear: year,
+        current_year: year,
+        currentYear: year,
+        current_semester: semester,
+        currentSemester: semester,
+        semester: semester,
+        semister: semester,
+      };
+    }
+    const totalYearsForBatch = resolveTotalYearsFromCourseSettings(
+      courseSettings,
+      formState.courseInfo.courseId,
+      formState.courseInfo.branchId
+    );
+    const intakeForBatchSanitize = gate.isBtech
+      ? Number(normalizeBtechIntakeYearString(next.academic_year ?? next.academicYear, gate.calendarYear).year)
+      : clampApplicationCalendarYear(
+          leadSnap?.academicYear != null && !Number.isNaN(Number(leadSnap.academicYear))
+            ? Number(leadSnap.academicYear)
+            : Number(next.academic_year ?? next.academicYear ?? gate.calendarYear)
+        );
+    for (const f of sortedRegistrationFields) {
+      const fn = String((f as { fieldName?: string }).fieldName || '').trim();
+      const lab = String((f as { fieldLabel?: string }).fieldLabel || '');
+      const rep = sanitizeJoiningRegistrationBatchFieldValue(
+        fn,
+        lab,
+        next[fn],
+        intakeForBatchSanitize,
+        totalYearsForBatch,
+        gate.calendarYear,
+        gate.isBtech ? 4 : null
+      );
+      if (rep != null) (next as Record<string, unknown>)[fn] = rep;
+    }
+    setRegistrationExtras(next);
+  }, [
+    joiningRecord?._id,
+    joiningRecord?.updatedAt,
+    lead,
+    formState.courseInfo.courseId,
+    formState.courseInfo.course,
+    joiningRegistrationCourseContext.isBtech,
+    joiningRegistrationCourseContext.calendarYear,
+    joiningRegistrationCourseContext.standardIntakeYear,
+    joiningRegistrationCourseContext.standardSemester,
+    joiningRegistrationCourseContext.btechRegularSemester,
+    joiningRegistrationCourseContext.btechLateralSemester,
+    joiningRegistrationCourseContext.fixed.year,
+    joiningRegistrationCourseContext.fixed.semester,
+    joiningRemarkFieldNames,
+    sortedRegistrationFields,
+    courseSettings,
+    formState.courseInfo.branchId,
+  ]);
+
   /** Application (intake) academic year from lead + completion year = application year + course/branch total_years. */
   useEffect(() => {
     const leadSnap = lead as LeadLike | undefined;
@@ -934,22 +1140,106 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     if (appRaw == null || Number.isNaN(Number(appRaw))) return;
     const applicationYear = Number(appRaw);
     if (!sortedRegistrationFields.length) return;
+    const gate = joiningRegistrationCourseContext;
     const totalYears = resolveTotalYearsFromCourseSettings(
       courseSettings,
       formState.courseInfo.courseId,
       formState.courseInfo.branchId
     );
-    const patches = computeAcademicYearRegistrationPatches(
-      sortedRegistrationFields,
-      applicationYear,
-      totalYears
-    );
+    const remarkKeys = joiningRemarkFieldNames;
+
     setRegistrationExtras((prev) => {
       let next = { ...prev };
+      let intakeForPatches: number;
+      if (gate.isBtech) {
+        const { year } = normalizeBtechIntakeYearString(
+          next.academic_year ?? next.academicYear,
+          gate.calendarYear
+        );
+        intakeForPatches = Number(year);
+      } else {
+        intakeForPatches = applicationYear;
+      }
+      const patches = computeAcademicYearRegistrationPatches(
+        sortedRegistrationFields,
+        intakeForPatches,
+        totalYears
+      );
       let changed = false;
       for (const [k, v] of Object.entries(patches)) {
         if (next[k] !== v) {
           next[k] = v;
+          changed = true;
+        }
+      }
+      if (gate.isBtech) {
+        const { year, lateral } = normalizeBtechIntakeYearString(
+          next.academic_year ?? next.academicYear,
+          gate.calendarYear
+        );
+        const sem = resolveBtechSemesterFromLateral(lateral);
+        const remark = buildBtechIntakeAutoRemark({
+          lateral,
+          selectedYear: Number(year),
+          calendarYear: gate.calendarYear,
+          semester: sem,
+        });
+        const canon: Record<string, string> = {
+          academic_year: year,
+          academicYear: year,
+          current_year: year,
+          currentYear: year,
+          current_semester: sem,
+          currentSemester: sem,
+          semester: sem,
+          semister: sem,
+          student_status: lateral ? 'Lateral' : 'Regular',
+          studentStatus: lateral ? 'Lateral' : 'Regular',
+        };
+        for (const [k, v] of Object.entries(canon)) {
+          if (next[k] !== v) {
+            next[k] = v;
+            changed = true;
+          }
+        }
+        for (const rk of remarkKeys) {
+          if (next[rk] !== remark) {
+            next[rk] = remark;
+            changed = true;
+          }
+        }
+      } else {
+        const canon: Record<string, string> = {
+          academic_year: gate.standardIntakeYear,
+          academicYear: gate.standardIntakeYear,
+          current_year: gate.standardIntakeYear,
+          currentYear: gate.standardIntakeYear,
+          current_semester: gate.standardSemester,
+          currentSemester: gate.standardSemester,
+          semester: gate.standardSemester,
+          semister: gate.standardSemester,
+        };
+        for (const [k, v] of Object.entries(canon)) {
+          if (next[k] !== v) {
+            next[k] = v;
+            changed = true;
+          }
+        }
+      }
+      for (const f of sortedRegistrationFields) {
+        const fn = String((f as { fieldName?: string }).fieldName || '').trim();
+        const lab = String((f as { fieldLabel?: string }).fieldLabel || '');
+        const rep = sanitizeJoiningRegistrationBatchFieldValue(
+          fn,
+          lab,
+          next[fn],
+          intakeForPatches,
+          totalYears,
+          gate.calendarYear,
+          gate.isBtech ? 4 : null
+        );
+        if (rep != null) {
+          (next as Record<string, unknown>)[fn] = rep;
           changed = true;
         }
       }
@@ -961,7 +1251,79 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     lead,
     formState.courseInfo.courseId,
     formState.courseInfo.branchId,
+    formState.courseInfo.course,
     courseSettings,
+    joiningRegistrationCourseContext.isBtech,
+    joiningRegistrationCourseContext.calendarYear,
+    joiningRegistrationCourseContext.standardIntakeYear,
+    joiningRegistrationCourseContext.standardSemester,
+    joiningRegistrationCourseContext.btechRegularSemester,
+    joiningRegistrationCourseContext.btechLateralSemester,
+    joiningRegistrationCourseContext.catalogName,
+    joiningRegistrationCourseContext.catalogCode,
+    joiningRemarkFieldNames,
+    registrationExtras.academic_year,
+    registrationExtras.academicYear,
+  ]);
+
+  /** Correct Batch / admission-batch year when it was set to program-end (`intake + totalYears`) or label-only batch fields were missed by earlier passes. */
+  useEffect(() => {
+    if (!sortedRegistrationFields.length) return;
+    const gate = joiningRegistrationCourseContext;
+    const totalYears = resolveTotalYearsFromCourseSettings(
+      courseSettings,
+      formState.courseInfo.courseId,
+      formState.courseInfo.branchId
+    );
+    const leadSnap = lead as LeadLike | undefined;
+    let intake = gate.calendarYear;
+    if (gate.isBtech) {
+      intake = Number(
+        normalizeBtechIntakeYearString(
+          registrationExtras.academic_year ?? registrationExtras.academicYear,
+          gate.calendarYear
+        ).year
+      );
+    } else if (leadSnap?.academicYear != null && !Number.isNaN(Number(leadSnap.academicYear))) {
+      intake = clampApplicationCalendarYear(Number(leadSnap.academicYear));
+    } else {
+      intake = clampApplicationCalendarYear(
+        Number(registrationExtras.academic_year ?? registrationExtras.academicYear ?? gate.calendarYear)
+      );
+    }
+    setRegistrationExtras((prev) => {
+      let next = { ...prev };
+      let changed = false;
+      for (const f of sortedRegistrationFields) {
+        const fn = String((f as { fieldName?: string }).fieldName || '').trim();
+        const lab = String((f as { fieldLabel?: string }).fieldLabel || '');
+        const rep = sanitizeJoiningRegistrationBatchFieldValue(
+          fn,
+          lab,
+          next[fn],
+          intake,
+          totalYears,
+          gate.calendarYear,
+          gate.isBtech ? 4 : null
+        );
+        if (rep != null && String(next[fn] ?? '') !== rep) {
+          next[fn] = rep;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [
+    sortedRegistrationFields,
+    joiningRegistrationCourseContext.isBtech,
+    joiningRegistrationCourseContext.calendarYear,
+    courseSettings,
+    formState.courseInfo.courseId,
+    formState.courseInfo.branchId,
+    lead,
+    registrationExtras.academic_year,
+    registrationExtras.academicYear,
+    registrationExtras,
   ]);
 
   const { data: programLevelsResponse } = useQuery({
@@ -1185,7 +1547,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         fl === 'current_year' ||
         fl === 'currentyear'
       ) {
-        return FIXED_REGISTRATION_ACADEMIC_YEAR;
+        if (joiningRegistrationCourseContext.isBtech) {
+          const v =
+            registrationExtras[fieldName] ??
+            registrationExtras.academic_year ??
+            registrationExtras.academicYear ??
+            registrationExtras.current_year ??
+            registrationExtras.currentYear;
+          if (v !== undefined && v !== null && String(v).trim() !== '') return String(v);
+          return String(joiningRegistrationCourseContext.calendarYear);
+        }
+        return joiningRegistrationCourseContext.standardIntakeYear;
       }
       if (
         fl === 'current_semester' ||
@@ -1193,7 +1565,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         fl === 'semester' ||
         fl === 'semister'
       ) {
-        return FIXED_REGISTRATION_SEMESTER;
+        if (joiningRegistrationCourseContext.isBtech) {
+          return btechRegistrationSemester;
+        }
+        return joiningRegistrationCourseContext.standardSemester;
       }
       if (
         fl === 'certification_status' ||
@@ -1216,7 +1591,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       if (v === undefined || v === null) return '';
       return String(v);
     },
-    [formState, registrationExtras, derivedCertificationStatus]
+    [
+      formState,
+      registrationExtras,
+      derivedCertificationStatus,
+      joiningRegistrationCourseContext.isBtech,
+      joiningRegistrationCourseContext.calendarYear,
+      joiningRegistrationCourseContext.standardIntakeYear,
+      joiningRegistrationCourseContext.standardSemester,
+      joiningRegistrationCourseContext.btechRegularSemester,
+      joiningRegistrationCourseContext.btechLateralSemester,
+      btechRegistrationSemester,
+    ]
   );
 
   useEffect(() => {
@@ -3301,6 +3687,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         onChange={handleRegistrationFieldChange}
                         selectedState={registrationLocationState}
                         selectedDistrict={registrationLocationDistrict}
+                        fixedRegistrationAcademicYear={joiningRegistrationCourseContext.fixed.year}
+                        fixedRegistrationSemester={
+                          joiningRegistrationCourseContext.isBtech
+                            ? btechRegistrationSemester
+                            : joiningRegistrationCourseContext.standardSemester
+                        }
+                        isBtechJoining={joiningRegistrationCourseContext.isBtech}
+                        btechYearOptions={joiningRegistrationCourseContext.btechYearOptions}
                         photoUploadContext={{
                           baseSlug:
                             formState.studentInfo.name ||
