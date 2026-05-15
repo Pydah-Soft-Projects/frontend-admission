@@ -19,7 +19,7 @@ import {
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
-import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays } from 'lucide-react';
+import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil } from 'lucide-react';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -31,6 +31,20 @@ const statusOptions: Array<{ label: string; value: AdmissionStatusFilter }> = [
   { label: 'Withdrawn', value: 'withdrawn' },
   { label: 'Admission Cancelled', value: ADMISSION_CANCELLED_STATUS },
 ];
+
+const ABSTRACT_COLUMN_COUNT = 11;
+
+type AbstractIntakeEditRow = {
+  courseId: string;
+  branchId: string;
+  courseName: string;
+  branchName: string;
+  cqIntake: number | null;
+  mqIntake: number | null;
+};
+
+const formatAbstractIntake = (value: number | null | undefined) =>
+  value === null || value === undefined ? '—' : String(value);
 
 const getAdmissionStatusBadge = (status?: string) => {
   if (status === 'active') {
@@ -81,6 +95,8 @@ const CompletedAdmissionsPage = () => {
     reason: '',
     approvedBy: '',
   });
+  const [intakeEditTarget, setIntakeEditTarget] = useState<AbstractIntakeEditRow | null>(null);
+  const [intakeForm, setIntakeForm] = useState({ cqIntake: '', mqIntake: '' });
   
   const { getCourseName, getBranchName } = useCourseLookup();
 
@@ -122,6 +138,56 @@ const CompletedAdmissionsPage = () => {
   });
 
   const stats = statsData?.stats || [];
+
+  const saveBranchIntakeMutation = useMutation({
+    mutationFn: (payload: AbstractIntakeEditRow & { cqIntake: number | null; mqIntake: number | null }) =>
+      admissionAPI.upsertBranchIntake({
+        courseId: payload.courseId,
+        branchId: payload.branchId,
+        courseName: payload.courseName,
+        branchName: payload.branchName,
+        cqIntake: payload.cqIntake,
+        mqIntake: payload.mqIntake,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admissions', 'stats'] });
+      showToast.success('Intake saved');
+      setIntakeEditTarget(null);
+    },
+    onError: (error: ApiError) => {
+      showToast.error(error.response?.data?.message || 'Failed to save intake');
+    },
+  });
+
+  const openIntakeEditor = (row: AbstractIntakeEditRow) => {
+    setIntakeEditTarget(row);
+    setIntakeForm({
+      cqIntake: row.cqIntake != null ? String(row.cqIntake) : '',
+      mqIntake: row.mqIntake != null ? String(row.mqIntake) : '',
+    });
+  };
+
+  const submitIntakeEdit = () => {
+    if (!intakeEditTarget) return;
+    const parseField = (raw: string): number | null => {
+      const trimmed = raw.trim();
+      if (!trimmed) return null;
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return NaN;
+      return n;
+    };
+    const cqIntake = parseField(intakeForm.cqIntake);
+    const mqIntake = parseField(intakeForm.mqIntake);
+    if (Number.isNaN(cqIntake) || Number.isNaN(mqIntake)) {
+      showToast.error('Intake must be a whole number ≥ 0, or leave blank');
+      return;
+    }
+    saveBranchIntakeMutation.mutate({
+      ...intakeEditTarget,
+      cqIntake,
+      mqIntake,
+    });
+  };
 
   const pivotReportParams = useMemo(
     () => ({
@@ -348,6 +414,66 @@ const CompletedAdmissionsPage = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!intakeEditTarget} onOpenChange={(open) => !open && setIntakeEditTarget(null)}>
+        <DialogContent className="w-[95vw] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit branch intake</DialogTitle>
+            <DialogDescription>
+              Set convenor (CQ) and management (MQ) seat intake for this course and branch on the abstract
+              report.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+              <p className="font-semibold text-slate-900 dark:text-slate-100">
+                {intakeEditTarget?.courseName || '—'}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {intakeEditTarget?.branchName || '—'}
+              </p>
+            </div>
+            <Input
+              id="abstract-cq-intake"
+              label="CQ - Intake"
+              type="number"
+              min={0}
+              step={1}
+              value={intakeForm.cqIntake}
+              onChange={(e) => setIntakeForm((prev) => ({ ...prev, cqIntake: e.target.value }))}
+              placeholder="Convenor seats"
+            />
+            <Input
+              id="abstract-mq-intake"
+              label="MQ - Intake"
+              type="number"
+              min={0}
+              step={1}
+              value={intakeForm.mqIntake}
+              onChange={(e) => setIntakeForm((prev) => ({ ...prev, mqIntake: e.target.value }))}
+              placeholder="Management seats"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIntakeEditTarget(null)}
+              disabled={saveBranchIntakeMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={submitIntakeEdit}
+              isLoading={saveBranchIntakeMutation.isPending}
+              disabled={!intakeEditTarget?.courseId || !intakeEditTarget?.branchId}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="flex flex-col gap-1 border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-slate-900">
@@ -561,29 +687,38 @@ const CompletedAdmissionsPage = () => {
         <div className="w-full">
           <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
             <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
-              <h3 className="font-semibold text-slate-900 dark:text-slate-100">Course-wise Joinings Abstract</h3>
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100">Course-wise Admissions Abstract</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                CQ = Convenor (CONV) · MQ = Management (MANG) · Merit Quota = registration Merit Eligible (Not Eligible / blank are not counted)
+              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                 <thead>
                   <tr className="bg-white dark:bg-slate-900">
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Course</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Branch</th>
-                    <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-slate-500 text-blue-600 dark:text-blue-400">Active</th>
-                    <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-slate-500 text-red-600 dark:text-red-400">Cancelled</th>
-                    <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Share</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Course</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Branch</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">CQ - Intake</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">CQ - Admitted</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">CQ - Cancelled</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">MQ - Admitted</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">MQ - Intake</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">MQ - Cancelled</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Merit Quota Admitted</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Merit Quota Cancelled</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 w-14">Edit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
                   {statsLoading ? (
                     <tr>
-                      <td colSpan={5} className="py-20 text-center">
+                      <td colSpan={ABSTRACT_COLUMN_COUNT} className="py-20 text-center">
                         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
                       </td>
                     </tr>
                   ) : stats.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-20 text-center text-slate-500">No data available for the selected filters.</td>
+                      <td colSpan={ABSTRACT_COLUMN_COUNT} className="py-20 text-center text-slate-500">No data available for the selected filters.</td>
                     </tr>
                   ) : (
                     stats.flatMap((c: any) => 
@@ -592,37 +727,63 @@ const CompletedAdmissionsPage = () => {
                         courseName: c.courseName,
                         branchId: b.branchId,
                         branchName: b.branchName,
-                        totalAdmissions: b.totalAdmissions,
-                        totalCancelled: b.totalCancelled
+                        cqIntake: b.cqIntake,
+                        cqAdmitted: b.cqAdmitted,
+                        cqCancelled: b.cqCancelled,
+                        mqAdmitted: b.mqAdmitted,
+                        mqIntake: b.mqIntake,
+                        mqCancelled: b.mqCancelled,
+                        meritQuotaAdmitted: b.meritQuotaAdmitted,
+                        meritQuotaCancelled: b.meritQuotaCancelled,
                       }))
                     ).map((row: any) => (
                       <tr key={`${row.courseId || row.courseName}-${row.branchId || row.branchName}`} className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <span className="font-bold text-slate-900 dark:text-slate-100">{row.courseName || 'Unknown Course'}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                             {row.branchName || '—'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{row.totalAdmissions}</span>
+                        <td className="px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          {formatAbstractIntake(row.cqIntake)}
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="text-lg font-bold text-red-600 dark:text-red-400">{row.totalCancelled || 0}</span>
+                        <td className="px-4 py-3 text-center text-sm font-bold text-blue-600 dark:text-blue-400">
+                          {row.cqAdmitted ?? 0}
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                              <div 
-                                className="h-full bg-blue-500" 
-                                style={{ width: `${(row.totalAdmissions / totalAdmissionsCount) * 100}%` }}
-                              />
-                            </div>
-                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                              {((row.totalAdmissions / totalAdmissionsCount) * 100).toFixed(1)}%
-                            </span>
-                          </div>
+                        <td className="px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400">
+                          {row.cqCancelled ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-bold text-amber-600 dark:text-amber-400">
+                          {row.mqAdmitted ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          {formatAbstractIntake(row.mqIntake)}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400">
+                          {row.mqCancelled ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                          {row.meritQuotaAdmitted ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400">
+                          {row.meritQuotaCancelled ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => openIntakeEditor(row)}
+                            disabled={!row.courseId || !row.branchId}
+                            title={
+                              row.courseId && row.branchId
+                                ? 'Edit CQ and MQ intake'
+                                : 'Course and branch id required to set intake'
+                            }
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
                     ))

@@ -1300,6 +1300,17 @@ export const admissionAPI = {
     const response = await api.get(`/admissions/stats${query ? `?${query}` : ''}`);
     return response.data?.data || response.data;
   },
+  upsertBranchIntake: async (payload: {
+    courseId: string;
+    branchId: string;
+    courseName?: string;
+    branchName?: string;
+    cqIntake?: number | null;
+    mqIntake?: number | null;
+  }) => {
+    const response = await api.put('/admissions/branch-intake', payload);
+    return response.data?.data || response.data;
+  },
   getStatsByReference: async (params?: {
     startDate?: string;
     endDate?: string;
