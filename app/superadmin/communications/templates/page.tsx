@@ -743,7 +743,7 @@ function MessagePreviewCard({
 }
 
 /** Aligned with backend `MAX_SMS_BULK_JOB_ITEMS` — large sends run as background jobs. */
-const MAX_SMS_BULK_LEADS = 2000;
+const MAX_SMS_BULK_LEADS = 5000;
 
 /** Initial SMS variable values from template only (no auto lead name). */
 function buildSmsVariablesFromTemplate(template: MessageTemplate): { key: string; value: string }[] {
