@@ -144,7 +144,7 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
                   Send Joining Form
                 </h2>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Create a draft application with an enquiry number and send the joining form link.
+                  Create a draft application with an enquiry number and send the Step 1 application link (mobile-friendly).
                 </p>
               </div>
               <Button

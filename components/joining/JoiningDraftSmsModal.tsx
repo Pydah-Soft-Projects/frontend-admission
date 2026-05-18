@@ -378,8 +378,12 @@ export function JoiningDraftSmsModal({
             {admissionPublicLink?.url ? (
               <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-                  Online joining form link
+                  Online joining form link (Step 1 only)
                 </h3>
+                <p className="mt-1 text-xs text-emerald-800/90 dark:text-emerald-200/90">
+                  Families complete the application form only. Certificate verification and fee lines are handled by
+                  admissions after approval.
+                </p>
                 <p className="mt-2 break-all font-mono text-xs text-emerald-900 dark:text-emerald-100">{admissionPublicLink.url}</p>
                 {admissionPublicLink.expiresAt ? (
                   <p className="mt-2 text-xs text-emerald-800/90 dark:text-emerald-300/90">

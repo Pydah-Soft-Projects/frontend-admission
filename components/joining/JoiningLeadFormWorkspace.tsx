@@ -1489,26 +1489,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   });
 
   const certificateGuidance: CertificateGuidance | null = useMemo(() => {
-    // Unwrap the `{ success, data: { … } }` envelope returned by the API (or
-    // the inline `certificateGuidance` block on the public-link bootstrap
-    // payload). Keep the guidance object even when empty so the UI can show
+    // Public joining links are Step 1 only — certificate rules load on the admission desk.
+    if (isPublicEdit) return null;
+    // Unwrap the `{ success, data: { … } }` envelope returned by the API.
+    // Keep the guidance object even when empty so the UI can show
     // an actionable "no rules for this level" banner instead of going silent.
-    let inner: unknown;
-    if (isPublicEdit) {
-      inner = (publicBootstrapQuery.data?.data as { certificateGuidance?: unknown } | undefined)
-        ?.certificateGuidance;
-    } else {
-      const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
-      inner =
-        envelope && typeof envelope === 'object' && 'data' in envelope
-          ? (envelope as { data: unknown }).data
-          : envelope;
-    }
+    const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
+    const inner =
+      envelope && typeof envelope === 'object' && 'data' in envelope
+        ? (envelope as { data: unknown }).data
+        : envelope;
     if (!inner || typeof inner !== 'object') return null;
     return inner as CertificateGuidance;
-  }, [isPublicEdit, publicBootstrapQuery.data, certificateGuidanceResponse]);
+  }, [isPublicEdit, certificateGuidanceResponse]);
 
   useEffect(() => {
+    if (isPublicEdit) return;
     const items = certificateGuidance?.items;
     if (!items?.length || certificateGuidance?.format !== 'certificate_config') {
       return;
@@ -3396,14 +3392,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const statusLabel = status.replace('_', ' ');
 
   return (
-    <div className="w-full space-y-10 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+    <div
+      className={`w-full space-y-8 px-3 pb-20 pt-4 sm:space-y-10 sm:px-6 sm:pb-16 sm:pt-6 lg:px-8 ${
+        isPublicEdit ? 'mx-auto max-w-2xl' : ''
+      }`}
+    >
+      {isPublicEdit && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-950 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100">
+          <p className="font-semibold">Step 1 — Online application</p>
+          <p className="mt-1 text-xs leading-relaxed text-blue-900/90 dark:text-blue-200/90">
+            Complete and submit this form. Admissions will verify certificates and fees after your
+            application is approved.
+          </p>
+        </div>
+      )}
       {isPublicEdit && publicExpiresAt && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           Secure public form · This link expires at{' '}
           <strong>{new Date(publicExpiresAt).toLocaleString()}</strong> (5 minutes from when it was created).
         </div>
       )}
-      <div className="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+      <div className="rounded-3xl border border-white/60 bg-white/95 p-4 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none sm:p-6">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
@@ -4607,9 +4616,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       </>
                     ) : isPublicEdit ? (
                       <>
-                        Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
-                        Certificate are tracked under <span className="font-medium">Certificate information checklist</span>{' '}
-                        (from student database settings).
+                        Mark each document as received for this application. Academic certificates (SSC, Intermediate,
+                        transfer/study certificates, and related items) are verified by admissions after approval.
                       </>
                     ) : (
                       <>
@@ -4637,12 +4645,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   .map(([key, label]) => (
                     <div
                       key={key}
-                      className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700"
+                      className={`rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700 ${
+                        isPublicEdit
+                          ? 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'
+                          : 'flex items-center justify-between'
+                      }`}
                     >
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
                       </div>
-                      <div className="flex gap-3">
+                      <div className={`flex gap-2 ${isPublicEdit ? 'flex-wrap' : ''}`}>
                         {documentStatusOptions.map((statusOption) => (
                           <label
                             key={`${key}-${statusOption}`}
@@ -4668,18 +4680,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ))}
               </div>
 
-              {isPublicEdit && (
-                <CertificateInformationChecklistBlock
-                  variant="below-documents"
-                  derivedCertificationStatus={derivedCertificationStatus}
-                  programLevelTrimmed={programLevelTrimmed}
-                  isLoadingCertificateGuidance={isLoadingCertificateGuidance}
-                  certificateGuidance={certificateGuidance}
-                  certificateChecklistParsed={certificateChecklistParsed}
-                  onChecklistOptionChange={updateCertificateChecklistOption}
-                  onChecklistStatusChange={updateCertificateChecklistStatus}
-                />
-              )}
             </section>
 
             {showAdminPostAdmissionStep3 ? (
@@ -5101,7 +5101,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
             {/* Action Buttons at Bottom - Always visible for draft/pending status */}
             {!isAdmissionEditable && status !== 'approved' && (
-              <div className="sticky bottom-0 z-10 rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <div
+                className={`sticky bottom-0 z-10 rounded-2xl border border-white/60 bg-white/95 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${
+                  isPublicEdit
+                    ? '-mx-3 border-x-0 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:mx-0 sm:border sm:p-6'
+                    : 'p-6'
+                }`}
+              >
                 {!isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval') && (
                   <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
                     <strong>College</strong>, <strong>quota</strong>, managed <strong>course</strong>, and managed{' '}
@@ -5109,7 +5115,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     submitting or approving.
                   </p>
                 )}
-                <div className="flex flex-wrap items-center justify-end gap-3">
+                <div
+                  className={`flex items-center justify-end gap-3 ${
+                    isPublicEdit ? 'flex-col sm:flex-row' : 'flex-wrap'
+                  }`}
+                >
                   {status === 'draft' && !isPublicEdit && (
                     <Button
                       variant="secondary"
@@ -5128,6 +5138,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   {status === 'draft' && (
                     <Button
                       variant="primary"
+                      className={isPublicEdit ? 'w-full sm:w-auto' : undefined}
                       disabled={
                         !canSubmit ||
                         isSubmitting ||

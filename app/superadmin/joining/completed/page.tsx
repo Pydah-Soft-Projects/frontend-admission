@@ -33,6 +33,21 @@ const statusOptions: Array<{ label: string; value: AdmissionStatusFilter }> = [
   { label: 'Admission Cancelled', value: ADMISSION_CANCELLED_STATUS },
 ];
 
+type AdmissionCourseStat = {
+  courseId?: string;
+  courseName?: string;
+  totalAdmissions: number;
+  totalCancelled?: number;
+};
+
+/** Local calendar date as YYYY-MM-DD (for stats “through today”). */
+const formatLocalDateIso = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const ABSTRACT_COLUMN_COUNT = 11;
 
 type AbstractIntakeEditRow = {
@@ -151,20 +166,33 @@ const CompletedAdmissionsPage = () => {
 
   const [isExporting, setIsExporting] = useState(false);
 
-  // Stats Query
+  const statsThroughDate = dateRange.to || formatLocalDateIso(new Date());
+
+  // Stats Query (course cards count admissions through today when “Admission To” is empty)
   const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: ['admissions', 'stats', dateRange, courseFilter, branchFilter],
-    queryFn: () => admissionAPI.getStats({
-      startDate: dateRange.from || undefined,
-      endDate: dateRange.to || undefined,
-      courseId: courseFilter || undefined,
-      branchId: branchFilter || undefined,
-      courseName: getCourseName(courseFilter) || undefined,
-      branchName: getBranchName(branchFilter) || undefined,
-    }),
+    queryKey: ['admissions', 'stats', dateRange.from, statsThroughDate, courseFilter, branchFilter],
+    queryFn: () =>
+      admissionAPI.getStats({
+        startDate: dateRange.from || undefined,
+        endDate: statsThroughDate,
+        courseId: courseFilter || undefined,
+        branchId: branchFilter || undefined,
+        courseName: getCourseName(courseFilter) || undefined,
+        branchName: getBranchName(branchFilter) || undefined,
+      }),
   });
 
-  const stats = statsData?.stats || [];
+  const stats: AdmissionCourseStat[] = statsData?.stats || [];
+
+  const courseStatsForCards = useMemo(() => {
+    return stats
+      .filter((row) => {
+        const active = Number(row.totalAdmissions) || 0;
+        const cancelled = Number(row.totalCancelled) || 0;
+        return active + cancelled > 0;
+      })
+      .sort((a, b) => (Number(b.totalAdmissions) || 0) - (Number(a.totalAdmissions) || 0));
+  }, [stats]);
 
   const saveBranchIntakeMutation = useMutation({
     mutationFn: (payload: AbstractIntakeEditRow & { cqIntake: number | null; mqIntake: number | null }) =>
@@ -219,14 +247,14 @@ const CompletedAdmissionsPage = () => {
   const pivotReportParams = useMemo(
     () => ({
       startDate: dateRange.from || undefined,
-      endDate: dateRange.to || undefined,
+      endDate: statsThroughDate,
       courseId: courseFilter || undefined,
       branchId: branchFilter || undefined,
       courseName: getCourseName(courseFilter) || undefined,
       branchName: getBranchName(branchFilter) || undefined,
       status: statusFilter === 'all' ? undefined : statusFilter,
     }),
-    [dateRange.from, dateRange.to, courseFilter, branchFilter, statusFilter, getCourseName, getBranchName]
+    [dateRange.from, statsThroughDate, courseFilter, branchFilter, statusFilter, getCourseName, getBranchName]
   );
 
   const { data: referenceStatsData, isLoading: referenceStatsLoading } = useQuery({
@@ -265,29 +293,12 @@ const CompletedAdmissionsPage = () => {
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
         startDate: dateRange.from || undefined,
-        endDate: dateRange.to || undefined,
+        endDate: statsThroughDate,
       });
       return response.data || response;
     },
     placeholderData: (previousData) => previousData,
   });
-
-  const headerContent = useMemo(
-    () => (
-      <div className="flex flex-col items-end gap-2 text-right">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Admissions Desk</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Monitor course-wise performance and manage completed admissions.
-        </p>
-      </div>
-    ),
-    []
-  );
-
-  useEffect(() => {
-    setHeaderContent(headerContent);
-    return () => clearHeaderContent();
-  }, [headerContent, setHeaderContent, clearHeaderContent]);
 
   const admissions = data?.admissions ?? [];
   const pagination = data?.pagination ?? { page: 1, pages: 1, limit: 20, total: 0 };
@@ -366,7 +377,7 @@ const CompletedAdmissionsPage = () => {
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
         startDate: dateRange.from || undefined,
-        endDate: dateRange.to || undefined,
+        endDate: statsThroughDate,
       });
 
       const url = window.URL.createObjectURL(new Blob([blob]));
@@ -388,12 +399,69 @@ const CompletedAdmissionsPage = () => {
   };
 
   const totalAdmissionsCount = useMemo(() => {
-    return stats.reduce((acc: number, curr: any) => acc + curr.totalAdmissions, 0);
+    return stats.reduce((acc, curr) => acc + (Number(curr.totalAdmissions) || 0), 0);
   }, [stats]);
 
   const totalCancelledCount = useMemo(() => {
-    return stats.reduce((acc: number, curr: any) => acc + (curr.totalCancelled || 0), 0);
+    return stats.reduce((acc, curr) => acc + (Number(curr.totalCancelled) || 0), 0);
   }, [stats]);
+
+  const statsThroughLabel = useMemo(() => {
+    try {
+      return new Date(`${statsThroughDate}T12:00:00`).toLocaleDateString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return statsThroughDate;
+    }
+  }, [statsThroughDate]);
+
+  const headerContent = useMemo(
+    () => (
+      <div className="flex flex-col items-end gap-0.5 text-right">
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Admissions Desk</h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Through {statsThroughLabel}
+          {dateRange.from ? ` · from ${dateRange.from}` : ''} ·{' '}
+          <span className="font-medium text-blue-600">A</span> active ·{' '}
+          <span className="font-medium text-red-600">C</span> cancelled
+        </p>
+      </div>
+    ),
+    [statsThroughLabel, dateRange.from]
+  );
+
+  useEffect(() => {
+    setHeaderContent(headerContent);
+    return () => clearHeaderContent();
+  }, [headerContent, setHeaderContent, clearHeaderContent]);
+
+  const statCardsGridClass =
+    'grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-10';
+
+  const statCardShell =
+    'flex h-[5rem] w-full min-w-0 flex-col !rounded-lg border border-slate-200/90 bg-white !p-0 !shadow-sm transition-shadow hover:!scale-100 hover:!shadow-md dark:border-slate-700 dark:bg-slate-900';
+
+  const statCardInner = 'flex h-full min-w-0 flex-col justify-center px-2 py-2 sm:px-2.5 sm:py-2.5';
+
+  const renderStatCounts = (active: number, cancelled: number) => (
+    <div className="mt-1.5 grid grid-cols-2 divide-x divide-slate-200/90 dark:divide-slate-600">
+      <div className="flex items-baseline justify-center gap-px pr-1">
+        <span className="text-lg font-bold leading-none tabular-nums text-slate-900 sm:text-xl lg:text-2xl dark:text-slate-100">
+          {active}
+        </span>
+        <span className="text-[10px] font-bold text-blue-600 sm:text-xs dark:text-blue-400">A</span>
+      </div>
+      <div className="flex items-baseline justify-center gap-px pl-1">
+        <span className="text-lg font-bold leading-none tabular-nums text-slate-900 sm:text-xl lg:text-2xl dark:text-slate-100">
+          {cancelled}
+        </span>
+        <span className="text-[10px] font-bold text-red-600 sm:text-xs dark:text-red-400">C</span>
+      </div>
+    </div>
+  );
 
   return (
     <div className="w-full space-y-6 pb-12">
@@ -693,41 +761,50 @@ const CompletedAdmissionsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="flex flex-col gap-1 border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-slate-900">
-          <span className="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Total Admissions</span>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-              {statsLoading ? '...' : totalAdmissionsCount}
-            </span>
+      {/* Statistics Cards — full-width responsive grid */}
+      <div>
+        {statsLoading ? (
+          <div className={statCardsGridClass}>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div
+                key={`stats-skeleton-${i}`}
+                className="h-[5rem] w-full min-w-0 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800"
+              />
+            ))}
           </div>
-        </Card>
-        <Card className="flex flex-col gap-1 border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 to-white dark:from-red-900/10 dark:to-slate-900">
-          <span className="text-xs font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">Cancelled Admissions</span>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-              {statsLoading ? '...' : totalCancelledCount}
-            </span>
+        ) : courseStatsForCards.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">No course admissions in this date range.</p>
+        ) : (
+          <div className={statCardsGridClass}>
+            <Card
+              noPadding
+              className={`${statCardShell} border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50/95 to-white dark:from-blue-950/40 dark:to-slate-900`}
+            >
+              <div className={statCardInner} title="All courses combined">
+                <p className="truncate text-xs font-bold uppercase tracking-wide text-blue-800 sm:text-sm dark:text-blue-200">
+                  Total
+                </p>
+                {renderStatCounts(totalAdmissionsCount, totalCancelledCount)}
+              </div>
+            </Card>
+            {courseStatsForCards.map((s) => {
+              const key = s.courseId || s.courseName || 'unknown';
+              const active = Number(s.totalAdmissions) || 0;
+              const cancelled = Number(s.totalCancelled) || 0;
+              const label = s.courseName || 'Other';
+              return (
+                <Card key={key} noPadding className={statCardShell}>
+                  <div className={statCardInner} title={label}>
+                    <p className="truncate text-xs font-bold uppercase tracking-wide text-slate-700 sm:text-sm dark:text-slate-200">
+                      {label}
+                    </p>
+                    {renderStatCounts(active, cancelled)}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
-        </Card>
-        {stats.slice(0, 2).map((s: any) => (
-          <Card key={s.courseId || s.courseName} className="flex flex-col gap-1 border-l-4 border-l-slate-300 dark:border-l-slate-700">
-            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              {s.courseName || 'Other'}
-            </span>
-            <div className="flex items-center gap-4">
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-slate-900 dark:text-slate-100">{s.totalAdmissions}</span>
-                <span className="text-[10px] text-blue-500 uppercase font-bold">Active</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-slate-900 dark:text-slate-100">{s.totalCancelled || 0}</span>
-                <span className="text-[10px] text-red-500 uppercase font-bold">Cancelled</span>
-              </div>
-            </div>
-          </Card>
-        ))}
+        )}
       </div>
 
       {/* Combined Filters & Tabs Bar */}
