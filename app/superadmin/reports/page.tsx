@@ -5188,7 +5188,7 @@ export default function ReportsPage() {
                                   </td>
                                   <td className="px-6 py-4">
                                     <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                                      {format(new Date(leave.leave_date + 'T12:00:00'), 'dd MMM yyyy')}
+                                      {format(new Date(String(leave.leave_date).substring(0, 10) + 'T12:00:00'), 'dd MMM yyyy')}
                                     </span>
                                   </td>
                                   <td className="px-6 py-4">
