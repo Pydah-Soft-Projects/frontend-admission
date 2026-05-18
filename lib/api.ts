@@ -1405,6 +1405,10 @@ export const admissionAPI = {
     const response = await api.put(`/admissions/${leadId}`, data);
     return response.data;
   },
+  patchReferenceById: async (admissionId: string, reference1: string) => {
+    const response = await api.patch(`/admissions/id/${admissionId}/reference`, { reference1 });
+    return response.data;
+  },
   exportAdmissions: async (filters?: {
     search?: string;
     status?: string;

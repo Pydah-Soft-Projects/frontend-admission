@@ -29,7 +29,8 @@ export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
   {
     key: 'joining',
     label: 'Joining Desk',
-    description: 'Oversee joining progress, approvals, and admission lifecycle.',
+    description:
+      'Oversee joining progress, admissions, and the desk. With Read & Write you can optionally allow reference edits and admission/joining form edits.',
   },
   {
     key: 'payments',

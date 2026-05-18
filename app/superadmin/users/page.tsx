@@ -14,7 +14,15 @@ import { useDashboardHeader, useModulePermission } from '@/components/layout/Das
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PERMISSION_MODULES, PermissionModuleKey } from '@/constants/permissions';
+import { JoiningModulePermissionExtras } from '@/components/users/JoiningModulePermissionExtras';
+import {
+  defaultJoiningPermissionExtras,
+  joiningExtrasFromStored,
+  JOINING_PERMISSION_KEY,
+  modulePermissionForSave,
+} from '@/lib/joiningPermissions';
 import { auth } from '@/lib/auth';
+import { refreshSessionUser } from '@/lib/sessionUser';
 
 // Action icons for table (Heroicons-style outline)
 const IconPencil = ({ className = 'w-4 h-4' }: { className?: string }) => (
@@ -109,6 +117,7 @@ const UserManagementPage = () => {
         [module.key]: {
           access: false,
           permission: 'read' as ModulePermission['permission'],
+          ...(module.key === JOINING_PERMISSION_KEY ? defaultJoiningPermissionExtras() : {}),
         },
       }),
       {} as Record<PermissionModuleKey, ModulePermission>
@@ -343,8 +352,17 @@ const UserManagementPage = () => {
   const updateUserMutation = useMutation({
     mutationFn: async ({ userId, data }: { userId: string; data: Parameters<typeof userAPI.update>[1] }) =>
       userAPI.update(userId, data),
-    onSuccess: () => {
+    onSuccess: async (_, { userId }) => {
       showToast.success('User updated successfully');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('crm-session-permissions-changed', { detail: { userId } })
+        );
+      }
+      const me = auth.getUser();
+      if (me?._id === userId) {
+        await refreshSessionUser();
+      }
       setShowEditUser(false);
       setEditingUser(null);
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -550,10 +568,7 @@ const UserManagementPage = () => {
     if (formState.roleName === 'Sub Super Admin') {
       const selectedPermissions = Object.entries(permissionState).reduce((acc, [key, value]) => {
         if (value.access) {
-          acc[key as PermissionModuleKey] = {
-            access: true,
-            permission: value.permission === 'read' ? 'read' : 'write',
-          };
+          acc[key as PermissionModuleKey] = modulePermissionForSave(key, value);
         }
         return acc;
       }, {} as Record<PermissionModuleKey, ModulePermission>);
@@ -598,13 +613,20 @@ const UserManagementPage = () => {
   };
 
   const toggleModuleAccess = (moduleKey: PermissionModuleKey) => {
-    setPermissionState((prev) => ({
-      ...prev,
-      [moduleKey]: {
-        access: !prev[moduleKey].access,
-        permission: prev[moduleKey].access ? prev[moduleKey].permission : 'read',
-      },
-    }));
+    setPermissionState((prev) => {
+      const nextAccess = !prev[moduleKey].access;
+      return {
+        ...prev,
+        [moduleKey]: {
+          ...prev[moduleKey],
+          access: nextAccess,
+          permission: nextAccess ? prev[moduleKey].permission || 'read' : prev[moduleKey].permission,
+          ...(moduleKey === JOINING_PERMISSION_KEY && nextAccess && !prev[moduleKey].access
+            ? defaultJoiningPermissionExtras()
+            : {}),
+        },
+      };
+    });
   };
 
   const updateModulePermissionLevel = (moduleKey: PermissionModuleKey, level: ModulePermission['permission']) => {
@@ -613,6 +635,18 @@ const UserManagementPage = () => {
       [moduleKey]: {
         ...prev[moduleKey],
         permission: level,
+        ...(moduleKey === JOINING_PERMISSION_KEY ? defaultJoiningPermissionExtras() : {}),
+      },
+    }));
+  };
+
+  const updateEditModulePermissionLevel = (moduleKey: PermissionModuleKey, level: ModulePermission['permission']) => {
+    setEditPermissionState((prev) => ({
+      ...prev,
+      [moduleKey]: {
+        ...prev[moduleKey],
+        permission: level,
+        ...(moduleKey === JOINING_PERMISSION_KEY ? defaultJoiningPermissionExtras() : {}),
       },
     }));
   };
@@ -1103,6 +1137,56 @@ const UserManagementPage = () => {
                 </div>
               )}
 
+              {selectedUserDetail.roleName === 'Sub Super Admin' && (
+                <div className="space-y-3 pt-2">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Module access</h3>
+                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+                    {PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).length ===
+                    0 ? (
+                      <p className="text-xs text-slate-500">No modules assigned.</p>
+                    ) : (
+                      PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).map(
+                        (module) => {
+                          const entry = selectedUserDetail.permissions?.[module.key] as
+                            | ModulePermission
+                            | undefined;
+                          const isWrite = entry?.permission === 'write';
+                          const joiningExtras =
+                            module.key === JOINING_PERMISSION_KEY && isWrite
+                              ? joiningExtrasFromStored(entry)
+                              : null;
+                          return (
+                            <div
+                              key={module.key}
+                              className="rounded-lg border border-white/80 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/80"
+                            >
+                              <p className="font-semibold text-slate-800 dark:text-slate-100">{module.label}</p>
+                              <p className="mt-0.5 text-slate-500 dark:text-slate-400">
+                                {isWrite ? 'Read & Write' : 'Read only'}
+                              </p>
+                              {joiningExtras && (
+                                <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
+                                  Desk edits:{' '}
+                                  {joiningExtras.editReference ? 'Reference' : '—'}
+                                  {joiningExtras.editReference && joiningExtras.editAdmission ? ' · ' : ''}
+                                  {joiningExtras.editAdmission ? 'Admission' : ''}
+                                  {!joiningExtras.editReference && !joiningExtras.editAdmission
+                                    ? 'None (view only on desk)'
+                                    : ''}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }
+                      )
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Use Edit User to change Joining Desk reference or admission edit options.
+                  </p>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Actions</h3>
 
@@ -1174,12 +1258,17 @@ const UserManagementPage = () => {
                         const userPerms = selectedUserDetail.permissions || {};
                         const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
                         PERMISSION_MODULES.forEach((module) => {
-                          const entry = userPerms[module.key];
+                          const entry = userPerms[module.key] as ModulePermission | undefined;
                           if (entry?.access) {
-                            seeded[module.key] = {
-                              access: true,
-                              permission: entry.permission === 'read' ? 'read' : 'write',
-                            };
+                            const permission = entry.permission === 'write' ? 'write' : 'read';
+                            seeded[module.key] =
+                              module.key === JOINING_PERMISSION_KEY
+                                ? {
+                                    access: true,
+                                    permission,
+                                    ...joiningExtrasFromStored(entry),
+                                  }
+                                : { access: true, permission };
                           }
                         });
                         setEditPermissionState(seeded);
@@ -1514,6 +1603,17 @@ const UserManagementPage = () => {
                                     Read &amp; Write
                                   </Button>
                                 </div>
+                                {module.key === JOINING_PERMISSION_KEY && (
+                                  <JoiningModulePermissionExtras
+                                    moduleState={moduleState}
+                                    onChange={(patch) =>
+                                      setPermissionState((prev) => ({
+                                        ...prev,
+                                        [module.key]: { ...prev[module.key], ...patch },
+                                      }))
+                                    }
+                                  />
+                                )}
                                 {module.key === 'leads' && (
                                   <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
                                     <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">
@@ -1631,10 +1731,7 @@ const UserManagementPage = () => {
                   const selectedPermissions = Object.entries(editPermissionState).reduce(
                     (acc, [key, value]) => {
                       if (value.access) {
-                        acc[key as PermissionModuleKey] = {
-                          access: true,
-                          permission: value.permission === 'read' ? 'read' : 'write',
-                        };
+                        acc[key as PermissionModuleKey] = modulePermissionForSave(key, value);
                       }
                       return acc;
                     },
@@ -1880,15 +1977,24 @@ const UserManagementPage = () => {
                                   className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                   checked={moduleState.access}
                                   onChange={() =>
-                                    setEditPermissionState((prev) => ({
-                                      ...prev,
-                                      [module.key]: {
-                                        access: !prev[module.key].access,
-                                        permission: prev[module.key].access
-                                          ? prev[module.key].permission
-                                          : 'read',
-                                      },
-                                    }))
+                                    setEditPermissionState((prev) => {
+                                      const nextAccess = !prev[module.key].access;
+                                      return {
+                                        ...prev,
+                                        [module.key]: {
+                                          ...prev[module.key],
+                                          access: nextAccess,
+                                          permission: nextAccess
+                                            ? prev[module.key].permission || 'read'
+                                            : prev[module.key].permission,
+                                          ...(module.key === JOINING_PERMISSION_KEY &&
+                                          nextAccess &&
+                                          !prev[module.key].access
+                                            ? defaultJoiningPermissionExtras()
+                                            : {}),
+                                        },
+                                      };
+                                    })
                                   }
                                 />
                                 Access
@@ -1904,15 +2010,7 @@ const UserManagementPage = () => {
                                     type="button"
                                     size="sm"
                                     variant={moduleState.permission === 'read' ? 'primary' : 'outline'}
-                                    onClick={() =>
-                                      setEditPermissionState((prev) => ({
-                                        ...prev,
-                                        [module.key]: {
-                                          ...prev[module.key],
-                                          permission: 'read',
-                                        },
-                                      }))
-                                    }
+                                    onClick={() => updateEditModulePermissionLevel(module.key, 'read')}
                                   >
                                     Read Only
                                   </Button>
@@ -1920,19 +2018,22 @@ const UserManagementPage = () => {
                                     type="button"
                                     size="sm"
                                     variant={moduleState.permission === 'write' ? 'primary' : 'outline'}
-                                    onClick={() =>
-                                      setEditPermissionState((prev) => ({
-                                        ...prev,
-                                        [module.key]: {
-                                          ...prev[module.key],
-                                          permission: 'write',
-                                        },
-                                      }))
-                                    }
+                                    onClick={() => updateEditModulePermissionLevel(module.key, 'write')}
                                   >
                                     Read &amp; Write
                                   </Button>
                                 </div>
+                                {module.key === JOINING_PERMISSION_KEY && (
+                                  <JoiningModulePermissionExtras
+                                    moduleState={moduleState}
+                                    onChange={(patch) =>
+                                      setEditPermissionState((prev) => ({
+                                        ...prev,
+                                        [module.key]: { ...prev[module.key], ...patch },
+                                      }))
+                                    }
+                                  />
+                                )}
                                 {module.key === 'leads' && (
                                   <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
                                     <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">

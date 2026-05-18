@@ -17,12 +17,14 @@ import {
   ReportIcon,
 } from '@/components/layout/DashboardShell';
 import { auth } from '@/lib/auth';
+import { refreshSessionUser } from '@/lib/sessionUser';
 import type { ModulePermission, User } from '@/types';
 import {
   PERMISSION_MODULES,
   DASHBOARD_PERMISSION_KEY,
   PermissionModuleKey,
 } from '@/constants/permissions';
+import { joiningExtrasFromStored } from '@/lib/joiningPermissions';
 import { TestNotificationsButton } from '@/components/TestNotificationsButton';
 import { Loading } from '@/components/Loading';
 
@@ -79,10 +81,18 @@ const buildFullAccessPermissions = (): Record<PermissionModuleKey, ModulePermiss
   >;
 
   PERMISSION_MODULES.forEach((module) => {
-    permissions[module.key] = {
-      access: true,
-      permission: 'write',
-    };
+    permissions[module.key] =
+      module.key === 'joining'
+        ? {
+            access: true,
+            permission: 'write',
+            editReference: true,
+            editAdmission: true,
+          }
+        : {
+            access: true,
+            permission: 'write',
+          };
   });
 
   return permissions;
@@ -99,10 +109,19 @@ const sanitizeSubAdminPermissions = (
   PERMISSION_MODULES.forEach((module) => {
     const entry = permissions?.[module.key];
     if (entry?.access) {
-      sanitized[module.key] = {
-        access: true,
-        permission: entry.permission === 'read' ? 'read' : 'write',
-      };
+      const permission = entry.permission === 'write' ? 'write' : 'read';
+      if (module.key === 'joining' && permission === 'write') {
+        sanitized[module.key] = {
+          access: true,
+          permission: 'write',
+          ...joiningExtrasFromStored(entry as import('@/types').ModulePermission),
+        };
+      } else {
+        sanitized[module.key] = {
+          access: true,
+          permission,
+        };
+      }
     } else {
       sanitized[module.key] = {
         access: false,
@@ -121,20 +140,80 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   const [isAuthorised, setIsAuthorised] = useState(false);
 
   useEffect(() => {
-    const user = auth.getUser();
-    if (!user) {
-      router.replace('/auth/login');
-      return;
-    }
+    let cancelled = false;
 
-    if (user.roleName !== 'Super Admin' && user.roleName !== 'Sub Super Admin' && user.roleName !== 'Data Entry User') {
-      router.replace('/user/dashboard');
-      return;
-    }
+    const bootstrap = async () => {
+      const cached = auth.getUser();
+      if (!cached) {
+        router.replace('/auth/login');
+        return;
+      }
 
-    setCurrentUser(user);
-    setIsAuthorised(true);
+      if (
+        cached.roleName !== 'Super Admin' &&
+        cached.roleName !== 'Sub Super Admin' &&
+        cached.roleName !== 'Data Entry User'
+      ) {
+        router.replace('/user/dashboard');
+        return;
+      }
+
+      let user = cached;
+      if (cached.roleName === 'Sub Super Admin') {
+        const fresh = await refreshSessionUser();
+        if (!cancelled && fresh) {
+          user = fresh;
+        }
+      }
+
+      if (!cancelled) {
+        setCurrentUser(user);
+        setIsAuthorised(true);
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.roleName !== 'Sub Super Admin') return;
+
+    const applyFreshUser = (fresh: User | null) => {
+      if (fresh) {
+        setCurrentUser((prev) => (prev ? { ...prev, ...fresh, permissions: fresh.permissions } : fresh));
+      }
+    };
+
+    const syncPermissions = () => {
+      void refreshSessionUser().then(applyFreshUser);
+    };
+
+    const onPermissionsChanged = (event: Event) => {
+      const userId = (event as CustomEvent<{ userId?: string }>).detail?.userId;
+      if (!userId || userId === currentUser._id) {
+        syncPermissions();
+      }
+    };
+
+    window.addEventListener('focus', syncPermissions);
+    window.addEventListener('crm-session-permissions-changed', onPermissionsChanged);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncPermissions();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('focus', syncPermissions);
+      window.removeEventListener('crm-session-permissions-changed', onPermissionsChanged);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [currentUser?._id, currentUser?.roleName]);
 
   // Data Entry User may only access the create individual lead page
   useEffect(() => {

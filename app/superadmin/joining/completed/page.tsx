@@ -7,6 +7,7 @@ import { admissionAPI, courseAPI } from '@/lib/api';
 import { Admission, AdmissionListResponse } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect';
 import { Button } from '@/components/ui/Button';
 import {
   Dialog,
@@ -17,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog';
 import { showToast } from '@/lib/toast';
-import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil } from 'lucide-react';
 
@@ -41,6 +42,12 @@ type AbstractIntakeEditRow = {
   branchName: string;
   cqIntake: number | null;
   mqIntake: number | null;
+};
+
+/** Course column metadata from admissions pivot APIs (`/stats/by-reference`, `/stats/by-date`). */
+type AdmissionStatsPivotCourse = {
+  courseId: string;
+  courseName: string;
 };
 
 const formatAbstractIntake = (value: number | null | undefined) =>
@@ -73,8 +80,25 @@ type ApiError = {
   };
 };
 
+/** EWS Yes/No from `reservation.isEws` (with legacy fallbacks). */
+const formatReservationEws = (reservation?: Admission['reservation']) => {
+  if (reservation?.isEws === true) return 'Yes';
+  if (reservation?.isEws === false) return 'No';
+  if (reservation?.general === 'ews' || reservation?.other?.includes('EWS')) return 'Yes';
+  return 'No';
+};
+
+/** Reference 1 from admission list row (lead_data.reference1 or list API referenceName). */
+const resolveAdmissionReference1 = (record: Admission) => {
+  const fromList = record.referenceName?.trim();
+  if (fromList) return fromList;
+  const ld = record.leadData as Record<string, unknown> | undefined;
+  return String(ld?.reference1 ?? ld?.referenceName ?? '').trim();
+};
+
 const CompletedAdmissionsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<
     'abstract' | 'detailed' | 'student-info' | 'reference-list' | 'date-wise'
@@ -97,7 +121,10 @@ const CompletedAdmissionsPage = () => {
   });
   const [intakeEditTarget, setIntakeEditTarget] = useState<AbstractIntakeEditRow | null>(null);
   const [intakeForm, setIntakeForm] = useState({ cqIntake: '', mqIntake: '' });
-  
+  const [studentInfoViewRecord, setStudentInfoViewRecord] = useState<Admission | null>(null);
+  const [referenceEditTarget, setReferenceEditTarget] = useState<Admission | null>(null);
+  const [referenceEditValue, setReferenceEditValue] = useState('');
+
   const { getCourseName, getBranchName } = useCourseLookup();
 
   // Fetch courses for dropdown
@@ -214,9 +241,9 @@ const CompletedAdmissionsPage = () => {
     enabled: activeTab === 'date-wise',
   });
 
-  const referenceCourses = referenceStatsData?.courses ?? [];
+  const referenceCourses = (referenceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
   const referenceRows = referenceStatsData?.rows ?? [];
-  const dateWiseCourses = dateWiseStatsData?.courses ?? [];
+  const dateWiseCourses = (dateWiseStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
   const dateWiseRows = dateWiseStatsData?.rows ?? [];
 
   // Detailed List Query
@@ -304,6 +331,30 @@ const CompletedAdmissionsPage = () => {
     cancelAdmissionMutation.mutate();
   };
 
+  const saveReferenceMutation = useMutation({
+    mutationFn: async () => {
+      if (!referenceEditTarget?._id) {
+        throw new Error('Select an admission to update');
+      }
+      return admissionAPI.patchReferenceById(referenceEditTarget._id, referenceEditValue.trim());
+    },
+    onSuccess: async () => {
+      showToast.success('Reference updated');
+      setReferenceEditTarget(null);
+      setReferenceEditValue('');
+      await queryClient.invalidateQueries({ queryKey: ['admissions'] });
+      await queryClient.invalidateQueries({ queryKey: ['admissions', 'stats', 'by-reference'] });
+    },
+    onError: (error: ApiError) => {
+      showToast.error(error.response?.data?.message || 'Failed to update reference');
+    },
+  });
+
+  const openReferenceEditor = (record: Admission) => {
+    setReferenceEditTarget(record);
+    setReferenceEditValue(resolveAdmissionReference1(record));
+  };
+
   const handleExportExcel = async () => {
     try {
       setIsExporting(true);
@@ -346,6 +397,63 @@ const CompletedAdmissionsPage = () => {
 
   return (
     <div className="w-full space-y-6 pb-12">
+      <Dialog
+        open={!!referenceEditTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReferenceEditTarget(null);
+            setReferenceEditValue('');
+          }
+        }}
+      >
+        <DialogContent className="w-[95vw] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Reference 1</DialogTitle>
+            <DialogDescription>
+              Stored on the admission, joining form, and CRM lead (when linked). Used by the Reference list
+              report.
+            </DialogDescription>
+          </DialogHeader>
+          {referenceEditTarget && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                  {referenceEditTarget.studentInfo?.name || 'Student'}
+                </p>
+                <p className="text-xs text-slate-500">{referenceEditTarget.admissionNumber}</p>
+              </div>
+              <ReferenceUserSelect
+                id="admission-reference1"
+                label="Reference"
+                value={referenceEditValue}
+                onChange={setReferenceEditValue}
+                disabled={saveReferenceMutation.isPending}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setReferenceEditTarget(null);
+                setReferenceEditValue('');
+              }}
+              disabled={saveReferenceMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              isLoading={saveReferenceMutation.isPending}
+              onClick={() => saveReferenceMutation.mutate()}
+            >
+              Save Reference
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!cancelTarget} onOpenChange={(open) => !open && setCancelTarget(null)}>
         <DialogContent className="w-[95vw] max-w-lg">
           <DialogHeader>
@@ -410,6 +518,117 @@ const CompletedAdmissionsPage = () => {
             >
               Submit
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!studentInfoViewRecord}
+        onOpenChange={(open) => {
+          if (!open) setStudentInfoViewRecord(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Student information</DialogTitle>
+            <DialogDescription>
+              Quick view for this admission. Use Edit joining form to change joining data, or open the full admission
+              page for payments, documents, and Step 2.
+            </DialogDescription>
+          </DialogHeader>
+          {studentInfoViewRecord && (
+            <div className="grid gap-4 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission</p>
+                <p className="mt-1 font-mono text-base font-semibold text-blue-600 dark:text-blue-400">
+                  {studentInfoViewRecord.admissionNumber}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Recorded:{' '}
+                  {studentInfoViewRecord.createdAt
+                    ? new Date(studentInfoViewRecord.createdAt).toLocaleString()
+                    : '—'}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Student</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {studentInfoViewRecord.studentInfo?.name ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contact</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {studentInfoViewRecord.studentInfo?.phone ?? '—'}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course / branch</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {studentInfoViewRecord.courseInfo?.course || getCourseName(studentInfoViewRecord.courseInfo?.courseId) || '—'}{' '}
+                    <span className="text-slate-500">·</span>{' '}
+                    {studentInfoViewRecord.courseInfo?.branch ||
+                      getBranchName(studentInfoViewRecord.courseInfo?.branchId) ||
+                      '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quota</p>
+                  <p className="mt-0.5 font-medium uppercase text-slate-900 dark:text-slate-100">
+                    {studentInfoViewRecord.courseInfo?.quota || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Caste</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {(studentInfoViewRecord.reservation?.general || 'OC').toUpperCase()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">EWS</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {formatReservationEws(studentInfoViewRecord.reservation)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paid</p>
+                  <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
+                    {new Intl.NumberFormat('en-IN', {
+                      style: 'currency',
+                      currency: 'INR',
+                      maximumFractionDigits: 0,
+                    }).format(studentInfoViewRecord.paymentSummary?.totalPaid || 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference</p>
+                  <p className="mt-0.5 text-slate-700 dark:text-slate-300">
+                    {resolveAdmissionReference1(studentInfoViewRecord) || '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setStudentInfoViewRecord(null)}>
+              Close
+            </Button>
+            {canEditAdmission && studentInfoViewRecord?.joiningId ? (
+              <Link href={`/superadmin/joining/${studentInfoViewRecord.joiningId}`} className="w-full sm:w-auto">
+                <Button type="button" className="w-full gap-2 sm:w-auto">
+                  <Pencil className="h-4 w-4" />
+                  Edit joining form
+                </Button>
+              </Link>
+            ) : null}
+            {studentInfoViewRecord?._id ? (
+              <Link href={`/superadmin/admission/${studentInfoViewRecord._id}/detail`} className="w-full sm:w-auto">
+                <Button type="button" variant="outline" className="w-full sm:w-auto">
+                  Full admission page
+                </Button>
+              </Link>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -774,7 +993,7 @@ const CompletedAdmissionsPage = () => {
                           <button
                             type="button"
                             onClick={() => openIntakeEditor(row)}
-                            disabled={!row.courseId || !row.branchId}
+                            disabled={!canEditAdmission || !row.courseId || !row.branchId}
                             title={
                               row.courseId && row.branchId
                                 ? 'Edit CQ and MQ intake'
@@ -868,8 +1087,8 @@ const CompletedAdmissionsPage = () => {
                         {record.updatedAt ? new Date(record.updatedAt).toLocaleString() : '—'}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          {record.status !== ADMISSION_CANCELLED_STATUS && (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {canEditAdmission && record.status !== ADMISSION_CANCELLED_STATUS && (
                             <Button
                               variant="danger"
                               size="sm"
@@ -878,11 +1097,42 @@ const CompletedAdmissionsPage = () => {
                               Cancel
                             </Button>
                           )}
-                          <Link href={`/superadmin/admission/${record._id}/detail`}>
-                            <Button variant="outline" size="sm">
-                              View
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setStudentInfoViewRecord(record)}
+                          >
+                            View
+                          </Button>
+                          {canEditReference && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openReferenceEditor(record)}
+                              title="Edit Reference 1 on admission, joining, and lead"
+                            >
+                              Ref
                             </Button>
-                          </Link>
+                          )}
+                          {canEditAdmission && record.joiningId ? (
+                            <Link href={`/superadmin/joining/${record.joiningId}`}>
+                              <Button variant="outline" size="sm" className="gap-1.5">
+                                <Pencil className="h-3.5 w-3.5" />
+                                Edit
+                              </Button>
+                            </Link>
+                          ) : canEditAdmission ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              disabled
+                              title="No joining record is linked to this admission"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -983,13 +1233,20 @@ const CompletedAdmissionsPage = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        {record.reservation?.general === 'ews' || record.reservation?.other?.includes('EWS') ? (
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
-                            ✓
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-700">—</span>
-                        )}
+                        {(() => {
+                          const ewsLabel = formatReservationEws(record.reservation);
+                          return (
+                            <span
+                              className={`text-xs font-semibold ${
+                                ewsLabel === 'Yes'
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-slate-600 dark:text-slate-400'
+                              }`}
+                            >
+                              {ewsLabel}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 text-center">
                         {(() => {
@@ -1015,7 +1272,7 @@ const CompletedAdmissionsPage = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right text-xs text-slate-600 dark:text-slate-400">
-                        {record.referenceName?.trim() || record.leadSource || '—'}
+                        {resolveAdmissionReference1(record) || '—'}
                       </td>
                     </tr>
                   ))
@@ -1220,3 +1477,5 @@ const CompletedAdmissionsPage = () => {
 };
 
 export default CompletedAdmissionsPage;
+
+

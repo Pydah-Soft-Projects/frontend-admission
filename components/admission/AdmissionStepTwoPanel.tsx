@@ -7,7 +7,7 @@ import { joiningAPI, courseAPI } from '@/lib/api';
 import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
 import { showToast } from '@/lib/toast';
-import { useModulePermission } from '@/components/layout/DashboardShell';
+import { useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import {
   buildCertificateChecklistStoredValue,
   certificateChecklistValuesEqual,
@@ -44,8 +44,8 @@ export function AdmissionStepTwoPanel({
   disabled = false,
 }: AdmissionStepTwoPanelProps) {
   const queryClient = useQueryClient();
-  const joiningPerm = useModulePermission('joining');
-  const canWrite = joiningPerm.canWrite && !disabled;
+  const { canEditAdmission } = useJoiningDeskPermissions();
+  const canWrite = canEditAdmission && !disabled;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['joining', joiningId],

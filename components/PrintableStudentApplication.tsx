@@ -396,6 +396,32 @@ function getPrintApplicationHtml(props: {
     return parts.length ? parts.join(', ') : '';
   })();
 
+  const renderPrintSignatureRow = (extraClass = '') => `
+    <div class="print-signature-footer print-page-signatures ${extraClass}" aria-label="Student and parent signatures">
+      <div class="signature-divider" aria-hidden="true"></div>
+      <div class="signature-row">
+      <div class="sig-block">
+        <div class="sig-section-title">STUDENT SIGNATURE</div>
+        <div class="sig-box"></div>
+      </div>
+      <div class="sig-block">
+        <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
+        <div class="sig-box"></div>
+      </div>
+      </div>
+    </div>`;
+
+  const renderContinuationTopMeta = () => `
+    <div class="top-meta print-continuation-meta">
+      <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
+      <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
+      <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
+      <div>PIN No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
+      <div>College: <span style="border-bottom: 1px dotted #333; min-width: 120px; display: inline-block;">${escapeHtml((collegeName || '').trim() || '—')}</span></div>
+      <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
+      <div>Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span></div>
+    </div>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -498,38 +524,144 @@ function getPrintApplicationHtml(props: {
     table.data-table th { background: #f2f2f2; font-size: 9px; }
     table.data-table thead { display: table-header-group; }
 
-    /* Siblings + page-1 signatures: keep together (see @media print for hard page start). */
-    .print-siblings-signature-block {
+    /* Three sheets: (1) sections 1–7 + signatures, (2) 8–10 + declaration + signatures, (3) fee + signatures. */
+    .print-page {
       display: block;
+    }
+    .print-page-two-content {
+      display: block;
+      line-height: 1.45;
+    }
+    .print-signature-footer {
+      margin-top: 18px;
+      padding: 0 16px;
+      box-sizing: border-box;
+    }
+    .print-page-signatures {
+      margin-top: 0;
+      padding: 0;
+      border-top: none;
+    }
+    .signature-divider {
+      display: block;
+      width: 100%;
+      border-top: 2px solid #8B2323;
+      margin: 0 0 10px 0;
+    }
+    .print-page-two,
+    .fee-print-page {
+      padding-top: 14mm;
+      line-height: 1.45;
+    }
+    .print-continuation-meta {
+      margin-bottom: 18px;
+      row-gap: 10px;
+    }
+    .print-continuation-meta div {
+      margin-bottom: 2px;
+    }
+    .fee-print-page .print-continuation-meta {
+      margin-bottom: 16px;
+    }
+    /* Page 2: relaxed vertical rhythm */
+    .print-page-two-content .form-row {
+      margin-bottom: 11px;
+      min-height: 18px;
+    }
+    .print-page-two-content .m-t-10 {
+      margin-top: 14px !important;
+    }
+    .print-page-two-content .data-table {
+      margin-top: 8px;
+      margin-bottom: 12px;
+    }
+    .print-page-two-content .data-table th,
+    .print-page-two-content .data-table td {
+      padding: 6px 5px;
+      line-height: 1.4;
+    }
+    .print-page-two-content .doc-required-section {
+      margin-top: 12px;
+      margin-bottom: 14px;
+      gap: 10px;
+    }
+    .print-page-two-content .doc-required-section .form-row {
+      margin-bottom: 10px;
+    }
+    .print-page-two-content .selected-inline {
+      min-height: 18px;
+      line-height: 1.45;
+    }
+    .print-doc-declaration-block {
+      margin-top: 6px;
+    }
+    .declaration-section {
+      padding: 12px 18px 14px;
+      margin-top: 18px;
+    }
+    .declaration-list {
+      line-height: 1.55;
+    }
+    .declaration-list li {
+      margin-bottom: 9px;
+    }
+    /* Page 3: fee section breathing room */
+    .fee-print-page .office-label-tag {
+      margin-top: 6px;
+      margin-bottom: 14px;
+    }
+    .fee-print-page .office-use-bottom {
+      margin-top: 8px;
+      padding: 8px;
+    }
+    .fee-print-page .office-use-bottom-left {
+      padding: 10px 8px;
+    }
+    .fee-print-page .data-table th,
+    .fee-print-page .data-table td {
+      padding: 6px 5px;
+      line-height: 1.4;
+    }
+    .fee-print-page .footer-note {
+      margin-top: 16px;
+      margin-bottom: 8px;
+      padding: 12px 14px;
+      line-height: 1.5;
     }
     .education-table { break-inside: auto; page-break-inside: auto; }
     
     .declaration-section {
       border-radius: 15px;
       border: 2px solid #8B2323;
-      padding: 5px 15px;
-      margin-top: 15px;
       break-after: auto;
       page-break-after: auto;
       break-inside: auto;
       page-break-inside: auto;
     }
-    .declaration-title { text-align: center; margin: -15px auto 5px; background: #8B2323; color: white; width: 150px; border-radius: 10px; padding: 2px; font-weight: bold; }
-    .declaration-list { list-style: disc; padding-left: 20px; font-size: 12px; }
-    .declaration-list li { margin-bottom: 4px; }
+    .declaration-title { text-align: center; margin: -15px auto 8px; background: #8B2323; color: white; width: 150px; border-radius: 10px; padding: 2px; font-weight: bold; }
+    .declaration-list { list-style: disc; padding-left: 20px; font-size: 12px; margin: 8px 0 4px; }
 
+    .print-signature-footer .signature-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      width: 100%;
+      margin-top: 0;
+      padding: 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      clear: both;
+    }
     .signature-row {
       display: flex;
       justify-content: space-between;
-      margin-top: 20px;
-      padding: 0 20px;
+      align-items: flex-start;
+      width: 100%;
       break-inside: avoid;
       page-break-inside: avoid;
-      break-before: auto;
-      page-break-before: auto;
       clear: both;
     }
-    .sig-block { width: 180px; border: 1px solid #777; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
+    .sig-block { width: 180px; flex-shrink: 0; border: 1px solid #777; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
     .sig-section-title { font-size: 9px; color: #8B2323; font-weight: bold; text-align: center; background: #f2f2f2; border-bottom: 1px solid #777; margin: 0; padding: 4px 0; }
     .sig-box { height: 50px; background: #fff; }
 
@@ -550,33 +682,42 @@ function getPrintApplicationHtml(props: {
     .text-red { color: #8B2323; }
     .font-8 { font-size: 8px; }
 
-    /* Keep declaration + signatures + fee as one flow so nothing overlaps when the fee
-       table wraps; avoid forcing a blank page between signatures and fee. */
-    .fee-print-page { page-break-before: auto; break-before: auto; }
-    .print-doc-fee-block { break-inside: auto; page-break-inside: auto; }
+    .print-doc-declaration-block { break-inside: auto; page-break-inside: auto; }
     .office-use-bottom { break-inside: auto; page-break-inside: auto; }
     .fee-print-page .footer-note { break-inside: avoid; page-break-inside: avoid; }
 
     @media print {
       body { padding: 0; margin: 5mm 10mm; }
+      .print-page-two,
+      .fee-print-page {
+        padding-top: 14mm;
+      }
       .no-print { display: none; }
       .education-table tbody tr { break-inside: auto; page-break-inside: auto; }
 
-      /*
-        Chrome often ignores break-inside:avoid when the block does not fit the *remaining*
-        space on a page — the last fragment (signatures) then jumps alone to the next page.
-        Starting this block on a fresh page guarantees room so the table + signatures stay together.
-      */
-      .print-siblings-signature-block {
-        break-before: page;
-        page-break-before: always;
+      .print-page {
+        break-after: page;
+        page-break-after: always;
+      }
+      .print-page:last-of-type {
+        break-after: auto;
+        page-break-after: auto;
+      }
+      .print-page-signatures {
         break-inside: avoid;
         page-break-inside: avoid;
       }
-      .print-siblings-signature-block .siblings-table,
-      .print-siblings-signature-block .siblings-table thead,
-      .print-siblings-signature-block .siblings-table tbody,
-      .print-siblings-signature-block .signature-row {
+      .signature-divider {
+        margin-bottom: 10px;
+      }
+      .print-signature-footer .signature-row {
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .print-page-two-content .siblings-table,
+      .print-page-two-content .siblings-table thead,
+      .print-page-two-content .siblings-table tbody {
         break-inside: avoid !important;
         page-break-inside: avoid !important;
       }
@@ -585,15 +726,12 @@ function getPrintApplicationHtml(props: {
         break-inside: avoid;
         page-break-inside: avoid;
       }
-      .print-declaration-signatures .signature-row {
-        page-break-before: avoid;
-        break-before: avoid;
-      }
     }
   </style>
 </head>
 <body>
   <div class="page">
+    <div class="print-page print-page-one">
     <div class="top-meta">
       <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
       <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
@@ -793,7 +931,13 @@ function getPrintApplicationHtml(props: {
         <span class="form-label" style="min-width: 180px;">Medium of Qualified Examination :</span>
         <span class="selected-inline">${escapeHtml(displayMediumText || '—')}</span>
       </div>
+    </div>
+    ${renderPrintSignatureRow('page-one-signatures')}
+    </div>
 
+    <div class="print-page print-page-two">
+    ${renderContinuationTopMeta()}
+    <div class="print-page-two-content">
       <div class="form-row m-t-10">
         <span class="section-num">8.</span>
         <span class="form-label">Details of the School/College Last Studied :</span>
@@ -822,7 +966,7 @@ function getPrintApplicationHtml(props: {
               .filter(Boolean)
               .join(', ');
             return `
-              <tr style="height: 25px;">
+              <tr style="height: 28px;">
                 <td>${label}</td>
                 <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
                 <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
@@ -844,7 +988,7 @@ function getPrintApplicationHtml(props: {
                 ? String(edu.level).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
                 : 'Other');
             return `
-              <tr style="height: 25px;">
+              <tr style="height: 28px;">
                 <td>${escapeHtml(standardLabel)}</td>
                 <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
                 <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
@@ -858,9 +1002,7 @@ function getPrintApplicationHtml(props: {
           }).join('')}
         </tbody>
       </table>
-    </div>
 
-    <div class="print-siblings-signature-block">
       <div class="form-row m-t-10">
         <span class="section-num">9.</span>
         <span class="form-label">Details of the Siblings</span>
@@ -888,7 +1030,7 @@ function getPrintApplicationHtml(props: {
                   ? 'Brother/Sister'
                   : '';
               return `
-                <tr style="height: 25px;">
+                <tr style="height: 28px;">
                   <td>${escapeHtml(relation)}</td>
                   <td>${escapeHtml(sib?.name || '')}</td>
                   <td>${escapeHtml(sib?.studyingStandard || '')}</td>
@@ -899,29 +1041,6 @@ function getPrintApplicationHtml(props: {
           })()}
         </tbody>
       </table>
-
-      <div class="signature-row page-one-signatures" style="margin-top: 16px; border-top: 2px solid #8B2323; padding-top: 10px;">
-        <div class="sig-block">
-          <div class="sig-section-title">STUDENT SIGNATURE</div>
-          <div class="sig-box"></div>
-        </div>
-        <div class="sig-block">
-          <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
-          <div class="sig-box"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="print-continuation">
-    <div class="top-meta">
-      <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
-      <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
-      <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
-      <div>PIN No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
-      <div>College: <span style="border-bottom: 1px dotted #333; min-width: 120px; display: inline-block;">${escapeHtml((collegeName || '').trim() || '—')}</span></div>
-      <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
-      <div>Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span></div>
-    </div>
 
     <div class="form-row">
       <span class="section-num">10.</span>
@@ -941,7 +1060,7 @@ function getPrintApplicationHtml(props: {
       </div>
     </div>
 
-    <div class="print-doc-fee-block">
+    <div class="print-doc-declaration-block">
     <div class="print-declaration-signatures">
     <div class="declaration-section">
       <div class="declaration-title">DECLARATION</div>
@@ -956,24 +1075,19 @@ function getPrintApplicationHtml(props: {
         <li>I/We have got satisfied ourself with all the facilities, conditions, rules and regulations of the institutions and the Hostel/Transport, I am willingly admitting my ward.</li>
       </ul>
     </div>
-
-    <div class="signature-row" style="border-top: 1px solid #ddd; padding-top: 10px;">
-      <div class="sig-block">
-        <div class="sig-section-title">STUDENT SIGNATURE</div>
-        <div class="sig-box"></div>
-      </div>
-      <div class="sig-block">
-        <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
-        <div class="sig-box"></div>
-      </div>
     </div>
     </div>
+    </div>
+    ${renderPrintSignatureRow('page-two-signatures')}
+    </div>
 
-    <div class="fee-print-page">
+    <div class="print-page fee-print-page">
+    ${renderContinuationTopMeta()}
+
     <div class="office-label-tag">FOR OFFICE USE</div>
     <div class="office-use-bottom">
       <div class="office-use-bottom-left">
-        <div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Fee Paid Details</div>
+        <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">Fee Paid Details</div>
         ${paymentSummary ? `
           <div style="font-size: 9px; margin-bottom: 4px; display: flex; gap: 12px; justify-content: center;">
             <span><strong>Total:</strong> ${formatCurrency(paymentSummary.totalFee)}</span>
@@ -1001,7 +1115,7 @@ function getPrintApplicationHtml(props: {
               return Array.from({ length: totalRows }).map((_, i) => {
                 const tx = transactions[i];
                 return `
-                  <tr style="height: 18px;">
+                  <tr style="height: 24px;">
                     <td>${i + 1}</td>
                     <td>${escapeHtml(getReceiptNumber(tx))}</td>
                     <td>${escapeHtml(formatTxDate(tx?.createdAt))}</td>
@@ -1024,8 +1138,7 @@ function getPrintApplicationHtml(props: {
       Do not pay the fees without receipt. Do not transfer/deposit College<br/>
       fees to any personal account
     </div>
-    </div>
-    </div>
+    ${renderPrintSignatureRow('page-three-signatures')}
     </div>
 
   </div>

@@ -17,6 +17,11 @@ import { cn } from '@/lib/utils';
 import { Button } from '../ui/Button';
 import { auth } from '@/lib/auth';
 import type { ModulePermission } from '@/types';
+import {
+  JOINING_PERMISSION_KEY,
+  resolveJoiningEditAdmission,
+  resolveJoiningEditReference,
+} from '@/lib/joiningPermissions';
 import { NotificationBell } from '../NotificationBell';
 import { MobileBottomNav, flattenNavItemsForMobile } from './MobileBottomNav';
 import { MobileMenuSheet } from './MobileMenuSheet';
@@ -138,6 +143,8 @@ type PermissionContextValue = {
   permissions: Record<string, ModulePermission>;
   hasAccess: (moduleKey: string) => boolean;
   canWrite: (moduleKey: string) => boolean;
+  canJoiningEditReference: () => boolean;
+  canJoiningEditAdmission: () => boolean;
 };
 
 const PermissionContext = createContext<PermissionContextValue | null>(null);
@@ -156,6 +163,24 @@ export const useModulePermission = (moduleKey: string) => {
   return {
     hasAccess: ctx.hasAccess(moduleKey),
     canWrite: ctx.canWrite(moduleKey),
+  };
+};
+
+export const useJoiningDeskPermissions = () => {
+  const ctx = useContext(PermissionContext);
+  const base = useModulePermission(JOINING_PERMISSION_KEY);
+  const denyEdits = {
+    ...base,
+    canEditReference: false,
+    canEditAdmission: false,
+  };
+  if (!ctx) {
+    return denyEdits;
+  }
+  return {
+    ...base,
+    canEditReference: ctx.canJoiningEditReference(),
+    canEditAdmission: ctx.canJoiningEditAdmission(),
   };
 };
 
@@ -311,6 +336,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       return entry.permission !== 'read';
     },
     [normalizedPermissions]
+  );
+
+  const joiningPermissionEntry = normalizedPermissions[JOINING_PERMISSION_KEY] as ModulePermission | undefined;
+
+  const canJoiningEditReference = useCallback(
+    () => resolveJoiningEditReference(joiningPermissionEntry),
+    [joiningPermissionEntry]
+  );
+
+  const canJoiningEditAdmission = useCallback(
+    () => resolveJoiningEditAdmission(joiningPermissionEntry),
+    [joiningPermissionEntry]
   );
 
   const filterNavItems = useCallback(
@@ -664,8 +701,10 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       permissions: normalizedPermissions,
       hasAccess: hasAccessForKey,
       canWrite: canWriteForKey,
+      canJoiningEditReference,
+      canJoiningEditAdmission,
     }),
-    [normalizedPermissions, hasAccessForKey, canWriteForKey]
+    [normalizedPermissions, hasAccessForKey, canWriteForKey, canJoiningEditReference, canJoiningEditAdmission]
   );
 
   return (

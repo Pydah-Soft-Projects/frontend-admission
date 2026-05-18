@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect';
 import {
   joiningAPI,
   admissionAPI,
@@ -73,7 +74,11 @@ import {
   CertificateGuidance,
   Lead,
 } from '@/types';
-import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
+import {
+  useDashboardHeader,
+  useJoiningDeskPermissions,
+  useModulePermission,
+} from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
@@ -311,6 +316,26 @@ const defaultDocuments: JoiningDocuments = {
   rationCard: 'pending',
 };
 
+/** Reference 1 (Excel / CRM) — stored on admission.joining.lead_data.reference1 and leads.dynamic_fields.reference1 */
+const resolveReference1FromRecord = (
+  admission?: Admission | null,
+  joining?: Joining | null,
+  lead?: LeadLike | null
+): string => {
+  const admLd = admission?.leadData as Record<string, unknown> | undefined;
+  const fromAdm = String(admLd?.reference1 ?? admission?.referenceName ?? '').trim();
+  if (fromAdm) return fromAdm;
+  const joinLd = joining?.leadData as Record<string, unknown> | undefined;
+  const fromJoin = String(joinLd?.reference1 ?? '').trim();
+  if (fromJoin) return fromJoin;
+  const leadAny = lead as Record<string, unknown> | undefined;
+  const dyn = leadAny?.dynamicFields ?? leadAny?.dynamic_fields;
+  if (dyn && typeof dyn === 'object') {
+    return String((dyn as Record<string, unknown>).reference1 ?? '').trim();
+  }
+  return '';
+};
+
 const buildInitialState = (joining?: Joining): JoiningFormState => {
   const resolvedMediums = normalizeMediumSelections(joining?.qualifications);
 
@@ -429,6 +454,57 @@ const maskAadhaar = (value?: string) => {
   return `${masked} ${suffix}`;
 };
 
+/** Parse admission from update/get API bodies (`data` may be the record or `{ admission }`). */
+const parseAdmissionFromApiBody = (body: unknown): Admission | null => {
+  if (!body || typeof body !== 'object') return null;
+  const root = body as Record<string, unknown>;
+  const data = root.data;
+  if (data && typeof data === 'object') {
+    const d = data as Record<string, unknown>;
+    if (d.admission && typeof d.admission === 'object') {
+      return d.admission as Admission;
+    }
+    if (typeof d._id === 'string' && d._id.length === 36) {
+      return d as Admission;
+    }
+  }
+  if (typeof root._id === 'string' && root._id.length === 36) {
+    return root as Admission;
+  }
+  return null;
+};
+
+const normalizeStudentFeeDetailsFromRecord = (
+  sfd: JoiningStudentFeeDetails | undefined | null
+): JoiningStudentFeeDetails => {
+  if (!sfd || typeof sfd !== 'object' || !Array.isArray(sfd.lines)) {
+    return { lines: [] };
+  }
+  return {
+    batch: typeof sfd.batch === 'string' && sfd.batch.trim() ? sfd.batch.trim() : undefined,
+    lines: sfd.lines
+      .map((line) => {
+        const rawAmount = line.amount as unknown;
+        let amount: number | null = null;
+        if (rawAmount !== undefined && rawAmount !== null) {
+          if (typeof rawAmount === 'string' && rawAmount.trim() === '') {
+            amount = null;
+          } else {
+            const n =
+              typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
+            amount = Number.isFinite(n) ? n : null;
+          }
+        }
+        return {
+          structureId: String(line.structureId || '').trim(),
+          amount,
+          remarks: typeof line.remarks === 'string' ? line.remarks : '',
+        };
+      })
+      .filter((l) => l.structureId),
+  };
+};
+
 export type JoiningLeadFormWorkspaceProps = {
   adminLeadId?: string | null;
   publicToken?: string | null;
@@ -438,19 +514,24 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const isPublicEdit = Boolean(publicToken);
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const routeLeadFromParams = Array.isArray(params?.leadId) ? params.leadId[0] : params?.leadId;
   const effectiveAdminLeadId = (adminLeadId ?? routeLeadFromParams) as string | undefined;
 
   const joiningPerm = useModulePermission('joining');
+  const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
   const paymentsPerm = useModulePermission('payments');
   const canAccessJoiningModule = isPublicEdit || joiningPerm.hasAccess;
   const canWriteJoining = isPublicEdit || joiningPerm.canWrite;
+  const canEditApprovedAdmission = isPublicEdit || canEditAdmission;
   const canAccessPaymentsModule = !isPublicEdit && paymentsPerm.hasAccess;
   const canWritePayments = !isPublicEdit && paymentsPerm.canWrite;
 
   const [formState, setFormState] = useState<JoiningFormState>(buildInitialState());
   const [status, setStatus] = useState<JoiningStatus>('draft');
+  const canEditReferenceField =
+    isPublicEdit || (status === 'approved' ? canEditReference : canWriteJoining);
   const [meta, setMeta] = useState<{
     updatedAt?: string;
     submittedAt?: string;
@@ -466,6 +547,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const [isEditMode, setIsEditMode] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
+  const [reference1, setReference1] = useState('');
   /** Latest workflow-fixed registration year/semester (B.Tech vs others); synced after course catalog context resolves. */
   const joiningFixedRegistrationRef = useRef<JoiningRegistrationFixedGate>(
     buildJoiningRegistrationFixedGate({ courseName: '', courseCode: '' })
@@ -2082,12 +2164,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       });
       setPaymentSummary(joining.paymentSummary || null);
 
-      if (joining.status !== 'approved' || !hasAppliedAdmissionSnapshot) {
+      // Approved admissions are hydrated from the admission record, not stale joining draft.
+      if (joining.status !== 'approved') {
         const base = buildInitialState(joining);
         setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
+        setReference1(resolveReference1FromRecord(null, joining, lead as LeadLike));
       }
     }
-  }, [data, lead, hasAppliedAdmissionSnapshot]);
+  }, [data, lead]);
 
   const {
     data: admissionData,
@@ -2107,20 +2191,43 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     },
   });
 
+  const applyAdmissionRecordToWorkspace = useCallback(
+    (record: Admission) => {
+      setAdmissionRecord(record);
+      setMeta((prev) => ({
+        ...prev,
+        admissionNumber: record.admissionNumber || prev.admissionNumber,
+        updatedAt: record.updatedAt || prev.updatedAt,
+      }));
+      setPaymentSummary(record.paymentSummary || null);
+      const base = buildInitialState(record as unknown as Joining);
+      setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
+      setHasAppliedAdmissionSnapshot(true);
+
+      if (record.registrationFormData && typeof record.registrationFormData === 'object') {
+        setRegistrationExtras(
+          stripJoiningRedundantRegistrationExtras({
+            ...(record.registrationFormData as Record<string, unknown>),
+          })
+        );
+      }
+
+      const leadData = record.leadData as Record<string, unknown> | undefined;
+      const sfd =
+        record.studentFeeDetails ??
+        (leadData?._joiningStudentFeeDetails as JoiningStudentFeeDetails | undefined);
+      setStudentFeeDetails(normalizeStudentFeeDetailsFromRecord(sfd));
+      setReference1(resolveReference1FromRecord(record, joiningRecord ?? undefined, lead as LeadLike));
+    },
+    [lead, joiningRecord]
+  );
+
   useEffect(() => {
     if (status === 'approved') {
       if (admissionData?.data?.admission) {
         const record = admissionData.data.admission as Admission;
-        setAdmissionRecord(record);
-        setMeta((prev) => ({
-          ...prev,
-          admissionNumber: record.admissionNumber || prev.admissionNumber,
-        }));
-        setPaymentSummary(record.paymentSummary || null);
         if (!hasAppliedAdmissionSnapshot) {
-          const base = buildInitialState(record as unknown as Joining);
-          setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
-          setHasAppliedAdmissionSnapshot(true);
+          applyAdmissionRecordToWorkspace(record);
         }
       }
     } else {
@@ -2130,7 +2237,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         setHasAppliedAdmissionSnapshot(false);
       }
     }
-  }, [status, admissionData, hasAppliedAdmissionSnapshot, joiningRecord, lead]);
+  }, [
+    status,
+    admissionData,
+    hasAppliedAdmissionSnapshot,
+    joiningRecord,
+    applyAdmissionRecordToWorkspace,
+  ]);
 
   const handleCourseFieldChange = (field: 'course' | 'branch' | 'quota', value: string) => {
     setFormState((prev) => ({
@@ -2938,6 +3051,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       educationHistory: formState.educationHistory,
       siblings: formState.siblings,
       documents: formState.documents,
+      reference1: reference1.trim(),
       ...(isApprovedAdmission
         ? {}
         : {
@@ -2970,6 +3084,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     isPublicEdit,
     studentFeeDetails,
     status,
+    reference1,
   ]);
 
   const saveDraftMutation = useMutation({
@@ -3124,13 +3239,55 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const updateAdmissionMutation = useMutation({
     mutationFn: async (payload: any) => {
-      if (!leadId) return null;
-      return admissionAPI.updateByLeadId(leadId, payload);
+      /** Prefer SQL admission primary key — URL `leadId` is often the joining row id, not `admissions.lead_id`. */
+      const admissionSqlId = admissionRecord?._id ? String(admissionRecord._id).trim() : '';
+      if (admissionSqlId.length === 36) {
+        return admissionAPI.updateById(admissionSqlId, payload);
+      }
+      const resolvedLeadId = [
+        admissionRecord?.leadId,
+        joiningRecord?.leadId,
+        lead?.id as string | undefined,
+      ]
+        .map((x) => (x != null ? String(x).trim() : ''))
+        .find((s) => s.length === 36);
+      if (!resolvedLeadId) {
+        throw new Error(
+          'Admission record is not loaded or lead id is missing — reload the page and try again.'
+        );
+      }
+      return admissionAPI.updateByLeadId(resolvedLeadId, payload);
     },
-    onSuccess: () => {
+    onSuccess: async (response) => {
       showToast.success('Admission record updated');
-      setHasAppliedAdmissionSnapshot(false);
-      refetchAdmission();
+
+      const fromResponse = parseAdmissionFromApiBody(response);
+      if (fromResponse) {
+        applyAdmissionRecordToWorkspace(fromResponse);
+        queryClient.setQueryData(['admission', leadId, status], (prev: unknown) => {
+          const prevData =
+            prev && typeof prev === 'object' && 'data' in (prev as object)
+              ? (prev as { data?: Record<string, unknown> }).data
+              : undefined;
+          return {
+            ...(prev && typeof prev === 'object' ? prev : {}),
+            data: {
+              ...(prevData || {}),
+              admission: fromResponse,
+              lead: prevData?.lead ?? lead,
+            },
+          };
+        });
+      }
+
+      const { data: refetched } = await refetchAdmission();
+      const record =
+        (refetched?.data?.admission as Admission | undefined) ?? fromResponse ?? null;
+      if (record) {
+        applyAdmissionRecordToWorkspace(record);
+      }
+
+      await Promise.all([refetch(), refetchTransactions()]);
     },
     onError: (error: any) => {
       console.error('Error updating admission record:', error);
@@ -3162,7 +3319,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     isPublicEdit,
   ]);
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
-  const isAdmissionEditable = canWriteJoining && status === 'approved';
+  const isAdmissionEditable = canEditApprovedAdmission && status === 'approved';
   /** After approval: admin sees summary, payments, and fee table on this joining page; cert/fees live on admission. */
   const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
   const admissionNumberDisplay =
@@ -3170,8 +3327,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const isBusy = isLoading || (isAdmissionEditable && isLoadingAdmission && !admissionRecord);
 
   const handleSaveAdmissionRecord = () => {
-    if (!canWriteJoining) {
-      showToast.error('You have read-only access to the joining desk');
+    if (!canEditApprovedAdmission) {
+      showToast.error('You do not have permission to edit admissions on the joining desk');
       return;
     }
     if (!hasManagedCourseAndBranch) {
@@ -3803,6 +3960,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ) : null}
                 </div>
                 ) : null}
+                <div className="md:col-span-2">
+                  <ReferenceUserSelect
+                    label="Reference"
+                    value={reference1}
+                    onChange={setReference1}
+                    disabled={!canEditReferenceField}
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                    Select an admission portal user, or leave as No reference. Saved on admission, joining, and CRM lead.
+                  </p>
+                </div>
               </div>
             </section>
 
@@ -5187,3 +5355,4 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     </div>
   );
 };
+

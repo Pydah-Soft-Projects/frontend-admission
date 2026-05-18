@@ -6,6 +6,10 @@ export type ModulePermissionLevel = 'read' | 'write';
 export interface ModulePermission {
   access: boolean;
   permission: ModulePermissionLevel;
+  /** Joining desk: edit Reference 1 on admissions (requires module write). */
+  editReference?: boolean;
+  /** Joining desk: edit joining / admission records (requires module write). */
+  editAdmission?: boolean;
 }
 
 export interface User {
