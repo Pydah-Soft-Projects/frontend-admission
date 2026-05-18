@@ -1666,6 +1666,23 @@ export const reportAPI = {
     const response = await api.get(`/reports/leads-abstract?${queryParams.toString()}`);
     return response.data?.data || response.data;
   },
+  getProLeaves: async (params?: { startDate?: string; endDate?: string; userId?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.userId) queryParams.append('userId', params.userId);
+    const query = queryParams.toString();
+    const response = await api.get(`/leads/pro/leaves${query ? `?${query}` : ''}`);
+    return response.data?.data || response.data;
+  },
+  markProLeave: async (data: { userId: string; date: string; reason?: string }) => {
+    const response = await api.post('/leads/pro/leaves', data);
+    return response.data;
+  },
+  deleteProLeave: async (id: string) => {
+    const response = await api.delete(`/leads/pro/leaves/${id}`);
+    return response.data;
+  },
 };
 
 // UTM API
