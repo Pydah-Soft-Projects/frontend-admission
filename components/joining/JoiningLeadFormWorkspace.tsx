@@ -42,6 +42,11 @@ import {
   scholarshipIntentForCourseQuota,
 } from '@/lib/joiningScholarshipQuotaDefault';
 import {
+  mergeQuotaSelectOptions,
+  parseStudentQuotasResponse,
+  quotaLabelsFromCatalog,
+} from '@/lib/studentQuotaCatalog';
+import {
   buildBtechIntakeAutoRemark,
   buildBtechJoiningYearOptions,
   buildJoiningRegistrationFixedGate,
@@ -131,8 +136,6 @@ const DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST = new Set<keyof JoiningDocuments>([
   'transferCertificate',
   'studyCertificate',
 ]);
-
-const quotaOptions = ['Management', 'Convenor', 'Not Applicable'] as const;
 
 const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: string }> = [
   { value: 'english', label: 'English' },
@@ -1415,6 +1418,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     enabled: !isPublicEdit,
   });
 
+  const { data: studentQuotasResponse } = useQuery({
+    queryKey: ['courses', 'student-quotas'],
+    queryFn: async () => courseAPI.listStudentQuotas(),
+    staleTime: 120_000,
+    enabled: !isPublicEdit,
+  });
+
   const programLevels: string[] = useMemo(() => {
     if (isPublicEdit) {
       const pl = (publicBootstrapQuery.data?.data as { programLevels?: string[] } | undefined)?.programLevels;
@@ -1429,6 +1439,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     }
     return [];
   }, [isPublicEdit, publicBootstrapQuery.data, programLevelsResponse]);
+
+  const quotaSelectOptions: string[] = useMemo(() => {
+    if (isPublicEdit) {
+      const sq = (publicBootstrapQuery.data?.data as { studentQuotas?: unknown[] } | undefined)
+        ?.studentQuotas;
+      const labels = quotaLabelsFromCatalog(parseStudentQuotasResponse(sq));
+      return mergeQuotaSelectOptions(labels, formState.courseInfo.quota);
+    }
+    const labels = quotaLabelsFromCatalog(parseStudentQuotasResponse(studentQuotasResponse));
+    return mergeQuotaSelectOptions(labels, formState.courseInfo.quota);
+  }, [
+    isPublicEdit,
+    publicBootstrapQuery.data,
+    studentQuotasResponse,
+    formState.courseInfo.quota,
+  ]);
 
   const filteredCourseSettings = useMemo(() => {
     const collegeKey = (selectedCollegeId || '').trim();
@@ -3654,16 +3680,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                         >
                           <option value="">Select quota</option>
-                          {formState.courseInfo.quota &&
-                            !quotaOptions.includes(formState.courseInfo.quota as (typeof quotaOptions)[number]) && (
-                              <option value={formState.courseInfo.quota}>{formState.courseInfo.quota}</option>
-                            )}
-                          {quotaOptions.map((option) => (
+                          {quotaSelectOptions.map((option) => (
                             <option key={option} value={option}>
                               {option}
                             </option>
                           ))}
                         </select>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          From secondary <span className="font-mono">student_database.student_quotas</span>.
+                        </p>
                       </div>
                       <div className="min-w-0">
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">

@@ -20,6 +20,7 @@ import {
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
+import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil } from 'lucide-react';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
@@ -48,7 +49,15 @@ const formatLocalDateIso = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
-const ABSTRACT_COLUMN_COUNT = 11;
+const ABSTRACT_COLUMN_COUNT = 13;
+
+const abstractBlockOutline = 'border-2 border-slate-300 dark:border-slate-600';
+const abstractBlockCellStart = 'border-l-2 border-slate-300 dark:border-slate-600';
+const abstractBlockCellEnd = 'border-r-2 border-slate-300 dark:border-slate-600';
+const abstractGroupHeaderClass =
+  'px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wider';
+const abstractSubHeaderClass =
+  'px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider';
 
 type AbstractIntakeEditRow = {
   courseId: string;
@@ -105,10 +114,49 @@ const formatReservationEws = (reservation?: Admission['reservation']) => {
 
 /** Reference 1 from admission list row (lead_data.reference1 or list API referenceName). */
 const resolveAdmissionReference1 = (record: Admission) => {
-  const fromList = record.referenceName?.trim();
-  if (fromList) return fromList;
+  const anyRecord = record as unknown as Record<string, unknown>;
+  const fromList =
+    (typeof record.referenceName === 'string' ? record.referenceName : '') ||
+    (typeof anyRecord.reference_name === 'string' ? (anyRecord.reference_name as string) : '') ||
+    (typeof anyRecord.reference1 === 'string' ? (anyRecord.reference1 as string) : '') ||
+    (typeof anyRecord.reference === 'string' ? (anyRecord.reference as string) : '');
+  const direct = String(fromList ?? '').trim();
+  if (direct) return direct;
+  const ld = (record.leadData as Record<string, unknown> | undefined) ?? undefined;
+  return String(ld?.reference1 ?? ld?.referenceName ?? ld?.reference_name ?? '').trim();
+};
+
+/** Student list source (list API leadSource with safe fallbacks). */
+const resolveAdmissionSource = (record: Admission) => {
+  const isQuotaLike = (raw: string) => {
+    const s = raw.trim().toLowerCase();
+    if (!s) return false;
+    // Quota labels sometimes leak into "source" fields — ignore these.
+    return (
+      s === 'conv' ||
+      s === 'convenor' ||
+      s === 'convener' ||
+      s === 'cq' ||
+      s === 'mq' ||
+      s === 'management' ||
+      s === 'mang' ||
+      s.includes('management quota') ||
+      s.includes('convenor quota') ||
+      s.includes('spot') ||
+      s === 'lateral entry' ||
+      s.includes('lateral')
+    );
+  };
+
+  const fromList = (record.leadSource || '').trim();
+  if (fromList && !isQuotaLike(fromList)) return fromList;
+
   const ld = record.leadData as Record<string, unknown> | undefined;
-  return String(ld?.reference1 ?? ld?.referenceName ?? '').trim();
+  const fromLeadData = String(ld?.source ?? ld?.utmSource ?? ld?.leadSource ?? '').trim();
+  if (fromLeadData && !isQuotaLike(fromLeadData)) return fromLeadData;
+
+  // If backend hasn't derived it (or older cached rows), default like the leads UI.
+  return 'Manual Form';
 };
 
 const CompletedAdmissionsPage = () => {
@@ -634,7 +682,7 @@ const CompletedAdmissionsPage = () => {
                 <div className="sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course / branch</p>
                   <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {studentInfoViewRecord.courseInfo?.course || getCourseName(studentInfoViewRecord.courseInfo?.courseId) || '—'}{' '}
+                    {resolveJoiningOrAdmissionCourseLabel(studentInfoViewRecord, getCourseName) || '—'}{' '}
                     <span className="text-slate-500">·</span>{' '}
                     {studentInfoViewRecord.courseInfo?.branch ||
                       getBranchName(studentInfoViewRecord.courseInfo?.branchId) ||
@@ -673,6 +721,12 @@ const CompletedAdmissionsPage = () => {
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference</p>
                   <p className="mt-0.5 text-slate-700 dark:text-slate-300">
                     {resolveAdmissionReference1(studentInfoViewRecord) || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
+                  <p className="mt-0.5 text-slate-700 dark:text-slate-300">
+                    {resolveAdmissionSource(studentInfoViewRecord) || '—'}
                   </p>
                 </div>
               </div>
@@ -788,7 +842,7 @@ const CompletedAdmissionsPage = () => {
               </div>
             </Card>
             {courseStatsForCards.map((s) => {
-              const key = s.courseId || s.courseName || 'unknown';
+              const key = `${s.courseId || s.courseName || 'unknown'}-${String((s as any).lateralTrack ?? 0)}`;
               const active = Number(s.totalAdmissions) || 0;
               const cancelled = Number(s.totalCancelled) || 0;
               const label = s.courseName || 'Other';
@@ -982,27 +1036,64 @@ const CompletedAdmissionsPage = () => {
       {activeTab === 'abstract' ? (
         <div className="w-full">
           <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
-            <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
-              <h3 className="font-semibold text-slate-900 dark:text-slate-100">Course-wise Admissions Abstract</h3>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                CQ = Convenor (CONV) · MQ = Management (MANG) · Merit Quota = registration Merit Eligible (Not Eligible / blank are not counted)
-              </p>
-            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                 <thead>
-                  <tr className="bg-white dark:bg-slate-900">
-                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Course</th>
-                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Branch</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">CQ - Intake</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">CQ - Admitted</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">CQ - Cancelled</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">MQ - Admitted</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">MQ - Intake</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">MQ - Cancelled</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Merit Quota Admitted</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Merit Quota Cancelled</th>
-                    <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 w-14">Edit</th>
+                  <tr className="border-b border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800/80">
+                    <th
+                      rowSpan={2}
+                      className="border-r border-slate-200 px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-700"
+                    >
+                      Course
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className="border-r border-slate-200 px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-700"
+                    >
+                      Branch
+                    </th>
+                    <th
+                      colSpan={2}
+                      className={`${abstractGroupHeaderClass} ${abstractBlockOutline} bg-slate-200/60 text-slate-800 dark:bg-slate-700/50 dark:text-slate-100`}
+                    >
+                      Total Admissions
+                    </th>
+                    <th
+                      colSpan={3}
+                      className={`${abstractGroupHeaderClass} ${abstractBlockOutline} bg-blue-50/80 text-blue-800 dark:bg-blue-950/30 dark:text-blue-200`}
+                    >
+                      Convenor
+                    </th>
+                    <th
+                      colSpan={3}
+                      className={`${abstractGroupHeaderClass} ${abstractBlockOutline} bg-amber-50/80 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200`}
+                    >
+                      Management
+                    </th>
+                    <th
+                      colSpan={2}
+                      className={`${abstractGroupHeaderClass} ${abstractBlockOutline} bg-emerald-50/80 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200`}
+                    >
+                      Merit
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className="w-14 px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      Edit
+                    </th>
+                  </tr>
+                  <tr className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-blue-600 dark:text-blue-400`}>Active</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-red-600 dark:text-red-400`}>Cancelled</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-slate-500`}>Intake</th>
+                    <th className={`${abstractSubHeaderClass} text-blue-600 dark:text-blue-400`}>Admitted</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-red-600 dark:text-red-400`}>Cancelled</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-slate-500`}>Intake</th>
+                    <th className={`${abstractSubHeaderClass} text-amber-600 dark:text-amber-400`}>Admitted</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-red-600 dark:text-red-400`}>Cancelled</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-emerald-600 dark:text-emerald-400`}>Admitted</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-red-600 dark:text-red-400`}>Cancelled</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
@@ -1031,9 +1122,14 @@ const CompletedAdmissionsPage = () => {
                         mqCancelled: b.mqCancelled,
                         meritQuotaAdmitted: b.meritQuotaAdmitted,
                         meritQuotaCancelled: b.meritQuotaCancelled,
+                        totalAdmissions: b.totalAdmissions,
+                        totalCancelled: b.totalCancelled,
                       }))
-                    ).map((row: any) => (
-                      <tr key={`${row.courseId || row.courseName}-${row.branchId || row.branchName}`} className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    ).map((row: any, idx: number) => (
+                      <tr
+                        key={`${row.courseId || row.courseName}-${row.branchId || row.branchName}-${String(row.lateralTrack ?? 0)}-${idx}`}
+                        className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                      >
                         <td className="px-4 py-3">
                           <span className="font-bold text-slate-900 dark:text-slate-100">{row.courseName || 'Unknown Course'}</span>
                         </td>
@@ -1042,28 +1138,34 @@ const CompletedAdmissionsPage = () => {
                             {row.branchName || '—'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-blue-600 dark:text-blue-400 ${abstractBlockCellStart}`}>
+                          {row.totalAdmissions ?? 0}
+                        </td>
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
+                          {row.totalCancelled ?? 0}
+                        </td>
+                        <td className={`px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300 ${abstractBlockCellStart}`}>
                           {formatAbstractIntake(row.cqIntake)}
                         </td>
                         <td className="px-4 py-3 text-center text-sm font-bold text-blue-600 dark:text-blue-400">
                           {row.cqAdmitted ?? 0}
                         </td>
-                        <td className="px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400">
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.cqCancelled ?? 0}
+                        </td>
+                        <td className={`px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300 ${abstractBlockCellStart}`}>
+                          {formatAbstractIntake(row.mqIntake)}
                         </td>
                         <td className="px-4 py-3 text-center text-sm font-bold text-amber-600 dark:text-amber-400">
                           {row.mqAdmitted ?? 0}
                         </td>
-                        <td className="px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
-                          {formatAbstractIntake(row.mqIntake)}
-                        </td>
-                        <td className="px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400">
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.mqCancelled ?? 0}
                         </td>
-                        <td className="px-4 py-3 text-center text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-emerald-600 dark:text-emerald-400 ${abstractBlockCellStart}`}>
                           {row.meritQuotaAdmitted ?? 0}
                         </td>
-                        <td className="px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400">
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.meritQuotaCancelled ?? 0}
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -1145,7 +1247,7 @@ const CompletedAdmissionsPage = () => {
                         {record.studentInfo?.name ?? '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                        {record.courseInfo?.course || getCourseName(record.courseInfo?.courseId) || '—'}
+                        {resolveJoiningOrAdmissionCourseLabel(record, getCourseName) || '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                         {record.courseInfo?.branch || getBranchName(record.courseInfo?.branchId) || '—'}
@@ -1261,20 +1363,21 @@ const CompletedAdmissionsPage = () => {
                   <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">EWS</th>
                   <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Certificates</th>
                   <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Paid</th>
+                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Source</th>
                   <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Reference</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
                 {isLoading || isFetching ? (
                   <tr>
-                    <td colSpan={11} className="px-6 py-16 text-center text-sm text-slate-500">
+                    <td colSpan={12} className="px-6 py-16 text-center text-sm text-slate-500">
                       <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
                       <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">Loading admissions…</p>
                     </td>
                   </tr>
                 ) : isEmpty ? (
                   <tr>
-                    <td colSpan={11} className="px-6 py-16 text-center text-sm text-slate-500">
+                    <td colSpan={12} className="px-6 py-16 text-center text-sm text-slate-500">
                       <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
                     </td>
                   </tr>
@@ -1347,6 +1450,9 @@ const CompletedAdmissionsPage = () => {
                         <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
                           {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.totalPaid || 0)}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-right text-xs text-slate-600 dark:text-slate-400">
+                        {resolveAdmissionSource(record) || '—'}
                       </td>
                       <td className="px-6 py-4 text-right text-xs text-slate-600 dark:text-slate-400">
                         {resolveAdmissionReference1(record) || '—'}

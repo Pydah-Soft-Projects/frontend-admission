@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { showToast } from '@/lib/toast';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
+import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 
 const statusPalette: Record<JoiningStatus, string> = {
   draft: 'bg-blue-100 text-blue-700',
@@ -234,10 +235,7 @@ const JoiningInProgressPage = () => {
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                       <div className="flex flex-col gap-1">
                         <span>
-                          {joining.courseInfo?.course ||
-                            getCourseName(joining.courseInfo?.courseId) ||
-                            joining.lead?.courseInterested ||
-                            '—'}
+                          {resolveJoiningOrAdmissionCourseLabel(joining, getCourseName) || '—'}
                         </span>
                         <span className="text-xs text-slate-400">
                           {joining.courseInfo?.branch ||

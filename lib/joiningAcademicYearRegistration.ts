@@ -62,11 +62,65 @@ export function isBtechCourseFromCatalog(name?: string | null, code?: string | n
     const s = String(raw || '').trim();
     if (!s) continue;
     const low = s.toLowerCase();
+    if (/\bm\.?\s*tech\b/i.test(low)) return false;
     if (/\bb\.?\s*tech\b/i.test(low)) return true;
     const compact = low.replace(/\s+/g, '');
     if (/\bbtech\b/i.test(compact)) return true;
   }
   return false;
+}
+
+export const deriveAdmissionSeriesYear = (admissionNumber?: string | null): string | null => {
+  const m = String(admissionNumber ?? '').trim().match(/^(20\d{2})/);
+  return m ? m[1] : null;
+};
+
+/** True when registration extras indicate B.Tech lateral entry (2-1 / prior intake year). */
+export function isLateralRegistrationExtras(
+  registrationExtras?: Record<string, unknown> | null,
+  admissionNumber?: string | null
+): boolean {
+  if (!registrationExtras || typeof registrationExtras !== 'object') return false;
+
+  const seriesYear = deriveAdmissionSeriesYear(admissionNumber);
+  const seriesNum = Number(seriesYear);
+
+  const status = String(
+    registrationExtras.student_status ?? registrationExtras.studentStatus ?? ''
+  ).trim();
+  if (/lateral/i.test(status)) return true;
+
+  const sem = String(
+    registrationExtras.semester ??
+      registrationExtras.current_semester ??
+      registrationExtras.currentSemester ??
+      registrationExtras.semister ??
+      ''
+  ).trim();
+  if (sem === '2-1') return true;
+
+  const intake = Number(
+    String(
+      registrationExtras.current_year ??
+        registrationExtras.currentYear ??
+        registrationExtras.academic_year ??
+        registrationExtras.academicYear ??
+        ''
+    ).trim()
+  );
+  if (Number.isFinite(seriesNum) && Number.isFinite(intake) && intake === seriesNum - 1) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Display label for B.Tech lateral batch (idempotent if suffix already present). */
+export function formatBtechCourseDisplayLabel(courseName: string, isLateral: boolean): string {
+  const base = String(courseName ?? '').trim();
+  if (!base || !isLateral) return base;
+  if (/\(lateral\)/i.test(base)) return base;
+  return `${base} (LATERAL)`;
 }
 
 export type JoiningRegistrationFixedGate = {

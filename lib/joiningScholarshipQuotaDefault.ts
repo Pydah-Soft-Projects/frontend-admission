@@ -71,11 +71,30 @@ export function isScholarshipStatusField(field: RegistrationFieldLike): boolean 
   return false;
 }
 
+function isManagementQuotaLabel(quotaTrimmed: string): boolean {
+  const q = quotaTrimmed.trim();
+  if (!q) return false;
+  if (q === 'Management') return true;
+  const u = q.toUpperCase();
+  if (u === 'MANG' || u === 'MANAGEMENT') return true;
+  if (u.includes('MANAGEMENT')) return true;
+  return u.includes('MANG') && !u.includes('CONV');
+}
+
+function isConvenorQuotaLabel(quotaTrimmed: string): boolean {
+  const q = quotaTrimmed.trim();
+  if (!q) return false;
+  if (q === 'Convenor') return true;
+  const u = q.toUpperCase();
+  if (u === 'CONV' || u === 'CONVENOR' || u === 'CONVENER') return true;
+  if (u.includes('CONVENOR') || u.includes('CONVENER')) return true;
+  return u.includes('CONV') && !u.includes('MANG');
+}
+
 /** Course & Quota values that drive automatic eligible / not-eligible registration answers. */
 export function scholarshipIntentForCourseQuota(quotaTrimmed: string): 'eligible' | 'not_eligible' | null {
-  const q = quotaTrimmed.trim();
-  if (q === 'Management') return 'not_eligible';
-  if (q === 'Convenor') return 'eligible';
+  if (isManagementQuotaLabel(quotaTrimmed)) return 'not_eligible';
+  if (isConvenorQuotaLabel(quotaTrimmed)) return 'eligible';
   return null;
 }
 

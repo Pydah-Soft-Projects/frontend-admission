@@ -4,7 +4,12 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { formBuilderAPI, leadAPI } from '@/lib/api';
+import { courseAPI, formBuilderAPI, leadAPI } from '@/lib/api';
+import {
+  mergeQuotaSelectOptions,
+  parseStudentQuotasResponse,
+  quotaLabelsFromCatalog,
+} from '@/lib/studentQuotaCatalog';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -77,6 +82,21 @@ const IndividualLeadPage = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
+
+  const { data: studentQuotasResponse } = useQuery({
+    queryKey: ['courses', 'student-quotas', 'lead-individual'],
+    queryFn: async () => courseAPI.listStudentQuotas(),
+    staleTime: 120_000,
+  });
+
+  const quotaSelectOptions = useMemo(
+    () =>
+      mergeQuotaSelectOptions(
+        ['Not Applicable', ...quotaLabelsFromCatalog(parseStudentQuotasResponse(studentQuotasResponse))],
+        formState.quota
+      ),
+    [studentQuotasResponse, formState.quota]
+  );
 
   // -------- Dynamic Form Builder integration --------
 
@@ -976,7 +996,7 @@ const IndividualLeadPage = () => {
                     onChange={handleChange('quota')}
                     className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                   >
-                    {['Not Applicable', 'Management', 'Convenor'].map((quota) => (
+                    {quotaSelectOptions.map((quota) => (
                       <option key={quota} value={quota}>
                         {quota}
                       </option>

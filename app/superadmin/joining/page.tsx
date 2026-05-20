@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { showToast } from '@/lib/toast';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
+import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 
 const statusColors: Record<string, string> = {
   new: 'bg-blue-100 text-blue-700',
@@ -375,9 +376,7 @@ const JoiningPipelinePage = () => {
                       {activeTab === 'pending' ? (
                         <>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                            {joining.courseInfo?.course ||
-                              getCourseName(joining.courseInfo?.courseId) ||
-                              '—'}
+                            {resolveJoiningOrAdmissionCourseLabel(joining, getCourseName) || '—'}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                             {joining.courseInfo?.branch ||
@@ -398,11 +397,7 @@ const JoiningPipelinePage = () => {
                           <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                             <div className="flex flex-col gap-1">
                               <span>
-                                {joining.courseInfo?.course ||
-                                  getCourseName(joining.courseInfo?.courseId) ||
-                                  joining.lead?.courseInterested ||
-                                  joining.leadData?.courseInterested ||
-                                  '—'}
+                                {resolveJoiningOrAdmissionCourseLabel(joining, getCourseName) || '—'}
                               </span>
                               <span className="text-xs text-slate-400">
                                 {joining.courseInfo?.branch ||

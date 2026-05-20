@@ -823,6 +823,11 @@ export const courseAPI = {
     const response = await api.get('/courses/program-levels');
     return response.data;
   },
+  /** Active quota catalog from secondary `student_database.student_quotas`. */
+  listStudentQuotas: async () => {
+    const response = await api.get('/courses/student-quotas');
+    return response.data;
+  },
   /** Certificate / document copy from secondary `settings` for a program level. */
   getCertificateGuidance: async (level: string) => {
     const q = new URLSearchParams();
@@ -1375,7 +1380,9 @@ export const admissionAPI = {
     }
     const query = queryParams.toString();
     const response = await api.get(`/admissions${query ? `?${query}` : ''}`);
-    return response.data;
+    // Backend returns { success: true, data: { admissions, pagination }, message }
+    // Normalize to return the nested data object like other API helpers do.
+    return response.data?.data || response.data;
   },
   getByLeadId: async (leadId: string) => {
     const response = await api.get(`/admissions/${leadId}`);

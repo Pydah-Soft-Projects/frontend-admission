@@ -4,7 +4,12 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { formBuilderAPI, leadAPI } from '@/lib/api';
+import { courseAPI, formBuilderAPI, leadAPI } from '@/lib/api';
+import {
+  mergeQuotaSelectOptions,
+  parseStudentQuotasResponse,
+  quotaLabelsFromCatalog,
+} from '@/lib/studentQuotaCatalog';
 import { auth } from '@/lib/auth';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -81,6 +86,21 @@ const UserAddLeadPage = () => {
   const router = useRouter();
   const { setHeaderContent, clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [formState, setFormState] = useState<LeadFormState>(initialFormState);
+
+  const { data: studentQuotasResponse } = useQuery({
+    queryKey: ['courses', 'student-quotas', 'lead-add'],
+    queryFn: async () => courseAPI.listStudentQuotas(),
+    staleTime: 120_000,
+  });
+
+  const quotaSelectOptions = useMemo(
+    () =>
+      mergeQuotaSelectOptions(
+        ['Not Applicable', ...quotaLabelsFromCatalog(parseStudentQuotasResponse(studentQuotasResponse))],
+        formState.quota
+      ),
+    [studentQuotasResponse, formState.quota]
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({
@@ -1042,7 +1062,7 @@ const UserAddLeadPage = () => {
                     onChange={handleChange('quota')}
                     className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm font-medium text-slate-600 transition focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                   >
-                    {['Not Applicable', 'Management', 'Convenor'].map((quota) => (
+                    {quotaSelectOptions.map((quota) => (
                       <option key={quota} value={quota}>
                         {quota}
                       </option>

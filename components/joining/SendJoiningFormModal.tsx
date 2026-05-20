@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { joiningAPI, paymentSettingsAPI } from '@/lib/api';
+import { joiningAPI, paymentSettingsAPI, courseAPI } from '@/lib/api';
+import {
+  mergeQuotaSelectOptions,
+  parseStudentQuotasResponse,
+  quotaLabelsFromCatalog,
+} from '@/lib/studentQuotaCatalog';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
 import { Button } from '@/components/ui/Button';
@@ -19,8 +24,6 @@ type FormState = {
   courseInterested: string;
   quota: string;
 };
-
-const quotaOptions = ['Management', 'Convenor', 'Not Applicable'] as const;
 
 type Props = {
   open: boolean;
@@ -52,6 +55,22 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
     queryFn: async () => paymentSettingsAPI.listCourseSettings(),
     enabled: open,
   });
+
+  const { data: studentQuotasResponse, isLoading: isLoadingQuotas } = useQuery({
+    queryKey: ['courses', 'student-quotas', 'send-joining'],
+    queryFn: async () => courseAPI.listStudentQuotas(),
+    enabled: open,
+    staleTime: 120_000,
+  });
+
+  const quotaSelectOptions = useMemo(
+    () =>
+      mergeQuotaSelectOptions(
+        quotaLabelsFromCatalog(parseStudentQuotasResponse(studentQuotasResponse)),
+        form.quota
+      ),
+    [studentQuotasResponse, form.quota]
+  );
 
   const courseSettings: CoursePaymentSettings[] = useMemo(() => {
     const raw = courseSettingsResponse?.data;
@@ -244,10 +263,13 @@ export function SendJoiningFormModal({ open, onClose }: Props) {
                 <select
                   value={form.quota}
                   onChange={(event) => setForm((prev) => ({ ...prev, quota: event.target.value }))}
+                  disabled={isLoadingQuotas}
                   className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                 >
-                  <option value="">Select quota</option>
-                  {quotaOptions.map((option) => (
+                  <option value="">
+                    {isLoadingQuotas ? 'Loading quotas...' : 'Select quota'}
+                  </option>
+                  {quotaSelectOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>

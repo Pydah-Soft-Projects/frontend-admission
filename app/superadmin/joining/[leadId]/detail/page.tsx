@@ -9,6 +9,7 @@ import { joiningAPI, paymentAPI, admissionAPI } from '@/lib/api';
 import { Joining, PaymentSummary, PaymentTransaction, Admission } from '@/types';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
+import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import {
@@ -312,7 +313,7 @@ export default function JoiningDetailPage() {
               <div className="rounded-xl bg-blue-100 dark:bg-blue-900/50 p-4 border-2 border-blue-300 dark:border-blue-700">
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">Course</p>
                 <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                  {joining.courseInfo?.course || getCourseName(joining.courseInfo?.courseId) || '—'}
+                  {resolveJoiningOrAdmissionCourseLabel(joining, getCourseName) || '—'}
                 </p>
               </div>
               <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/50 p-4 border-2 border-emerald-300 dark:border-emerald-700">

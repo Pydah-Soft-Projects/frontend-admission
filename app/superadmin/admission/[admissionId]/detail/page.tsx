@@ -20,6 +20,7 @@ import { Admission, PaymentSummary, PaymentTransaction } from '@/types';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
+import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import { AdmissionStepTwoPanel } from '@/components/admission/AdmissionStepTwoPanel';
 import {
@@ -299,7 +300,7 @@ export default function AdmissionDetailPage() {
               application={admission}
               enquiryNumber={lead?.enquiryNumber ?? admission?.enquiryNumber}
               admissionNumber={admission.admissionNumber}
-              courseName={admission.courseInfo?.course || getCourseName(admission.courseInfo?.courseId) || undefined}
+              courseName={resolveJoiningOrAdmissionCourseLabel(admission, getCourseName) || undefined}
               branchName={admission.courseInfo?.branch || getBranchName(admission.courseInfo?.branchId) || undefined}
               collegeName={getCollegeNameForCourse(admission.courseInfo?.courseId) || undefined}
               paymentSummary={paymentSummary ?? undefined}
@@ -669,7 +670,7 @@ export default function AdmissionDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Course</p>
                 <p className="text-lg font-bold text-blue-600 dark:text-blue-300 mt-1">
-                  {admission.courseInfo?.course || getCourseName(admission.courseInfo?.courseId) || '—'}
+                  {resolveJoiningOrAdmissionCourseLabel(admission, getCourseName) || '—'}
                 </p>
               </div>
               <div>

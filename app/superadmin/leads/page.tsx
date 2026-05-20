@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
+import { mergeQuotaSelectOptions } from '@/lib/studentQuotaCatalog';
 import { Skeleton, TableSkeleton, CardSkeleton, LeadTableSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 // import { exportToExcel, exportToCSV } from '@/lib/export'; // Temporarily removed for future redesign
@@ -80,7 +81,6 @@ export default function LeadsPage() {
   const [comment, setComment] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [newQuota, setNewQuota] = useState('Not Applicable');
-  const quotaOptions = ['Not Applicable', 'Management', 'Convenor'];
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set<string>());
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
@@ -220,6 +220,15 @@ export default function LeadsPage() {
       loadFilterOptions();
     }
   }, [user]);
+
+  const quotaOptions = useMemo(
+    () =>
+      mergeQuotaSelectOptions(
+        ['Not Applicable', ...(filterOptions?.quotas ?? [])],
+        selectedLead?.quota
+      ),
+    [filterOptions?.quotas, selectedLead?.quota]
+  );
 
   // Search suggestions (name or enquiry number only; matches backend)
   useEffect(() => {
