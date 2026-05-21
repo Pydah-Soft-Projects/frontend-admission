@@ -278,7 +278,9 @@ export default function PaymentTransactionsPage() {
                     getCourseName(courseInfo?.courseId || transaction.courseId) ||
                     '—';
                   const branchName =
-                    courseInfo?.branch || getBranchName(courseInfo?.branchId || transaction.branchId) || '';
+                    getBranchName(courseInfo?.branchId || transaction.branchId) ||
+                    courseInfo?.branch ||
+                    '';
                   const quota = courseInfo?.quota || '—';
                   
                   const modeLabel =

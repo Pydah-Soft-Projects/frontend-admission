@@ -1141,11 +1141,13 @@ const CompletedAdmissionsPage = () => {
                         className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
                       >
                         <td className="px-4 py-3">
-                          <span className="font-bold text-slate-900 dark:text-slate-100">{row.courseName || 'Unknown Course'}</span>
+                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                            {row.courseName || getCourseName(row.courseId) || 'Unknown Course'}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                            {row.branchName || '—'}
+                            {getBranchName(row.branchId) || row.branchName || '—'}
                           </span>
                         </td>
                         <td className={`px-4 py-3 text-center text-sm font-bold text-blue-600 dark:text-blue-400 ${abstractBlockCellStart}`}>
@@ -1266,7 +1268,7 @@ const CompletedAdmissionsPage = () => {
                         {resolveJoiningOrAdmissionCourseLabel(record, getCourseName) || '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                        {record.courseInfo?.branch || getBranchName(record.courseInfo?.branchId) || '—'}
+                        {getBranchName(record.courseInfo?.branchId) || record.courseInfo?.branch || '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                         {(() => {

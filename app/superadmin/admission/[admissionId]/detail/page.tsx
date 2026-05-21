@@ -297,7 +297,7 @@ export default function AdmissionDetailPage() {
               enquiryNumber={lead?.enquiryNumber ?? admission?.enquiryNumber}
               admissionNumber={admission.admissionNumber}
               courseName={resolveJoiningOrAdmissionCourseLabel(admission, getCourseName) || undefined}
-              branchName={admission.courseInfo?.branch || getBranchName(admission.courseInfo?.branchId) || undefined}
+              branchName={getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || undefined}
               collegeName={getCollegeNameForCourse(admission.courseInfo?.courseId) || undefined}
               paymentSummary={paymentSummary ?? undefined}
               transactions={transactions}
@@ -701,7 +701,7 @@ export default function AdmissionDetailPage() {
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Branch</p>
                 <p className="text-lg font-bold text-blue-600 dark:text-blue-300 mt-1">
-                  {admission.courseInfo?.branch || getBranchName(admission.courseInfo?.branchId) || '—'}
+                  {getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || '—'}
                 </p>
               </div>
               <div>
