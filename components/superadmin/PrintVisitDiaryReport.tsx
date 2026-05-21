@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
+
+function formatReportDate(value?: string, pattern = 'dd-MM-yyyy'): string {
+  if (!value?.trim()) return '—';
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+    ? new Date(`${value.trim()}T12:00:00`)
+    : new Date(value);
+  return isValid(d) ? format(d, pattern) : value;
+}
 
 interface Props {
   generatedAt: string;
@@ -84,7 +92,7 @@ export default function PrintVisitDiaryReport({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '6px' }}>
           <div>
             <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
-              <strong>Period:</strong> {format(new Date(filters.startDate + 'T12:00:00'), 'dd-MM-yyyy')} to {format(new Date(filters.endDate + 'T12:00:00'), 'dd-MM-yyyy')}
+              <strong>Period:</strong> {formatReportDate(filters.startDate)} to {formatReportDate(filters.endDate)}
             </p>
             {filters.proName && (
               <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#64748b' }}>
@@ -142,7 +150,7 @@ export default function PrintVisitDiaryReport({
                 {proData.records.map((row, idx) => (
                   <tr key={idx} style={{ backgroundColor: row.isOnLeave ? '#fff7ed' : (idx % 2 === 0 ? 'transparent' : '#f8fafc') }}>
                     <td style={{ ...thTdStyle, textAlign: 'center', color: '#000' }}>{idx + 1}</td>
-                    <td style={thTdStyle}>{format(new Date(row.date + 'T12:00:00'), 'dd MMM yy')}</td>
+                    <td style={thTdStyle}>{formatReportDate(row.date, 'dd MMM yy')}</td>
                     {row.isOnLeave ? (
                       <td colSpan={5} style={{ ...thTdStyle, color: '#c2410c', fontWeight: 'bold', fontSize: '11px' }}>
                         ON LEAVE {row.leaveReason ? `— ${row.leaveReason}` : ''}
