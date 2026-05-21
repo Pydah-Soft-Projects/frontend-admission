@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { format, subDays } from 'date-fns';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Download } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { leadAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -549,6 +552,61 @@ function PrintAssignmentModal({ isOpen, onClose, roleName }: { isOpen: boolean; 
     setIsColumnModalOpen(true);
   };
 
+  const handleDownloadPdf = () => {
+    if (leads.length === 0) return;
+    setIsColumnModalOpen(false);
+
+    const activeColumns = availableColumns.filter((k) => selectedColumns[k]);
+    const includeRemarks = Boolean(selectedColumns.remarks);
+    const dateLabel = selectedDate
+      ? format(new Date(selectedDate + 'T12:00:00'), 'MMMM d, yyyy')
+      : 'N/A';
+
+    const doc = new jsPDF({
+      orientation: activeColumns.length + (includeRemarks ? 1 : 0) > 5 ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    doc.setFontSize(16);
+    doc.text('Leads Assignment Report', 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Date: ${dateLabel}`, 14, 22);
+    doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}`, 14, 28);
+    doc.text(`Total Leads: ${leads.length}`, 14, 34);
+
+    const tableHead = [
+      'S.No',
+      ...activeColumns.map((k) => formatHeader(k)),
+      ...(includeRemarks ? ['Remarks'] : []),
+    ];
+    const tableBody = leads.map((lead, idx) => [
+      String(idx + 1),
+      ...activeColumns.map((k) => (lead[k] != null && lead[k] !== '' ? String(lead[k]) : '—')),
+      ...(includeRemarks ? [''] : []),
+    ]);
+
+    autoTable(doc, {
+      startY: 40,
+      head: [tableHead],
+      body: tableBody,
+      styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
+      theme: 'grid',
+      margin: { left: 14, right: 14 },
+    });
+
+    const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 40;
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text('* This is a system-generated report.', 14, finalY + 12);
+
+    const dateStr = selectedDate
+      ? format(new Date(selectedDate + 'T12:00:00'), 'yyyy-MM-dd')
+      : format(new Date(), 'yyyy-MM-dd');
+    doc.save(`Assignment_Report_${dateStr}.pdf`);
+  };
+
   const handleFinalPrint = () => {
     setIsColumnModalOpen(false);
     
@@ -615,7 +673,7 @@ function PrintAssignmentModal({ isOpen, onClose, roleName }: { isOpen: boolean; 
               <tr>
                 <th style="width: 30px">S.No</th>
                 ${availableColumns.filter(k => selectedColumns[k]).map(k => `<th>${formatHeader(k)}</th>`).join('')}
-                <th style="width: 120px">Remarks</th>
+                ${selectedColumns.remarks ? '<th style="width: 120px">Remarks</th>' : ''}
               </tr>
             </thead>
             <tbody>
@@ -623,7 +681,7 @@ function PrintAssignmentModal({ isOpen, onClose, roleName }: { isOpen: boolean; 
                 <tr>
                   <td style="text-align: center">${idx + 1}</td>
                   ${availableColumns.filter(k => selectedColumns[k]).map(k => `<td>${lead[k] || '—'}</td>`).join('')}
-                  <td></td>
+                  ${selectedColumns.remarks ? '<td></td>' : ''}
                 </tr>
               `).join('')}
             </tbody>
@@ -864,11 +922,20 @@ function PrintAssignmentModal({ isOpen, onClose, roleName }: { isOpen: boolean; 
               </div>
             </div>
 
-            <DialogFooter className="p-3 sm:p-4 pb-16 sm:pb-4 bg-slate-50 dark:bg-slate-800/50 border-t dark:border-slate-700 flex gap-2 shrink-0">
-              <Button variant="ghost" onClick={() => setIsColumnModalOpen(false)} className="flex-1">
+            <DialogFooter className="p-3 sm:p-4 pb-16 sm:pb-4 bg-slate-50 dark:bg-slate-800/50 border-t dark:border-slate-700 flex flex-col sm:flex-row gap-2 shrink-0">
+              <Button variant="ghost" onClick={() => setIsColumnModalOpen(false)} className="flex-1 sm:flex-initial">
                 Back
               </Button>
-              <Button onClick={handleFinalPrint} className="flex-1 bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-600/20">
+              <Button
+                variant="outline"
+                onClick={handleDownloadPdf}
+                disabled={leads.length === 0 || !availableColumns.some((k) => selectedColumns[k])}
+                className="flex-1 sm:flex-initial gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Download PDF
+              </Button>
+              <Button onClick={handleFinalPrint} className="flex-1 sm:flex-initial bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-600/20">
                 Confirm & Print
               </Button>
             </DialogFooter>

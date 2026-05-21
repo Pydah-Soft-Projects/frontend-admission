@@ -209,11 +209,6 @@ type PortraitSlotProps = {
   onChange: (fieldName: string, value: unknown) => void;
   photoBaseSlug: string;
   subjectDisplayName: string;
-  /**
-   * Hint for the **Camera** control only (`capture` on file input). Gallery uses no capture so users can pick existing photos.
-   * Front camera suits student selfies; environment suits photographing another person (e.g. parent).
-   */
-  cameraFacing?: 'user' | 'environment';
 };
 
 function RegistrationPortraitSlot({
@@ -226,7 +221,6 @@ function RegistrationPortraitSlot({
   onChange,
   photoBaseSlug,
   subjectDisplayName,
-  cameraFacing = 'user',
 }: PortraitSlotProps) {
   const fileLabel = String(value || '').trim();
   const hasPreview = isImageDataUrl(value);
@@ -286,7 +280,6 @@ function RegistrationPortraitSlot({
       ) : null}
       <div className="mt-3 flex w-full flex-col gap-2">
         <JoiningCameraCaptureButton
-          facing={cameraFacing}
           aria-label={`Take ${label} with camera — ${subjectDisplayName}`}
           buttonClassName="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
           onCapture={(file) =>
@@ -745,7 +738,7 @@ export function JoiningDynamicRegistrationFields({
                   </p>
                   <p className="mb-4 text-center text-xs text-gray-600 dark:text-slate-400 sm:text-left">
                     Student, father, and mother photos are all optional. <strong>Take photo</strong> opens the live
-                    camera; use <strong>Flip camera</strong> on your phone to switch front or rear. <strong>Upload</strong>{' '}
+                    camera — choose <strong>Front</strong> or <strong>Rear</strong> for any photo. <strong>Upload</strong>{' '}
                     picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
                   </p>
                   <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between md:gap-4">
@@ -758,7 +751,6 @@ export function JoiningDynamicRegistrationFields({
                       onChange={onChange}
                       photoBaseSlug={photoBaseSlug}
                       subjectDisplayName={subjectDisplayName}
-                      cameraFacing="user"
                     />
                     <RegistrationPortraitSlot
                       label={fatherLabel}
@@ -769,7 +761,6 @@ export function JoiningDynamicRegistrationFields({
                       onChange={onChange}
                       photoBaseSlug={photoBaseSlug}
                       subjectDisplayName={subjectDisplayName}
-                      cameraFacing="environment"
                     />
                     <RegistrationPortraitSlot
                       label={motherLabel}
@@ -780,7 +771,6 @@ export function JoiningDynamicRegistrationFields({
                       onChange={onChange}
                       photoBaseSlug={photoBaseSlug}
                       subjectDisplayName={subjectDisplayName}
-                      cameraFacing="environment"
                     />
                   </div>
                   {field.helpText ? (
@@ -810,12 +800,12 @@ export function JoiningDynamicRegistrationFields({
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 <p className="mb-2 text-xs text-gray-500 dark:text-slate-400">
-                  Images only — <strong>Take photo</strong> opens the live camera; <strong>Upload</strong> picks from your
-                  gallery or files. New photos use the student file prefix <span className="font-mono">{photoBaseSlug}</span>.
+                  Images only — <strong>Take photo</strong> opens the live camera (front or rear); <strong>Upload</strong>{' '}
+                  picks from your gallery or files. New photos use the student file prefix{' '}
+                  <span className="font-mono">{photoBaseSlug}</span>.
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <JoiningCameraCaptureButton
-                    facing="environment"
                     aria-label={`Take photo for ${field.fieldLabel} — ${subjectDisplayName}`}
                     buttonClassName="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
                     onCapture={(file) =>

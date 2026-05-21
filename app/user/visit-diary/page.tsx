@@ -18,9 +18,7 @@ import {
   Calendar, 
   Search, 
   ChevronDown, 
-  Download, 
   History, 
-  User, 
   MapPin, 
   Phone,
   FileText
@@ -166,9 +164,9 @@ export default function VisitDiaryPage() {
   if (!isMounted || !user) return null;
 
   return (
-    <div className="mx-auto w-full max-w-2xl pb-24 px-3 sm:px-2">
+    <div className="w-[calc(100%+1.5rem)] -mx-3 sm:mx-auto sm:w-full max-w-2xl pb-24 px-0 sm:px-2">
       {/* Sticky Tab Switcher */}
-      <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-sm py-2 mb-3">
+      <div className="sticky top-0 z-20 bg-gray-50/95 dark:bg-slate-950/95 backdrop-blur-sm py-2 mb-3 px-3 sm:px-0">
         <div className="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl shadow-sm">
           <button
             onClick={() => setActiveTab('record')}
@@ -198,7 +196,7 @@ export default function VisitDiaryPage() {
       </div>
 
       {activeTab === 'record' ? (
-        <div className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-300">
+        <div className="space-y-4 px-3 sm:px-0 animate-in fade-in slide-in-from-left-2 duration-300">
           {/* Date Selection */}
           <Card className="p-3 sm:p-4 shadow-sm border-slate-200 dark:border-slate-800">
             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">
@@ -326,39 +324,12 @@ export default function VisitDiaryPage() {
       ) : (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
           {/* History Filters */}
-          <Card className="p-3 sm:p-4 shadow-sm border-slate-200 dark:border-slate-800">
+          <Card className="rounded-none sm:rounded-xl border-x-0 sm:border-x p-3 sm:p-4 shadow-sm border-slate-200 dark:border-slate-800">
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">History Range</label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-7 px-2 text-[10px] text-blue-600 font-bold"
-                  onClick={() => {
-                    const csvData = historyData.flatMap((day: any) => 
-                      day.details.map((a: any) => ({
-                        'Date': day.date,
-                        'Student': a.name,
-                        'Phone': a.phone,
-                        'Village': a.village,
-                        'Outcome': a.visitStatus || 'Assigned'
-                      }))
-                    );
-                    const header = ['Date', 'Student', 'Phone', 'Village', 'Outcome'];
-                    const rows = csvData.map(r => [r.Date, r.Student, r.Phone, r.Village, r.Outcome]);
-                    const csvContent = [header, ...rows].map(e => e.join(",")).join("\n");
-                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement("a");
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `my-visit-history-${historyStartDate}.csv`;
-                    link.click();
-                  }}
-                >
-                  <Download className="w-3 h-3 mr-1" />
-                  Export
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 sm:px-1">
+                History Range
+              </label>
+              <div className="grid grid-cols-2 gap-2 px-3 sm:px-0">
                 <div className="space-y-1">
                   <span className="text-[8px] font-bold text-slate-400 ml-1 uppercase tracking-tighter">From</span>
                   <Input
@@ -382,21 +353,21 @@ export default function VisitDiaryPage() {
           </Card>
 
           {/* History List - Grouped Style */}
-          <div className="space-y-3">
+          <div className="space-y-0 sm:space-y-3">
             {isHistoryLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}
+              <div className="space-y-0 sm:space-y-3">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-none sm:rounded-2xl" />)}
               </div>
             ) : historyData && historyData.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-0 sm:space-y-3 divide-y divide-slate-200 dark:divide-slate-800 sm:divide-y-0">
                 {historyData.map((day: any) => {
                   const dayKey = `pro-day-${day.date}`;
                   const isExpanded = expandedRows.has(dayKey);
 
                   return (
-                    <Card key={day.date} className="overflow-hidden border-slate-200 dark:border-slate-800 shadow-sm">
+                    <Card key={day.date} className="overflow-hidden rounded-none sm:rounded-xl border-x-0 sm:border-x border-t-0 sm:border-t border-slate-200 dark:border-slate-800 shadow-none sm:shadow-sm">
                       <div 
-                        className="bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                        className="bg-white dark:bg-slate-900 px-3 sm:px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                         onClick={() => {
                           const next = new Set(expandedRows);
                           if (next.has(dayKey)) next.delete(dayKey);
@@ -443,11 +414,11 @@ export default function VisitDiaryPage() {
                       </div>
 
                       {isExpanded && (
-                        <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/30 p-2 space-y-2">
+                        <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/30 p-0 sm:p-2 space-y-0 sm:space-y-2 divide-y divide-slate-100 dark:divide-slate-800 sm:divide-y-0">
                           {(day.details || []).map((lead: any, lIdx: number) => (
                             <div 
                               key={lIdx} 
-                              className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3"
+                              className="bg-white dark:bg-slate-900 px-3 py-3 sm:p-3 sm:rounded-xl border-0 sm:border border-slate-100 dark:border-slate-800 shadow-none sm:shadow-sm flex items-center justify-between gap-2 sm:gap-3"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <div className="min-w-0">
@@ -480,7 +451,7 @@ export default function VisitDiaryPage() {
                 })}
               </div>
             ) : (
-              <div className="py-20 text-center">
+              <div className="py-20 text-center px-3 sm:px-0">
                 <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
                   <FileText className="w-8 h-8 text-slate-300" />
                 </div>

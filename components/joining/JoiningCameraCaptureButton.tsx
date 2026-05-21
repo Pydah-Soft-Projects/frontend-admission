@@ -6,9 +6,38 @@ import { createPortal } from 'react-dom';
 
 export type JoiningCameraFacing = 'user' | 'environment';
 
+const FACING_STORAGE_KEY = 'joining-registration-camera-facing';
+
+function readStoredFacing(): JoiningCameraFacing | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const v = window.sessionStorage.getItem(FACING_STORAGE_KEY);
+    return v === 'user' || v === 'environment' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredFacing(face: JoiningCameraFacing) {
+  try {
+    window.sessionStorage.setItem(FACING_STORAGE_KEY, face);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+type CameraDeviceMap = Partial<Record<JoiningCameraFacing, string>>;
+
+function classifyVideoDevice(label: string): JoiningCameraFacing | null {
+  const l = label.toLowerCase();
+  if (/front|user|selfie|facetime|true.?depth/i.test(l)) return 'user';
+  if (/back|rear|environment|wide|telephoto/i.test(l)) return 'environment';
+  return null;
+}
+
 type Props = {
-  /** Default camera when the dialog opens (front = user, rear = environment). */
-  facing: JoiningCameraFacing;
+  /** Fallback when no saved preference exists (front = user, rear = environment). */
+  facing?: JoiningCameraFacing;
   /** Allow switching front/rear while the capture dialog is open. Default true. */
   allowFacingSwitch?: boolean;
   /** Primary action styling (matches previous “Take photo” label). */
@@ -26,7 +55,7 @@ type Props = {
  * `<input type="file" capture>` which often shows only the gallery/file picker on Chrome/Android and desktop.
  */
 export function JoiningCameraCaptureButton({
-  facing,
+  facing = 'user',
   allowFacingSwitch = true,
   buttonClassName,
   children,
@@ -42,6 +71,7 @@ export function JoiningCameraCaptureButton({
   const [switchingFacing, setSwitchingFacing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const deviceMapRef = useRef<CameraDeviceMap>({});
 
   useEffect(() => {
     setMounted(true);
@@ -82,6 +112,39 @@ export function JoiningCameraCaptureButton({
     attachStreamToVideo();
   }, [open, attachStreamToVideo]);
 
+  const refreshDeviceMap = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videos = devices.filter((d) => d.kind === 'videoinput');
+      const map: CameraDeviceMap = {};
+      for (const d of videos) {
+        const kind = classifyVideoDevice(d.label);
+        if (kind && d.deviceId) map[kind] = d.deviceId;
+      }
+      if (!map.user && videos[0]?.deviceId) map.user = videos[0].deviceId;
+      if (!map.environment && videos.length > 1) {
+        map.environment = videos[videos.length - 1]?.deviceId;
+      } else if (!map.environment && videos[0]?.deviceId) {
+        map.environment = videos[0].deviceId;
+      }
+      deviceMapRef.current = map;
+    } catch {
+      /* keep previous map */
+    }
+  }, []);
+
+  const videoConstraintsForFacing = useCallback((face: JoiningCameraFacing): MediaTrackConstraints => {
+    const deviceId = deviceMapRef.current[face];
+    const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
+    if (deviceId) {
+      return { deviceId: { exact: deviceId }, ...size };
+    }
+    return face === 'user'
+      ? { facingMode: 'user', ...size }
+      : { facingMode: { ideal: 'environment' }, ...size };
+  }, []);
+
   const openCameraStream = useCallback(
     async (face: JoiningCameraFacing) => {
       if (typeof window === 'undefined') return false;
@@ -93,28 +156,45 @@ export function JoiningCameraCaptureButton({
         setErr('This browser does not support live camera. Use Upload to pick a photo.');
         return false;
       }
-      const videoConstraints: MediaTrackConstraints =
-        face === 'user'
-          ? { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
-          : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
-        audio: false,
-      });
-      stopStream();
-      streamRef.current = stream;
-      setActiveFacing(face);
-      attachStreamToVideo();
-      return true;
+
+      const tryOpen = async (constraints: MediaTrackConstraints) => {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+        stopStream();
+        streamRef.current = stream;
+        setActiveFacing(face);
+        writeStoredFacing(face);
+        attachStreamToVideo();
+        await refreshDeviceMap();
+        return true;
+      };
+
+      try {
+        return await tryOpen(videoConstraintsForFacing(face));
+      } catch (firstErr: unknown) {
+        const fallback: MediaTrackConstraints =
+          face === 'user'
+            ? { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
+            : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+        try {
+          return await tryOpen(fallback);
+        } catch {
+          throw firstErr;
+        }
+      }
     },
-    [attachStreamToVideo, stopStream]
+    [attachStreamToVideo, refreshDeviceMap, stopStream, videoConstraintsForFacing]
   );
+
+  const resolveInitialFacing = useCallback((): JoiningCameraFacing => {
+    return readStoredFacing() ?? facing;
+  }, [facing]);
 
   const startCamera = useCallback(async () => {
     setErr(null);
-    setActiveFacing(facing);
+    const initial = resolveInitialFacing();
+    setActiveFacing(initial);
     try {
-      const ok = await openCameraStream(facing);
+      const ok = await openCameraStream(initial);
       if (ok) setOpen(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -124,22 +204,29 @@ export function JoiningCameraCaptureButton({
           : `Could not open camera (${msg}). Use Upload instead.`
       );
     }
-  }, [facing, openCameraStream]);
+  }, [openCameraStream, resolveInitialFacing]);
+
+  const selectFacing = useCallback(
+    async (next: JoiningCameraFacing) => {
+      if (!allowFacingSwitch || !open || switchingFacing || next === activeFacing) return;
+      setSwitchingFacing(true);
+      setErr(null);
+      try {
+        await openCameraStream(next);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setErr(`Could not switch camera (${msg}). Try the other camera or use Upload.`);
+      } finally {
+        setSwitchingFacing(false);
+      }
+    },
+    [activeFacing, allowFacingSwitch, open, openCameraStream, switchingFacing]
+  );
 
   const toggleFacing = useCallback(async () => {
-    if (!allowFacingSwitch || !open || switchingFacing) return;
     const next: JoiningCameraFacing = activeFacing === 'user' ? 'environment' : 'user';
-    setSwitchingFacing(true);
-    setErr(null);
-    try {
-      await openCameraStream(next);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setErr(`Could not switch camera (${msg}). Try again or use Upload.`);
-    } finally {
-      setSwitchingFacing(false);
-    }
-  }, [activeFacing, allowFacingSwitch, open, openCameraStream, switchingFacing]);
+    await selectFacing(next);
+  }, [activeFacing, selectFacing]);
 
   const close = useCallback(() => {
     stopStream();
@@ -221,14 +308,43 @@ export function JoiningCameraCaptureButton({
                     Take photo
                   </h2>
                   <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                    Position in frame, then tap <span className="font-medium">Use photo</span>.
-                    {allowFacingSwitch ? (
-                      <>
-                        {' '}
-                        On phones, use <span className="font-medium">Flip camera</span> for front or rear.
-                      </>
-                    ) : null}
+                    Choose <span className="font-medium">Front</span> or <span className="font-medium">Rear</span>, position
+                    in frame, then tap <span className="font-medium">Use photo</span>.
                   </p>
+                  {allowFacingSwitch ? (
+                    <div
+                      className="mt-3 inline-flex w-full rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-600 dark:bg-slate-800"
+                      role="group"
+                      aria-label="Camera selection"
+                    >
+                      <button
+                        type="button"
+                        className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          activeFacing === 'user'
+                            ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+                            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                        }`}
+                        aria-pressed={activeFacing === 'user'}
+                        disabled={switchingFacing}
+                        onClick={() => void selectFacing('user')}
+                      >
+                        Front camera
+                      </button>
+                      <button
+                        type="button"
+                        className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          activeFacing === 'environment'
+                            ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+                            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                        }`}
+                        aria-pressed={activeFacing === 'environment'}
+                        disabled={switchingFacing}
+                        onClick={() => void selectFacing('environment')}
+                      >
+                        Rear camera
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-black p-2 sm:p-3">
                   <video
@@ -243,9 +359,7 @@ export function JoiningCameraCaptureButton({
                       type="button"
                       className="absolute bottom-4 right-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/55 text-white shadow-lg backdrop-blur-sm transition hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-white/80 disabled:cursor-not-allowed disabled:opacity-50 sm:bottom-5 sm:right-5"
                       aria-label={
-                        activeFacing === 'user'
-                          ? 'Switch to rear camera'
-                          : 'Switch to front camera'
+                        activeFacing === 'user' ? 'Switch to rear camera' : 'Switch to front camera'
                       }
                       title={activeFacing === 'user' ? 'Rear camera' : 'Front camera'}
                       disabled={switchingFacing}
