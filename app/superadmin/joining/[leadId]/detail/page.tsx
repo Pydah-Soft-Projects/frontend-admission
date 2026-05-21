@@ -151,7 +151,7 @@ export default function JoiningDetailPage() {
               }
               admissionNumber={admission?.admissionNumber}
               courseName={joining.courseInfo?.course || getCourseName(joining.courseInfo?.courseId) || undefined}
-              branchName={joining.courseInfo?.branch || getBranchName(joining.courseInfo?.branchId) || undefined}
+              branchName={getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || undefined}
               collegeName={getCollegeNameForCourse(joining.courseInfo?.courseId) || undefined}
               paymentSummary={paymentSummary ?? undefined}
               transactions={transactions}
@@ -319,7 +319,7 @@ export default function JoiningDetailPage() {
               <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/50 p-4 border-2 border-emerald-300 dark:border-emerald-700">
                 <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-2">Branch</p>
                 <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">
-                  {joining.courseInfo?.branch || getBranchName(joining.courseInfo?.branchId) || '—'}
+                  {getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || '—'}
                 </p>
               </div>
               <div className="rounded-xl bg-amber-100 dark:bg-amber-900/50 p-4 border-2 border-amber-300 dark:border-amber-700">

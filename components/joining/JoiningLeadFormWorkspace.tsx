@@ -1859,7 +1859,28 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     const hasCourseId = Boolean((formState.courseInfo.courseId || '').toString().trim());
     const hasBranchId = Boolean((formState.courseInfo.branchId || '').toString().trim());
     const hasProgramLevel = Boolean((formState.courseInfo.programLevel || '').trim());
+    // Managed course + branch ids are authoritative — do not re-match from stale free-text.
     if (hasCourseId && hasBranchId && hasProgramLevel) return;
+    if (hasCourseId && hasBranchId) {
+      const cidTarget = String(formState.courseInfo.courseId ?? '').trim();
+      const setting = catalogForMatch.find(
+        (item) => String(item.course._id ?? '').trim() === cidTarget
+      );
+      const inferredLevel =
+        setting?.course?.level != null && String(setting.course.level).trim()
+          ? String(setting.course.level).trim()
+          : '';
+      if (inferredLevel) {
+        setFormState((prev) => {
+          if ((prev.courseInfo.programLevel || '').trim()) return prev;
+          return {
+            ...prev,
+            courseInfo: { ...prev.courseInfo, programLevel: inferredLevel },
+          };
+        });
+      }
+      return;
+    }
     if (!courseLabel && !branchLabel && !hasCourseId) return;
 
     const norm = (v?: string | null) =>
@@ -2009,6 +2030,52 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     formState.courseInfo.courseId,
     formState.courseInfo.branchId,
     formState.courseInfo.programLevel,
+  ]);
+
+  /** When branchId is set, sync stale branch text (e.g. old DMEC) from the catalog (e.g. DCSE). */
+  useEffect(() => {
+    if (courseSettings.length === 0) return;
+    const courseId = String(formState.courseInfo.courseId || '').trim();
+    const branchId = String(formState.courseInfo.branchId || '').trim();
+    if (!courseId || !branchId) return;
+
+    const setting = courseSettings.find(
+      (item) => String(item.course._id ?? '').trim() === courseId
+    );
+    const selected = setting?.branches.find((b) => String(b._id ?? '').trim() === branchId);
+    if (!selected) return;
+
+    const catalogLabel = String(selected.code || selected.name || '').trim();
+    if (!catalogLabel) return;
+
+    const branchLabel = String(formState.courseInfo.branch || '').trim();
+    const norm = (v?: string | null) =>
+      String(v ?? '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s._\-/&,]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (
+      norm(branchLabel) === norm(catalogLabel) ||
+      norm(branchLabel) === norm(selected.name) ||
+      norm(branchLabel) === norm(selected.code || '')
+    ) {
+      return;
+    }
+
+    setFormState((prev) => ({
+      ...prev,
+      courseInfo: {
+        ...prev.courseInfo,
+        branch: catalogLabel,
+      },
+    }));
+  }, [
+    courseSettings,
+    formState.courseInfo.courseId,
+    formState.courseInfo.branchId,
+    formState.courseInfo.branch,
   ]);
 
   useEffect(() => {
@@ -2312,13 +2379,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     queryKey: ['admission', leadId, status],
     enabled: !isPublicEdit && !!leadId && status === 'approved',
     queryFn: async () => {
-      const candidateLeadId = lead?.id || joiningRecord?.leadId || (leadId as string);
-      try {
-        return await admissionAPI.getByLeadId(candidateLeadId);
-      } catch {
-        const candidateJoiningId = joiningRecord?._id || (leadId as string);
-        return admissionAPI.getByJoiningId(candidateJoiningId);
+      const candidateJoiningId = joiningRecord?._id || (leadId as string);
+      if (candidateJoiningId && String(candidateJoiningId).length === 36) {
+        try {
+          return await admissionAPI.getByJoiningId(String(candidateJoiningId));
+        } catch {
+          /* fall through to lead lookup */
+        }
       }
+      const candidateLeadId = lead?.id || joiningRecord?.leadId;
+      if (candidateLeadId && String(candidateLeadId).length === 36) {
+        return await admissionAPI.getByLeadId(String(candidateLeadId));
+      }
+      throw new Error('Admission record not found for this joining');
     },
   });
 
@@ -2485,7 +2558,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       courseInfo: {
         ...prev.courseInfo,
         branchId: bidTarget,
-        branch: branch?.name || '',
+        branch: String(branch?.code || branch?.name || '').trim(),
       },
     }));
   };
@@ -3166,7 +3239,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       }
     }
 
-    if (branchTarget && !courseInfo.branch && courseTarget) {
+    if (branchTarget && courseTarget) {
       const selectedCourse = courseSettings.find(
         (item) => String(item.course._id ?? '').trim() === courseTarget
       );
@@ -3174,7 +3247,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         (branch) => String(branch._id ?? '').trim() === branchTarget
       );
       if (selectedBranch) {
-        courseInfo.branch = selectedBranch.name;
+        courseInfo.branch =
+          String(selectedBranch.code || selectedBranch.name || '').trim() ||
+          courseInfo.branch;
       }
     }
 
@@ -3390,16 +3465,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       if (admissionSqlId.length === 36) {
         return admissionAPI.updateById(admissionSqlId, payload);
       }
-      const resolvedLeadId = [
-        admissionRecord?.leadId,
-        joiningRecord?.leadId,
-        lead?.id as string | undefined,
-      ]
+      const joiningRouteId =
+        joiningRecord?._id || (typeof leadId === 'string' ? leadId.trim() : '');
+      if (joiningRouteId.length === 36) {
+        return admissionAPI.updateByLeadId(joiningRouteId, payload);
+      }
+      const resolvedLeadId = [admissionRecord?.leadId, joiningRecord?.leadId, lead?.id as string | undefined]
         .map((x) => (x != null ? String(x).trim() : ''))
         .find((s) => s.length === 36);
       if (!resolvedLeadId) {
         throw new Error(
-          'Admission record is not loaded or lead id is missing — reload the page and try again.'
+          'Admission record is not loaded — wait for the form to finish loading, then use Update Admission again.'
         );
       }
       return admissionAPI.updateByLeadId(resolvedLeadId, payload);
@@ -3433,7 +3509,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         applyAdmissionRecordToWorkspace(record);
       }
 
-      await Promise.all([refetch(), refetchTransactions()]);
+      await Promise.all([
+        refetch(),
+        refetchTransactions(),
+        queryClient.invalidateQueries({ queryKey: ['admissions'] }),
+      ]);
     },
     onError: (error: any) => {
       console.error('Error updating admission record:', error);
@@ -3470,6 +3550,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
   const admissionNumberDisplay =
     meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
+
+  const courseBranchSubtitle = useMemo(() => {
+    if (status === 'approved') {
+      const course = String(formState.courseInfo.course || '').trim();
+      const branch =
+        String(formState.courseInfo.branch || '').trim() ||
+        selectedCourseSetting?.branches.find(
+          (b) =>
+            String(b._id ?? '').trim() === String(formState.courseInfo.branchId ?? '').trim()
+        )?.name ||
+        '';
+      if (course && branch) return `${course} - ${branch}`;
+      if (course || branch) return course || branch;
+    }
+    return String(lead?.courseInterested || '').trim();
+  }, [
+    status,
+    formState.courseInfo.course,
+    formState.courseInfo.branch,
+    formState.courseInfo.branchId,
+    selectedCourseSetting,
+    lead?.courseInterested,
+  ]);
   /** Step 2 payment UI: available once joining is saved (draft, pending, or approved). */
   const showStepTwoPaymentUi =
     !isPublicEdit && Boolean(joiningRecord?._id) && canAccessPaymentsModule;
@@ -3502,6 +3605,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const handleSaveAdmissionRecord = () => {
     if (!canEditApprovedAdmission) {
       showToast.error('You do not have permission to edit admissions on the joining desk');
+      return;
+    }
+    if (!admissionRecord?._id) {
+      showToast.error(
+        'Admission record is still loading. Reload the page, then change the managed branch and click Update Admission (not Save Draft).'
+      );
       return;
     }
     if (!hasManagedCourseAndBranch) {
@@ -3708,7 +3817,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           {isAdmissionEditable && (
             <Button
               variant="primary"
-              disabled={isUpdatingAdmission || isBusy || !canWriteJoining || !hasManagedCourseAndBranch}
+              disabled={
+                isUpdatingAdmission ||
+                isBusy ||
+                !canWriteJoining ||
+                !hasManagedCourseAndBranch ||
+                !admissionRecord?._id
+              }
               onClick={handleSaveAdmissionRecord}
             >
               {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
@@ -3854,7 +3969,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span>{formState.studentInfo.phone || lead?.phone || 'No phone recorded'}</span>
-                {!isNewJoining && lead?.courseInterested && <span>· {lead.courseInterested}</span>}
+                {!isNewJoining && courseBranchSubtitle ? (
+                  <span>· {courseBranchSubtitle}</span>
+                ) : null}
                 {!isNewJoining && lead?.district && <span>· {lead.district}</span>}
               </div>
             </div>
@@ -3903,13 +4020,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               <>
                 <Button
                   variant="primary"
-                  disabled={isUpdatingAdmission || isBusy || !canWriteJoining || !hasManagedCourseAndBranch}
+                  disabled={
+                    isUpdatingAdmission ||
+                    isBusy ||
+                    !canWriteJoining ||
+                    !hasManagedCourseAndBranch ||
+                    !admissionRecord?._id
+                  }
                   onClick={handleSaveAdmissionRecord}
                   className="group inline-flex items-center gap-2"
                   title={
-                    hasManagedCourseAndBranch
-                      ? undefined
-                      : 'Select college, quota, managed course, and managed branch in Course & Quota before saving.'
+                    !admissionRecord?._id
+                      ? 'Waiting for admission record to load…'
+                      : hasManagedCourseAndBranch
+                        ? undefined
+                        : 'Select college, quota, managed course, and managed branch in Course & Quota before saving.'
                   }
                 >
                   {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
