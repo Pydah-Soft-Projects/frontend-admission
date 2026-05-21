@@ -13,7 +13,7 @@ export const ADMISSION_WORKFLOW_STEPS = [
     label: 'Step 1',
     title: 'Online application',
     description:
-      'Course & quota, student, parents, reservation, address, qualifications, education, and siblings (sections 1–8).',
+      'Student & course, parents, address, reservation, qualifications, education, siblings, and documents (sections 1–8).',
     scrollId: 'joining-wizard-step-1',
     admissionScrollId: 'admission-step-one',
     tone: 'blue' as const,

@@ -17,6 +17,7 @@ import {
   formatRegistrationFieldLabel,
   isRegistrationImageDataUrl,
 } from '@/lib/registrationFieldsDisplay';
+import { ApplicationSectionCard } from '@/components/admission/ApplicationSectionCard';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -222,13 +223,41 @@ export default function JoiningDetailPage() {
 
   return (
     <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      {/* Student & Course Information - Highlighted */}
-      <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-lg dark:border-blue-800 dark:from-blue-900/30 dark:to-slate-900/70">
-        <div className="grid gap-6 md:grid-cols-2">
+      <ApplicationSectionCard step={1} title="Student Information">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Course &amp; quota
+        </h3>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300 mb-4">
-              Student Information
-            </h2>
+            <p className="text-xs font-medium text-gray-500 dark:text-slate-400">College</p>
+            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+              {getCollegeNameForCourse(joining.courseInfo?.courseId) || '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Course</p>
+            <p className="mt-1 text-sm font-semibold text-blue-700 dark:text-blue-300">
+              {resolveJoiningOrAdmissionCourseLabel(joining, getCourseName) || '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Branch</p>
+            <p className="mt-1 text-sm font-semibold text-blue-700 dark:text-blue-300">
+              {getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Quota</p>
+            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+              {joining.courseInfo?.quota || '—'}
+            </p>
+          </div>
+        </div>
+        <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          Student profile
+        </h3>
+        <div className="mt-4 grid gap-6 md:grid-cols-2">
+          <div className="space-y-3">
             <div className="space-y-3">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Full Name</p>
@@ -304,40 +333,10 @@ export default function JoiningDetailPage() {
               </div>
             </div>
           </div>
-
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300 mb-4">
-              Course & Branch Information
-            </h2>
-            <div className="space-y-4">
-              <div className="rounded-xl bg-blue-100 dark:bg-blue-900/50 p-4 border-2 border-blue-300 dark:border-blue-700">
-                <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">Course</p>
-                <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                  {resolveJoiningOrAdmissionCourseLabel(joining, getCourseName) || '—'}
-                </p>
-              </div>
-              <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/50 p-4 border-2 border-emerald-300 dark:border-emerald-700">
-                <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-2">Branch</p>
-                <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">
-                  {getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || '—'}
-                </p>
-              </div>
-              <div className="rounded-xl bg-amber-100 dark:bg-amber-900/50 p-4 border-2 border-amber-300 dark:border-amber-700">
-                <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-2">Quota</p>
-                <p className="text-xl font-bold text-amber-900 dark:text-amber-100">
-                  {joining.courseInfo?.quota || '—'}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
+      </ApplicationSectionCard>
 
-      {/* Parents Information */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
-          Parents Information
-        </h2>
+      <ApplicationSectionCard step={2} title="Parents Details">
         <div className="grid gap-6 md:grid-cols-2">
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Father</h3>
@@ -467,14 +466,10 @@ export default function JoiningDetailPage() {
             </div>
           </div>
         </div>
-      </div>
+      </ApplicationSectionCard>
 
-      {/* Address & Communication */}
       {joining.address && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
-            Address & Communication
-          </h2>
+        <ApplicationSectionCard step={3} title="Address Details">
           <div className="grid gap-6 md:grid-cols-2">
             <div>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">Communication Address</h3>
@@ -513,16 +508,11 @@ export default function JoiningDetailPage() {
               </div>
             )}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Reservation & Qualifications */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {joining.reservation && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4">
-              Reservation Category
-            </h2>
+      {joining.reservation && (
+        <ApplicationSectionCard step={4} title="Reservation Category">
             <div className="space-y-3">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">General</p>
@@ -547,14 +537,11 @@ export default function JoiningDetailPage() {
                 </div>
               )}
             </div>
-          </div>
-        )}
+        </ApplicationSectionCard>
+      )}
 
-        {joining.qualifications && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4">
-              Qualifications
-            </h2>
+      {joining.qualifications && (
+        <ApplicationSectionCard step={5} title="Qualified Examinations">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <div className={`h-3 w-3 rounded-full ${joining.qualifications.ssc ? 'bg-green-500' : 'bg-gray-300'}`} />
@@ -590,16 +577,11 @@ export default function JoiningDetailPage() {
                 </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
+        </ApplicationSectionCard>
+      )}
 
-      {/* Education History */}
       {joining.educationHistory && joining.educationHistory.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
-            Education History
-          </h2>
+        <ApplicationSectionCard step={6} title="Education History">
           <div className="space-y-4">
             {joining.educationHistory.map((edu, idx) => (
               <div key={idx} className="border-l-4 border-blue-500 pl-4 py-2">
@@ -627,15 +609,31 @@ export default function JoiningDetailPage() {
               </div>
             ))}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Documents Status */}
+      {joining.siblings && joining.siblings.length > 0 && (
+        <ApplicationSectionCard step={7} title="Siblings">
+          <div className="space-y-4">
+            {joining.siblings.map((sibling, idx) => (
+              <div
+                key={idx}
+                className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40"
+              >
+                <p className="font-semibold text-gray-900 dark:text-slate-100">{sibling.name || '—'}</p>
+                <p className="text-sm text-gray-600 dark:text-slate-400">
+                  {[sibling.relation, sibling.studyingStandard, sibling.institutionName]
+                    .filter(Boolean)
+                    .join(' · ') || '—'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </ApplicationSectionCard>
+      )}
+
       {joining.documents && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
-            Documents Status
-          </h2>
+        <ApplicationSectionCard step={8} title="Documents Checklist">
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
             {Object.entries(joining.documents).map(([key, value]) => (
               <div key={key} className="flex items-center gap-2">
@@ -653,15 +651,11 @@ export default function JoiningDetailPage() {
               </div>
             ))}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Registration Form Fields */}
       {registrationFieldEntries.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
-            Registration Form Fields
-          </h2>
+        <ApplicationSectionCard title="Registration Form Fields">
           <div className="grid gap-4 md:grid-cols-2">
             {registrationFieldEntries.map(([key, raw]) => (
               <div key={key} className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40">
@@ -682,7 +676,7 @@ export default function JoiningDetailPage() {
               </div>
             ))}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
       {/* Payment Information */}

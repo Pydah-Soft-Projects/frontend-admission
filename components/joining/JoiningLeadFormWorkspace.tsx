@@ -3682,7 +3682,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const stepOneCourseHint =
     !isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval')
-      ? 'College, quota, managed course, and managed branch are required — set all of them under Course & Quota before submitting or approving.'
+      ? 'Complete course, college, branch, and quota before submit or approve.'
       : undefined;
 
   const canSaveJoiningDraft =
@@ -4075,17 +4075,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               )}
             >
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
-                {useWizard ? 'Step 1 — Online application (sections 1–8)' : 'Step 1 — Online application'}
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
-                Course & Quota
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                1. Student Information
               </h2>
-              <p className="text-sm text-gray-500">
-                These values default from the confirmed lead. Adjust if the student opted for a
-                different program. <span className="font-medium text-slate-700 dark:text-slate-300">College, quota,</span>{' '}
-                managed course, and managed branch are all required before submit or approval (staff).
-              </p>
+              <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Course &amp; quota
+              </h3>
               {(() => {
                 // Show what the lead actually carried over (free-text "course
                 // interested") next to the managed-DB resolved values so staff
@@ -4104,32 +4099,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 if (!interestedFromLead && !resolvedCourseName && !resolvedBranchName) {
                   return null;
                 }
+                const needsMapping =
+                  interestedFromLead && !(resolvedCourseName || resolvedBranchName);
                 return (
-                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-100">
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-                      {interestedFromLead ? (
-                        <div className="min-w-0">
-                          <span className="font-medium">From lead (interest):</span>{' '}
-                          <span className="font-semibold">{interestedFromLead}</span>
-                        </div>
-                      ) : null}
-                      {(resolvedCourseName || resolvedBranchName) ? (
-                        <div className="min-w-0">
-                          <span className="font-medium">Linked to managed:</span>{' '}
-                          <span className="font-semibold">
-                            {resolvedCourseName || '—'}
-                            {resolvedBranchName ? ` · ${resolvedBranchName}` : ''}
-                          </span>
-                        </div>
-                      ) : interestedFromLead ? (
-                        <div className="min-w-0 text-xs text-amber-700 dark:text-amber-300">
-                          Not yet mapped to a managed course/branch. Pick below to link it.
-                        </div>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-200/80">
-                      Managed values come from the secondary <span className="font-mono">student_database</span> (courses & course_branches).
-                    </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
+                    {interestedFromLead ? (
+                      <span>
+                        Lead interest: <span className="font-semibold">{interestedFromLead}</span>
+                      </span>
+                    ) : null}
+                    {(resolvedCourseName || resolvedBranchName) ? (
+                      <span>
+                        Selected:{' '}
+                        <span className="font-semibold">
+                          {resolvedCourseName || '—'}
+                          {resolvedBranchName ? ` · ${resolvedBranchName}` : ''}
+                        </span>
+                      </span>
+                    ) : null}
+                    {needsMapping ? (
+                      <span className="text-amber-700 dark:text-amber-300">
+                        Map to course and branch below.
+                      </span>
+                    ) : null}
                   </div>
                 );
               })()}
@@ -4173,10 +4165,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                             </option>
                           ))}
                         </select>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          From <span className="font-mono">student_database.courses</span> and{' '}
-                          <span className="font-mono">settings.certificate_config</span>.
-                        </p>
                       </div>
                       <div className="min-w-0">
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -4195,9 +4183,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                             </option>
                           ))}
                         </select>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          From secondary <span className="font-mono">student_database.student_quotas</span>.
-                        </p>
                       </div>
                       <div className="min-w-0">
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -4216,10 +4201,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                             </option>
                           ))}
                         </select>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          From secondary DB colleges list. Managed course/branch lists below are limited to
-                          courses linked to this college (<span className="font-mono">courses.college_id</span>).
-                        </p>
                       </div>
                       {!programLevelTrimmed ? (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
@@ -4231,7 +4212,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         <>
                           <div className="min-w-0">
                             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                              Select Managed Course
+                              Course
                               <span className="ml-1 text-rose-600">*</span>
                             </label>
                             <select
@@ -4247,13 +4228,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                                 </option>
                               ))}
                             </select>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              Managed in Course &amp; Branch Setup. Keeps payments in sync.
-                            </p>
                           </div>
                           <div className="min-w-0">
                             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                              Select Managed Branch
+                              Branch
                               <span className="ml-1 text-rose-600">*</span>
                             </label>
                             <select
@@ -4286,17 +4264,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                                 });
                               })()}
                             </select>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              Updates when the course changes.
-                            </p>
                           </div>
                         </>
                       ) : programLevelTrimmed ? (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
                           <p className="text-sm text-amber-800 dark:text-amber-200">
                             {selectedCollegeId.trim()
-                              ? 'No managed courses for this program level at the selected college. Confirm courses.college_id and level in the secondary database, or pick another college.'
-                              : 'No managed courses are tagged for this program level. Check course level values or payment configuration.'}
+                              ? 'No courses for this level at the selected college.'
+                              : 'No courses for this program level.'}
                           </p>
                         </div>
                       ) : null}
@@ -4324,60 +4299,28 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       <p className="text-right text-xs text-blue-500 dark:text-blue-300">
                         Branch: {selectedBranchSetting.branch.name}
                       </p>
-                    ) : selectedCourseSetting ? (
-                      <p className="text-right text-xs text-blue-500 dark:text-blue-300">
-                        Course-wide default fee
-                      </p>
                     ) : null}
                   </div>
-                  <p className="mt-2 text-xs text-blue-500/80 dark:text-blue-200/70">
-                    Update fee amounts any time under Payment Configuration settings.
-                  </p>
                 </div>
               )}
-            </section>
-
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                1. Student Information
-              </h2>
+              <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                Student profile
+              </h3>
               {status === 'draft' ? (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50/90 to-white p-4 dark:border-slate-700 dark:from-slate-900/60 dark:to-slate-900/40">
-                  <div className="flex flex-col gap-2 border-b border-slate-200/80 pb-3 dark:border-slate-700/80 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                        Registration fields (student database)
-                      </h3>
-                      <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                        Definitions load from secondary MySQL (<span className="font-mono">student_database</span>
-                        ). Course, branch, quota, student type, Aadhaar, caste, and address are not repeated here — use{' '}
-                        <span className="font-medium text-slate-700 dark:text-slate-300">Course &amp; Quota</span>{' '}
-                        above so fee rules stay aligned.
-                      </p>
-                    </div>
-                  </div>
+                <div className="mt-4">
                   {registrationFormsError ? (
-                    <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-                      Could not load form list from the student database. Check DB_SECONDARY_* and that a{' '}
-                      <span className="font-mono">forms</span> or <span className="font-mono">form_builder_forms</span>{' '}
-                      table is available.
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      Could not load registration form.
                     </p>
                   ) : registrationFormError ? (
-                    <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-                      Could not load the selected registration form from the student database.
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      Could not load registration form fields.
                     </p>
                   ) : !registrationFormId ? (
-                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                      No active registration form found in the student database.
-                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">No registration form configured.</p>
                   ) : isLoadingRegistrationForm ? (
-                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading registration form…</p>
-                  ) : registrationFormFieldsAllFilteredOut ? (
-                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-                      This registration form only contained fields that are already covered above (for example
-                      course or branch). Nothing extra to show here.
-                    </p>
-                  ) : regHasDyn ? (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+                  ) : registrationFormFieldsAllFilteredOut ? null : regHasDyn ? (
                     <div className="mt-4">
                       <JoiningDynamicRegistrationFields
                         formTitle={registrationFormDefinition?.name || undefined}
@@ -4407,11 +4350,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         }}
                       />
                     </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                      No active fields on the default registration form in the student database.
-                    </p>
-                  )}
+                  ) : null}
                 </div>
               ) : null}
               <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -4422,7 +4361,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     value={formState.studentInfo.name}
                     onChange={(event) => handleStudentInfoChange('name', event.target.value)}
                   />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                 </div>
                 ) : null}
                 {!hideJoiningStudentPhone ? (
@@ -4439,9 +4377,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       placeholder="10-digit mobile"
                       maxLength={15}
                     />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                      Pulled from the lead when you open joining; edit here if it changed.
-                    </p>
                   </div>
                 ) : null}
                 <div>
@@ -4467,9 +4402,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       {showStudentAadhaar ? 'Hide' : 'Show'}
                     </Button>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Stored securely. Masked by default for privacy.
-                  </p>
                 </div>
                 {(!hideJoiningStudentGender || !hideJoiningDateOfBirth) ? (
                 <div className="grid grid-cols-2 gap-4">
@@ -4498,7 +4430,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       onChange={(event) => handleStudentInfoChange('dateOfBirth', event.target.value)}
                       type="date"
                     />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                   </div>
                   ) : null}
                 </div>
@@ -4511,9 +4442,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     disabled={!canEditReferenceField}
                     showAddUserButton={canEditReferenceField}
                   />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Pick a staff member from the list, use Add to type a reference name, or leave as No reference.
-                  </p>
                 </div>
               </div>
             </section>
@@ -4535,7 +4463,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         value={formState.parents.father.name || ''}
                         onChange={(event) => handleParentChange('father', 'name', event.target.value)}
                       />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                     </div>
                     ) : null}
                     <div>
@@ -4555,9 +4482,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         placeholder="10-digit mobile"
                         maxLength={15}
                       />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                        Required for the printed application form.
-                      </p>
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -4597,7 +4521,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         value={formState.parents.mother.name || ''}
                         onChange={(event) => handleParentChange('mother', 'name', event.target.value)}
                       />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Enter as per SSC</p>
                     </div>
                     ) : null}
                     <div>
@@ -4617,9 +4540,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         placeholder="10-digit mobile"
                         maxLength={15}
                       />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                        Required for the printed application form.
-                      </p>
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
@@ -4652,7 +4572,127 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                3. Reservation Category
+                3. Address Details
+              </h2>
+              <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Communication address
+              </h3>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {!hideJoiningDoor ? (
+                <Input
+                  label="Door No / Street Name"
+                  value={formState.address.communication.doorOrStreet || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('doorOrStreet', event.target.value.toUpperCase())
+                  }
+                />
+                ) : null}
+                {!hideJoiningLandmark ? (
+                <Input
+                  label="Landmark"
+                  value={formState.address.communication.landmark || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('landmark', event.target.value.toUpperCase())
+                  }
+                />
+                ) : null}
+                {!hideJoiningVillage ? (
+                <Input
+                  label="Village / Town / City"
+                  value={formState.address.communication.villageOrCity || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('villageOrCity', event.target.value.toUpperCase())
+                  }
+                />
+                ) : null}
+                {!hideJoiningState ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={formState.address.communication.state || ''}
+                    onChange={(e) => handleCommunicationAddressChange('state', e.target.value)}
+                  >
+                    <option value="">Select state</option>
+                    {stateNames.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                ) : null}
+                {!hideJoiningDistrict ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">District</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={formState.address.communication.district || ''}
+                    onChange={(e) => handleCommunicationAddressChange('district', e.target.value)}
+                  >
+                    <option value="">Select district</option>
+                    {commDistricts.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                ) : null}
+                {!hideJoiningMandal ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mandal</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    value={formState.address.communication.mandal || ''}
+                    onChange={(e) => handleCommunicationAddressChange('mandal', e.target.value)}
+                  >
+                    <option value="">Select mandal</option>
+                    {commMandals.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                ) : null}
+                {!hideJoiningPin ? (
+                <Input
+                  label="PIN Code"
+                  value={formState.address.communication.pinCode || ''}
+                  onChange={(event) =>
+                    handleCommunicationAddressChange('pinCode', event.target.value)
+                  }
+                  maxLength={6}
+                />
+                ) : null}
+              </div>
+              <div className="mt-8 flex items-center justify-between border-t border-slate-200/80 pt-6 dark:border-slate-700">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Relatives / friends (optional)
+                  </h3>
+                </div>
+                <Button type="button" variant="secondary" onClick={addRelative}>
+                  Add Address
+                </Button>
+              </div>
+              <div className="mt-4 space-y-6">
+                {formState.address.relatives.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                    No relative or friend addresses added.
+                  </p>
+                )}
+                {formState.address.relatives.map((relative, index) => (
+                  <RelativeAddressRow
+                    key={`relative-${index}`}
+                    relative={relative}
+                    index={index}
+                    updateRelative={updateRelative}
+                    removeRelative={removeRelative}
+                    stateNames={stateNames}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                4. Reservation Category
               </h2>
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <div>
@@ -4745,130 +4785,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                4. Address for Communication (Uppercase)
-              </h2>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {!hideJoiningDoor ? (
-                <Input
-                  label="Door No / Street Name"
-                  value={formState.address.communication.doorOrStreet || ''}
-                  onChange={(event) =>
-                    handleCommunicationAddressChange('doorOrStreet', event.target.value.toUpperCase())
-                  }
-                />
-                ) : null}
-                {!hideJoiningLandmark ? (
-                <Input
-                  label="Landmark"
-                  value={formState.address.communication.landmark || ''}
-                  onChange={(event) =>
-                    handleCommunicationAddressChange('landmark', event.target.value.toUpperCase())
-                  }
-                />
-                ) : null}
-                {!hideJoiningVillage ? (
-                <Input
-                  label="Village / Town / City"
-                  value={formState.address.communication.villageOrCity || ''}
-                  onChange={(event) =>
-                    handleCommunicationAddressChange('villageOrCity', event.target.value.toUpperCase())
-                  }
-                />
-                ) : null}
-                {!hideJoiningState ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={formState.address.communication.state || ''}
-                    onChange={(e) => handleCommunicationAddressChange('state', e.target.value)}
-                  >
-                    <option value="">Select state</option>
-                    {stateNames.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-                ) : null}
-                {!hideJoiningDistrict ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">District</label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={formState.address.communication.district || ''}
-                    onChange={(e) => handleCommunicationAddressChange('district', e.target.value)}
-                  >
-                    <option value="">Select district</option>
-                    {commDistricts.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                ) : null}
-                {!hideJoiningMandal ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mandal</label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    value={formState.address.communication.mandal || ''}
-                    onChange={(e) => handleCommunicationAddressChange('mandal', e.target.value)}
-                  >
-                    <option value="">Select mandal</option>
-                    {commMandals.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-                ) : null}
-                {!hideJoiningPin ? (
-                <Input
-                  label="PIN Code"
-                  value={formState.address.communication.pinCode || ''}
-                  onChange={(event) =>
-                    handleCommunicationAddressChange('pinCode', event.target.value)
-                  }
-                  maxLength={6}
-                />
-                ) : null}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    5. Relatives / Friends (Optional)
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    Capture additional contact addresses. Add as many as required.
-                  </p>
-                </div>
-                <Button type="button" variant="secondary" onClick={addRelative}>
-                  Add Address
-                </Button>
-              </div>
-              <div className="mt-6 space-y-6">
-                {formState.address.relatives.length === 0 && (
-                  <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-                    No relative or friend addresses added.
-                  </p>
-                )}
-                {formState.address.relatives.map((relative, index) => (
-                  <RelativeAddressRow
-                    key={`relative-${index}`}
-                    relative={relative}
-                    index={index}
-                    updateRelative={updateRelative}
-                    removeRelative={removeRelative}
-                    stateNames={stateNames}
-                  />
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                6. Qualified Examinations
+                5. Qualified Examinations
               </h2>
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <div className="space-y-3">
@@ -4889,7 +4806,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ))}
                   <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 dark:border-slate-600 dark:bg-slate-800/40">
                     <p className="text-sm font-medium text-gray-800 dark:text-slate-200">Merit</p>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">Select Yes or No.</p>
                     <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-700 dark:text-slate-300">
                       <label className="inline-flex cursor-pointer items-center gap-2">
                         <input
@@ -4951,12 +4867,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    7. Education History
+                    6. Education History
                   </h2>
-                  <p className="text-sm text-gray-500">
-                    Add every school or college the student has studied. Include year, course, and
-                    identifiers.
-                  </p>
                 </div>
                 <Button type="button" variant="secondary" onClick={addEducationHistory}>
                   Add Entry
@@ -5067,9 +4979,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    8. Siblings (Optional)
+                    7. Siblings (Optional)
                   </h2>
-                  <p className="text-sm text-gray-500">Record siblings currently studying.</p>
                 </div>
                 <Button type="button" variant="secondary" onClick={addSibling}>
                   Add Sibling
@@ -5126,57 +5037,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             </section>
 
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    9. Documents Checklist
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {useWizard ? (
-                      <>
-                        Mark each document as received. Complete the program-level{' '}
-                        <span className="font-medium">Certificate information checklist</span> in{' '}
-                        <button
-                          type="button"
-                          className="font-semibold text-blue-700 underline underline-offset-2 dark:text-blue-300"
-                          onClick={() => handleJoiningWizardStepSelect(2)}
-                        >
-                          Step 2 — Admission fee workflow
-                        </button>
-                        .
-                      </>
-                    ) : showAdminPostAdmissionStep3 ? (
-                      <>
-                        Mark each document as received. The program-level{' '}
-                        <span className="font-medium">Certificate information checklist</span> (from student database
-                        settings) is completed on the{' '}
-                        {admissionRecord?._id ? (
-                          <Link
-                            href={`/superadmin/admission/${admissionRecord._id}/detail#admission-step-two`}
-                            className="font-semibold text-blue-700 underline underline-offset-2 dark:text-blue-300"
-                          >
-                            admission record
-                          </Link>
-                        ) : (
-                          <span className="font-medium">admission record</span>
-                        )}
-                        .
-                      </>
-                    ) : isPublicEdit ? (
-                      <>
-                        Mark each document as received for this application. Academic certificates (SSC, Intermediate,
-                        transfer/study certificates, and related items) are verified by admissions after approval.
-                      </>
-                    ) : (
-                      <>
-                        Mark each document as received. The program-level{' '}
-                        <span className="font-medium">Certificate information checklist</span> is edited on the{' '}
-                        <span className="font-medium">admission record</span> after approval — set program level in
-                        Course &amp; Quota first so rules can load there.
-                      </>
-                    )}
-                  </p>
-                </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                  8. Documents Checklist
+                </h2>
                 <PrintableDocumentChecklist
                   documentLabels={documentsChecklistForPrint.labels}
                   documents={documentsChecklistForPrint.docs as Record<string, 'pending' | 'received' | undefined>}
