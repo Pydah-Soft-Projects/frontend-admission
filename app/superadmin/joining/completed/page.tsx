@@ -49,7 +49,7 @@ const formatLocalDateIso = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
-const ABSTRACT_COLUMN_COUNT = 13;
+const ABSTRACT_COLUMN_COUNT = 15;
 
 const abstractBlockOutline = 'border-2 border-slate-300 dark:border-slate-600';
 const abstractBlockCellStart = 'border-l-2 border-slate-300 dark:border-slate-600';
@@ -1072,6 +1072,12 @@ const CompletedAdmissionsPage = () => {
                     </th>
                     <th
                       colSpan={2}
+                      className={`${abstractGroupHeaderClass} ${abstractBlockOutline} bg-violet-50/80 text-violet-900 dark:bg-violet-950/30 dark:text-violet-200`}
+                    >
+                      Spot
+                    </th>
+                    <th
+                      colSpan={2}
                       className={`${abstractGroupHeaderClass} ${abstractBlockOutline} bg-emerald-50/80 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200`}
                     >
                       Merit
@@ -1092,8 +1098,10 @@ const CompletedAdmissionsPage = () => {
                     <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-slate-500`}>Intake</th>
                     <th className={`${abstractSubHeaderClass} text-amber-600 dark:text-amber-400`}>Admitted</th>
                     <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-red-600 dark:text-red-400`}>Cancelled</th>
-                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-emerald-600 dark:text-emerald-400`}>Admitted</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-violet-600 dark:text-violet-400`}>Admitted</th>
                     <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-red-600 dark:text-red-400`}>Cancelled</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-emerald-600 dark:text-emerald-400`}>Yes</th>
+                    <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-slate-600 dark:text-slate-400`}>No</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
@@ -1120,8 +1128,10 @@ const CompletedAdmissionsPage = () => {
                         mqAdmitted: b.mqAdmitted,
                         mqIntake: b.mqIntake,
                         mqCancelled: b.mqCancelled,
-                        meritQuotaAdmitted: b.meritQuotaAdmitted,
-                        meritQuotaCancelled: b.meritQuotaCancelled,
+                        spotAdmitted: b.spotAdmitted,
+                        spotCancelled: b.spotCancelled,
+                        meritYes: b.meritYes,
+                        meritNo: b.meritNo,
                         totalAdmissions: b.totalAdmissions,
                         totalCancelled: b.totalCancelled,
                       }))
@@ -1162,11 +1172,17 @@ const CompletedAdmissionsPage = () => {
                         <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.mqCancelled ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-emerald-600 dark:text-emerald-400 ${abstractBlockCellStart}`}>
-                          {row.meritQuotaAdmitted ?? 0}
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-violet-600 dark:text-violet-400 ${abstractBlockCellStart}`}>
+                          {row.spotAdmitted ?? 0}
                         </td>
                         <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
-                          {row.meritQuotaCancelled ?? 0}
+                          {row.spotCancelled ?? 0}
+                        </td>
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-emerald-600 dark:text-emerald-400 ${abstractBlockCellStart}`}>
+                          {row.meritYes ?? 0}
+                        </td>
+                        <td className={`px-4 py-3 text-center text-sm font-bold text-slate-700 dark:text-slate-300 ${abstractBlockCellEnd}`}>
+                          {row.meritNo ?? 0}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button

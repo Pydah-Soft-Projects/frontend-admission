@@ -466,9 +466,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       merit:
         joining?.qualifications?.merit === true
           ? true
-          : joining?.qualifications?.merit === false
-            ? false
-            : null,
+          : false,
       mediums: resolvedMediums,
       otherMediumLabel: resolvedMediums.includes('other')
         ? joining?.qualifications?.otherMediumLabel || ''
@@ -5349,11 +5347,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         ]
                           .filter(Boolean)
                           .join(', ') || '—'}
-                        {formState.qualifications.merit === true
-                          ? ' · Merit: Yes'
-                          : formState.qualifications.merit === false
-                            ? ' · Merit: No'
-                            : ''}
+                        {formState.qualifications.merit === true ? ' · Merit: Yes' : ' · Merit: No'}
                       </dd>
                     </div>
                     <div>

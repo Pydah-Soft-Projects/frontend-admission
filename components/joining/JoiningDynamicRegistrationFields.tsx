@@ -745,8 +745,8 @@ export function JoiningDynamicRegistrationFields({
                   </p>
                   <p className="mb-4 text-center text-xs text-gray-600 dark:text-slate-400 sm:text-left">
                     Student, father, and mother photos are all optional. <strong>Take photo</strong> opens the live
-                    camera in a small window; <strong>Upload</strong> picks from your gallery. Files use the student
-                    prefix <span className="font-mono">{photoBaseSlug}</span>.
+                    camera; use <strong>Flip camera</strong> on your phone to switch front or rear. <strong>Upload</strong>{' '}
+                    picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
                   </p>
                   <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between md:gap-4">
                     <RegistrationPortraitSlot

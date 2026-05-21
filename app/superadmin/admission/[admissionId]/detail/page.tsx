@@ -950,11 +950,7 @@ export default function AdmissionDetailPage() {
                 <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
                   <span className="text-sm text-gray-700 dark:text-slate-300">Merit</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                    {admission.qualifications.merit === true
-                      ? 'Yes'
-                      : admission.qualifications.merit === false
-                        ? 'No'
-                        : '—'}
+                    {admission.qualifications.merit === true ? 'Yes' : 'No'}
                   </span>
                 </div>
               </div>

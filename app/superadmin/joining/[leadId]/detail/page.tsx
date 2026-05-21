@@ -571,11 +571,7 @@ export default function JoiningDetailPage() {
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-700 dark:text-slate-300">Merit:</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-slate-100">
-                  {joining.qualifications.merit === true
-                    ? 'Yes'
-                    : joining.qualifications.merit === false
-                      ? 'No'
-                      : '—'}
+                  {joining.qualifications.merit === true ? 'Yes' : 'No'}
                 </span>
               </div>
               {joining.qualifications.mediums && joining.qualifications.mediums.length > 0 && (

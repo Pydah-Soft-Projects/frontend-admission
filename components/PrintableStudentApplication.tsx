@@ -378,11 +378,7 @@ function getPrintApplicationHtml(props: {
     return levels.length ? levels.join(', ') : '';
   })();
 
-  const displayMeritText = (() => {
-    if (qualifications?.merit === true) return 'Yes';
-    if (qualifications?.merit === false) return 'No';
-    return '';
-  })();
+  const displayMeritText = qualifications?.merit === true ? 'Yes' : 'No';
 
   const displayMediumText = (() => {
     const mediums = qualifications?.mediums ?? [];
