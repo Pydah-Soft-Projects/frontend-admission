@@ -76,10 +76,23 @@ export default function AssignLeadsPage() {
   const [statsLocationVillages, setStatsLocationVillages] = useState<LocationOption[]>([]);
   const [academicYear, setAcademicYear] = useState<number | ''>(2026);
   const [studentGroup, setStudentGroup] = useState<string>('');
-  const [count, setCount] = useState<number | ''>('');
+  const [count, setCount] = useState<number | ''>(1000);
   const [targetDate, setTargetDate] = useState<string>('');
   const [cycleNumber, setCycleNumber] = useState<number | ''>('');
+  const [source, setSource] = useState('');
+  const [minRank, setMinRank] = useState<number | ''>('');
+  const [maxRank, setMaxRank] = useState<number | ''>('');
+  const [debouncedMinRank, setDebouncedMinRank] = useState<number | ''>('');
+  const [debouncedMaxRank, setDebouncedMaxRank] = useState<number | ''>('');
   const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedMinRank(minRank);
+      setDebouncedMaxRank(maxRank);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [minRank, maxRank]);
 
   // Location dropdowns (cascade: State → District → Mandal) from locations API
   type LocationOption = { id: string; name: string };
@@ -237,6 +250,7 @@ export default function AssignLeadsPage() {
             applicationStatuses: Array.isArray(raw.applicationStatuses) ? raw.applicationStatuses : [],
             academicYears: Array.isArray(raw.academicYears) ? raw.academicYears : [],
             studentGroups: Array.isArray(raw.studentGroups) ? raw.studentGroups : [],
+            sources: Array.isArray(raw.sources) ? raw.sources : [],
           };
 
           if (options.states.length === 0 || options.mandals.length === 0) {
@@ -511,6 +525,10 @@ export default function AssignLeadsPage() {
   const statsQueryMandal = mode === 'stats' ? debouncedStatsMandal : mode === 'institution' ? '' : mandal;
   const statsQueryVillage = mode === 'stats' ? debouncedStatsVillage : mode === 'institution' ? '' : village;
 
+  const statsQuerySource = mode === 'bulk' ? source : '';
+  const statsQueryMinRank = mode === 'bulk' ? debouncedMinRank : '';
+  const statsQueryMaxRank = mode === 'bulk' ? debouncedMaxRank : '';
+
   // Top stats: bulk tab uses the bulk form filters; stats tab uses debounced stats filters; institution tab uses year / student group / cycle only (no state/district/mandal).
   const statsQueryAcademicYear =
     mode === 'institution' ? institutionAcademicYear : mode === 'bulk' ? academicYear : debouncedStatsAcademicYear;
@@ -544,7 +562,7 @@ export default function AssignLeadsPage() {
     isLoading: isStatsLoading,
     isFetching: isStatsFetching
   } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStats', mode, statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryKey: ['assignmentStats', mode, statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         village: statsQueryVillage || undefined,
@@ -557,6 +575,9 @@ export default function AssignLeadsPage() {
         targetRole: targetRole || undefined,
         includeBreakdowns: mode === 'stats',
         summaryOnly: mode === 'stats',
+        source: statsQuerySource || undefined,
+        minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
+        maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
       // Backend returns { success, data: { totalLeads, assignedCount, ... }, message }
       const payload = response?.data ?? response ?? {};
@@ -575,7 +596,7 @@ export default function AssignLeadsPage() {
   const stats = statsData?.data;
 
   const { data: statsBreakdownsData, isFetching: isBreakdownsFetching } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStatsBreakdowns', statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryKey: ['assignmentStatsBreakdowns', statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         village: statsQueryVillage || undefined,
@@ -587,6 +608,9 @@ export default function AssignLeadsPage() {
         cycleNumber: statsQueryCycleNumber !== '' ? statsQueryCycleNumber : undefined,
         targetRole: targetRole || undefined,
         includeBreakdowns: true,
+        source: statsQuerySource || undefined,
+        minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
+        maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
       const payload = response?.data ?? response ?? {};
       return { data: payload };
@@ -606,7 +630,7 @@ export default function AssignLeadsPage() {
     : undefined;
 
   const { data: districtGeoStatsRaw, isFetching: isDistrictGeoFetching } = useQuery({
-    queryKey: ['assignmentStatsGeo', 'district', mode, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryKey: ['assignmentStatsGeo', 'district', mode, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
@@ -616,6 +640,9 @@ export default function AssignLeadsPage() {
         geoBreakdown: 'district',
         targetRole: targetRole || undefined,
         includeBreakdowns: false,
+        source: statsQuerySource || undefined,
+        minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
+        maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
       const payload = (response?.data ?? response) as AssignmentStats;
       return payload;
@@ -631,7 +658,7 @@ export default function AssignLeadsPage() {
   });
 
   const { data: mandalGeoStatsRaw, isFetching: isMandalGeoFetching } = useQuery({
-    queryKey: ['assignmentStatsGeo', 'mandal', mode, statsQueryState, statsQueryDistrict, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryKey: ['assignmentStatsGeo', 'mandal', mode, statsQueryState, statsQueryDistrict, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
@@ -642,6 +669,9 @@ export default function AssignLeadsPage() {
         geoBreakdown: 'mandal',
         targetRole: targetRole || undefined,
         includeBreakdowns: false,
+        source: statsQuerySource || undefined,
+        minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
+        maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
       const payload = (response?.data ?? response) as AssignmentStats;
       return payload;
@@ -658,7 +688,7 @@ export default function AssignLeadsPage() {
   });
 
   const { data: villageGeoStatsRaw, isFetching: isVillageGeoFetching } = useQuery({
-    queryKey: ['assignmentStatsGeo', 'village', mode, statsQueryState, statsQueryDistrict, statsQueryMandal, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole],
+    queryKey: ['assignmentStatsGeo', 'village', mode, statsQueryState, statsQueryDistrict, statsQueryMandal, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
@@ -670,6 +700,9 @@ export default function AssignLeadsPage() {
         geoBreakdown: 'village',
         targetRole: targetRole || undefined,
         includeBreakdowns: false,
+        source: statsQuerySource || undefined,
+        minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
+        maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
       const payload = (response?.data ?? response) as any;
       return payload;
@@ -1026,6 +1059,7 @@ export default function AssignLeadsPage() {
       // Reset form
       if (mode === 'bulk') {
         setSelectedUserId('');
+        setBulkSelectedRole('');
         setMandal('');
         setState('');
         setDistrict('');
@@ -1035,6 +1069,9 @@ export default function AssignLeadsPage() {
         setCycleNumber('');
         setTargetDate('');
         setCount(1000);
+        setSource('');
+        setMinRank('');
+        setMaxRank('');
       } else if (mode === 'institution') {
         setInstitutionUserId('');
         setInstitutionName('');
@@ -1119,6 +1156,9 @@ export default function AssignLeadsPage() {
       targetDate: assignSlotIsPro ? null : targetDate.trim(),
       cycleNumber: cycleNumber !== '' ? cycleNumber : undefined,
       count,
+      source: source || undefined,
+      minRank: source && minRank !== '' ? minRank : undefined,
+      maxRank: source && maxRank !== '' ? maxRank : undefined,
     });
   };
 
@@ -1188,11 +1228,12 @@ export default function AssignLeadsPage() {
       showToast.error('Please select a user to remove assignments from.');
       return;
     }
-    if (removeCount <= 0) {
+    const countVal = Number(removeCount);
+    if (Number.isNaN(countVal) || countVal <= 0) {
       showToast.error('Count must be greater than zero.');
       return;
     }
-    if (removeCount > assignedToUserCount) {
+    if (countVal > assignedToUserCount) {
       showToast.error(`This user has only ${assignedToUserCount} assigned lead(s). Enter a count up to ${assignedToUserCount}.`);
       return;
     }
@@ -1205,7 +1246,7 @@ export default function AssignLeadsPage() {
       academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
       studentGroup: removeStudentGroup || undefined,
       cycleNumber: removeCycleNumber !== '' ? removeCycleNumber : undefined,
-      count: removeCount,
+      count: countVal,
     });
   };
 
@@ -2132,7 +2173,7 @@ export default function AssignLeadsPage() {
                   disabled={
                     removeAssignmentsMutation.isPending ||
                     !removeUserId ||
-                    removeCount <= 0 ||
+                    Number(removeCount) <= 0 ||
                     assignedToUserCount === 0
                   }
                   className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900/20"
@@ -2273,6 +2314,63 @@ export default function AssignLeadsPage() {
                   </div>
                 )}
               </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3 items-end">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    Source (optional)
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                    value={source}
+                    onChange={(e) => {
+                      setSource(e.target.value);
+                      if (!e.target.value) {
+                        setMinRank('');
+                        setMaxRank('');
+                      }
+                    }}
+                  >
+                    <option value="">All Sources</option>
+                    {filters?.sources?.map((src) => (
+                      <option key={src} value={src}>
+                        {src}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {source && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        Min Rank (optional)
+                      </label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Min rank"
+                        value={minRank}
+                        onChange={(e) => setMinRank(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        Max Rank (optional)
+                      </label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Max rank"
+                        value={maxRank}
+                        onChange={(e) => setMaxRank(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
               <p className="text-xs text-gray-500 dark:text-slate-400">
                 {targetRole === 'PRO'
                   ? 'Available leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'
@@ -2387,6 +2485,9 @@ export default function AssignLeadsPage() {
                   Number of {targetRole === 'PRO' ? 'available' : 'unassigned'} leads to assign. Available: {stats?.unassignedCount.toLocaleString() || 0} leads
                   {academicYear !== '' && ` for ${academicYear}`}
                   {studentGroup && `, ${studentGroup}`}
+                  {source && `, Source: ${source}`}
+                  {source && minRank !== '' && `, Min Rank: ${minRank}`}
+                  {source && maxRank !== '' && `, Max Rank: ${maxRank}`}
                   {village && ` in ${village}`}
                   {mandal && `, ${mandal}`}
                   {state && `, ${state}`}
@@ -2422,6 +2523,9 @@ export default function AssignLeadsPage() {
                     setCycleNumber('');
                     setTargetDate('');
                     setCount('');
+                    setSource('');
+                    setMinRank('');
+                    setMaxRank('');
                   }}
                   disabled={assignMutation.isPending}
                 >
