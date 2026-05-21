@@ -447,6 +447,8 @@ export const leadAPI = {
       newStatus?: string;
       newQuota?: string;
       type?: 'comment' | 'status_change' | 'quota_change';
+      /** YYYY-MM-DD: the visit date selected by the PRO. Stored in activity metadata so diary history groups by this date, not the server's NOW(). */
+      visitDate?: string;
     },
   ) => {
     const response = await api.post(`/leads/${leadId}/activity`, data);
@@ -473,6 +475,9 @@ export const leadAPI = {
     district?: string;
     village?: string;
     cycleNumber?: number | string;
+    source?: string;
+    minRank?: number | string;
+    maxRank?: number | string;
   }) => {
     const response = await api.post('/leads/assign', data);
     return response.data;
@@ -497,6 +502,9 @@ export const leadAPI = {
     summaryOnly?: boolean;
     /** With `forBreakdown`: run only school/college grouped query (no summary COUNT on leads). */
     institutionBreakdownOnly?: boolean;
+    source?: string;
+    minRank?: number | string;
+    maxRank?: number | string;
   }) => {
     const queryParams = new URLSearchParams();
     if (params?.mandal) queryParams.append('mandal', params.mandal);
@@ -513,6 +521,9 @@ export const leadAPI = {
     if (params?.includeBreakdowns === false) queryParams.append('includeBreakdowns', 'false');
     if (params?.summaryOnly === true) queryParams.append('summaryOnly', 'true');
     if (params?.institutionBreakdownOnly === true) queryParams.append('institutionBreakdownOnly', 'true');
+    if (params?.source) queryParams.append('source', params.source);
+    if (params?.minRank != null && params.minRank !== '') queryParams.append('minRank', String(params.minRank));
+    if (params?.maxRank != null && params.maxRank !== '') queryParams.append('maxRank', String(params.maxRank));
     const query = queryParams.toString();
     const response = await api.get(`/leads/assign/stats${query ? `?${query}` : ''}`);
     return response.data;

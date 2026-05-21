@@ -134,6 +134,7 @@ export default function SuperAdminVisitDiaryPage() {
         leadAPI.addActivity(item.lead._id, {
           newStatus: item.status,
           type: 'status_change',
+          visitDate: selectedDate,
           comment: `Visit outcome recorded by Admin via Visit Diary for date: ${format(new Date(selectedDate + 'T12:00:00'), 'MMM d, yyyy')}`
         })
       );
