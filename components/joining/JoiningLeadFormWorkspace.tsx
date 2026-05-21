@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect';
+import { ReferenceUserSelect, REFERENCE_NAMES_QUERY_KEY } from '@/components/admission/ReferenceUserSelect';
 import {
   joiningAPI,
   admissionAPI,
@@ -3322,6 +3322,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     },
     onSuccess: (response: any) => {
       showToast.success('Joining form saved as draft');
+      if (reference1.trim()) {
+        void queryClient.invalidateQueries({ queryKey: [...REFERENCE_NAMES_QUERY_KEY] });
+      }
       const savedJoining = response?.data?.data || response?.data;
       if (isNewJoining && savedJoining?._id && leadId === 'new') {
         router.replace(`/superadmin/joining/${savedJoining._id}`);
@@ -4506,9 +4509,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     value={reference1}
                     onChange={setReference1}
                     disabled={!canEditReferenceField}
+                    showAddUserButton={canEditReferenceField}
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Select an admission portal user, or leave as No reference. Saved on admission, joining, and CRM lead.
+                    Pick a staff member from the list, use Add to type a reference name, or leave as No reference.
                   </p>
                 </div>
               </div>

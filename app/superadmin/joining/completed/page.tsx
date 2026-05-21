@@ -403,6 +403,7 @@ const CompletedAdmissionsPage = () => {
       setReferenceEditValue('');
       await queryClient.invalidateQueries({ queryKey: ['admissions'] });
       await queryClient.invalidateQueries({ queryKey: ['admissions', 'stats', 'by-reference'] });
+      await queryClient.invalidateQueries({ queryKey: ['admissions', 'reference-names'] });
     },
     onError: (error: ApiError) => {
       showToast.error(error.response?.data?.message || 'Failed to update reference');
@@ -544,6 +545,7 @@ const CompletedAdmissionsPage = () => {
                 value={referenceEditValue}
                 onChange={setReferenceEditValue}
                 disabled={saveReferenceMutation.isPending}
+                showAddUserButton={!saveReferenceMutation.isPending}
               />
             </div>
           )}

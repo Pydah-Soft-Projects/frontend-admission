@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
-import { SendJoiningFormModal } from '@/components/joining/SendJoiningFormModal';
+import { AddJoiningFormModal } from '@/components/joining/AddJoiningFormModal';
 import { JoiningListResponse, Joining } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -62,7 +62,7 @@ const JoiningPipelinePage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'draft' | 'pending'>('draft');
-  const [isSendJoiningModalOpen, setIsSendJoiningModalOpen] = useState(false);
+  const [isAddJoiningModalOpen, setIsAddJoiningModalOpen] = useState(false);
   const [smsSession, setSmsSession] = useState<{
     leadId: string;
     admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
@@ -175,17 +175,10 @@ const JoiningPipelinePage = () => {
           />
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
-              className="whitespace-nowrap"
-              onClick={() => setIsSendJoiningModalOpen(true)}
-            >
-              Send Joining Form
-            </Button>
-            <Button
               type="button"
               variant="primary"
               className="whitespace-nowrap"
-              onClick={() => setIsSendJoiningModalOpen(true)}
+              onClick={() => setIsAddJoiningModalOpen(true)}
             >
               Add Joining Form
             </Button>
@@ -535,9 +528,9 @@ const JoiningPipelinePage = () => {
         onClose={() => setSmsSession(null)}
       />
 
-      <SendJoiningFormModal
-        open={isSendJoiningModalOpen}
-        onClose={() => setIsSendJoiningModalOpen(false)}
+      <AddJoiningFormModal
+        open={isAddJoiningModalOpen}
+        onClose={() => setIsAddJoiningModalOpen(false)}
       />
     </div>
   );

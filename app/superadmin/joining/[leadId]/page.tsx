@@ -18,7 +18,7 @@ export default function JoiningLeadWorkspacePage() {
           Standalone joining form disabled
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          New joinings must be created with a CRM enquiry. Use <strong>Send Joining Form</strong> from the Joining
+          New joinings must be created with a CRM enquiry. Use <strong>Add Joining Form</strong> from the Joining
           Pipeline so the lead gets an enquiry number and a linked draft.
         </p>
         <Link href="/superadmin/joining">
