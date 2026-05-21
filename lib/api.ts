@@ -1498,6 +1498,7 @@ export const paymentAPI = {
     amount: number;
     currency?: string;
     notes?: string;
+    referenceId?: string;
     isAdditionalFee?: boolean;
     // Optional fee-head tagging from Fee Management DB
     feeHead?: string | null;

@@ -24,6 +24,12 @@ import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDispl
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import { AdmissionStepTwoPanel } from '@/components/admission/AdmissionStepTwoPanel';
 import {
+  AdmissionWorkflowOverview,
+  AdmissionWorkflowStepButtons,
+  WorkflowNextStepButton,
+  WorkflowStickyActionBar,
+} from '@/components/admission/AdmissionWorkflowSteps';
+import {
   cleanRegistrationFieldEntries,
   formatRegistrationFieldLabel,
   isRegistrationImageDataUrl,
@@ -248,6 +254,9 @@ export default function AdmissionDetailPage() {
     },
   });
 
+  const joiningStatus =
+    (joiningForRegistrationData?.data?.joining?.status as string | undefined) ?? 'approved';
+
   const registrationFieldEntries = useMemo<Array<[string, unknown]>>(() => {
     const registrationFieldSource =
       admission?.registrationFormData && Object.keys(admission.registrationFormData).length > 0
@@ -272,29 +281,16 @@ export default function AdmissionDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-          {admission && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              disabled={isAdmissionCancelled || !admission.joiningId}
-              title={
-                isAdmissionCancelled
-                  ? 'Admission cancelled — Step 2 is not available'
-                  : admission.joiningId
-                    ? 'Scroll to certificate checklist and fee lines on this page'
-                    : 'No joining record linked — Step 2 is available once a joining is linked'
-              }
-              onClick={() => {
-                if (isAdmissionCancelled || !admission.joiningId) return;
-                document
-                  .getElementById('admission-step-two')
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-            >
-              Step 2
-            </Button>
-          )}
+          {admission ? (
+            <AdmissionWorkflowStepButtons
+              activeStep={2}
+              surface="admission-detail"
+              joiningId={admission.joiningId}
+              admissionId={admission._id}
+              joiningStatus={joiningStatus}
+              isAdmissionCancelled={isAdmissionCancelled}
+            />
+          ) : null}
           {admission && (
             <PrintableStudentApplication
               application={admission}
@@ -344,6 +340,7 @@ export default function AdmissionDetailPage() {
     paymentSummary,
     transactions,
     getCollegeNameForCourse,
+    joiningStatus,
     setHeaderContent,
     clearHeaderContent,
   ]);
@@ -440,6 +437,17 @@ export default function AdmissionDetailPage() {
           <p className="mt-2 text-lg font-bold text-gray-700">—</p>
         </div>
       </div>
+
+      {admission.joiningId ? (
+        <AdmissionWorkflowOverview
+          activeStep={2}
+          surface="admission-detail"
+          joiningId={admission.joiningId}
+          admissionId={admission._id}
+          joiningStatus={joiningStatus}
+          isAdmissionCancelled={isAdmissionCancelled}
+        />
+      ) : null}
 
       <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
         <DialogContent className="w-[95vw] max-w-lg">
@@ -586,13 +594,30 @@ export default function AdmissionDetailPage() {
         </div>
       )}
 
-      {/* Student & Course Information - Highlighted */}
-      <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-lg dark:border-blue-800 dark:from-blue-900/30 dark:to-slate-900/70">
-        <div className="grid gap-6 md:grid-cols-2">
+      {/* Step 1 — application data captured on the joining form */}
+      <div
+        id="admission-step-one"
+        className="scroll-mt-24 rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-lg dark:border-blue-800 dark:from-blue-900/30 dark:to-slate-900/70"
+      >
+        <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+          Step 1 — Online application
+        </p>
+        <p className="mt-1 text-sm text-blue-900/80 dark:text-blue-200/80">
+          Read-only view of the approved joining form.{' '}
+          {admission.joiningId ? (
+            <Link
+              href={`/superadmin/joining/${admission.joiningId}`}
+              className="font-semibold text-blue-800 underline underline-offset-2 dark:text-blue-200"
+            >
+              Edit on joining workspace
+            </Link>
+          ) : null}
+        </p>
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300 mb-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300 mb-4">
               Student Information
-            </h2>
+            </h3>
             <div className="space-y-3">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Full Name</p>
@@ -688,7 +713,6 @@ export default function AdmissionDetailPage() {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Parents Information */}
       {admission.parents && (
@@ -1239,6 +1263,20 @@ export default function AdmissionDetailPage() {
           </div>
         </div>
       )}
+
+      <WorkflowStickyActionBar
+        id="admission-step-one-actions"
+        stepLabel="Step 1 actions"
+        className="border-blue-200/80 dark:border-blue-900/50"
+      >
+        <WorkflowNextStepButton
+          fromStep={1}
+          surface="admission-detail"
+          joiningId={admission.joiningId}
+          admissionId={admission._id}
+        />
+      </WorkflowStickyActionBar>
+      </div>
 
       {admission.joiningId && admission._id && !isAdmissionCancelled ? (
         <AdmissionStepTwoPanel

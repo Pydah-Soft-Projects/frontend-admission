@@ -60,6 +60,7 @@ import {
   type JoiningRegistrationFixedGate,
 } from '@/lib/joiningAcademicYearRegistration';
 import { showToast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 import {
   Joining,
   JoiningDocumentStatus,
@@ -87,6 +88,22 @@ import {
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
+import { JoiningStepTwoPaymentsPanel } from '@/components/joining/JoiningStepTwoPaymentsPanel';
+import {
+  PrintablePaymentReceipt,
+  buildPaymentReceiptDetailsFromForm,
+} from '@/components/joining/PrintablePaymentReceipt';
+import { PrintableCertificateChecklist } from '@/components/joining/PrintableCertificateChecklist';
+import {
+  AdmissionWorkflowOverview,
+  AdmissionWorkflowStepBanner,
+  AdmissionWorkflowStepButtons,
+  WorkflowNextStepButton,
+  WorkflowPreviousStepButton,
+  WorkflowStickyActionBar,
+  scrollToWorkflowAnchor,
+  type AdmissionWorkflowStep,
+} from '@/components/admission/AdmissionWorkflowSteps';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 
@@ -109,6 +126,47 @@ const formatDateTime = (value?: string) => {
   if (!value) return '—';
   return new Date(value).toLocaleString();
 };
+
+/** Keys used for college on Course & Quota — must survive registration re-sync when course changes. */
+const COLLEGE_REGISTRATION_EXTRA_KEYS = [
+  'college_id',
+  'collegeId',
+  'school_or_college_id',
+  'schoolOrCollegeId',
+  'school_or_college_name',
+  'college',
+] as const;
+
+function mergePreservedCollegeRegistrationExtras(
+  next: Record<string, unknown>,
+  prev: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...next };
+  for (const key of COLLEGE_REGISTRATION_EXTRA_KEYS) {
+    const prevVal = prev[key];
+    if (prevVal !== undefined && prevVal !== null && String(prevVal).trim() !== '') {
+      merged[key] = prevVal;
+    }
+  }
+  return merged;
+}
+
+function collegeRegistrationPatchFromId(
+  collegeId: string,
+  colleges: { id: string; name: string }[]
+): Record<string, unknown> {
+  const id = String(collegeId || '').trim();
+  if (!id) return {};
+  const selected = colleges.find((item) => item.id === id);
+  return {
+    college_id: id,
+    collegeId: id,
+    school_or_college_id: id,
+    schoolOrCollegeId: id,
+    school_or_college_name: selected?.name || '',
+    college: selected?.name || '',
+  };
+}
 
 const documentLabels: Record<keyof JoiningDocuments, string> = {
   ssc: 'SSC',
@@ -533,6 +591,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const [formState, setFormState] = useState<JoiningFormState>(buildInitialState());
   const [status, setStatus] = useState<JoiningStatus>('draft');
+  const [applicationWizardStep, setApplicationWizardStep] = useState<AdmissionWorkflowStep>(1);
+  const useJoiningPageWizard = !isPublicEdit;
+  const usePublicWizard = isPublicEdit && status !== 'approved';
+  const useWizard = useJoiningPageWizard || usePublicWizard;
+
+  const advanceApplicationWizard = useCallback((step: AdmissionWorkflowStep) => {
+    setApplicationWizardStep(step);
+    requestAnimationFrame(() => scrollToWorkflowAnchor(`joining-wizard-step-${step}`));
+  }, []);
+
+  const handleJoiningWizardStepSelect = useCallback(
+    (step: AdmissionWorkflowStep) => advanceApplicationWizard(step),
+    [advanceApplicationWizard]
+  );
+
   const canEditReferenceField =
     isPublicEdit || (status === 'approved' ? canEditReference : canWriteJoining);
   const [meta, setMeta] = useState<{
@@ -564,9 +637,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const [isAdditionalFeeMode, setIsAdditionalFeeMode] = useState(false);
   const [paymentFormState, setPaymentFormState] = useState<{
     amount: string;
+    referenceId: string;
     isProcessing: boolean;
   }>({
     amount: '',
+    referenceId: '',
     isProcessing: false,
   });
   // Fee head the user clicked "Pay" against in the Fee Structure section. When set, the
@@ -631,6 +706,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     if (leadId && leadId !== 'new') return String(leadId);
     return '';
   }, [joiningRecord?._id, leadId]);
+
+  useEffect(() => {
+    setApplicationWizardStep(1);
+  }, [leadId, joiningRecord?._id, status]);
 
   const { data: registrationFormsResponse, isError: registrationFormsError } = useQuery({
     queryKey: ['registration-form', 'student-db', 'forms', 'joining'],
@@ -967,16 +1046,23 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const handleCollegeSelect = useCallback(
     (collegeId: string) => {
-      const selected = colleges.find((item) => item.id === collegeId);
       setRegistrationExtras((prev) => ({
         ...prev,
-        college_id: collegeId || undefined,
-        collegeId: collegeId || undefined,
-        school_or_college_id: collegeId || undefined,
-        schoolOrCollegeId: collegeId || undefined,
-        school_or_college_name: selected?.name || '',
-        college: selected?.name || '',
+        ...collegeRegistrationPatchFromId(collegeId, colleges),
       }));
+      // Changing college invalidates course/branch tied to another college_id.
+      if (collegeId) {
+        setFormState((prev) => ({
+          ...prev,
+          courseInfo: {
+            ...prev.courseInfo,
+            courseId: undefined,
+            course: '',
+            branchId: undefined,
+            branch: '',
+          },
+        }));
+      }
     },
     [colleges]
   );
@@ -1197,7 +1283,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       );
       if (rep != null) (next as Record<string, unknown>)[fn] = rep;
     }
-    setRegistrationExtras(next);
+    setRegistrationExtras((prev) => mergePreservedCollegeRegistrationExtras(next, prev));
   }, [
     joiningRecord?._id,
     joiningRecord?.updatedAt,
@@ -2021,6 +2107,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       return () => clearHeaderContent();
     }
 
+    const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
+    const workflowAdmissionId = admissionRecord?._id;
+
     setHeaderContent(
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2032,7 +2121,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             {lead.enquiryNumber ? `· Enquiry #${lead.enquiryNumber}` : ''}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <AdmissionWorkflowStepButtons
+            activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 3 : 1}
+            surface="joining-edit"
+            joiningId={workflowJoiningId}
+            admissionId={workflowAdmissionId}
+            joiningStatus={status}
+            onJoiningWizardStepSelect={useWizard ? handleJoiningWizardStepSelect : undefined}
+          />
           <Button variant="outline" onClick={() => router.push('/superadmin/joining')}>
             Back to Joining Desk
           </Button>
@@ -2044,7 +2141,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     );
 
     return () => clearHeaderContent();
-  }, [isPublicEdit, lead, router, setHeaderContent, clearHeaderContent]);
+  }, [
+    isPublicEdit,
+    lead,
+    router,
+    setHeaderContent,
+    clearHeaderContent,
+    status,
+    publicLinkRouteKey,
+    joiningRecord?._id,
+    effectiveAdminLeadId,
+    admissionRecord?._id,
+    applicationWizardStep,
+    useWizard,
+    handleJoiningWizardStepSelect,
+  ]);
 
   useEffect(() => {
     if (isPublicEdit) return;
@@ -2328,6 +2439,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       course?.course?.level != null && String(course.course.level).trim()
         ? String(course.course.level).trim()
         : '';
+    const rowCollegeId =
+      course?.course?.collegeId !== undefined && course?.course?.collegeId !== null
+        ? String(course.course.collegeId).trim()
+        : '';
+
     setFormState((prev) => ({
       ...prev,
       courseInfo: {
@@ -2336,13 +2452,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         course: course?.course?.name || '',
         branchId: undefined,
         branch: '',
-        // Only overwrite an empty program level — never clobber a value the
-        // user explicitly picked. If the picked course doesn't carry a level
-        // in the secondary DB, leave the existing selection alone.
         programLevel:
           (prev.courseInfo.programLevel || '').trim() || inferredLevel || prev.courseInfo.programLevel,
       },
     }));
+
+    if (rowCollegeId) {
+      setRegistrationExtras((prev) => ({
+        ...prev,
+        ...collegeRegistrationPatchFromId(rowCollegeId, colleges),
+      }));
+    }
   };
 
   const handleManagedBranchSelect = (branchId: string) => {
@@ -2434,6 +2554,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const resetPaymentForm = () => {
     setPaymentFormState({
       amount: '',
+      referenceId: '',
       isProcessing: false,
     });
     setSelectedFeeHead(null);
@@ -2457,6 +2578,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     setPaymentFormState({
       amount:
         isAdditionalFeeMode || normalizedValue <= 0 ? '' : String(normalizedValue),
+      referenceId: '',
       isProcessing: false,
     });
     setShouldPromptPayment(false);
@@ -2498,6 +2620,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         : rowAmount;
     setPaymentFormState({
       amount: cappedAmount > 0 ? String(Number(cappedAmount.toFixed(2))) : '',
+      referenceId: '',
       isProcessing: false,
     });
     setShouldPromptPayment(false);
@@ -2528,6 +2651,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         currency: 'INR',
         isAdditionalFee: isAdditionalFeeMode || undefined,
         // Tag transaction with the selected fee head (Fee Management DB) when present.
+        ...(paymentFormState.referenceId.trim()
+          ? { referenceId: paymentFormState.referenceId.trim() }
+          : {}),
         ...(selectedFeeHead && {
           feeHead: selectedFeeHead.feeHeadId,
           feeHeadName: selectedFeeHead.feeHeadName,
@@ -3346,6 +3472,33 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
   const admissionNumberDisplay =
     meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
+  /** Step 2 payment UI: available once joining is saved (draft, pending, or approved). */
+  const showStepTwoPaymentUi =
+    !isPublicEdit && Boolean(joiningRecord?._id) && canAccessPaymentsModule;
+  const paymentReceiptPrintDetails = useMemo(
+    () =>
+      buildPaymentReceiptDetailsFromForm({
+        formState,
+        lead,
+        admissionNumber: admissionNumberDisplay || meta.admissionNumber,
+        amount: paymentFormState.amount,
+        mode: openPaymentMode === 'online' ? 'online' : 'cash',
+        transactionId: paymentFormState.referenceId,
+        feeHeadLabel: selectedFeeHead?.label,
+        isAdditionalFee: isAdditionalFeeMode,
+      }),
+    [
+      formState,
+      lead,
+      admissionNumberDisplay,
+      meta.admissionNumber,
+      paymentFormState.amount,
+      paymentFormState.referenceId,
+      openPaymentMode,
+      selectedFeeHead?.label,
+      isAdditionalFeeMode,
+    ]
+  );
   const isBusy = isLoading || (isAdmissionEditable && isLoadingAdmission && !admissionRecord);
 
   const handleSaveAdmissionRecord = () => {
@@ -3417,18 +3570,238 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const statusLabel = status.replace('_', ' ');
 
+  const stepOneCourseHint =
+    !isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval')
+      ? 'College, quota, managed course, and managed branch are required — set all of them under Course & Quota before submitting or approving.'
+      : undefined;
+
+  const canSaveJoiningDraft =
+    canWriteJoining &&
+    (isPublicEdit ? status === 'draft' : status === 'draft' || status === 'pending_approval');
+
+  const workflowSurface = isPublicEdit ? 'joining-public' : 'joining-edit';
+  const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
+
+  const saveStepTwoMutation = useMutation({
+    mutationFn: async () => {
+      if (!workflowJoiningId) {
+        throw new Error('Save the joining form first');
+      }
+      const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
+      const registrationFormData =
+        derivedCertificationStatus !== null
+          ? {
+              ...stripped,
+              certification_status: derivedCertificationStatus,
+              certificates_status: derivedCertificationStatus,
+            }
+          : stripped;
+      if (status === 'approved') {
+        return joiningAPI.patchStepTwo(workflowJoiningId, {
+          registrationFormData,
+          studentFeeDetails: {
+            batch: studentFeeDetails.batch,
+            lines: studentFeeDetails.lines || [],
+          },
+        });
+      }
+      return joiningAPI.saveDraft(leadId as string, {
+        ...payloadForSave,
+        ...(joiningRecord?._id ? { _id: joiningRecord._id } : {}),
+      });
+    },
+    onSuccess: async () => {
+      showToast.success(
+        status === 'approved'
+          ? 'Certificate checklist and admission fee lines saved'
+          : 'Admission fee workflow saved as draft'
+      );
+      await refetch();
+      if (status === 'approved' && admissionRecord?._id) {
+        await queryClient.invalidateQueries({ queryKey: ['admission', admissionRecord._id] });
+      }
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      showToast.error(error.response?.data?.message || 'Failed to save admission fee workflow');
+    },
+  });
+
+  const renderWizardStepFooter = (panelStep: AdmissionWorkflowStep) => {
+    if (!useWizard || applicationWizardStep !== panelStep) return null;
+
+    const stickyClass = isPublicEdit
+      ? '-mx-3 border-x-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:mx-0'
+      : undefined;
+
+    if (panelStep === 3) {
+      return (
+        <WorkflowStickyActionBar
+          id="joining-wizard-step-3-actions"
+          stepLabel="Step 3 — Fee configuration & submit"
+          hint={
+            status === 'approved'
+              ? 'Collect payments against fee heads from the Fee Management database. Save admission updates before leaving.'
+              : stepOneCourseHint ||
+                'Review configured fee heads, then save or submit the application for approval.'
+          }
+          className={stickyClass}
+        >
+          <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(2)} />
+          {canSaveJoiningDraft && (
+            <Button
+              variant="secondary"
+              disabled={isSaving}
+              onClick={() => {
+                if (!canWriteJoining) {
+                  showToast.error('You have read-only access to the joining desk');
+                  return;
+                }
+                saveDraftMutation.mutate();
+              }}
+            >
+              {isSaving ? 'Saving…' : 'Save Draft'}
+            </Button>
+          )}
+          {status === 'draft' && (
+            <Button
+              variant="primary"
+              className={isPublicEdit ? 'w-full sm:w-auto' : undefined}
+              disabled={
+                !canSubmit || isSubmitting || (!isPublicEdit && !hasManagedCourseAndBranch)
+              }
+              onClick={() => {
+                if (!canWriteJoining) {
+                  showToast.error('You have read-only access to the joining desk');
+                  return;
+                }
+                if (!isPublicEdit && !hasManagedCourseAndBranch) {
+                  showToast.error(
+                    'Select college, quota, managed course, and managed branch before submitting for approval.'
+                  );
+                  return;
+                }
+                submitMutation.mutate();
+              }}
+            >
+              {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
+            </Button>
+          )}
+          {canApprove && (
+            <Button
+              variant="primary"
+              disabled={isApproving || !hasManagedCourseAndBranch}
+              onClick={() => {
+                if (!canWriteJoining) {
+                  showToast.error('You have read-only access to the joining desk');
+                  return;
+                }
+                if (!hasManagedCourseAndBranch) {
+                  showToast.error(
+                    'Select college, quota, managed course, and managed branch before approving.'
+                  );
+                  return;
+                }
+                approveMutation.mutate();
+              }}
+            >
+              {isApproving ? 'Approving…' : 'Approve'}
+            </Button>
+          )}
+          {isAdmissionEditable && (
+            <Button
+              variant="primary"
+              disabled={isUpdatingAdmission || isBusy || !canWriteJoining || !hasManagedCourseAndBranch}
+              onClick={handleSaveAdmissionRecord}
+            >
+              {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
+            </Button>
+          )}
+        </WorkflowStickyActionBar>
+      );
+    }
+
+    return (
+      <WorkflowStickyActionBar
+        id={`joining-wizard-step-${panelStep}-actions`}
+        stepLabel={
+          panelStep === 1
+            ? 'Step 1 — Online application (sections 1–8)'
+            : 'Step 2 — Admission fee workflow'
+        }
+        hint={panelStep === 1 ? stepOneCourseHint : undefined}
+        className={stickyClass}
+      >
+        {panelStep > 1 ? (
+          <WorkflowPreviousStepButton
+            onClick={() => advanceApplicationWizard((panelStep - 1) as AdmissionWorkflowStep)}
+          />
+        ) : null}
+        {panelStep === 2 && canWriteJoining && !isPublicEdit ? (
+          <Button
+            variant="secondary"
+            disabled={saveStepTwoMutation.isPending}
+            onClick={() => saveStepTwoMutation.mutate()}
+          >
+            {saveStepTwoMutation.isPending ? 'Saving…' : 'Save Draft'}
+          </Button>
+        ) : null}
+        <WorkflowNextStepButton
+          fromStep={panelStep}
+          surface={workflowSurface}
+          joiningId={workflowJoiningId}
+          admissionId={admissionRecord?._id}
+          onWizardAdvance={() => advanceApplicationWizard((panelStep + 1) as AdmissionWorkflowStep)}
+        />
+      </WorkflowStickyActionBar>
+    );
+  };
+
   return (
     <div
       className={`w-full space-y-8 px-3 pb-20 pt-4 sm:space-y-10 sm:px-6 sm:pb-16 sm:pt-6 lg:px-8 ${
         isPublicEdit ? 'mx-auto max-w-2xl' : ''
       }`}
     >
-      {isPublicEdit && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-950 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100">
-          <p className="font-semibold">Step 1 — Online application</p>
-          <p className="mt-1 text-xs leading-relaxed text-blue-900/90 dark:text-blue-200/90">
-            Complete and submit this form. Admissions will verify certificates and fees after your
-            application is approved.
+      {isPublicEdit ? (
+        <>
+          <AdmissionWorkflowStepBanner step={applicationWizardStep} />
+          {usePublicWizard ? (
+            <AdmissionWorkflowOverview
+              activeStep={applicationWizardStep}
+              surface="joining-public"
+              joiningId={publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId}
+              joiningStatus={status}
+              onJoiningWizardStepSelect={handleJoiningWizardStepSelect}
+            />
+          ) : null}
+        </>
+      ) : (
+        <AdmissionWorkflowOverview
+          activeStep={useWizard ? applicationWizardStep : showAdminPostAdmissionStep3 ? 3 : 1}
+          surface="joining-edit"
+          joiningId={publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId}
+          admissionId={admissionRecord?._id}
+          joiningStatus={status}
+          onJoiningWizardStepSelect={useJoiningPageWizard ? handleJoiningWizardStepSelect : undefined}
+        />
+      )}
+      {!isPublicEdit && status === 'pending_approval' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+          <p className="font-semibold">Awaiting approval (Step 1)</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            Save any edits with <span className="font-medium">Save Draft</span>, then use{' '}
+            <span className="font-medium">Approve</span> below the form to unlock Steps 2 and 3.{' '}
+            <button
+              type="button"
+              className="font-semibold text-amber-900 underline underline-offset-2 dark:text-amber-100"
+              onClick={() =>
+                scrollToWorkflowAnchor(
+                  useWizard ? 'joining-wizard-step-3' : 'joining-step-one-actions'
+                )
+              }
+            >
+              Jump to actions
+            </button>
           </p>
         </div>
       )}
@@ -3567,9 +3940,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             </p>
           </div>
         ) : (
-          <div className="space-y-10">
+          <div id="joining-step-one" className="scroll-mt-24 space-y-10">
+            <div
+              id="joining-wizard-step-1"
+              className={cn(
+                'space-y-10',
+                useWizard && applicationWizardStep !== 1 && 'hidden'
+              )}
+            >
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+              <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                {useWizard ? 'Step 1 — Online application (sections 1–8)' : 'Step 1 — Online application'}
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
                 Course & Quota
               </h2>
               <p className="text-sm text-gray-500">
@@ -4622,7 +5005,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     9. Documents Checklist
                   </h2>
                   <p className="text-sm text-gray-500">
-                    {showAdminPostAdmissionStep3 ? (
+                    {useWizard ? (
+                      <>
+                        Mark each document as received. Complete the program-level{' '}
+                        <span className="font-medium">Certificate information checklist</span> in{' '}
+                        <button
+                          type="button"
+                          className="font-semibold text-blue-700 underline underline-offset-2 dark:text-blue-300"
+                          onClick={() => handleJoiningWizardStepSelect(2)}
+                        >
+                          Step 2 — Admission fee workflow
+                        </button>
+                        .
+                      </>
+                    ) : showAdminPostAdmissionStep3 ? (
                       <>
                         Mark each document as received. The program-level{' '}
                         <span className="font-medium">Certificate information checklist</span> (from student database
@@ -4707,36 +5103,171 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
             </section>
 
-            {showAdminPostAdmissionStep3 ? (
+            {renderWizardStepFooter(1)}
+            </div>
+
+            <div
+              id="joining-wizard-step-2"
+              className={cn(
+                'space-y-10',
+                useWizard && applicationWizardStep !== 2 && 'hidden'
+              )}
+            >
+              <section
+                className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                      Step 2 — Admission fee workflow
+                    </p>
+                    <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Certificate checklist &amp; fee lines
+                    </h2>
+                    <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+                      Program certificate rules from student database settings. Admission fees below come from{' '}
+                      <span className="font-medium">Payments → Fee Configuration</span> (per course &amp; branch), not
+                      the Fee Management database.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!isPublicEdit && programLevelTrimmed ? (
+                      <PrintableCertificateChecklist
+                        certificateGuidance={certificateGuidance}
+                        certificateChecklistParsed={certificateChecklistParsed}
+                        programLevel={programLevelTrimmed}
+                        certificationStatus={derivedCertificationStatus}
+                        studentName={formState.studentInfo.name || lead?.name}
+                        fatherName={formState.parents.father.name}
+                        course={formState.courseInfo.course}
+                        branch={formState.courseInfo.branch}
+                        enquiryNumber={lead?.enquiryNumber}
+                      />
+                    ) : null}
+                    {canWriteJoining && !isPublicEdit ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        disabled={saveStepTwoMutation.isPending || !programLevelTrimmed}
+                        onClick={() => saveStepTwoMutation.mutate()}
+                      >
+                        {saveStepTwoMutation.isPending ? 'Saving…' : 'Save certificate & fee lines'}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {!isPublicEdit && programLevelTrimmed ? (
+                  <CertificateInformationChecklistBlock
+                    variant="admission-step-two"
+                    radioNameSuffix="-joining-wizard-step2"
+                    derivedCertificationStatus={derivedCertificationStatus}
+                    programLevelTrimmed={programLevelTrimmed}
+                    isLoadingCertificateGuidance={isLoadingCertificateGuidance}
+                    certificateGuidance={certificateGuidance}
+                    certificateChecklistParsed={certificateChecklistParsed}
+                    onChecklistOptionChange={updateCertificateChecklistOption}
+                    onChecklistStatusChange={updateCertificateChecklistStatus}
+                  />
+                ) : (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                    Select a program level under Course &amp; Quota in Step 1 to load certificate rules.
+                  </p>
+                )}
+
+                {showStepTwoPaymentUi ? (
+                  <JoiningStepTwoPaymentsPanel
+                    courseName={formState.courseInfo.course}
+                    branchName={formState.courseInfo.branch}
+                    quota={formState.courseInfo.quota}
+                    paymentSummary={paymentSummary}
+                    transactions={transactions}
+                    isLoadingTransactions={isLoadingTransactions}
+                    formatCurrency={formatCurrency}
+                    formatDateTime={formatDateTime}
+                    baseFeeTarget={baseFeeTarget}
+                    baseFeePaid={baseFeePaid}
+                    outstandingBalance={outstandingBalance}
+                    additionalFeePaid={additionalFeePaid}
+                    totalAmountPaid={totalAmountPaid}
+                    configuredFee={configuredFee}
+                    paymentStatusBadgeClass={paymentStatusBadgeClass}
+                    paymentStatusLabel={paymentStatusLabel}
+                    cashfreeConfig={cashfreeConfig}
+                    canAccessPaymentsModule={canAccessPaymentsModule}
+                    canWritePayments={canWritePayments}
+                    canUseCashfree={canUseCashfree}
+                    paymentActionsDisabled={paymentActionsDisabled}
+                    isAdditionalFeeMode={isAdditionalFeeMode}
+                    shouldShowAdditionalFeeButton={shouldShowAdditionalFeeButton}
+                    isProcessingPayment={paymentFormState.isProcessing}
+                    onOpenCash={() => openPaymentModal('cash')}
+                    onOpenOnline={() => openPaymentModal('online')}
+                    onToggleAdditionalFeeMode={() => {
+                      if (paymentFormState.isProcessing) return;
+                      setIsAdditionalFeeMode((prev) => {
+                        if (prev) resetPaymentForm();
+                        return !prev;
+                      });
+                    }}
+                  />
+                ) : !isPublicEdit && !joiningRecord?._id ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                    Save the joining form with <span className="font-semibold">Save Draft</span> on Step 1 or Step 3
+                    first — then you can record cash and online payments here.
+                  </p>
+                ) : !isPublicEdit && !canAccessPaymentsModule ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                    Your role does not have access to the Payments module. Ask an admin to grant Payments
+                    permission to record fees.
+                  </p>
+                ) : null}
+              </section>
+              {renderWizardStepFooter(2)}
+            </div>
+
+            <div
+              id="joining-wizard-step-3"
+              className={cn(
+                'space-y-10',
+                useWizard && applicationWizardStep !== 3 && 'hidden'
+              )}
+            >
+            {(useWizard ? applicationWizardStep === 3 : showAdminPostAdmissionStep3) ? (
               <section
                 id="joining-post-admission-payments"
                 className="space-y-8 rounded-2xl border-2 border-emerald-200/80 bg-gradient-to-b from-emerald-50/40 to-white/95 p-6 shadow-lg shadow-emerald-100/30 backdrop-blur dark:border-emerald-900/50 dark:from-emerald-950/20 dark:to-slate-900/70 dark:shadow-none"
               >
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                    After admission
+                    Step 3 — Fee configuration &amp; payments
                   </p>
                   <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    Verification summary &amp; payments
+                    {status === 'approved' ? 'Post-admission desk' : 'Fee preview & submit'}
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-                    Admission is confirmed. Review the summary below, then use{' '}
-                    <span className="font-semibold">Update Admission</span> for any remaining admission fields. Certificate
-                    checklist and per-head fee line edits are on the{' '}
-                    {admissionRecord?._id ? (
-                      <Link
-                        href={`/superadmin/admission/${admissionRecord._id}/detail#admission-step-two`}
-                        className="font-semibold text-emerald-800 underline underline-offset-2 dark:text-emerald-200"
-                      >
-                        admission record
-                      </Link>
+                    {status === 'approved' ? (
+                      <>
+                        Review fee configuration and payment status. Collect fees on{' '}
+                        <button
+                          type="button"
+                          className="font-semibold text-emerald-700 underline underline-offset-2 dark:text-emerald-300"
+                          onClick={() => handleJoiningWizardStepSelect(2)}
+                        >
+                          Step 2 — Admission fee workflow
+                        </button>
+                        .
+                      </>
                     ) : (
-                      <span className="font-semibold">admission record</span>
+                      <>
+                        Review configured fee heads for this course and branch. Save draft or submit for approval when
+                        Steps 1 and 2 are complete.
+                      </>
                     )}
-                    ; record cash or online payments in this workspace using the section below.
                   </p>
                 </div>
 
+                {status === 'approved' ? (
                 <div className="rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     Recorded application summary
@@ -4868,244 +5399,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     </div>
                   </dl>
                 </div>
+                ) : null}
 
-                <section
-                  id="payment-panel"
-                  className={`rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur transition dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${shouldPromptPayment
-                    ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
-                    : ''
-                    }`}
-                >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                      Payments &amp; Transactions
-                    </h2>
-                    <p className="text-sm text-gray-500 dark:text-slate-400">
-                      Collect admission fees in parts or full. Every transaction updates the balance and is
-                      logged for audit.
-                    </p>
-                    {paymentSummary?.lastPaymentAt && (
-                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        Last payment updated on{' '}
-                        <span className="font-semibold">
-                          {formatDateTime(paymentSummary.lastPaymentAt)}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-                  {canAccessPaymentsModule ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="primary"
-                        onClick={() => openPaymentModal('cash')}
-                        disabled={paymentActionsDisabled}
-                      >
-                        {isAdditionalFeeMode ? 'Record Additional Cash Payment' : 'Record Cash Payment'}
-                      </Button>
-                      <Button
-                        variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                        onClick={() => openPaymentModal('online')}
-                        disabled={!canUseCashfree || paymentActionsDisabled}
-                      >
-                        {isAdditionalFeeMode
-                          ? 'Collect Additional Fee via Cashfree'
-                          : 'Collect via Cashfree UPI / QR'}
-                      </Button>
-                      {shouldShowAdditionalFeeButton && (
-                        <Button
-                          variant={isAdditionalFeeMode ? 'secondary' : 'outline'}
-                          onClick={() => {
-                            if (paymentFormState.isProcessing) return;
-                            setIsAdditionalFeeMode((prev) => {
-                              if (prev) {
-                                resetPaymentForm();
-                              }
-                              return !prev;
-                            });
-                          }}
-                          disabled={paymentFormState.isProcessing || !canWritePayments}
-                        >
-                          {isAdditionalFeeMode ? 'Cancel Additional Fee' : 'Additional Fee'}
-                        </Button>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-                      Payments module is read-only for your role. Ask a Super Admin to grant the
-                      <span className="font-semibold"> Payments </span> permission to record fees.
-                    </p>
-                  )}
-                  {isAdditionalFeeMode && (
-                    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                      Additional fee mode active
-                    </div>
-                  )}
-                </div>
-
-                {!canUseCashfree && (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/40 dark:text-amber-200">
-                    Cashfree credentials are not configured or inactive. Update them under Payment Settings
-                    to enable online collections.
-                  </div>
-                )}
-
-                <div className="mt-6 grid gap-6 lg:grid-cols-2">
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Total Fee
-                        </span>
-                        <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                          {formatCurrency(baseFeeTarget)}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Paid Fee
-                        </span>
-                        <span className="text-base font-semibold text-emerald-600 dark:text-emerald-300">
-                          {formatCurrency(baseFeePaid)}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Balance Fee
-                        </span>
-                        <span className="text-base font-semibold text-blue-600 dark:text-blue-300">
-                          {formatCurrency(outstandingBalance)}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Additional Fee
-                        </span>
-                        <span className="text-base font-semibold text-amber-600 dark:text-amber-300">
-                          {formatCurrency(additionalFeePaid)}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Total Amount Paid
-                        </span>
-                        <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                          {formatCurrency(totalAmountPaid)}
-                        </span>
-                      </div>
-                      <div className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-semibold uppercase tracking-wide">
-                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ${paymentStatusBadgeClass}`}>
-                          <span className="inline-block h-2 w-2 rounded-full bg-current opacity-75" />
-                          {paymentStatusLabel}
-                        </span>
-                        {cashfreeConfig && (
-                          <span className="text-[10px] uppercase text-slate-400 dark:text-slate-500">
-                            Cashfree mode: production
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {configuredFee !== null && outstandingBalance > configuredFee && (
-                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-600 shadow-sm dark:border-rose-900/60 dark:bg-rose-900/40 dark:text-rose-200">
-                        Awaiting fee configuration update. Balance exceeds configured amount—verify course
-                        selection and fee setup.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      Payment Activity
-                    </h3>
-                    {isLoadingTransactions ? (
-                      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                        Loading transactions…
-                      </p>
-                    ) : transactions.length === 0 ? (
-                      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                        No payments recorded yet. Collect fees using the actions above.
-                      </p>
-                    ) : (
-                      <ul className="mt-4 space-y-3">
-                        {transactions.map((transaction) => {
-                          const modeLabel =
-                            transaction.mode === 'cash'
-                              ? 'Cash'
-                              : transaction.mode === 'online'
-                                ? 'Cashfree'
-                                : 'UPI QR';
-                          const statusClass =
-                            transaction.status === 'success'
-                              ? 'text-emerald-600 dark:text-emerald-300'
-                              : transaction.status === 'failed'
-                                ? 'text-rose-600 dark:text-rose-300'
-                                : 'text-amber-600 dark:text-amber-300';
-                          const collectorName =
-                            typeof transaction.collectedBy === 'object'
-                              ? transaction.collectedBy?.name
-                              : undefined;
-                          return (
-                            <li
-                              key={transaction._id}
-                              className="rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm dark:border-slate-700"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-semibold text-slate-800 dark:text-slate-100">
-                                    {modeLabel}
-                                  </span>
-                                  {transaction.isAdditionalFee && (
-                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                                      Additional
-                                    </span>
-                                  )}
-                                  {(transaction.feeHeadName || transaction.feeHeadCode) && (
-                                    <span
-                                      className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
-                                      title={
-                                        transaction.feeStructureYear || transaction.feeStructureBatch
-                                          ? `Batch ${transaction.feeStructureBatch || ''} ${
-                                              transaction.feeStructureYear
-                                                ? `· Year ${transaction.feeStructureYear}`
-                                                : ''
-                                            }`.trim()
-                                          : 'Tagged fee head'
-                                      }
-                                    >
-                                      {transaction.feeHeadName || transaction.feeHeadCode}
-                                    </span>
-                                  )}
-                                </div>
-                                <span className={`text-xs font-semibold uppercase ${statusClass}`}>
-                                  {transaction.status}
-                                </span>
-                              </div>
-                              <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                                <span>{formatDateTime(transaction.processedAt || transaction.createdAt)}</span>
-                                <span>{formatCurrency(transaction.amount)}</span>
-                              </div>
-                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                {collectorName && (
-                                  <span>
-                                    Collected by <span className="font-semibold">{collectorName}</span>
-                                  </span>
-                                )}
-                                {transaction.referenceId && (
-                                  <span className="ml-2">
-                                    Ref: <span className="font-mono">{transaction.referenceId}</span>
-                                  </span>
-                                )}
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Fee heads (read-only overrides) — payments use row actions; edit amounts on the admission record. */}
               <FeeStructureSection
                 course={formState.courseInfo.course}
                 branch={formState.courseInfo.branch}
@@ -5114,112 +5409,23 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   (lead as { academicYear?: number | string } | undefined)?.academicYear ??
                   null
                 }
-                description="Live from the Fee Management database. Pick a batch, then use Cash or Cashfree on any fee head — the payment is tagged with that head and shows up above. Edit per-head amounts on the admission record."
-                onSelectFeeHead={canWritePayments ? handleSelectFeeHead : undefined}
+                title="Fee configuration (Fee Management database)"
+                description={
+                  status === 'approved'
+                    ? 'Read-only fee configuration from the Fee Management database. Record payments on Step 2.'
+                    : 'Preview of fee heads that will apply once course, branch, and quota are set in Step 1. Payments unlock after approval.'
+                }
+                onSelectFeeHead={undefined}
                 activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
                 canUseCashfree={canUseCashfree}
                 feeDetailsEditable={false}
                 studentFeeDetails={studentFeeDetails}
               />
+
+              {renderWizardStepFooter(3)}
             </section>
             ) : null}
-
-            {/* Action Buttons at Bottom - Always visible for draft/pending status */}
-            {!isAdmissionEditable && status !== 'approved' && (
-              <div
-                className={`sticky bottom-0 z-10 rounded-2xl border border-white/60 bg-white/95 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none ${
-                  isPublicEdit
-                    ? '-mx-3 border-x-0 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:mx-0 sm:border sm:p-6'
-                    : 'p-6'
-                }`}
-              >
-                {!isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval') && (
-                  <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                    <strong>College</strong>, <strong>quota</strong>, managed <strong>course</strong>, and managed{' '}
-                    <strong>branch</strong> are required — set all of them under <strong>Course &amp; Quota</strong> before
-                    submitting or approving.
-                  </p>
-                )}
-                <div
-                  className={`flex items-center justify-end gap-3 ${
-                    isPublicEdit ? 'flex-col sm:flex-row' : 'flex-wrap'
-                  }`}
-                >
-                  {status === 'draft' && !isPublicEdit && (
-                    <Button
-                      variant="secondary"
-                      disabled={isSaving || !canWriteJoining}
-                      onClick={() => {
-                        if (!canWriteJoining) {
-                          showToast.error('You have read-only access to the joining desk');
-                          return;
-                        }
-                        saveDraftMutation.mutate();
-                      }}
-                    >
-                      {isSaving ? 'Saving…' : 'Save Draft'}
-                    </Button>
-                  )}
-                  {status === 'draft' && (
-                    <Button
-                      variant="primary"
-                      className={isPublicEdit ? 'w-full sm:w-auto' : undefined}
-                      disabled={
-                        !canSubmit ||
-                        isSubmitting ||
-                        (!isPublicEdit && !hasManagedCourseAndBranch)
-                      }
-                      title={
-                        isPublicEdit || hasManagedCourseAndBranch
-                          ? undefined
-                          : 'Select college, quota, managed course, and managed branch under Course & Quota first.'
-                      }
-                      onClick={() => {
-                        if (!canWriteJoining) {
-                          showToast.error('You have read-only access to the joining desk');
-                          return;
-                        }
-                        if (!isPublicEdit && !hasManagedCourseAndBranch) {
-                          showToast.error(
-                            'Select college, quota, managed course, and managed branch before submitting for approval.'
-                          );
-                          return;
-                        }
-                        submitMutation.mutate();
-                      }}
-                    >
-                      {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
-                    </Button>
-                  )}
-                  {canApprove && (
-                    <Button
-                      variant="primary"
-                      disabled={isApproving || !hasManagedCourseAndBranch}
-                      title={
-                        hasManagedCourseAndBranch
-                          ? undefined
-                          : 'Select college, quota, managed course, and managed branch under Course & Quota before approving.'
-                      }
-                      onClick={() => {
-                        if (!canWriteJoining) {
-                          showToast.error('You have read-only access to the joining desk');
-                          return;
-                        }
-                        if (!hasManagedCourseAndBranch) {
-                          showToast.error(
-                            'Select college, quota, managed course, and managed branch before approving.'
-                          );
-                          return;
-                        }
-                        approveMutation.mutate();
-                      }}
-                    >
-                      {isApproving ? 'Approving…' : 'Approve'}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
       </div>
@@ -5258,6 +5464,43 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             </div>
 
             <div className="mt-5 space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/90 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Payment details (auto-filled)
+                </p>
+                <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs text-slate-500">Student</dt>
+                    <dd className="font-medium text-slate-900 dark:text-slate-100">
+                      {paymentReceiptPrintDetails.studentName}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Father</dt>
+                    <dd className="font-medium text-slate-900 dark:text-slate-100">
+                      {paymentReceiptPrintDetails.fatherName}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Course</dt>
+                    <dd className="font-medium text-slate-900 dark:text-slate-100">
+                      {paymentReceiptPrintDetails.course}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Branch</dt>
+                    <dd className="font-medium text-slate-900 dark:text-slate-100">
+                      {paymentReceiptPrintDetails.branch}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs text-slate-500">Date &amp; time</dt>
+                    <dd className="font-medium text-slate-900 dark:text-slate-100">
+                      {paymentReceiptPrintDetails.collectedAt}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
               {isAdditionalFeeMode && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-200">
                   This transaction is marked as an additional fee. It will be tracked separately from the admission balance.
@@ -5312,7 +5555,31 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   disabled={paymentFormState.isProcessing}
                 />
               </div>
-
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Transaction / reference ID
+                  {openPaymentMode === 'cash' ? (
+                    <span className="ml-1 font-normal text-slate-500">(receipt no., UTR, etc.)</span>
+                  ) : null}
+                </label>
+                <input
+                  type="text"
+                  value={paymentFormState.referenceId}
+                  onChange={(event) =>
+                    setPaymentFormState((prev) => ({
+                      ...prev,
+                      referenceId: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  placeholder={
+                    openPaymentMode === 'cash'
+                      ? 'Enter receipt or reference number'
+                      : 'Optional — filled after Cashfree payment'
+                  }
+                  disabled={paymentFormState.isProcessing}
+                />
+              </div>
 
               {openPaymentMode === 'online' && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-900/60 dark:bg-blue-900/30 dark:text-blue-200">
@@ -5322,7 +5589,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               )}
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <PrintablePaymentReceipt
+                details={paymentReceiptPrintDetails}
+                printButtonLabel="Print payment slip"
+              />
+              <div className="flex flex-wrap items-center justify-end gap-3">
               <Button
                 variant="secondary"
                 onClick={closePaymentModal}
@@ -5341,6 +5613,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     ? 'Record Payment'
                     : 'Collect Payment'}
               </Button>
+              </div>
             </div>
           </div>
         </div>
