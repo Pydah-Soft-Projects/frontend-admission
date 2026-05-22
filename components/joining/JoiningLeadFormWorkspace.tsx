@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { REFERENCE_NAMES_QUERY_KEY } from '@/components/admission/ReferenceUserSelect';
+import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect';
 import {
   joiningAPI,
   admissionAPI,
@@ -44,6 +44,7 @@ import {
 } from '@/lib/certificateChecklistEntry';
 import { coerceJoiningRegistrationField } from '@/lib/joiningRegistrationFieldCoerce';
 import { mergeLeadIntoJoiningFormState, type LeadLike } from '@/lib/joiningLeadPrefill';
+import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import {
   computeScholarshipRegistrationPatches,
   scholarshipIntentForCourseQuota,
@@ -383,26 +384,6 @@ const defaultDocuments: JoiningDocuments = {
   joiningReport: 'pending',
   bankPassBook: 'pending',
   rationCard: 'pending',
-};
-
-/** Reference 1 (Excel / CRM) — stored on admission.joining.lead_data.reference1 and leads.dynamic_fields.reference1 */
-const resolveReference1FromRecord = (
-  admission?: Admission | null,
-  joining?: Joining | null,
-  lead?: LeadLike | null
-): string => {
-  const admLd = admission?.leadData as Record<string, unknown> | undefined;
-  const fromAdm = String(admLd?.reference1 ?? admission?.referenceName ?? '').trim();
-  if (fromAdm) return fromAdm;
-  const joinLd = joining?.leadData as Record<string, unknown> | undefined;
-  const fromJoin = String(joinLd?.reference1 ?? '').trim();
-  if (fromJoin) return fromJoin;
-  const leadAny = lead as Record<string, unknown> | undefined;
-  const dyn = leadAny?.dynamicFields ?? leadAny?.dynamic_fields;
-  if (dyn && typeof dyn === 'object') {
-    return String((dyn as Record<string, unknown>).reference1 ?? '').trim();
-  }
-  return '';
 };
 
 const buildInitialState = (joining?: Joining): JoiningFormState => {
@@ -2464,7 +2445,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       if (joining.status !== 'approved') {
         const base = buildInitialState(joining);
         setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
-        setReference1(resolveReference1FromRecord(null, joining, lead as LeadLike));
+        setReference1(resolveJoiningReference1(null, joining, lead as LeadLike));
       }
     }
   }, [data, lead]);
@@ -2519,7 +2500,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         record.studentFeeDetails ??
         (leadData?._joiningStudentFeeDetails as JoiningStudentFeeDetails | undefined);
       setStudentFeeDetails(normalizeStudentFeeDetailsFromRecord(sfd));
-      setReference1(resolveReference1FromRecord(record, joiningRecord ?? undefined, lead as LeadLike));
+      setReference1(resolveJoiningReference1(record, joiningRecord ?? undefined, lead as LeadLike));
     },
     [lead, joiningRecord]
   );
@@ -3357,7 +3338,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       educationHistory: formState.educationHistory,
       siblings: formState.siblings,
       documents: formState.documents,
-      reference1: reference1.trim(),
       ...(isApprovedAdmission
         ? {}
         : {
@@ -3390,7 +3370,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     isPublicEdit,
     studentFeeDetails,
     status,
-    reference1,
   ]);
 
   const saveDraftMutation = useMutation({
@@ -3407,9 +3386,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     },
     onSuccess: (response: any) => {
       showToast.success('Joining form saved as draft');
-      if (reference1.trim()) {
-        void queryClient.invalidateQueries({ queryKey: [...REFERENCE_NAMES_QUERY_KEY] });
-      }
       const savedJoining = response?.data?.data || response?.data;
       if (isNewJoining && savedJoining?._id && leadId === 'new') {
         router.replace(`/superadmin/joining/${savedJoining._id}`);
@@ -4501,55 +4477,26 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           </div>
                         ) : null}
                       </div>
-                      <div className="min-w-0 space-y-4">
-                        <div>
-                          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                            Qualified examinations
-                          </label>
-                          <div className="flex flex-wrap gap-3">
-                            {[
-                              { key: 'ssc' as const, label: 'SSC' },
-                              { key: 'interOrDiploma' as const, label: 'Inter / Diploma' },
-                              { key: 'ug' as const, label: 'UG' },
-                            ].map((item) => (
-                              <label key={item.key} className={JOINING_FORM_CHOICE_PILL_CLASS}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(formState.qualifications[item.key])}
-                                  onChange={() => toggleQualification(item.key)}
-                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                {item.label}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                            Merit
-                          </label>
-                          <div className="flex flex-wrap gap-3">
-                            <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Qualified examinations
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          {[
+                            { key: 'ssc' as const, label: 'SSC' },
+                            { key: 'interOrDiploma' as const, label: 'Inter / Diploma' },
+                            { key: 'ug' as const, label: 'UG' },
+                          ].map((item) => (
+                            <label key={item.key} className={JOINING_FORM_CHOICE_PILL_CLASS}>
                               <input
-                                type="radio"
-                                name="joining-merit"
-                                checked={formState.qualifications.merit === true}
-                                onChange={() => setMeritQualification(true)}
-                                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                                type="checkbox"
+                                checked={Boolean(formState.qualifications[item.key])}
+                                onChange={() => toggleQualification(item.key)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                               />
-                              Yes
+                              {item.label}
                             </label>
-                            <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
-                              <input
-                                type="radio"
-                                name="joining-merit"
-                                checked={formState.qualifications.merit === false}
-                                onChange={() => setMeritQualification(false)}
-                                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              No
-                            </label>
-                          </div>
+                          ))}
                         </div>
                       </div>
                       <div className="min-w-0">
@@ -4582,6 +4529,47 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                               />
                             </div>
                           )}
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Merit
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                            <input
+                              type="radio"
+                              name="joining-merit"
+                              checked={formState.qualifications.merit === true}
+                              onChange={() => setMeritQualification(true)}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Yes
+                          </label>
+                          <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                            <input
+                              type="radio"
+                              name="joining-merit"
+                              checked={formState.qualifications.merit === false}
+                              onChange={() => setMeritQualification(false)}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            No
+                          </label>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <ReferenceUserSelect
+                          label="Reference"
+                          value={reference1}
+                          onChange={setReference1}
+                          disabled
+                          showAddUserButton={false}
+                        />
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          {status === 'approved'
+                            ? 'Admission confirmed — edit reference on Completed Admissions or the admission detail page.'
+                            : 'Read-only during joining. Set at intake or change after admission is confirmed.'}
+                        </p>
                       </div>
                     </div>
                     );

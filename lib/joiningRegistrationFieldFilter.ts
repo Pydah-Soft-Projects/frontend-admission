@@ -153,6 +153,11 @@ const HIDDEN_EXACT = new Set(
     'country_name',
     'father_name',
     'fathername',
+    'reference',
+    'reference1',
+    'reference_name',
+    'referencename',
+    'reference_1',
   ].map((x) => norm(x))
 );
 

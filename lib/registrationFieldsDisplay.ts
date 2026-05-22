@@ -1,3 +1,5 @@
+import { joiningStudentProfileFieldRank } from '@/lib/joiningRegistrationFieldLayout';
+
 /**
  * Helpers for cleaning up the dynamic "Registration Form Fields" rendered on
  * the admission and joining detail dialogs. The raw `registrationFormData`
@@ -166,4 +168,24 @@ export function cleanRegistrationFieldEntries(
     entries = entries.filter(([, value]) => !looksLikeBareId(value));
   }
   return entries;
+}
+
+export type CleanRegistrationFieldEntry = [string, unknown];
+
+/** Same profile field order as `JoiningDynamicRegistrationFields` on the edit form. */
+export function sortCleanRegistrationFieldEntries(
+  entries: CleanRegistrationFieldEntry[]
+): CleanRegistrationFieldEntry[] {
+  return [...entries].sort((a, b) => {
+    const rankA = joiningStudentProfileFieldRank({
+      fieldName: a[0],
+      fieldLabel: formatRegistrationFieldLabel(a[0]),
+    });
+    const rankB = joiningStudentProfileFieldRank({
+      fieldName: b[0],
+      fieldLabel: formatRegistrationFieldLabel(b[0]),
+    });
+    if (rankA !== rankB) return rankA - rankB;
+    return a[0].localeCompare(b[0]);
+  });
 }

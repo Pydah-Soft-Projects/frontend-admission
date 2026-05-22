@@ -18,7 +18,9 @@ import { Input } from '@/components/ui/Input';
 import { admissionAPI, joiningAPI, paymentAPI } from '@/lib/api';
 import { Admission, PaymentSummary, PaymentTransaction } from '@/types';
 import { showToast } from '@/lib/toast';
-import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
+import { AdmissionReferenceEditor } from '@/components/admission/AdmissionReferenceEditor';
+import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
@@ -123,6 +125,7 @@ export default function AdmissionDetailPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const admissionId = Array.isArray(params?.admissionId) ? params.admissionId[0] : params?.admissionId;
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
+  const { canEditReference } = useJoiningDeskPermissions();
 
   const [revealedAadhaars, setRevealedAadhaars] = useState<{
     student: boolean;
@@ -651,6 +654,25 @@ export default function AdmissionDetailPage() {
                 </p>
               </div>
             ) : null}
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-200/80 pt-6 md:grid-cols-2 md:gap-x-6 dark:border-slate-700">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                Merit
+              </p>
+              <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                {admission.qualifications?.merit === true
+                  ? 'Yes'
+                  : admission.qualifications?.merit === false
+                    ? 'No'
+                    : '—'}
+              </p>
+            </div>
+            <AdmissionReferenceEditor
+              admissionId={String(admission._id)}
+              initialReference1={resolveJoiningReference1(admission)}
+              canEdit={canEditReference && !isAdmissionCancelled}
+            />
           </div>
           <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
             Student profile
