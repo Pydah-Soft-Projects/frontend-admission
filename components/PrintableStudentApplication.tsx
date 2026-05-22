@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import type { Joining, Admission, PaymentSummary, PaymentTransaction, JoiningDocuments } from '@/types';
+import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 
 type ApplicationData = Joining | Admission;
 
@@ -336,7 +337,9 @@ function getPrintApplicationHtml(props: {
     { id: 'photos', label: 'Photos(5)' },
     { id: 'rationCard', label: 'Ration Card' },
     { id: 'incomeCertificate', label: 'Income Certificate' },
-  ];
+  ].filter((d) =>
+    isJoiningDocumentChecklistKeyVisible(d.id, course?.quota, { paperChecklist: false })
+  );
 
   const receivedDocLabels = docList
     .filter((d) => documents[d.id] === 'received')

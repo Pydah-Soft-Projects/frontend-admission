@@ -50,10 +50,14 @@ import {
   scholarshipIntentForCourseQuota,
 } from '@/lib/joiningScholarshipQuotaDefault';
 import {
+  isJoiningDocumentChecklistKeyVisible,
+} from '@/lib/joiningDocumentChecklist';
+import {
   mergeQuotaSelectOptions,
   parseStudentQuotasResponse,
   quotaLabelsFromCatalog,
 } from '@/lib/studentQuotaCatalog';
+import { isManagementQuotaLabel } from '@/lib/joiningScholarshipQuotaDefault';
 import {
   buildBtechIntakeAutoRemark,
   buildBtechJoiningYearOptions,
@@ -93,6 +97,7 @@ import {
   useJoiningDeskPermissions,
   useModulePermission,
 } from '@/components/layout/DashboardShell';
+import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
 import { JoiningStepTwoPaymentsPanel } from '@/components/joining/JoiningStepTwoPaymentsPanel';
@@ -197,15 +202,6 @@ const documentLabels: Record<keyof JoiningDocuments, string> = {
   rationCard: 'Ration Card',
 };
 
-/** Hidden from the joining UI checklist (covered by settings `certificate_config` per program level). */
-const DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST = new Set<keyof JoiningDocuments>([
-  'ssc',
-  'inter',
-  'ugOrPgCmm',
-  'transferCertificate',
-  'studyCertificate',
-]);
-
 const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: string }> = [
   { value: 'english', label: 'English' },
   { value: 'telugu', label: 'Telugu' },
@@ -213,6 +209,8 @@ const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: strin
 ];
 
 const mediumOptionValues = new Set(mediumOptions.map((option) => option.value));
+
+const documentStatusOptions: JoiningDocumentStatus[] = ['pending', 'received'];
 
 const normalizeDateInput = (value?: string) => {
   if (!value) return '';
@@ -1684,6 +1682,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       registrationExtras.certificate_checklist
     );
   }, [certificateGuidance, registrationExtras.certificate_checklist]);
+
+  const documentsChecklistForPrint = useMemo(() => {
+    const labels: Record<string, string> = {};
+    const docs: Record<string, JoiningDocumentStatus | undefined> = {};
+    const quota = formState.courseInfo.quota;
+    (Object.entries(documentLabels) as [keyof JoiningDocuments, string][]).forEach(([key, label]) => {
+      if (!isJoiningDocumentChecklistKeyVisible(key, quota)) return;
+      labels[key] = label;
+      docs[key] = formState.documents[key] || 'pending';
+    });
+    return { labels, docs };
+  }, [formState.documents, formState.courseInfo.quota]);
+
+  const isManagementQuotaSelected = isManagementQuotaLabel(
+    String(formState.courseInfo.quota ?? '').trim()
+  );
 
   const getRegistrationFieldValue = useCallback(
     (fieldName: string): string | boolean => {
@@ -3253,6 +3267,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         siblings: copy,
       };
     });
+  };
+
+  const updateDocumentStatus = (key: keyof JoiningDocuments, value: JoiningDocumentStatus) => {
+    setFormState((prev) => ({
+      ...prev,
+      documents: {
+        ...prev.documents,
+        [key]: value,
+      },
+    }));
   };
 
   const updateCertificateChecklistStatus = (
@@ -5137,6 +5161,75 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               </div>
             </section>
 
+            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                    6. Documents Checklist
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                    Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
+                    Certificate are tracked under{' '}
+                    <span className="font-medium">Certificate information checklist</span>
+                    {!isPublicEdit ? ' on Step 2' : ''}.
+                    {isManagementQuotaSelected ? (
+                      <>
+                        {' '}
+                        CET rank card, hall ticket, allotment letter, and joining report are not required for{' '}
+                        <span className="font-medium">Management</span> quota.
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+                <PrintableDocumentChecklist
+                  documentLabels={documentsChecklistForPrint.labels}
+                  documents={documentsChecklistForPrint.docs}
+                  title="Documents Checklist"
+                  studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
+                  enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}
+                  printButtonLabel="Print checklist"
+                  className="shrink-0"
+                />
+              </div>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
+                  .filter(([key]) =>
+                    isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota)
+                  )
+                  .map(([key, label]) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700"
+                    >
+                      <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
+                      <div className="flex gap-3">
+                        {documentStatusOptions.map((statusOption) => (
+                          <label
+                            key={`${key}-${statusOption}`}
+                            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${
+                              (formState.documents[key] || 'pending') === statusOption
+                                ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
+                                : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`document-${key}`}
+                              value={statusOption}
+                              checked={(formState.documents[key] || 'pending') === statusOption}
+                              disabled={!canWriteJoining && !isAdmissionEditable}
+                              onChange={() => updateDocumentStatus(key, statusOption)}
+                              className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                            />
+                            <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </section>
+
             {renderWizardStepFooter(1)}
             </div>
 
@@ -5412,7 +5505,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       </dt>
                       <dd className="mt-0.5 flex flex-wrap gap-2 text-slate-800 dark:text-slate-200">
                         {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
-                          .filter(([key]) => !DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key))
+                          .filter(([key]) =>
+                            isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota)
+                          )
                           .map(([key, label]) => (
                             <span
                               key={key}

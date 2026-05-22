@@ -71,7 +71,7 @@ export function isScholarshipStatusField(field: RegistrationFieldLike): boolean 
   return false;
 }
 
-function isManagementQuotaLabel(quotaTrimmed: string): boolean {
+export function isManagementQuotaLabel(quotaTrimmed: string): boolean {
   const q = quotaTrimmed.trim();
   if (!q) return false;
   if (q === 'Management') return true;

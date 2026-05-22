@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { admissionAPI, joiningAPI, paymentAPI } from '@/lib/api';
-import { Admission, PaymentSummary, PaymentTransaction } from '@/types';
+import { Admission, JoiningDocuments, PaymentSummary, PaymentTransaction } from '@/types';
+import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { AdmissionReferenceEditor } from '@/components/admission/AdmissionReferenceEditor';
@@ -1103,7 +1104,15 @@ export default function AdmissionDetailPage() {
               { id: 'photos', label: 'Photos(5)' },
               { id: 'rationCard', label: 'Ration Card' },
               { id: 'incomeCertificate', label: 'Income Certificate' },
-            ].map((doc: any) => (
+            ]
+              .filter((doc) =>
+                isJoiningDocumentChecklistKeyVisible(
+                  doc.id as keyof JoiningDocuments,
+                  admission.courseInfo?.quota,
+                  { paperChecklist: false }
+                )
+              )
+              .map((doc: { id: string; label: string }) => (
               <div
                 key={doc.id}
                 className={`p-4 rounded-lg border-2 flex items-center gap-3 ${

@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { joiningAPI, paymentAPI, admissionAPI } from '@/lib/api';
-import { Joining, PaymentSummary, PaymentTransaction, Admission } from '@/types';
+import { Joining, JoiningDocuments, PaymentSummary, PaymentTransaction, Admission } from '@/types';
+import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
@@ -541,7 +542,15 @@ export default function JoiningDetailPage() {
       {joining.documents && (
         <ApplicationSectionCard step={6} title="Documents Checklist">
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {Object.entries(joining.documents).map(([key, value]) => (
+            {Object.entries(joining.documents)
+              .filter(([key]) =>
+                isJoiningDocumentChecklistKeyVisible(
+                  key as keyof JoiningDocuments,
+                  joining.courseInfo?.quota,
+                  { paperChecklist: false }
+                )
+              )
+              .map(([key, value]) => (
               <div key={key} className="flex items-center gap-2">
                 <div
                   className={`h-3 w-3 rounded-full ${
