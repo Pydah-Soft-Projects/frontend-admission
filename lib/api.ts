@@ -638,6 +638,8 @@ export const leadAPI = {
     /** Roster: only users with current portfolio leads in this `leads.district` (exact). */
     district?: string;
     includeAssignmentDetails?: boolean;
+    /** Visit Diary report: lightweight path (visit_status logs + leaves only). */
+    visitDiaryOnly?: boolean;
     /** Server-side pagination for heavy user list (e.g. Call Reports → User Performance). */
     page?: number;
     limit?: number;
@@ -673,6 +675,7 @@ export const leadAPI = {
       queryParams.append('district', String(params.district));
     }
     if (params?.includeAssignmentDetails) queryParams.append('includeAssignmentDetails', 'true');
+    if (params?.visitDiaryOnly) queryParams.append('visitDiaryOnly', 'true');
     if (params?.page != null) queryParams.append('page', String(params.page));
     if (params?.limit != null) queryParams.append('limit', String(params.limit));
     if (params?.perfSearch != null && params.perfSearch !== '') queryParams.append('perfSearch', params.perfSearch);
