@@ -17,7 +17,7 @@ const summaryCardStyles = [
 ];
 ```
 
-**Update to (orange first, keep rest):**
+**Update to (orange first, keep rest):** ---
 ```ts
 const summaryCardStyles = [
   'from-orange-500/10 via-orange-500/15 to-transparent text-orange-700 dark:text-orange-200',
