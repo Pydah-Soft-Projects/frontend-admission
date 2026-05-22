@@ -35,6 +35,32 @@ function classifyVideoDevice(label: string): JoiningCameraFacing | null {
   return null;
 }
 
+/** Phones/tablets: facingMode is reliable; exact deviceId often fails when flipping cameras. */
+function prefersFacingModeConstraints(): boolean {
+  if (typeof window === 'undefined') return false;
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const touch = navigator.maxTouchPoints > 1;
+  const ua = /android|ipad|iphone|ipod|mobile|tablet/i.test(navigator.userAgent);
+  return coarse || touch || ua;
+}
+
+function waitMs(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isCameraBusyError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('notreadable') ||
+    msg.includes('could not start video') ||
+    msg.includes('failed to load') ||
+    msg.includes('video source') ||
+    msg.includes('video frame') ||
+    msg.includes('abort') ||
+    msg.includes('in use')
+  );
+}
+
 type Props = {
   /** Fallback when no saved preference exists (front = user, rear = environment). */
   facing?: JoiningCameraFacing;
@@ -87,11 +113,28 @@ export function JoiningCameraCaptureButton({
   }, [open]);
 
   const stopStream = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((t) => {
+        t.stop();
+        try {
+          stream.removeTrack(t);
+        } catch {
+          /* track may already be removed */
+        }
+      });
+    }
     streamRef.current = null;
     const v = videoRef.current;
     if (v) {
+      v.pause();
       v.srcObject = null;
+      // Reset element state — helps Chrome/Android release the camera before re-open.
+      try {
+        v.load();
+      } catch {
+        /* ignore */
+      }
     }
   }, []);
 
@@ -99,18 +142,37 @@ export function JoiningCameraCaptureButton({
     return () => stopStream();
   }, [stopStream]);
 
-  const attachStreamToVideo = useCallback(() => {
+  const attachStreamToVideo = useCallback(async (): Promise<boolean> => {
     const stream = streamRef.current;
     const el = videoRef.current;
-    if (!stream || !el) return;
+    if (!stream || !el) return false;
     el.srcObject = stream;
-    void el.play().catch(() => {});
+    try {
+      await el.play();
+    } catch {
+      /* autoplay policies — loadedmetadata may still fire */
+    }
+    if (el.videoWidth >= 2 && el.videoHeight >= 2) return true;
+    return new Promise<boolean>((resolve) => {
+      const done = () => {
+        el.removeEventListener('loadedmetadata', done);
+        el.removeEventListener('loadeddata', done);
+        resolve(el.videoWidth >= 2 && el.videoHeight >= 2);
+      };
+      el.addEventListener('loadedmetadata', done);
+      el.addEventListener('loadeddata', done);
+      window.setTimeout(() => {
+        el.removeEventListener('loadedmetadata', done);
+        el.removeEventListener('loadeddata', done);
+        resolve(el.videoWidth >= 2 && el.videoHeight >= 2);
+      }, 4000);
+    });
   }, []);
 
   useEffect(() => {
-    if (!open) return;
-    attachStreamToVideo();
-  }, [open, attachStreamToVideo]);
+    if (!open || !streamRef.current) return;
+    void attachStreamToVideo();
+  }, [open, activeFacing, attachStreamToVideo]);
 
   const refreshDeviceMap = useCallback(async () => {
     if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -134,15 +196,29 @@ export function JoiningCameraCaptureButton({
     }
   }, []);
 
-  const videoConstraintsForFacing = useCallback((face: JoiningCameraFacing): MediaTrackConstraints => {
-    const deviceId = deviceMapRef.current[face];
+  const constraintAttemptsForFacing = useCallback((face: JoiningCameraFacing): MediaTrackConstraints[] => {
     const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
-    if (deviceId) {
-      return { deviceId: { exact: deviceId }, ...size };
+    const facingOnly =
+      face === 'user'
+        ? { facingMode: 'user' as const, ...size }
+        : { facingMode: { ideal: 'environment' as const }, ...size };
+    const facingMinimal =
+      face === 'user' ? { facingMode: 'user' as const } : { facingMode: { ideal: 'environment' as const } };
+
+    if (prefersFacingModeConstraints()) {
+      return [facingOnly, facingMinimal];
     }
-    return face === 'user'
-      ? { facingMode: 'user', ...size }
-      : { facingMode: { ideal: 'environment' }, ...size };
+
+    const deviceId = deviceMapRef.current[face];
+    if (deviceId) {
+      return [
+        { deviceId: { ideal: deviceId }, ...size },
+        { deviceId: { exact: deviceId }, ...size },
+        facingOnly,
+        facingMinimal,
+      ];
+    }
+    return [facingOnly, facingMinimal];
   }, []);
 
   const openCameraStream = useCallback(
@@ -157,32 +233,49 @@ export function JoiningCameraCaptureButton({
         return false;
       }
 
-      const tryOpen = async (constraints: MediaTrackConstraints) => {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
-        stopStream();
-        streamRef.current = stream;
-        setActiveFacing(face);
-        writeStoredFacing(face);
-        attachStreamToVideo();
-        await refreshDeviceMap();
-        return true;
-      };
+      stopStream();
+      if (prefersFacingModeConstraints()) {
+        await waitMs(250);
+      }
 
-      try {
-        return await tryOpen(videoConstraintsForFacing(face));
-      } catch (firstErr: unknown) {
-        const fallback: MediaTrackConstraints =
-          face === 'user'
-            ? { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
-            : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+      const attempts = constraintAttemptsForFacing(face);
+      let lastErr: unknown = null;
+
+      for (let i = 0; i < attempts.length; i++) {
+        const constraints = attempts[i]!;
         try {
-          return await tryOpen(fallback);
-        } catch {
-          throw firstErr;
+          const stream = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+          streamRef.current = stream;
+          setActiveFacing(face);
+          writeStoredFacing(face);
+          const framesReady = await attachStreamToVideo();
+          // Dialog video mounts only after setOpen(true) on first launch — skip frame check until then.
+          if (!framesReady && videoRef.current) {
+            stream.getTracks().forEach((t) => t.stop());
+            streamRef.current = null;
+            lastErr = new Error('Camera opened but video frames did not load. Try again or use Upload.');
+            if (prefersFacingModeConstraints() && i < attempts.length - 1) {
+              await waitMs(200);
+              continue;
+            }
+            throw lastErr;
+          }
+          await refreshDeviceMap();
+          return true;
+        } catch (e: unknown) {
+          lastErr = e;
+          stopStream();
+          const canRetry = i < attempts.length - 1 && (isCameraBusyError(e) || prefersFacingModeConstraints());
+          if (canRetry) {
+            await waitMs(isCameraBusyError(e) ? 350 : 150);
+            continue;
+          }
         }
       }
+
+      throw lastErr ?? new Error('Could not open camera');
     },
-    [attachStreamToVideo, refreshDeviceMap, stopStream, videoConstraintsForFacing]
+    [attachStreamToVideo, constraintAttemptsForFacing, refreshDeviceMap, stopStream]
   );
 
   const resolveInitialFacing = useCallback((): JoiningCameraFacing => {
@@ -201,7 +294,9 @@ export function JoiningCameraCaptureButton({
       setErr(
         msg.toLowerCase().includes('denied') || msg.toLowerCase().includes('notallowed')
           ? 'Camera permission was denied. Allow camera for this site or use Upload.'
-          : `Could not open camera (${msg}). Use Upload instead.`
+          : isCameraBusyError(e)
+            ? 'Camera is busy — wait a moment, try again, or use Upload.'
+            : `Could not open camera (${msg}). Use Upload instead.`
       );
     }
   }, [openCameraStream, resolveInitialFacing]);
@@ -215,7 +310,11 @@ export function JoiningCameraCaptureButton({
         await openCameraStream(next);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        setErr(`Could not switch camera (${msg}). Try the other camera or use Upload.`);
+        setErr(
+          isCameraBusyError(e)
+            ? 'Could not switch camera — the previous camera may still be releasing. Wait a moment and try again, or use Upload.'
+            : `Could not switch camera (${msg}). Try the other camera or use Upload.`
+        );
       } finally {
         setSwitchingFacing(false);
       }
@@ -242,9 +341,25 @@ export function JoiningCameraCaptureButton({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, close]);
 
+  useEffect(() => {
+    if (!open || !streamRef.current) return;
+    const reattach = () => void attachStreamToVideo();
+    window.addEventListener('orientationchange', reattach);
+    const mq = window.matchMedia('(orientation: portrait)');
+    const onOrientMq = () => void attachStreamToVideo();
+    mq.addEventListener?.('change', onOrientMq);
+    return () => {
+      window.removeEventListener('orientationchange', reattach);
+      mq.removeEventListener?.('change', onOrientMq);
+    };
+  }, [open, attachStreamToVideo, activeFacing]);
+
   const confirmCapture = useCallback(() => {
     const video = videoRef.current;
-    if (!video || video.videoWidth < 2 || video.videoHeight < 2) return;
+    if (!video || video.videoWidth < 2 || video.videoHeight < 2) {
+      setErr('Video is not ready yet. Wait for the preview, or switch camera again.');
+      return;
+    }
     const w = video.videoWidth;
     const h = video.videoHeight;
     const canvas = document.createElement('canvas');
