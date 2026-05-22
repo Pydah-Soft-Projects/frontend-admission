@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useMemo, Fragment, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -355,7 +355,7 @@ export default function ReportsPage() {
     queryFn: () => leadAPI.getFilterOptions(),
   });
 
-  /** Dedicated endpoint: one DISTINCT on `leads.student_group` + long server cache — not blocked by full filter-options bundle. */
+  /** Dedicated endpoint: one DISTINCT on `leads.student_group` + long server cache â€” not blocked by full filter-options bundle. */
   const { data: studentGroupFilterPayload } = useQuery({
     queryKey: ['studentGroupFilterOptions'],
     queryFn: () => leadAPI.getStudentGroupFilterOptions(),
@@ -488,8 +488,8 @@ export default function ReportsPage() {
   const activityLogsPagination = activityLogsData?.pagination;
 
   /**
-   * Heavy endpoint — full user list for User Analytics tab only.
-   * Call Reports → Performance uses a separate paginated query so the table loads quickly.
+   * Heavy endpoint â€” full user list for User Analytics tab only.
+   * Call Reports â†’ Performance uses a separate paginated query so the table loads quickly.
    */
   const { data: userAnalyticsForUsersTab, isLoading: isLoadingUserAnalyticsTab, error: userAnalyticsTabError } = useQuery({
     queryKey: ['userAnalyticsSummary', 'usersTab', filters.startDate, filters.endDate, filters.academicYear],
@@ -613,7 +613,7 @@ export default function ReportsPage() {
     performanceLimit,
   ]);
 
-  /** Warm first page before opening Performance (paginated — smaller cohort SQL). */
+  /** Warm first page before opening Performance (paginated â€” smaller cohort SQL). */
   const prefetchUserPerformanceSummary = useCallback(() => {
     if (activeTab !== 'calls') return;
     void queryClient.prefetchQuery({
@@ -677,7 +677,7 @@ export default function ReportsPage() {
       }
     | undefined;
 
-  /** Performance “Total Leads”: Student Counselor / PRO show sum of date-wise bucket totals (matches expanded rows); others use portfolio total_assigned. */
+  /** Performance â€œTotal Leadsâ€: Student Counselor / PRO show sum of date-wise bucket totals (matches expanded rows); others use portfolio total_assigned. */
   const getPerformanceTotalLeadsDisplay = useCallback((u: any): number => {
     const role = String(u?.roleName || '').trim();
     if (role === 'Student Counselor' || role === 'PRO') {
@@ -688,7 +688,7 @@ export default function ReportsPage() {
   }, []);
 
   /**
-   * Student Counselor / PRO: Total Leads (bucket sum) − Calls/Visits Done (cohort status sum excluding Assigned).
+   * Student Counselor / PRO: Total Leads (bucket sum) âˆ’ Calls/Visits Done (cohort status sum excluding Assigned).
    * Other roles: API pendingBalance, then portfolio fallback.
    */
   const getPerformanceBalanceDisplay = useCallback(
@@ -817,7 +817,7 @@ export default function ReportsPage() {
   };
 
   /**
-   * PRO visit_status keys → same labels as `PRO_VISIT_STATUS_COLUMNS`, then merge blank / Not set / unknown into Assigned
+   * PRO visit_status keys â†’ same labels as `PRO_VISIT_STATUS_COLUMNS`, then merge blank / Not set / unknown into Assigned
    * (matches backend canonical + assignment default visit_status).
    */
   const foldOutcomeVisitMapToCanonical = (raw: Record<string, unknown> | undefined): Record<string, number> => {
@@ -884,7 +884,7 @@ export default function ReportsPage() {
 
   /**
    * User Performance (Student Counselor): roll Not Answered into Call Back for display (Not Answered column hidden).
-   * Display-only — API/DB unchanged; column totals still sum to the same cohort.
+   * Display-only â€” API/DB unchanged; column totals still sum to the same cohort.
    */
   const mergeNotAnsweredIntoCallBackForCounsellorDisplay = (
     map: Record<string, number> | Record<string, unknown> | undefined
@@ -921,7 +921,7 @@ export default function ReportsPage() {
     return sum;
   };
 
-  /** Expanded assignment table: pick columns by real role (analytics → users API → detail payload). */
+  /** Expanded assignment table: pick columns by real role (analytics â†’ users API â†’ detail payload). */
   type PerformanceExpandedMode = 'counsellor' | 'pro' | 'pipeline';
   const getPerformanceExpandedMode = (
     analyticsRole: unknown,
@@ -1028,7 +1028,7 @@ export default function ReportsPage() {
       .map(([mandal, count]) => ({ mandal: String(mandal), count: Number(count) || 0 }))
       .filter((x) => x.count > 0)
       .sort((a, b) => b.count - a.count || a.mandal.localeCompare(b.mandal));
-    if (!entries.length) return '—';
+    if (!entries.length) return 'â€”';
     return entries.map((x) => `${x.mandal} (${x.count})`).join(', ');
   };
 
@@ -1040,7 +1040,7 @@ export default function ReportsPage() {
       return;
     }
     isPrintingPerformanceRef.current = true;
-    setPerformancePrintOverlay('Loading all matching users for print…');
+    setPerformancePrintOverlay('Loading all matching users for printâ€¦');
 
     const escapeHtml = (s: unknown) =>
       String(s ?? '')
@@ -1078,7 +1078,7 @@ export default function ReportsPage() {
       return;
     }
 
-    setPerformancePrintOverlay('Preparing detailed report for print…');
+    setPerformancePrintOverlay('Preparing detailed report for printâ€¦');
 
     const userIds = rowsToPrint.map((u: any) => u.userId || u.id).filter(Boolean);
     if (!userIds.length) {
@@ -1116,7 +1116,7 @@ export default function ReportsPage() {
       return;
     }
 
-    setPerformancePrintOverlay('Building print layout…');
+    setPerformancePrintOverlay('Building print layoutâ€¦');
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => resolve());
     });
@@ -1130,7 +1130,7 @@ export default function ReportsPage() {
       const userName = escapeHtml(user.name || user.userName || 'Unknown');
       const roleRaw = user.roleName || detailUser?.roleName || fullUser?.roleName || '';
       const roleKey = String(roleRaw).trim();
-      const roleName = escapeHtml(roleKey || '—');
+      const roleName = escapeHtml(roleKey || 'â€”');
       const statusLabel = user.isActive ? 'Active' : 'Inactive';
       const printMode = getPerformanceExpandedMode(user.roleName, fullUser?.roleName, detailUser?.roleName);
       const printColSpan = printMode === 'pro' ? 13 : 12;
@@ -1174,7 +1174,7 @@ export default function ReportsPage() {
                 ? targetDateEntries
                     .map(([dt, count]) => `${format(new Date(String(dt)), 'dd MMM yyyy')} (${Number(count) || 0})`)
                     .join(', ')
-                : '—';
+                : 'â€”';
               const statusCells =
                 COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<td>${getCounsellorCallStatusCountForDisplay(day, c)}</td>`).join('') +
                 `<td>${getCounsellorAssignmentBalanceForDay(day)}</td>`;
@@ -1205,7 +1205,7 @@ export default function ReportsPage() {
           : 0;
         const mainRowInterested = roleKey === 'Student Counselor' ? (rawInterested + rawCetApplied) : rawInterested;
 
-        const mainRowVisited = roleKey === 'Student Counselor' ? (mergedPrintUser.visitedCumulative ?? 0) : '—';
+        const mainRowVisited = roleKey === 'Student Counselor' ? (mergedPrintUser.visitedCumulative ?? 0) : 'â€”';
         const mainRowConfirmed = mergedPrintUser.convertedLeads ?? 0;
         const mainRowAdmitted = mergedPrintUser.admittedLeads ?? mergedPrintUser.statusBreakdown?.Admitted ?? mergedPrintUser.statusBreakdown?.admitted ?? 0;
 
@@ -1238,9 +1238,9 @@ export default function ReportsPage() {
 
         return `
         <section style="margin-bottom:10px; break-inside: avoid;">
-          <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> · ${statusLabel}</h3>
+          <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> Â· ${statusLabel}</h3>
           ${summaryTableHtml}
-          <p style="margin:0 0 4px 0;font-size:8px;color:#475569;">Student Counselor — Assignment history by date buckets. Main table summary counts shown above.</p>
+          <p style="margin:0 0 4px 0;font-size:8px;color:#475569;">Student Counselor â€” Assignment history by date buckets. Main table summary counts shown above.</p>
           <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
             <thead>
               <tr>
@@ -1268,7 +1268,7 @@ export default function ReportsPage() {
               .sort((a: any, b: any) => String(a[0]).localeCompare(String(b[0])));
             const targetDateText = targetDateEntries.length
               ? targetDateEntries.map(([dt, count]) => `${format(new Date(String(dt)), 'dd MMM yyyy')} (${Number(count) || 0})`).join(', ')
-              : '—';
+              : 'â€”';
             let statusCells = '';
             if (printMode === 'pro') {
               statusCells =
@@ -1354,7 +1354,7 @@ export default function ReportsPage() {
       const rawCetAppliedOther = Number(mergedPrintUserOther.statusBreakdown?.['CET Applied'] || mergedPrintUserOther.statusBreakdown?.['cet applied'] || 0);
       const mainRowInterestedOther = (rawInterestedOther + rawCetAppliedOther);
 
-      const mainRowVisitedOther = roleKey === 'PRO' ? (mergedPrintUserOther.visitedCumulative ?? 0) : '—';
+      const mainRowVisitedOther = roleKey === 'PRO' ? (mergedPrintUserOther.visitedCumulative ?? 0) : 'â€”';
       const mainRowConfirmedOther = mergedPrintUserOther.convertedLeads ?? 0;
       const mainRowAdmittedOther = mergedPrintUserOther.admittedLeads ?? mergedPrintUserOther.statusBreakdown?.Admitted ?? mergedPrintUserOther.statusBreakdown?.admitted ?? 0;
 
@@ -1387,12 +1387,12 @@ export default function ReportsPage() {
 
       return `
         <section style="margin-bottom:10px; break-inside: avoid;">
-          <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> · ${statusLabel}</h3>
+          <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> Â· ${statusLabel}</h3>
           ${summaryTableOtherHtml}
           ${
             printMode === 'pro'
-              ? `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">PRO — Assignment history by date buckets. Main table summary counts shown above.</p>`
-              : `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">Pipeline Summary — Main table summary counts shown above.</p>`
+              ? `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">PRO â€” Assignment history by date buckets. Main table summary counts shown above.</p>`
+              : `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">Pipeline Summary â€” Main table summary counts shown above.</p>`
           }
           <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
             <thead>
@@ -1511,13 +1511,13 @@ export default function ReportsPage() {
       return {
         'S.No': idx + 1,
         'User': u.name || u.userName || 'Unknown',
-        'Email': u.email || '—',
-        'Role': role || '—',
+        'Email': u.email || 'â€”',
+        'Role': role || 'â€”',
         'Total Leads': getPerformanceTotalLeadsDisplay(u),
         'Calls/Visits Done': u.calls?.total ?? 0,
         'Balance': getPerformanceBalanceDisplay(u),
         'Interested': u.interested ?? 0,
-        'Visited': role === 'Student Counselor' ? (u.visitedCumulative ?? 0) : '—',
+        'Visited': role === 'Student Counselor' ? (u.visitedCumulative ?? 0) : 'â€”',
         'Confirmed': u.convertedLeads ?? 0,
         'Admitted': u.admittedLeads ?? u.statusBreakdown?.Admitted ?? 0,
       };
@@ -1537,7 +1537,7 @@ export default function ReportsPage() {
 
 
 
-  // States for Abstract tab (state → districts → mandals)
+  // States for Abstract tab (state â†’ districts â†’ mandals)
   const { data: abstractStates } = useQuery({
     queryKey: ['locations', 'states'],
     queryFn: () => locationsAPI.listStates(),
@@ -1738,7 +1738,7 @@ export default function ReportsPage() {
       const admitted = u.admittedLeads ?? u.statusBreakdown?.Admitted ?? 0;
       
       return {
-        User: (u.name || u.userName || '—'),
+        User: (u.name || u.userName || 'â€”'),
         'Total Leads': getPerformanceTotalLeadsDisplay(u),
         'Calls/Visits Done': u.calls?.total ?? 0,
         Balance: balance,
@@ -1770,11 +1770,11 @@ export default function ReportsPage() {
 
     const dailyRows = dailyGrouped.flatMap(g =>
       g.rows.map((r: any) => ({
-        User: g.userName || '—',
-        Division: g.fullUser?.division || '—',
-        Department: g.fullUser?.department || '—',
-        Group: g.fullUser?.group || '—',
-        Role: g.fullUser?.roleName || '—',
+        User: g.userName || 'â€”',
+        Division: g.fullUser?.division || 'â€”',
+        Department: g.fullUser?.department || 'â€”',
+        Group: g.fullUser?.group || 'â€”',
+        Role: g.fullUser?.roleName || 'â€”',
         Date: format(new Date(r.date), 'dd MMM yyyy'),
         'Calls/Visits Done': r.callCount ?? 0,
         'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
@@ -2093,7 +2093,7 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* Filters – hidden on Call Reports, User Analytics, Leads Abstract, Activity Logs AND Visit Diary (customized below) */}
+      {/* Filters â€“ hidden on Call Reports, User Analytics, Leads Abstract, Activity Logs AND Visit Diary (customized below) */}
       {activeTab !== 'calls' && activeTab !== 'users' && activeTab !== 'abstract' && activeTab !== 'activityLogs' && activeTab !== 'visitDiary' && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 mt-4">
           <div>
@@ -2475,6 +2475,344 @@ export default function ReportsPage() {
       {/* Call Reports Tab */}
       {activeTab === 'calls' && (
         <div className="space-y-6">
+          {/* Inner sub-tabs: Daily Call Report | User Performance Summary */}
+          <div className="space-y-3">
+            <div
+              className="grid w-full grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-100/80 dark:border-slate-700 dark:bg-slate-800/50"
+              role="tablist"
+              aria-label="Call report views"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={callSubTab === 'daily'}
+                onClick={() => {
+                  setCallSubTab('daily');
+                  handleDatePreset('today');
+                }}
+                className={cn(
+                  'border-b-2 px-4 py-3 text-center text-sm font-semibold transition-all',
+                  callSubTab === 'daily'
+                    ? 'border-[#f97316] bg-[#f97316] text-white'
+                    : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700/50 dark:hover:text-slate-300'
+                )}
+              >
+                Daily Call Report
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={callSubTab === 'performance'}
+                onClick={() => {
+                  setCallSubTab('performance');
+                  handleDatePreset('overall');
+                }}
+                onMouseEnter={prefetchUserPerformanceSummary}
+                onFocus={prefetchUserPerformanceSummary}
+                className={cn(
+                  'border-b-2 border-l border-slate-200 px-4 py-3 text-center text-sm font-semibold transition-all dark:border-slate-600',
+                  callSubTab === 'performance'
+                    ? 'border-[#f97316] bg-[#f97316] text-white'
+                    : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700/50 dark:hover:text-slate-300'
+                )}
+              >
+                User Performance Summary
+              </button>
+            </div>
+
+            {callSubTab === 'daily' && (
+              <div className="flex flex-nowrap items-end gap-2 overflow-x-auto pb-1">
+                <div className="flex w-[9.25rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Division
+                  </span>
+                  <select
+                    value={dailyDivision}
+                    onChange={(e) => setDailyDivision(e.target.value)}
+                    aria-label="Filter by division"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">All divisions</option>
+                    {performanceFilterOptions.divisions.map((d) => (
+                      <option key={`daily-div-${d}`} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex w-[9.25rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Department
+                  </span>
+                  <select
+                    value={dailyDepartment}
+                    onChange={(e) => setDailyDepartment(e.target.value)}
+                    aria-label="Filter by department"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">All departments</option>
+                    {performanceFilterOptions.departments.map((d) => (
+                      <option key={`daily-dept-${d}`} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex w-[9.25rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Student group
+                  </span>
+                  <select
+                    value={dailyStudentGroup}
+                    onChange={(e) => setDailyStudentGroup(e.target.value)}
+                    aria-label="Filter calls by lead student group (leads.student_group)"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">All student groups</option>
+                    {callReportStudentGroupOptions.map((g: string) => (
+                      <option key={`daily-sg-${g}`} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Page size
+                  </span>
+                  <select
+                    value={String(dailyLimit)}
+                    onChange={(e) => {
+                      const nextLimit = Number(e.target.value) || 50;
+                      setExpandedDailyUsers(new Set());
+                      setDailyLimit(nextLimit);
+                      setDailyPage(1);
+                    }}
+                    aria-label="Rows per page"
+                    className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <option value="25">25 / page</option>
+                    <option value="50">50 / page</option>
+                    <option value="100">100 / page</option>
+                  </select>
+                </div>
+                {filters.startDate && filters.endDate && (
+                  <span className="whitespace-nowrap rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    {format(new Date(filters.startDate), 'dd MMM yyyy')}
+                    <span className="mx-1 text-slate-400">â†’</span>
+                    {format(new Date(filters.endDate), 'dd MMM yyyy')}
+                  </span>
+                )}
+                {callReports?.reports && callReports.reports.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      const daily = callReports?.reports || [];
+                      if (daily.length === 0) return;
+
+                      const grouped: { userName: string; rows: any[]; fullUser: any }[] = [];
+                      const seen = new Map<string, number>();
+
+                      daily.forEach((r: any) => {
+                        const fullUser = users.find((u: any) => u._id === r.userId || u.name === r.userName);
+                        if (!seen.has(r.userName)) {
+                          seen.set(r.userName, grouped.length);
+                          grouped.push({ userName: r.userName, rows: [r], fullUser });
+                        } else {
+                          grouped[seen.get(r.userName)!].rows.push(r);
+                        }
+                      });
+                      grouped.forEach((g) => {
+                        g.rows.sort((a: any, b: any) => {
+                          if (a?.rangeAggregate || b?.rangeAggregate) return 0;
+                          const ta = a?.date ? new Date(a.date).getTime() : 0;
+                          const tb = b?.date ? new Date(b.date).getTime() : 0;
+                          return ta - tb;
+                        });
+                      });
+
+                      const dateLabelForDailyExport = (r: any) => {
+                        if (r?.rangeAggregate && filters.startDate && filters.endDate) {
+                          const a = format(new Date(filters.startDate), 'dd MMM yyyy');
+                          const b = format(new Date(filters.endDate), 'dd MMM yyyy');
+                          const same = filters.startDate === filters.endDate;
+                          const rangeStr = same ? a : `${a} â€“ ${b}`;
+                          const dwa = typeof r.daysWithActivity === 'number' && r.daysWithActivity > 0
+                            ? ` (${r.daysWithActivity} day${r.daysWithActivity !== 1 ? 's' : ''} with activity)`
+                            : '';
+                          return `${rangeStr}${dwa}`;
+                        }
+                        if (!r?.date) return 'â€”';
+                        return format(new Date(r.date), 'dd MMM yyyy');
+                      };
+
+                      const allRows = grouped.flatMap(g =>
+                        g.rows.map((r: any) => ({
+                          User: g.userName || 'â€”',
+                          Division: g.fullUser?.division || 'â€”',
+                          Department: g.fullUser?.department || 'â€”',
+                          'Employee group (HRMS)': g.fullUser?.group || 'â€”',
+                          Role: g.fullUser?.roleName || 'â€”',
+                          Date: dateLabelForDailyExport(r),
+                          'Calls/Visits Done': r.callCount ?? 0,
+                          'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
+                          'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
+                        }))
+                      );
+
+                      const displayData = allRows.map((row: any, idx: number) => {
+                        const newRow = { ...row };
+                        if (idx > 0 && allRows[idx - 1].User === row.User) {
+                          newRow.User = "";
+                          newRow.Division = "";
+                          newRow.Department = "";
+                          newRow['Employee group (HRMS)'] = "";
+                        }
+                        return newRow;
+                      });
+
+                      const worksheet = XLSX.utils.json_to_sheet(displayData);
+                      const merges: XLSX.Range[] = [];
+                      let startIdx = 0;
+                      while (startIdx < allRows.length) {
+                        const userName = allRows[startIdx].User;
+                        let endIdx = startIdx;
+                        while (endIdx + 1 < allRows.length && allRows[endIdx + 1].User === userName) {
+                          endIdx++;
+                        }
+
+                        if (endIdx > startIdx) {
+                          for (let col = 0; col <= 3; col++) {
+                            merges.push({
+                              s: { r: startIdx + 1, c: col },
+                              e: { r: endIdx + 1, c: col }
+                            });
+                          }
+                        }
+                        startIdx = endIdx + 1;
+                      }
+                      worksheet['!merges'] = merges;
+
+                      const cols = Object.keys(allRows[0]).map(key => ({
+                        wch: Math.max(key.length, ...allRows.map((r: any) => String(r[key] ?? '').length)) + 5
+                      }));
+                      worksheet['!cols'] = cols;
+
+                      const workbook = XLSX.utils.book_new();
+                      XLSX.utils.book_append_sheet(workbook, worksheet, 'Daily Call Report');
+                      XLSX.writeFile(workbook, `daily-call-reports-${filters.startDate}-${filters.endDate}.xlsx`);
+                    }}
+                  >
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                    Export Excel
+                  </Button>
+                )}
+              </div>
+            )}
+            {callSubTab === 'performance' && (
+              <div className="flex flex-nowrap items-end gap-2 overflow-x-auto pb-1">
+                <div className="relative flex w-[11rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Search
+                  </span>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={performanceSearch}
+                      onChange={(e) => setPerformanceSearch(e.target.value)}
+                      placeholder="User name or email"
+                      className="h-8 w-full rounded-md border border-slate-300 bg-white pl-7 pr-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                </div>
+                <div className="flex w-[9.25rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Role
+                  </span>
+                  <select
+                    value={performanceRole}
+                    onChange={(e) => setPerformanceRole(e.target.value)}
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                    aria-label="Filter by role"
+                  >
+                    <option value="">All roles</option>
+                    {performanceFilterOptions.roles.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex w-[9.25rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Division
+                  </span>
+                  <select
+                    value={performanceDivision}
+                    onChange={(e) => setPerformanceDivision(e.target.value)}
+                    aria-label="Filter by division"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">All divisions</option>
+                    {performanceFilterOptions.divisions.map((d) => (
+                      <option key={`perf-div-${d}`} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex w-[9.25rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Department
+                  </span>
+                  <select
+                    value={performanceDepartment}
+                    onChange={(e) => setPerformanceDepartment(e.target.value)}
+                    aria-label="Filter by department"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">All departments</option>
+                    {performanceFilterOptions.departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex w-[9.25rem] shrink-0 flex-col gap-0.5">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Student group
+                  </span>
+                  <select
+                    value={performanceStudentGroup}
+                    onChange={(e) => setPerformanceStudentGroup(e.target.value)}
+                    aria-label="Filter users with portfolio leads in this student group"
+                    className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">All student groups</option>
+                    {callReportStudentGroupOptions.map((g: string) => (
+                      <option key={`perf-sg-${g}`} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-2 self-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 whitespace-nowrap"
+                    onClick={() => void handlePrintPerformanceDetails()}
+                  >
+                    Print Detailed Report
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 whitespace-nowrap bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400"
+                    onClick={handleExportPerformanceSummaryExcel}
+                  >
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                    Export Excel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {callSubTab === 'daily' && isLoadingCalls ? (
             <ReportDashboardSkeleton />
           ) : callSubTab === 'daily' && callReportsError ? (
@@ -2586,340 +2924,6 @@ export default function ReportsPage() {
                 </Card>
               )}
 
-              {/* Inner Sub-Tabs: Daily Call Report | User Performance Summary */}
-              <div className="border-b border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between gap-3">
-                  <nav className="flex space-x-6">
-                    <button
-                      onClick={() => {
-                        setCallSubTab('daily');
-                        handleDatePreset('today');
-                      }}
-                      className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
-                        callSubTab === 'daily'
-                          ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
-                          : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
-                      }`}
-                    >
-                      Daily Call Report
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCallSubTab('performance');
-                        handleDatePreset('overall');
-                      }}
-                      onMouseEnter={prefetchUserPerformanceSummary}
-                      onFocus={prefetchUserPerformanceSummary}
-                      className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
-                        callSubTab === 'performance'
-                          ? 'border-[#f97316] text-[#ea580c] dark:text-[#fb923c]'
-                          : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
-                      }`}
-                    >
-                      User Performance Summary
-                    </button>
-                  </nav>
-
-                  {/* Daily sub-tab controls */}
-                  {callSubTab === 'daily' && (
-                    <div className="flex flex-wrap items-end gap-3 pb-1">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Division
-                        </span>
-                        <select
-                          value={dailyDivision}
-                          onChange={(e) => setDailyDivision(e.target.value)}
-                          aria-label="Filter by division"
-                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <option value="">All divisions</option>
-                          {performanceFilterOptions.divisions.map((d) => (
-                            <option key={`daily-div-${d}`} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Department
-                        </span>
-                        <select
-                          value={dailyDepartment}
-                          onChange={(e) => setDailyDepartment(e.target.value)}
-                          aria-label="Filter by department"
-                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <option value="">All departments</option>
-                          {performanceFilterOptions.departments.map((d) => (
-                            <option key={`daily-dept-${d}`} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Student group
-                        </span>
-                        <select
-                          value={dailyStudentGroup}
-                          onChange={(e) => setDailyStudentGroup(e.target.value)}
-                          aria-label="Filter calls by lead student group (leads.student_group)"
-                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <option value="">All student groups</option>
-                          {callReportStudentGroupOptions.map((g: string) => (
-                            <option key={`daily-sg-${g}`} value={g}>{g}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Page size
-                        </span>
-                        <select
-                          value={String(dailyLimit)}
-                          onChange={(e) => {
-                            const nextLimit = Number(e.target.value) || 50;
-                            setExpandedDailyUsers(new Set());
-                            setDailyLimit(nextLimit);
-                            setDailyPage(1);
-                          }}
-                          aria-label="Rows per page"
-                          className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <option value="25">25 / page</option>
-                          <option value="50">50 / page</option>
-                          <option value="100">100 / page</option>
-                        </select>
-                      </div>
-                      {/* Date range label */}
-                      {filters.startDate && filters.endDate && (
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded px-2 py-1 whitespace-nowrap">
-                          {format(new Date(filters.startDate), 'dd MMM yyyy')}
-                          <span className="mx-1 text-slate-400">→</span>
-                          {format(new Date(filters.endDate), 'dd MMM yyyy')}
-                        </span>
-                      )}
-                      {callReports?.reports && callReports.reports.length > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const daily = callReports?.reports || [];
-                            if (daily.length === 0) return;
-
-                          // Group and sort data
-                          const grouped: { userName: string; rows: any[]; fullUser: any }[] = [];
-                          const seen = new Map<string, number>();
-
-                          daily.forEach((r: any) => {
-                            const fullUser = users.find((u: any) => u._id === r.userId || u.name === r.userName);
-                            if (!seen.has(r.userName)) {
-                              seen.set(r.userName, grouped.length);
-                              grouped.push({ userName: r.userName, rows: [r], fullUser });
-                            } else {
-                              grouped[seen.get(r.userName)!].rows.push(r);
-                            }
-                          });
-                          grouped.forEach((g) => {
-                            g.rows.sort((a: any, b: any) => {
-                              if (a?.rangeAggregate || b?.rangeAggregate) return 0;
-                              const ta = a?.date ? new Date(a.date).getTime() : 0;
-                              const tb = b?.date ? new Date(b.date).getTime() : 0;
-                              return ta - tb;
-                            });
-                          });
-
-                          const dateLabelForDailyExport = (r: any) => {
-                            if (r?.rangeAggregate && filters.startDate && filters.endDate) {
-                              const a = format(new Date(filters.startDate), 'dd MMM yyyy');
-                              const b = format(new Date(filters.endDate), 'dd MMM yyyy');
-                              const same = filters.startDate === filters.endDate;
-                              const rangeStr = same ? a : `${a} – ${b}`;
-                              const dwa = typeof r.daysWithActivity === 'number' && r.daysWithActivity > 0
-                                ? ` (${r.daysWithActivity} day${r.daysWithActivity !== 1 ? 's' : ''} with activity)`
-                                : '';
-                              return `${rangeStr}${dwa}`;
-                            }
-                            if (!r?.date) return '—';
-                            return format(new Date(r.date), 'dd MMM yyyy');
-                          };
-
-                          // Build flat data rows
-                          const allRows = grouped.flatMap(g =>
-                            g.rows.map((r: any) => ({
-                              User: g.userName || '—',
-                              Division: g.fullUser?.division || '—',
-                              Department: g.fullUser?.department || '—',
-                              'Employee group (HRMS)': g.fullUser?.group || '—',
-                              Role: g.fullUser?.roleName || '—',
-                              Date: dateLabelForDailyExport(r),
-                              'Calls/Visits Done': r.callCount ?? 0,
-                              'Total Duration': formatSecondsToMMSS(r.totalDuration ?? 0),
-                              'Avg Duration': formatSecondsToMMSS(r.averageDuration ?? 0),
-                            }))
-                          );
-
-                          // Prepare display data with cleared redundant cells
-                          const displayData = allRows.map((row: any, idx: number) => {
-                            const newRow = { ...row };
-                            if (idx > 0 && allRows[idx - 1].User === row.User) {
-                              newRow.User = "";
-                              newRow.Division = "";
-                              newRow.Department = "";
-                              newRow['Employee group (HRMS)'] = "";
-                            }
-                            return newRow;
-                          });
-
-                          // Generate worksheet & merges
-                          const worksheet = XLSX.utils.json_to_sheet(displayData);
-                          const merges: XLSX.Range[] = [];
-                          let startIdx = 0;
-                          while (startIdx < allRows.length) {
-                            const userName = allRows[startIdx].User;
-                            let endIdx = startIdx;
-                            while (endIdx + 1 < allRows.length && allRows[endIdx + 1].User === userName) {
-                              endIdx++;
-                            }
-
-                            if (endIdx > startIdx) {
-                              for (let col = 0; col <= 3; col++) {
-                                merges.push({
-                                  s: { r: startIdx + 1, c: col },
-                                  e: { r: endIdx + 1, c: col }
-                                });
-                              }
-                            }
-                            startIdx = endIdx + 1;
-                          }
-                          worksheet['!merges'] = merges;
-
-                          // Column sizing
-                          const cols = Object.keys(allRows[0]).map(key => ({
-                            wch: Math.max(key.length, ...allRows.map((r: any) => String(r[key] ?? '').length)) + 5
-                          }));
-                          worksheet['!cols'] = cols;
-
-                          const workbook = XLSX.utils.book_new();
-                          XLSX.utils.book_append_sheet(workbook, worksheet, 'Daily Call Report');
-                          XLSX.writeFile(workbook, `daily-call-reports-${filters.startDate}-${filters.endDate}.xlsx`);
-                          }}
-                        >
-                          <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
-                          Export Excel
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {callSubTab === 'performance' && (
-                    <div className="flex flex-wrap items-end gap-2 pb-1">
-                      <div className="relative flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Search
-                        </span>
-                        <div className="relative">
-                          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                          <input
-                            type="text"
-                            value={performanceSearch}
-                            onChange={(e) => setPerformanceSearch(e.target.value)}
-                            placeholder="User name or email"
-                            className="h-8 w-40 rounded-md border border-slate-300 bg-white pl-7 pr-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Role
-                        </span>
-                        <select
-                          value={performanceRole}
-                          onChange={(e) => setPerformanceRole(e.target.value)}
-                          className="h-8 min-w-[9.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                          aria-label="Filter by role"
-                        >
-                          <option value="">All roles</option>
-                          {performanceFilterOptions.roles.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Division
-                        </span>
-                        <select
-                          value={performanceDivision}
-                          onChange={(e) => setPerformanceDivision(e.target.value)}
-                          aria-label="Filter by division"
-                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <option value="">All divisions</option>
-                          {performanceFilterOptions.divisions.map((d) => (
-                            <option key={`perf-div-${d}`} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Department
-                        </span>
-                        <select
-                          value={performanceDepartment}
-                          onChange={(e) => setPerformanceDepartment(e.target.value)}
-                          aria-label="Filter by department"
-                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <option value="">All departments</option>
-                          {performanceFilterOptions.departments.map((d) => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-0.5">
-                          Student group
-                        </span>
-                        <select
-                          value={performanceStudentGroup}
-                          onChange={(e) => setPerformanceStudentGroup(e.target.value)}
-                          aria-label="Filter users with portfolio leads in this student group"
-                          className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <option value="">All student groups</option>
-                          {callReportStudentGroupOptions.map((g: string) => (
-                            <option key={`perf-sg-${g}`} value={g}>{g}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex self-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void handlePrintPerformanceDetails()}
-                        >
-                          Print Detailed Report
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400"
-                          onClick={handleExportPerformanceSummaryExcel}
-                        >
-                          <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
-                          Export Excel
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Daily Call Report Sub-Tab */}
               {callSubTab === 'daily' && (
                 callReports?.reports && callReports.reports.length > 0 ? (
@@ -2959,7 +2963,7 @@ export default function ReportsPage() {
                                   const same = filters.startDate === filters.endDate;
                                   return (
                                     <div className="flex flex-col gap-0.5">
-                                      <span>{same ? a : `${a} – ${b}`}</span>
+                                      <span>{same ? a : `${a} â€“ ${b}`}</span>
                                       {typeof r.daysWithActivity === 'number' && r.daysWithActivity > 0 && (
                                         <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
                                           {r.daysWithActivity} day{r.daysWithActivity !== 1 ? 's' : ''} with activity
@@ -2968,7 +2972,7 @@ export default function ReportsPage() {
                                     </div>
                                   );
                                 }
-                                if (!r?.date) return <span className="text-slate-400">—</span>;
+                                if (!r?.date) return <span className="text-slate-400">â€”</span>;
                                 return <span>{format(new Date(r.date), 'dd MMM yyyy')}</span>;
                               };
 
@@ -2979,7 +2983,7 @@ export default function ReportsPage() {
                                   ? 'bg-[#ffffff] dark:bg-[#1e293b]/50'
                                   : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30';
 
-                                // ── Single row per user (date filter = cumulative from API, or one calendar day) ──
+                                // â”€â”€ Single row per user (date filter = cumulative from API, or one calendar day) â”€â”€
                                 if (!isMultiDay) {
                                   const r = group.rows[0];
                                   return [(
@@ -2988,7 +2992,7 @@ export default function ReportsPage() {
                                         <div className="flex flex-col">
                                           <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{group.userName}</span>
                                           <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                                            {group.fu?.department || '—'} · {group.fu?.group || '—'}
+                                            {group.fu?.department || 'â€”'} Â· {group.fu?.group || 'â€”'}
                                           </span>
                                         </div>
                                       </td>
@@ -3000,7 +3004,7 @@ export default function ReportsPage() {
                                   )];
                                 }
 
-                                // ── Overall mode: multiple calendar rows per user — collapsed summary + expandable per-day ──
+                                // â”€â”€ Overall mode: multiple calendar rows per user â€” collapsed summary + expandable per-day â”€â”€
                                 const totalCalls    = group.rows.reduce((s: number, row: any) => s + (Number(row.callCount)    || 0), 0);
                                 const totalDuration = group.rows.reduce((s: number, row: any) => s + (Number(row.totalDuration) || 0), 0);
                                 const avgDuration   = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
@@ -3025,7 +3029,7 @@ export default function ReportsPage() {
                                           <div className="flex flex-col">
                                             <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{group.userName}</span>
                                             <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                                              {group.fu?.department || '—'} · {group.fu?.group || '—'}
+                                              {group.fu?.department || 'â€”'} Â· {group.fu?.group || 'â€”'}
                                             </span>
                                           </div>
                                         </div>
@@ -3056,7 +3060,7 @@ export default function ReportsPage() {
                                             <div className="flex flex-col">
                                               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{group.userName}</span>
                                               <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                                                {group.fu?.department || '—'} · {group.fu?.group || '—'}
+                                                {group.fu?.department || 'â€”'} Â· {group.fu?.group || 'â€”'}
                                               </span>
                                             </div>
                                           </div>
@@ -3152,10 +3156,10 @@ export default function ReportsPage() {
                 ) : performanceTableUsers.length > 0 ? (
                   <div className="space-y-4">
                     {isFetchingPerformanceUserList && performanceUserAnalyticsData && (
-                      <p className="text-xs text-orange-600 dark:text-orange-400">Updating portfolio data…</p>
+                      <p className="text-xs text-orange-600 dark:text-orange-400">Updating portfolio dataâ€¦</p>
                     )}
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Current portfolio snapshot — lead counts by status for each user&apos;s assigned leads
+                      Current portfolio snapshot â€” lead counts by status for each user&apos;s assigned leads
                       {performanceRole.trim() === 'Student Counselor'
                         ? ' (call_status)'
                         : performanceRole.trim() === 'PRO'
@@ -3209,7 +3213,7 @@ export default function ReportsPage() {
                                       </span>
                                     </div>
                                     <div className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
-                                      {(user.department || fu?.department || '—')} | {(user.designation || fu?.designation || '—')} | {(user.group || fu?.group || '—')}
+                                      {(user.department || fu?.department || 'â€”')} | {(user.designation || fu?.designation || 'â€”')} | {(user.group || fu?.group || 'â€”')}
                                     </div>
                                   </div>
                                 </td>
@@ -3253,7 +3257,7 @@ export default function ReportsPage() {
                         <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
                           <p className="text-xs text-slate-600 dark:text-slate-400">
                             Page {performanceUserAnalyticsData.pagination.page} of{' '}
-                            {performanceUserAnalyticsData.pagination.pages} —{' '}
+                            {performanceUserAnalyticsData.pagination.pages} â€”{' '}
                             {performanceUserAnalyticsData.pagination.total} user
                             {performanceUserAnalyticsData.pagination.total === 1 ? '' : 's'} (showing{' '}
                             {performanceTableUsers.length} on this page)
@@ -3462,7 +3466,7 @@ export default function ReportsPage() {
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Calls/Visits Done']}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Balance}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row['Interested Leads']}</td>
-                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Visited === '' || row.Visited == null ? '—' : row.Visited}</td>
+                                        <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Visited === '' || row.Visited == null ? 'â€”' : row.Visited}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Confirmed}</td>
                                         <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{row.Admitted}</td>
                                       </tr>
@@ -3704,7 +3708,7 @@ export default function ReportsPage() {
         )
       }
 
-      {/* User Analytics Tab – per-user call activity (calls, SMS, status changes) like the counsellor Call activity page */}
+      {/* User Analytics Tab â€“ per-user call activity (calls, SMS, status changes) like the counsellor Call activity page */}
       {
         activeTab === 'users' && (
           <div className="space-y-6">
@@ -3810,8 +3814,8 @@ export default function ReportsPage() {
                                           {day.leads.map((lead: any, lidx: number) => (
                                             <tr key={lidx}>
                                               <td className="px-3 py-1.5 text-slate-900 dark:text-slate-100">{lead.leadName}</td>
-                                              <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.leadPhone || '—'}</td>
-                                              <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.enquiryNumber || '—'}</td>
+                                              <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.leadPhone || 'â€”'}</td>
+                                              <td className="px-3 py-1.5 text-slate-600 dark:text-slate-400">{lead.enquiryNumber || 'â€”'}</td>
                                               <td className="px-3 py-1.5 text-right text-slate-900 dark:text-slate-100">{lead.callCount}</td>
                                             </tr>
                                           ))}
@@ -3960,7 +3964,7 @@ export default function ReportsPage() {
                                               key={cIdx}
                                               className="inline-flex rounded px-2 py-0.5 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
                                             >
-                                              {conv.from} → {conv.to}
+                                              {conv.from} â†’ {conv.to}
                                             </span>
                                           ))}
                                         </div>
@@ -4611,7 +4615,7 @@ export default function ReportsPage() {
                                    >
                                      <div className="min-w-0">
                                        <p className="font-bold text-xs text-slate-900 dark:text-white truncate">{lead.name}</p>
-                                       <p className="text-[10px] text-slate-500 truncate">{lead.phone} • {lead.village}</p>
+                                       <p className="text-[10px] text-slate-500 truncate">{lead.phone} â€¢ {lead.village}</p>
                                      </div>
                                      <div className={cn(
                                        "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
@@ -4719,7 +4723,7 @@ export default function ReportsPage() {
         )
       }
 
-      {/* Activity Logs Tab – time tracking ON/OFF in tabular format */}
+      {/* Activity Logs Tab â€“ time tracking ON/OFF in tabular format */}
       {
         activeTab === 'activityLogs' && (
           <div className="overflow-hidden rounded-lg border border-[#e2e8f0] dark:border-[#475569] mt-4">
@@ -4817,7 +4821,7 @@ export default function ReportsPage() {
                                 )}
                               </td>
                               <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-600 dark:text-slate-400 sm:px-6">
-                                {log.firstLogin ? format(new Date(log.firstLogin), 'h:mm a') : '—'}
+                                {log.firstLogin ? format(new Date(log.firstLogin), 'h:mm a') : 'â€”'}
                               </td>
                               <td className="whitespace-nowrap px-6 py-4 text-right sm:px-6">
                                 <span className="text-slate-400">
@@ -4851,7 +4855,7 @@ export default function ReportsPage() {
                                               <span className="mr-2">
                                                 {format(new Date(session.startTime), 'h:mm a')}
                                               </span>
-                                              <span className="mr-2 text-slate-400">→</span>
+                                              <span className="mr-2 text-slate-400">â†’</span>
                                               <span className="mr-4">
                                                 {session.endTime ? format(new Date(session.endTime), 'h:mm a') : 'Active Now'}
                                               </span>
@@ -4878,7 +4882,7 @@ export default function ReportsPage() {
                 {activityLogsPagination && activityLogsPagination.pages > 1 && (
                   <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Page {activityLogsPagination.page} of {activityLogsPagination.pages} · {activityLogsPagination.total} records
+                      Page {activityLogsPagination.page} of {activityLogsPagination.pages} Â· {activityLogsPagination.total} records
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -4906,7 +4910,7 @@ export default function ReportsPage() {
         )
       }
 
-      {/* Leads Abstract Tab – State → Districts → Mandals filters; 4-column Kanban */}
+      {/* Leads Abstract Tab â€“ State â†’ Districts â†’ Mandals filters; 4-column Kanban */}
       {
         activeTab === 'abstract' && (
           <div className="space-y-4">
@@ -4915,11 +4919,11 @@ export default function ReportsPage() {
             ) : leadsAbstractDistricts ? (
               <>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-16rem)]">
-                {/* Districts table – always shown first */}
+                {/* Districts table â€“ always shown first */}
                 <Card noPadding className="flex flex-col overflow-hidden h-full">
                   <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Districts</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Totals per district · Select row for mandals</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Totals per district Â· Select row for mandals</p>
                   </div>
                   <div className="flex-1 overflow-y-auto">
                     {isFetchingAbstractDistricts && !leadsAbstractDistricts ? (
@@ -4971,12 +4975,12 @@ export default function ReportsPage() {
                   </div>
                 </Card>
 
-                {/* Mandals table – only when a district is selected */}
+                {/* Mandals table â€“ only when a district is selected */}
                 {filters.abstractDistrictId ? (
                   <Card noPadding className="flex flex-col overflow-hidden h-full">
                     <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mandals</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Assigned vs unassigned · Select row for villages</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Assigned vs unassigned Â· Select row for villages</p>
                     </div>
                     <div className="flex-1 overflow-y-auto">
                       {(isLoadingAbstractMandals || isFetchingAbstractMandals) && !leadsAbstractMandals ? (
@@ -5035,7 +5039,7 @@ export default function ReportsPage() {
                   </div>
                 )}
 
-                {/* Villages table – only when a mandal is selected */}
+                {/* Villages table â€“ only when a mandal is selected */}
                 {filters.abstractMandalId ? (
                   <Card noPadding className="flex flex-col overflow-hidden h-full">
                     <div className="shrink-0 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-[#f8fafc] dark:bg-[#1e293b]">
