@@ -34,6 +34,7 @@ import {
   formatRegistrationFieldLabel,
   isRegistrationImageDataUrl,
 } from '@/lib/registrationFieldsDisplay';
+import { ApplicationSectionCard } from '@/components/admission/ApplicationSectionCard';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -595,29 +596,66 @@ export default function AdmissionDetailPage() {
       )}
 
       {/* Step 1 — application data captured on the joining form */}
-      <div
-        id="admission-step-one"
-        className="scroll-mt-24 rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white p-6 shadow-lg dark:border-blue-800 dark:from-blue-900/30 dark:to-slate-900/70"
-      >
-        <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
-          Step 1 — Online application
-        </p>
-        <p className="mt-1 text-sm text-blue-900/80 dark:text-blue-200/80">
-          Read-only view of the approved joining form.{' '}
-          {admission.joiningId ? (
-            <Link
-              href={`/superadmin/joining/${admission.joiningId}`}
-              className="font-semibold text-blue-800 underline underline-offset-2 dark:text-blue-200"
-            >
-              Edit on joining workspace
-            </Link>
-          ) : null}
-        </p>
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300 mb-4">
-              Student Information
-            </h3>
+      <div id="admission-step-one" className="scroll-mt-24 space-y-6">
+        <div className="rounded-xl border border-blue-200/80 bg-blue-50/60 px-5 py-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+          <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+            Step 1 — Online application
+          </p>
+          <p className="mt-1 text-sm text-blue-900/80 dark:text-blue-200/80">
+            Read-only view of the approved joining form.{' '}
+            {admission.joiningId ? (
+              <Link
+                href={`/superadmin/joining/${admission.joiningId}`}
+                className="font-semibold text-blue-800 underline underline-offset-2 dark:text-blue-200"
+              >
+                Edit on joining workspace
+              </Link>
+            ) : null}
+          </p>
+        </div>
+
+        <ApplicationSectionCard step={1} title="Student Information">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Course &amp; quota
+          </h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">College</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                {getCollegeNameForCourse(admission.courseInfo?.courseId) || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Course</p>
+              <p className="mt-1 text-sm font-semibold text-blue-700 dark:text-blue-300">
+                {resolveJoiningOrAdmissionCourseLabel(admission, getCourseName) || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Branch</p>
+              <p className="mt-1 text-sm font-semibold text-blue-700 dark:text-blue-300">
+                {getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Quota</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                {admission.courseInfo?.quota || '—'}
+              </p>
+            </div>
+            {admission.courseInfo?.programLevel ? (
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Program level</p>
+                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                  {admission.courseInfo.programLevel}
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            Student profile
+          </h3>
+          <div className="mt-4 grid gap-6 md:grid-cols-2">
             <div className="space-y-3">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Full Name</p>
@@ -639,6 +677,8 @@ export default function AdmissionDetailPage() {
                   </p>
                 </div>
               </div>
+            </div>
+            <div className="space-y-3">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Date of Birth</p>
                 <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1">
@@ -687,42 +727,10 @@ export default function AdmissionDetailPage() {
               </div>
             </div>
           </div>
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300 mb-4">
-              Course Information
-            </h2>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Course</p>
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-300 mt-1">
-                  {resolveJoiningOrAdmissionCourseLabel(admission, getCourseName) || '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Branch</p>
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-300 mt-1">
-                  {getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Quota</p>
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-300 mt-1">
-                  {admission.courseInfo?.quota || '—'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        </ApplicationSectionCard>
 
-      {/* Parents Information */}
       {admission.parents && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-            <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 12H9m6 0a6 6 0 11-12 0 6 6 0 0112 0z" />
-            </svg>
-            Parents Information
-          </h2>
+        <ApplicationSectionCard step={2} title="Parents Details">
           <div className="grid gap-6 md:grid-cols-2">
             <div>
               <h3 className="text-md font-semibold text-gray-800 dark:text-slate-200 mb-4">
@@ -813,18 +821,17 @@ export default function AdmissionDetailPage() {
               </div>
             </div>
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Address Information */}
       {admission.address && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-6">
-            Address for Communication
-          </h2>
-          <div className="space-y-4">
+        <ApplicationSectionCard step={3} title="Address Details">
+          <div className="space-y-6">
             {admission.address.communication && (
               <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">
+                  Communication address
+                </h3>
                 <div>
                   <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Door No / Street Name</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
@@ -867,19 +874,34 @@ export default function AdmissionDetailPage() {
                 </div>
               </div>
             )}
+            {admission.address.relatives && admission.address.relatives.length > 0 && (
+              <div className="border-t border-slate-200/80 pt-6 dark:border-slate-700">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">
+                  Relatives / friends
+                </h3>
+                <div className="space-y-3">
+                  {admission.address.relatives.map((relative, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40"
+                    >
+                      <p className="font-semibold text-gray-900 dark:text-slate-100">
+                        {relative.name || '—'}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">
+                        {relative.relationship || '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Reservation Category */}
       {admission.reservation && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-            <svg className="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Reservation Category
-          </h2>
+        <ApplicationSectionCard step={4} title="Reservation Category">
           <div className="space-y-4">
             <div>
               <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">General Category</p>
@@ -919,18 +941,11 @@ export default function AdmissionDetailPage() {
               </div>
             )}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Qualifications */}
       {admission.qualifications && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-            <svg className="h-6 w-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z" />
-            </svg>
-            Qualifications
-          </h2>
+        <ApplicationSectionCard step={5} title="Qualified Examinations">
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Qualified Examinations</h3>
@@ -975,18 +990,11 @@ export default function AdmissionDetailPage() {
               </div>
             )}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Education History */}
       {admission.educationHistory && admission.educationHistory.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-            <svg className="h-6 w-6 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z" />
-            </svg>
-            Details of School/College Last Studied
-          </h2>
+        <ApplicationSectionCard step={6} title="Education History">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -1024,18 +1032,11 @@ export default function AdmissionDetailPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Siblings */}
       {admission.siblings && admission.siblings.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-            <svg className="h-6 w-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 12H9m6 0a6 6 0 11-12 0 6 6 0 0112 0z" />
-            </svg>
-            Details of Siblings
-          </h2>
+        <ApplicationSectionCard step={7} title="Siblings">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -1058,18 +1059,11 @@ export default function AdmissionDetailPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Documents Required */}
       {admission.documents && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-            <svg className="h-6 w-6 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Documents Received
-          </h2>
+        <ApplicationSectionCard step={8} title="Documents Checklist">
           <div className="grid gap-4 md:grid-cols-2">
             {[
               { id: 'ssc', label: 'S.S.C' },
@@ -1111,18 +1105,11 @@ export default function AdmissionDetailPage() {
               </div>
             ))}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
 
-      {/* Registration Form Fields */}
       {registrationFieldEntries.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/70">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-            <svg className="h-6 w-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Registration Form Fields
-          </h2>
+        <ApplicationSectionCard title="Registration Form Fields">
           <div className="grid gap-4 md:grid-cols-2">
             {registrationFieldEntries.map(([key, raw]) => (
               <div key={key} className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40">
@@ -1143,8 +1130,22 @@ export default function AdmissionDetailPage() {
               </div>
             ))}
           </div>
-        </div>
+        </ApplicationSectionCard>
       )}
+
+      <WorkflowStickyActionBar
+        id="admission-step-one-actions"
+        stepLabel="Step 1 actions"
+        className="border-blue-200/80 dark:border-blue-900/50"
+      >
+        <WorkflowNextStepButton
+          fromStep={1}
+          surface="admission-detail"
+          joiningId={admission.joiningId}
+          admissionId={admission._id}
+        />
+      </WorkflowStickyActionBar>
+      </div>
 
       {/* Payment Information */}
       {paymentSummary && (
@@ -1259,20 +1260,6 @@ export default function AdmissionDetailPage() {
           </div>
         </div>
       )}
-
-      <WorkflowStickyActionBar
-        id="admission-step-one-actions"
-        stepLabel="Step 1 actions"
-        className="border-blue-200/80 dark:border-blue-900/50"
-      >
-        <WorkflowNextStepButton
-          fromStep={1}
-          surface="admission-detail"
-          joiningId={admission.joiningId}
-          admissionId={admission._id}
-        />
-      </WorkflowStickyActionBar>
-      </div>
 
       {admission.joiningId && admission._id && !isAdmissionCancelled ? (
         <AdmissionStepTwoPanel

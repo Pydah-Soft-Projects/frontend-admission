@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { leadAPI, joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
-import { SendJoiningFormModal } from '@/components/joining/SendJoiningFormModal';
+import { AddJoiningFormModal } from '@/components/joining/AddJoiningFormModal';
 import { Lead } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -27,7 +27,7 @@ const ConfirmedLeadsPage = () => {
     admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
     joiningOnlineAdmissionMode: true;
   } | null>(null);
-  const [isSendJoiningModalOpen, setIsSendJoiningModalOpen] = useState(false);
+  const [isAddJoiningModalOpen, setIsAddJoiningModalOpen] = useState(false);
 
   const sendAdmissionSmsMutation = useMutation({
     mutationFn: (leadId: string) => joiningAPI.createPublicEditLink(leadId),
@@ -111,7 +111,7 @@ const ConfirmedLeadsPage = () => {
             type="button"
             variant="outline"
             className="whitespace-nowrap sm:ml-auto sm:shrink-0"
-            onClick={() => setIsSendJoiningModalOpen(true)}
+            onClick={() => setIsAddJoiningModalOpen(true)}
           >
             Add Joining Form (staff)
           </Button>
@@ -256,7 +256,7 @@ const ConfirmedLeadsPage = () => {
         onClose={() => setSmsSession(null)}
       />
 
-      <SendJoiningFormModal open={isSendJoiningModalOpen} onClose={() => setIsSendJoiningModalOpen(false)} />
+      <AddJoiningFormModal open={isAddJoiningModalOpen} onClose={() => setIsAddJoiningModalOpen(false)} />
     </div>
   );
 };

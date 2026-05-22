@@ -1288,8 +1288,14 @@ export const joiningAPI = {
     branch?: string;
     quota?: string;
     programLevel?: string;
+    reference1?: string;
+    /** CRM lead source; defaults to Direct Admission on the server. */
+    source?: string;
   }) => {
-    const response = await api.post('/joinings/send-public-link', data);
+    const response = await api.post('/joinings/send-public-link', {
+      ...data,
+      source: data.source ?? 'Direct Admission',
+    });
     return response.data as {
       data?: {
         leadId: string;
@@ -1329,6 +1335,12 @@ export const admissionAPI = {
   }) => {
     const response = await api.put('/admissions/branch-intake', payload);
     return response.data?.data || response.data;
+  },
+  listReferenceNames: async () => {
+    const response = await api.get('/admissions/reference-names');
+    const payload = response.data?.data ?? response.data;
+    const names = (payload as { names?: string[] })?.names;
+    return Array.isArray(names) ? names : [];
   },
   getStatsByReference: async (params?: {
     startDate?: string;
