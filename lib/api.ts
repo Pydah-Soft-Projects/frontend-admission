@@ -531,6 +531,32 @@ export const leadAPI = {
     const response = await api.get(`/leads/assign/stats${query ? `?${query}` : ''}`);
     return response.data;
   },
+  getAssignmentPortfolio: async (params: {
+    userId: string;
+    mandal?: string;
+    district?: string;
+    state?: string;
+    village?: string;
+    academicYear?: number | string;
+    studentGroup?: string;
+    cycleNumber?: number | string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    queryParams.append('userId', String(params.userId).trim());
+    if (params.mandal) queryParams.append('mandal', params.mandal);
+    if (params.village) queryParams.append('village', params.village);
+    if (params.district) queryParams.append('district', params.district);
+    if (params.state) queryParams.append('state', params.state);
+    if (params.academicYear != null && params.academicYear !== '') {
+      queryParams.append('academicYear', String(params.academicYear));
+    }
+    if (params.studentGroup) queryParams.append('studentGroup', params.studentGroup);
+    if (params.cycleNumber != null && params.cycleNumber !== '') {
+      queryParams.append('cycleNumber', String(params.cycleNumber));
+    }
+    const response = await api.get(`/leads/assign/portfolio?${queryParams.toString()}`);
+    return response.data?.data ?? response.data;
+  },
   getAssignedCountForUser: async (params: {
     userId: string;
     mandal?: string;
@@ -573,6 +599,12 @@ export const leadAPI = {
     village?: string;
     cycleNumber?: number | string;
     count: number;
+    /** Student Counselor: only unassign leads in these call_status buckets. */
+    callStatuses?: string[];
+    /** PRO: only unassign leads in these visit_status buckets. */
+    visitStatuses?: string[];
+    /** Role-agnostic alias (server picks column from user role). */
+    statuses?: string[];
   }) => {
     const response = await api.post('/leads/assign/remove', data);
     return response.data;
