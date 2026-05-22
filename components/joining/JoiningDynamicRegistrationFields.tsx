@@ -2,17 +2,36 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from 'react';
 import { Camera, ImagePlus } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 import { isJoiningRegistrationCertificationStatusField } from '@/lib/joiningRegistrationFieldFilter';
-import { isJoiningRegistrationBatchField } from '@/lib/joiningAcademicYearRegistration';
+import {
+  isJoiningRegistrationBatchField,
+  listRegistrationRemarkFieldNames,
+} from '@/lib/joiningAcademicYearRegistration';
 import {
   isJoiningFatherPortraitFileField,
   isJoiningMotherPortraitFileField,
   isJoiningStudentPortraitUploadField,
 } from '@/lib/joiningRegistrationPhotoFields';
 import { JoiningCameraCaptureButton } from '@/components/joining/JoiningCameraCaptureButton';
+import {
+  isApaarIdField,
+  isFixedAcademicYearField,
+  isFixedSemesterField,
+  isJoiningRegistrationIntakeField,
+  isPreviousCollegeField,
+  joiningStudentProfileFieldRank,
+  sortJoiningRegistrationProfileFields,
+  splitRegistrationGridFields,
+} from '@/lib/joiningRegistrationFieldLayout';
+
+/** Fields with rank below this render above the previous-college / APAAR / contact row. */
+const JOINING_PREVIOUS_COLLEGE_CONTACT_ROW_RANK = 80;
+
+export { isApaarIdField } from '@/lib/joiningRegistrationFieldLayout';
 
 export type RegistrationFormField = {
   _id?: string;
@@ -76,21 +95,13 @@ function isSchoolOrCollegeField(field: RegistrationFormField) {
   return (field.fieldName || '').toLowerCase() === 'school_or_college_name';
 }
 
-function normKey(s: string) {
-  return String(s || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_');
-}
-
-function isFixedAcademicYearField(field: RegistrationFormField): boolean {
-  const n = normKey(field.fieldName || '');
-  return n === 'academic_year' || n === 'academicyear' || n === 'current_year' || n === 'currentyear';
-}
-
-function isFixedSemesterField(field: RegistrationFormField): boolean {
-  const n = normKey(field.fieldName || '');
-  return n === 'current_semester' || n === 'currentsemester' || n === 'semester' || n === 'semister';
+function isRegistrationPortraitField(field: RegistrationFormField): boolean {
+  if (field.fieldType !== 'file') return false;
+  return (
+    isJoiningStudentPortraitUploadField(field) ||
+    isJoiningFatherPortraitFileField(field) ||
+    isJoiningMotherPortraitFileField(field)
+  );
 }
 
 /**
@@ -343,6 +354,17 @@ type Props = {
     baseSlug: string;
     displayName: string;
   };
+  /** Shown on the same row as APAAR ID (structured joining student fields). */
+  studentContactFields?: {
+    phone: string;
+    onPhoneChange: (value: string) => void;
+    aadhaarNumber: string;
+    onAadhaarChange: (value: string) => void;
+    showAadhaar: boolean;
+    onToggleShowAadhaar: () => void;
+  };
+  /** Current academic year / semester are shown beside Course & Quota on the joining page. */
+  omitIntakeYearSemesterFromGrid?: boolean;
 };
 
 export function JoiningDynamicRegistrationFields({
@@ -358,6 +380,8 @@ export function JoiningDynamicRegistrationFields({
   isBtechJoining = false,
   btechYearOptions,
   photoUploadContext,
+  studentContactFields,
+  omitIntakeYearSemesterFromGrid = false,
 }: Props) {
   const { stateNames, districtNames, mandalNames } = useLocations({
     stateName: selectedState || undefined,
@@ -383,9 +407,134 @@ export function JoiningDynamicRegistrationFields({
     return d || 'Student';
   }, [photoUploadContext?.displayName]);
 
-  const sorted = useMemo(() => {
-    return [...fields].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
-  }, [fields]);
+  const sorted = useMemo(() => sortJoiningRegistrationProfileFields(fields), [fields]);
+
+  /** Remark / comment fields stay at the bottom so the 3-column grid packs without gaps. */
+  const remarkFieldNames = useMemo(
+    () => new Set(listRegistrationRemarkFieldNames(sorted)),
+    [sorted]
+  );
+
+  const displayOrderedFields = useMemo(() => {
+    const remarks: RegistrationFormField[] = [];
+    const photos: RegistrationFormField[] = [];
+    const main: RegistrationFormField[] = [];
+
+    for (const field of sorted) {
+      if (remarkFieldNames.has(field.fieldName)) {
+        remarks.push(field);
+      } else if (isRegistrationPortraitField(field)) {
+        photos.push(field);
+      } else {
+        main.push(field);
+      }
+    }
+
+    return [...main, ...photos, ...remarks];
+  }, [sorted, remarkFieldNames]);
+
+  const apaarField = useMemo(
+    () => displayOrderedFields.find(isApaarIdField) ?? null,
+    [displayOrderedFields]
+  );
+
+  const contactBesidePreviousCollege = useMemo(
+    () =>
+      Boolean(
+        apaarField &&
+          studentContactFields &&
+          displayOrderedFields.some(isPreviousCollegeField)
+      ),
+    [displayOrderedFields, apaarField, studentContactFields]
+  );
+
+  const gridFields = useMemo(() => {
+    let list = displayOrderedFields;
+    if (contactBesidePreviousCollege) {
+      list = list.filter((f) => !isApaarIdField(f));
+    }
+    if (omitIntakeYearSemesterFromGrid) {
+      list = list.filter((f) => !isJoiningRegistrationIntakeField(f));
+    }
+    return list;
+  }, [displayOrderedFields, contactBesidePreviousCollege, omitIntakeYearSemesterFromGrid]);
+
+  const registrationGridLayout = useMemo(
+    () => splitRegistrationGridFields(gridFields, { omitApaar: false, omitIntake: false }),
+    [gridFields]
+  );
+
+  const mainGridFields = useMemo(() => {
+    if (
+      !registrationGridLayout.showPreviousCollegeContactRow ||
+      !apaarField ||
+      !studentContactFields
+    ) {
+      return gridFields;
+    }
+    return [
+      ...registrationGridLayout.beforePreviousCollege,
+      ...registrationGridLayout.afterPreviousCollege,
+    ];
+  }, [gridFields, registrationGridLayout, apaarField, studentContactFields]);
+
+  const fieldsBeforePreviousCollegeContactRow = useMemo(
+    () =>
+      mainGridFields.filter(
+        (f) => joiningStudentProfileFieldRank(f) < JOINING_PREVIOUS_COLLEGE_CONTACT_ROW_RANK
+      ),
+    [mainGridFields]
+  );
+
+  const fieldsAfterPreviousCollegeContactRow = useMemo(
+    () =>
+      mainGridFields.filter(
+        (f) => joiningStudentProfileFieldRank(f) >= JOINING_PREVIOUS_COLLEGE_CONTACT_ROW_RANK
+      ),
+    [mainGridFields]
+  );
+
+  const gridRenderSequence = useMemo(() => {
+    type SeqItem =
+      | { kind: 'field'; field: RegistrationFormField }
+      | { kind: 'student-mobile' }
+      | { kind: 'student-aadhaar' }
+      | { kind: 'apaar'; field: RegistrationFormField };
+
+    const seq: SeqItem[] = fieldsBeforePreviousCollegeContactRow.map((field) => ({
+      kind: 'field' as const,
+      field,
+    }));
+
+    if (studentContactFields) {
+      seq.push({ kind: 'student-mobile' });
+      seq.push({ kind: 'student-aadhaar' });
+    }
+
+    if (!contactBesidePreviousCollege) {
+      return mainGridFields.map((field) => ({ kind: 'field' as const, field }));
+    }
+
+    for (const field of registrationGridLayout.previousCollegeFields) {
+      seq.push({ kind: 'field', field });
+    }
+    if (apaarField) {
+      seq.push({ kind: 'apaar', field: apaarField });
+    }
+
+    for (const field of fieldsAfterPreviousCollegeContactRow) {
+      seq.push({ kind: 'field', field });
+    }
+    return seq;
+  }, [
+    mainGridFields,
+    contactBesidePreviousCollege,
+    apaarField,
+    studentContactFields,
+    fieldsBeforePreviousCollegeContactRow,
+    fieldsAfterPreviousCollegeContactRow,
+    registrationGridLayout.previousCollegeFields,
+  ]);
 
   /** When we render the combined student + parent portrait row, skip standalone father/mother file fields. */
   const portraitSiblingSkip = useMemo(() => {
@@ -429,7 +578,159 @@ export function JoiningDynamicRegistrationFields({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, currentYear]);
 
-  if (sorted.length === 0) return null;
+  if (sorted.length === 0 && !studentContactFields) return null;
+
+  const renderCompactRegistrationField = (field: RegistrationFormField) => {
+    const rawVal = getValue(field.fieldName);
+    const fieldValue =
+      rawVal === undefined || rawVal === null ? '' : field.fieldType === 'checkbox' ? rawVal : String(rawVal);
+    const isFieldRequired = Boolean(field.isRequired);
+
+    if (isSchoolOrCollegeField(field)) {
+      const labelSuffix = useSchoolsList ? 'School' : 'College';
+      const disabled = !hasSelectedGroup || institutionsLoading;
+      const datalistId = `joining-reg-${field.fieldName}-list`;
+      return (
+        <>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+            {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
+          </label>
+          <Input
+            value={String(fieldValue)}
+            onChange={(e) => onChange(field.fieldName, e.target.value)}
+            list={datalistId}
+            placeholder={
+              !hasSelectedGroup
+                ? 'Select student group first'
+                : institutionsLoading
+                  ? `Loading ${labelSuffix.toLowerCase()}s…`
+                  : `Start typing to search ${labelSuffix.toLowerCase()}`
+            }
+            disabled={disabled}
+          />
+          <datalist id={datalistId}>
+            {activeInstitutions.map((item) => (
+              <option key={item.id} value={item.name} />
+            ))}
+          </datalist>
+        </>
+      );
+    }
+
+    if (field.fieldType === 'dropdown') {
+      const dropdownOptions = normalizeFieldOptions(field.options);
+      return (
+        <>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+            {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
+          </label>
+          <select
+            value={String(fieldValue)}
+            onChange={(e) => onChange(field.fieldName, e.target.value)}
+            className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+          >
+            <option value="">Select {field.fieldLabel}</option>
+            {dropdownOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </>
+      );
+    }
+
+    const inputType =
+      field.fieldType === 'date'
+        ? 'date'
+        : field.fieldType === 'number'
+          ? 'number'
+          : field.fieldType === 'email'
+            ? 'email'
+            : field.fieldType === 'tel'
+              ? 'tel'
+              : 'text';
+
+    return (
+      <Input
+        label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
+        name={field.fieldName}
+        type={inputType as 'text' | 'email' | 'tel' | 'number' | 'date'}
+        value={String(fieldValue)}
+        onChange={(e) => onChange(field.fieldName, e.target.value)}
+        placeholder={field.placeholder || ''}
+      />
+    );
+  };
+
+  const renderApaarFieldControl = (field: RegistrationFormField) => {
+    const rawVal = getValue(field.fieldName);
+    const fieldValue =
+      rawVal === undefined || rawVal === null ? '' : field.fieldType === 'checkbox' ? rawVal : String(rawVal);
+    const isFieldRequired = Boolean(field.isRequired);
+
+    if (field.fieldType === 'dropdown') {
+      const dropdownOptions = normalizeFieldOptions(field.options);
+      return (
+        <>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+            {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
+          </label>
+          <select
+            value={String(fieldValue)}
+            onChange={(e) => onChange(field.fieldName, e.target.value)}
+            className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+          >
+            <option value="">Select {field.fieldLabel}</option>
+            {dropdownOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </>
+      );
+    }
+
+    if (field.fieldType === 'radio') {
+      const radioOptions = normalizeFieldOptions(field.options);
+      return (
+        <>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+            {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
+          </label>
+          <div className="flex flex-wrap gap-3">
+            {radioOptions.map((option) => (
+              <label
+                key={option.value}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+              >
+                <input
+                  type="radio"
+                  name={field.fieldName}
+                  value={option.value}
+                  checked={String(fieldValue) === option.value}
+                  onChange={(e) => onChange(field.fieldName, e.target.value)}
+                  className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <Input
+        label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
+        name={field.fieldName}
+        value={String(fieldValue)}
+        onChange={(e) => onChange(field.fieldName, e.target.value)}
+        placeholder={field.placeholder || ''}
+      />
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -446,11 +747,103 @@ export function JoiningDynamicRegistrationFields({
           </p>
         </div>
       ) : null}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {sorted.map((field) => {
+      {apaarField && studentContactFields && !contactBesidePreviousCollege ? (
+        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="min-w-0">{renderApaarFieldControl(apaarField)}</div>
+          <div className="min-w-0">
+            <Input
+              label="Student mobile number"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              value={studentContactFields.phone}
+              onChange={(e) => studentContactFields.onPhoneChange(e.target.value.replace(/\D/g, ''))}
+              placeholder="10-digit mobile"
+              maxLength={15}
+            />
+          </div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+              Aadhaar Number
+            </label>
+            <div className="flex gap-2">
+              <input
+                type={studentContactFields.showAadhaar ? 'text' : 'password'}
+                value={studentContactFields.aadhaarNumber}
+                onChange={(e) => studentContactFields.onAadhaarChange(e.target.value)}
+                placeholder="12-digit Aadhaar number"
+                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                maxLength={14}
+              />
+              <Button type="button" variant="secondary" onClick={studentContactFields.onToggleShowAadhaar}>
+                {studentContactFields.showAadhaar ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {gridRenderSequence.map((item) => {
+          if (item.kind === 'student-mobile' && studentContactFields) {
+            return (
+              <div key="joining-student-mobile" className="min-w-0">
+                <Input
+                  label="Student mobile number"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  value={studentContactFields.phone}
+                  onChange={(e) =>
+                    studentContactFields.onPhoneChange(e.target.value.replace(/\D/g, ''))
+                  }
+                  placeholder="10-digit mobile"
+                  maxLength={15}
+                />
+              </div>
+            );
+          }
+
+          if (item.kind === 'student-aadhaar' && studentContactFields) {
+            return (
+              <div key="joining-student-aadhaar" className="min-w-0">
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Aadhaar Number
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type={studentContactFields.showAadhaar ? 'text' : 'password'}
+                    value={studentContactFields.aadhaarNumber}
+                    onChange={(e) => studentContactFields.onAadhaarChange(e.target.value)}
+                    placeholder="12-digit Aadhaar number"
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                    maxLength={14}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={studentContactFields.onToggleShowAadhaar}
+                  >
+                    {studentContactFields.showAadhaar ? 'Hide' : 'Show'}
+                  </Button>
+                </div>
+              </div>
+            );
+          }
+
+          if (item.kind === 'apaar') {
+            return (
+              <div key={item.field._id || item.field.fieldName} className="min-w-0">
+                {renderApaarFieldControl(item.field)}
+              </div>
+            );
+          }
+
+          const field = item.field;
           if (portraitSiblingSkip.has(field.fieldName)) {
             return null;
           }
+          const isRemarkField = remarkFieldNames.has(field.fieldName);
+          const gridItemClass = isRemarkField ? 'md:col-span-3' : undefined;
           const rawVal = getValue(field.fieldName);
           const fieldValue =
             rawVal === undefined || rawVal === null ? '' : field.fieldType === 'checkbox' ? rawVal : String(rawVal);
@@ -464,7 +857,7 @@ export function JoiningDynamicRegistrationFields({
             const v = String(fieldValue || '').trim() || 'Unverified';
             const isVerified = v.toLowerCase() === 'verified';
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-2">
+              <div key={field._id || field.fieldName} className="md:col-span-3">
                 <div className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </div>
@@ -502,7 +895,7 @@ export function JoiningDynamicRegistrationFields({
               (isDistrictField(field) && !selectedState) ||
               (isMandalField(field) && (!selectedState || !selectedDistrict));
             return (
-              <div key={field._id || field.fieldName}>
+              <div key={field._id || field.fieldName} className={gridItemClass}>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -543,7 +936,7 @@ export function JoiningDynamicRegistrationFields({
                 ? [...batchBaseYears, numericCurrent].sort((a, b) => b - a)
                 : batchBaseYears;
             return (
-              <div key={field._id || field.fieldName}>
+              <div key={field._id || field.fieldName} className={gridItemClass}>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -572,7 +965,7 @@ export function JoiningDynamicRegistrationFields({
             const disabled = !hasSelectedGroup || institutionsLoading;
             const datalistId = `joining-reg-${field.fieldName}-list`;
             return (
-              <div key={field._id || field.fieldName}>
+              <div key={field._id || field.fieldName} className={gridItemClass}>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -616,7 +1009,7 @@ export function JoiningDynamicRegistrationFields({
             const forceDisabled =
               (isFixedAcademicYearField(field) || isFixedSemesterField(field)) && !btechYearPick;
             return (
-              <div key={field._id || field.fieldName}>
+              <div key={field._id || field.fieldName} className={gridItemClass}>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -662,8 +1055,13 @@ export function JoiningDynamicRegistrationFields({
 
           if (field.fieldType === 'radio') {
             const radioOptions = normalizeFieldOptions(field.options);
+            const radioSpanClass =
+              joiningStudentProfileFieldRank(field) >= 40 &&
+              joiningStudentProfileFieldRank(field) < JOINING_PREVIOUS_COLLEGE_CONTACT_ROW_RANK
+                ? gridItemClass
+                : 'md:col-span-3';
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-2">
+              <div key={field._id || field.fieldName} className={radioSpanClass}>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -689,7 +1087,7 @@ export function JoiningDynamicRegistrationFields({
           if (field.fieldType === 'checkbox') {
             const checked = fieldValue === true || fieldValue === 'true';
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-2">
+              <div key={field._id || field.fieldName} className="md:col-span-3">
                 <label className="flex cursor-pointer items-center gap-2">
                   <input
                     type="checkbox"
@@ -707,7 +1105,7 @@ export function JoiningDynamicRegistrationFields({
 
           if (field.fieldType === 'textarea') {
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-2">
+              <div key={field._id || field.fieldName} className="md:col-span-3">
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -731,7 +1129,7 @@ export function JoiningDynamicRegistrationFields({
             const motherLabel = (motherField?.fieldLabel || '').trim() || 'Mother photo';
 
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-2">
+              <div key={field._id || field.fieldName} className="md:col-span-3">
                 <div className="rounded-2xl border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50/90 to-indigo-50/60 p-6 shadow-sm dark:border-blue-600/70 dark:from-slate-900/80 dark:to-slate-900/40">
                   <p className="mb-1 text-center text-sm font-semibold text-gray-900 dark:text-slate-100 sm:text-left">
                     Applicant & parent photos
@@ -795,7 +1193,7 @@ export function JoiningDynamicRegistrationFields({
               });
             };
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-2">
+              <div key={field._id || field.fieldName} className="md:col-span-3">
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -856,7 +1254,7 @@ export function JoiningDynamicRegistrationFields({
                     : 'text';
 
           return (
-            <div key={field._id || field.fieldName}>
+            <div key={field._id || field.fieldName} className={gridItemClass}>
               <Input
                 label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
                 name={field.fieldName}

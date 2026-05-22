@@ -151,6 +151,8 @@ const HIDDEN_EXACT = new Set(
     'local_address',
     'country',
     'country_name',
+    'father_name',
+    'fathername',
   ].map((x) => norm(x))
 );
 
@@ -292,7 +294,10 @@ export function filterJoiningRegistrationDisplayFields<T extends { fieldName?: s
   fields: T[] | undefined | null
 ): T[] {
   if (!fields?.length) return [];
-  const filtered = fields.filter((f) => !isJoiningRegistrationFieldHidden(f));
+  const filtered = fields.filter(
+    (f) =>
+      !isJoiningRegistrationFieldHidden(f) && !isJoiningRegistrationCertificationStatusField(f)
+  );
   return dedupeJoiningRegistrationDisplayFields(filtered);
 }
 

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { ReferenceUserSelect, REFERENCE_NAMES_QUERY_KEY } from '@/components/admission/ReferenceUserSelect';
+import { REFERENCE_NAMES_QUERY_KEY } from '@/components/admission/ReferenceUserSelect';
 import {
   joiningAPI,
   admissionAPI,
@@ -17,6 +17,13 @@ import {
 } from '@/lib/api';
 import { joiningPublicApi } from '@/lib/joiningPublicApi';
 import { JoiningDynamicRegistrationFields } from '@/components/joining/JoiningDynamicRegistrationFields';
+import {
+  isApaarIdField,
+  isFixedAcademicYearField,
+  isFixedSemesterField,
+  isPreviousCollegeField,
+} from '@/lib/joiningRegistrationFieldLayout';
+import { isCurrentAcademicYearField } from '@/lib/joiningAcademicYearRegistration';
 import {
   applyMappedRegistrationField,
   isJoiningRegistrationFieldMapped,
@@ -85,7 +92,6 @@ import {
   useJoiningDeskPermissions,
   useModulePermission,
 } from '@/components/layout/DashboardShell';
-import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
 import { JoiningStepTwoPaymentsPanel } from '@/components/joining/JoiningStepTwoPaymentsPanel';
@@ -126,6 +132,10 @@ const formatDateTime = (value?: string) => {
   if (!value) return '—';
   return new Date(value).toLocaleString();
 };
+
+/** Radio/checkbox pills in Course & Quota — same padding as adjacent selects/inputs (px-4 py-3). */
+const JOINING_FORM_CHOICE_PILL_CLASS =
+  'inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus-within:border-blue-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100';
 
 /** Keys used for college on Course & Quota — must survive registration re-sync when course changes. */
 const COLLEGE_REGISTRATION_EXTRA_KEYS = [
@@ -202,8 +212,6 @@ const mediumOptions: Array<{ value: 'english' | 'telugu' | 'other'; label: strin
 ];
 
 const mediumOptionValues = new Set(mediumOptions.map((option) => option.value));
-
-const documentStatusOptions: JoiningDocumentStatus[] = ['pending', 'received'];
 
 const normalizeDateInput = (value?: string) => {
   if (!value) return '';
@@ -579,7 +587,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const effectiveAdminLeadId = (adminLeadId ?? routeLeadFromParams) as string | undefined;
 
   const joiningPerm = useModulePermission('joining');
-  const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
+  const { canEditAdmission } = useJoiningDeskPermissions();
   const paymentsPerm = useModulePermission('payments');
   const canAccessJoiningModule = isPublicEdit || joiningPerm.hasAccess;
   const canWriteJoining = isPublicEdit || joiningPerm.canWrite;
@@ -593,6 +601,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const useJoiningPageWizard = !isPublicEdit;
   const usePublicWizard = isPublicEdit && status !== 'approved';
   const useWizard = useJoiningPageWizard || usePublicWizard;
+  /** Status/enquiry/student summary and course headings duplicate the workflow strip on Step 1. */
+  const hideJoiningStepOneRedundantIntro = useWizard && applicationWizardStep === 1;
 
   const advanceApplicationWizard = useCallback((step: AdmissionWorkflowStep) => {
     setApplicationWizardStep(step);
@@ -604,8 +614,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     [advanceApplicationWizard]
   );
 
-  const canEditReferenceField =
-    isPublicEdit || (status === 'approved' ? canEditReference : canWriteJoining);
   const [meta, setMeta] = useState<{
     updatedAt?: string;
     submittedAt?: string;
@@ -834,18 +842,35 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   );
 
   const regHasDyn = joiningRegistrationDisplayFieldsCoerced.length > 0;
-  const hideJoiningStudentName = regHasDyn && registrationDynHas(['student_name', 'name']);
-  const hideJoiningStudentPhone =
+  const registrationHasApaarField = useMemo(
+    () => joiningRegistrationDisplayFieldsCoerced.some((f: { fieldName?: string; fieldLabel?: string }) => isApaarIdField(f as { fieldName: string; fieldLabel: string; fieldType: string })),
+    [joiningRegistrationDisplayFieldsCoerced]
+  );
+  const registrationIntakeYearField = useMemo(
+    () =>
+      joiningRegistrationDisplayFieldsCoerced.find(
+        (f: { fieldName?: string; fieldLabel?: string }) =>
+          isFixedAcademicYearField(f as { fieldName: string; fieldLabel: string }) ||
+          isCurrentAcademicYearField(f.fieldName || '', f.fieldLabel || '')
+      ) ?? null,
+    [joiningRegistrationDisplayFieldsCoerced]
+  );
+  const registrationIntakeSemesterField = useMemo(
+    () =>
+      joiningRegistrationDisplayFieldsCoerced.find((f: { fieldName?: string; fieldLabel?: string }) =>
+        isFixedSemesterField(f as { fieldName: string; fieldLabel: string })
+      ) ?? null,
+    [joiningRegistrationDisplayFieldsCoerced]
+  );
+  const showStudentContactBesidePreviousCollege =
+    status === 'draft' &&
     regHasDyn &&
-    registrationDynHas([
-      'student_phone',
-      'phone',
-      'student_mobile',
-      'student_mobileno',
-      'mobile',
-      'applicant_mobile',
-      'candidate_mobile',
-    ]);
+    registrationHasApaarField &&
+    joiningRegistrationDisplayFieldsCoerced.some((f: { fieldName?: string; fieldLabel?: string }) =>
+      isPreviousCollegeField(f as { fieldName: string; fieldLabel: string })
+    );
+
+  const hideJoiningStudentName = regHasDyn && registrationDynHas(['student_name', 'name']);
   const hideJoiningStudentGender = regHasDyn && registrationDynHas(['student_gender', 'gender']);
   const hideJoiningDateOfBirth = regHasDyn &&
     registrationDynHas([
@@ -857,7 +882,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       'birth_date',
       'birthdate',
     ]);
-  const hideJoiningFatherName = regHasDyn && registrationDynHas(['father_name', 'fathername']);
   const hideJoiningMotherName = regHasDyn && registrationDynHas(['mother_name', 'mothername']);
   const hideJoiningDoor = regHasDyn && registrationDynHas(['address_door_street', 'door_street']);
   const hideJoiningLandmark = regHasDyn && registrationDynHas(['address_landmark', 'landmark']);
@@ -1658,34 +1682,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     });
   }, [certificateGuidance?.format, certificateGuidance?.items]);
 
-  const documentsChecklistForPrint = useMemo(() => {
-    const labels: Record<string, string> = {};
-    const docs: Record<string, JoiningDocumentStatus | undefined> = {};
-    (Object.entries(documentLabels) as [keyof JoiningDocuments, string][]).forEach(([key, label]) => {
-      if (DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key)) return;
-      labels[key] = label;
-      docs[key] = formState.documents[key] || 'pending';
-    });
-    const raw = registrationExtras.certificate_checklist;
-    const ccMap =
-      raw && typeof raw === 'object' && !Array.isArray(raw)
-        ? (raw as Record<string, unknown>)
-        : {};
-    if (certificateGuidance?.format === 'certificate_config' && certificateGuidance.items?.length) {
-      for (const item of certificateGuidance.items) {
-        const id = String(item.id || item.name || '').trim();
-        if (!id) continue;
-        const sk = `cert:${id}`;
-        const entry = parseCertificateChecklistEntry(ccMap[id]);
-        const opts = listCertificateItemOptions(item);
-        const optLabel = opts.find((o) => o.encoded === entry.option)?.label;
-        labels[sk] = optLabel ? `${item.name} (${optLabel})` : item.name;
-        docs[sk] = entry.status === 'received' ? 'received' : 'pending';
-      }
-    }
-    return { labels, docs };
-  }, [formState.documents, registrationExtras.certificate_checklist, certificateGuidance]);
-
   const certificateChecklistParsed = useMemo(() => {
     const raw = registrationExtras.certificate_checklist;
     const out: Record<string, { status: JoiningDocumentStatus; option?: string }> = {};
@@ -1792,6 +1788,108 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       btechRegistrationSemester,
     ]
   );
+
+  const courseQuotaIntakeFields = useMemo(() => {
+    if (!registrationIntakeYearField && !registrationIntakeSemesterField) return null;
+    const btechYearPick =
+      joiningRegistrationCourseContext.isBtech &&
+      (joiningRegistrationCourseContext.btechYearOptions?.length ?? 0) > 0;
+    const fixedYear = joiningRegistrationCourseContext.fixed.year;
+    const fixedSem = joiningRegistrationCourseContext.isBtech
+      ? btechRegistrationSemester
+      : joiningRegistrationCourseContext.standardSemester;
+    const selectClass =
+      'w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800';
+
+    return (
+      <>
+        {registrationIntakeYearField ? (
+          <div className="min-w-0">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+              {registrationIntakeYearField.fieldLabel}
+              {registrationIntakeYearField.isRequired ? (
+                <span className="text-red-500">*</span>
+              ) : null}
+            </label>
+            <select
+              value={
+                btechYearPick
+                  ? String(
+                      getRegistrationFieldValue(registrationIntakeYearField.fieldName) || fixedYear
+                    )
+                  : fixedYear
+              }
+              onChange={(event) =>
+                handleRegistrationFieldChange(
+                  registrationIntakeYearField.fieldName,
+                  event.target.value
+                )
+              }
+              disabled={!btechYearPick}
+              className={selectClass}
+            >
+              <option value="">Select {registrationIntakeYearField.fieldLabel}</option>
+              {(btechYearPick
+                ? joiningRegistrationCourseContext.btechYearOptions
+                : [{ value: fixedYear, label: fixedYear }]
+              )?.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {btechYearPick ? (
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                Current year → semester <span className="font-medium">1-1</span> (regular). Prior year →{' '}
+                <span className="font-medium">lateral entry</span> and semester{' '}
+                <span className="font-medium">2-1</span>.
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-blue-600 dark:text-blue-300">
+                Fixed by admissions workflow configuration.
+              </p>
+            )}
+          </div>
+        ) : null}
+        {registrationIntakeSemesterField ? (
+          <div className="min-w-0">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+              {registrationIntakeSemesterField.fieldLabel}
+              {registrationIntakeSemesterField.isRequired ? (
+                <span className="text-red-500">*</span>
+              ) : null}
+            </label>
+            <select
+              value={fixedSem}
+              onChange={(event) =>
+                handleRegistrationFieldChange(
+                  registrationIntakeSemesterField.fieldName,
+                  event.target.value
+                )
+              }
+              disabled
+              className={selectClass}
+            >
+              <option value={fixedSem}>{fixedSem}</option>
+            </select>
+            <p className="mt-1 text-xs text-blue-600 dark:text-blue-300">
+              Fixed by admissions workflow configuration.
+            </p>
+          </div>
+        ) : null}
+      </>
+    );
+  }, [
+    registrationIntakeYearField,
+    registrationIntakeSemesterField,
+    joiningRegistrationCourseContext.isBtech,
+    joiningRegistrationCourseContext.btechYearOptions,
+    joiningRegistrationCourseContext.fixed.year,
+    joiningRegistrationCourseContext.standardSemester,
+    btechRegistrationSemester,
+    getRegistrationFieldValue,
+    handleRegistrationFieldChange,
+  ]);
 
   useEffect(() => {
     if (!joiningRecord?._id || courseSettings.length === 0) return;
@@ -3176,19 +3274,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     });
   };
 
-  const updateDocumentStatus = (
-    key: keyof JoiningDocuments,
-    value: JoiningDocumentStatus
-  ) => {
-    setFormState((prev) => ({
-      ...prev,
-      documents: {
-        ...prev.documents,
-        [key]: value,
-      },
-    }));
-  };
-
   const updateCertificateChecklistStatus = (
     itemId: string,
     value: JoiningDocumentStatus,
@@ -3841,7 +3926,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         id={`joining-wizard-step-${panelStep}-actions`}
         stepLabel={
           panelStep === 1
-            ? 'Step 1 — Online application (sections 1–8)'
+            ? 'Step 1 — Online application (sections 1–5)'
             : 'Step 2 — Admission fee workflow'
         }
         hint={panelStep === 1 ? stepOneCourseHint : undefined}
@@ -3928,7 +4013,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         </div>
       )}
       <div className="rounded-3xl border border-white/60 bg-white/95 p-4 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none sm:p-6">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div
+          className={cn(
+            'flex flex-col gap-6 lg:flex-row lg:items-start',
+            hideJoiningStepOneRedundantIntro ? 'lg:justify-end' : 'lg:justify-between'
+          )}
+        >
+          {!hideJoiningStepOneRedundantIntro ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-semibold ${statusBadgeClass}`}>
@@ -3979,6 +4070,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               </div>
             </div>
           </div>
+          ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
             {!isPublicEdit && publicLinkRouteKey && (
@@ -4075,58 +4167,61 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               )}
             >
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                1. Student Information
-              </h2>
-              <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Course &amp; quota
-              </h3>
-              {(() => {
-                // Show what the lead actually carried over (free-text "course
-                // interested") next to the managed-DB resolved values so staff
-                // can spot mismatches. The lead-side text and the managed
-                // course/branch can diverge when the lead form stored a
-                // combined "B.Tech CSE" string while the secondary DB keeps
-                // them split into a course + branch.
-                const interestedFromLead = String(lead?.courseInterested || '').trim();
-                const resolvedCourseName = selectedCourseSetting?.course?.name || '';
-                const resolvedBranchName =
-                  selectedCourseSetting?.branches.find(
-                    (b) =>
-                      String(b._id ?? '').trim() ===
-                      String(formState.courseInfo.branchId ?? '').trim()
-                  )?.name || '';
-                if (!interestedFromLead && !resolvedCourseName && !resolvedBranchName) {
-                  return null;
-                }
-                const needsMapping =
-                  interestedFromLead && !(resolvedCourseName || resolvedBranchName);
-                return (
-                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
-                    {interestedFromLead ? (
-                      <span>
-                        Lead interest: <span className="font-semibold">{interestedFromLead}</span>
-                      </span>
-                    ) : null}
-                    {(resolvedCourseName || resolvedBranchName) ? (
-                      <span>
-                        Selected:{' '}
-                        <span className="font-semibold">
-                          {resolvedCourseName || '—'}
-                          {resolvedBranchName ? ` · ${resolvedBranchName}` : ''}
-                        </span>
-                      </span>
-                    ) : null}
-                    {needsMapping ? (
-                      <span className="text-amber-700 dark:text-amber-300">
-                        Map to course and branch below.
-                      </span>
-                    ) : null}
-                  </div>
-                );
-              })()}
+              {!hideJoiningStepOneRedundantIntro ? (
+                <>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                    1. Student Information
+                  </h2>
+                  <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Course &amp; quota
+                  </h3>
+                  {(() => {
+                    const interestedFromLead = String(lead?.courseInterested || '').trim();
+                    const resolvedCourseName = selectedCourseSetting?.course?.name || '';
+                    const resolvedBranchName =
+                      selectedCourseSetting?.branches.find(
+                        (b) =>
+                          String(b._id ?? '').trim() ===
+                          String(formState.courseInfo.branchId ?? '').trim()
+                      )?.name || '';
+                    if (!interestedFromLead && !resolvedCourseName && !resolvedBranchName) {
+                      return null;
+                    }
+                    const needsMapping =
+                      interestedFromLead && !(resolvedCourseName || resolvedBranchName);
+                    return (
+                      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
+                        {interestedFromLead ? (
+                          <span>
+                            Lead interest: <span className="font-semibold">{interestedFromLead}</span>
+                          </span>
+                        ) : null}
+                        {(resolvedCourseName || resolvedBranchName) ? (
+                          <span>
+                            Selected:{' '}
+                            <span className="font-semibold">
+                              {resolvedCourseName || '—'}
+                              {resolvedBranchName ? ` · ${resolvedBranchName}` : ''}
+                            </span>
+                          </span>
+                        ) : null}
+                        {needsMapping ? (
+                          <span className="text-amber-700 dark:text-amber-300">
+                            Map to course and branch below.
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+                </>
+              ) : null}
               {isLoadingCourseSettings ? (
-                <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">
+                <p
+                  className={cn(
+                    'text-sm text-slate-500 dark:text-slate-300',
+                    hideJoiningStepOneRedundantIntro ? 'mt-0' : 'mt-4'
+                  )}
+                >
                   Loading course and branch directory…
                 </p>
               ) : courseSettings.length > 0 ? (
@@ -4140,7 +4235,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         (lvl) => String(lvl).trim().toLowerCase() === currentLevel.trim().toLowerCase()
                       );
                     return (
-                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6 md:items-start">
+                    <div
+                      className={cn(
+                        'grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-x-6 md:gap-y-5',
+                        hideJoiningStepOneRedundantIntro ? 'mt-0' : 'mt-6'
+                      )}
+                    >
                       <div className="min-w-0">
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                           Program level
@@ -4265,6 +4365,31 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                               })()}
                             </select>
                           </div>
+                          <div className="min-w-0">
+                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                              General Reservation Category<span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={formState.reservation.general}
+                              onChange={(event) =>
+                                handleReservationGeneralChange(
+                                  event.target.value as JoiningReservation['general']
+                                )
+                              }
+                              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                            >
+                              <option value="oc">OC</option>
+                              <option value="ews">EWS</option>
+                              <option value="bc-a">BC-A</option>
+                              <option value="bc-b">BC-B</option>
+                              <option value="bc-c">BC-C</option>
+                              <option value="bc-d">BC-D</option>
+                              <option value="bc-e">BC-E</option>
+                              <option value="sc">SC</option>
+                              <option value="st">ST</option>
+                            </select>
+                          </div>
+                          {courseQuotaIntakeFields}
                         </>
                       ) : programLevelTrimmed ? (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
@@ -4281,28 +4406,188 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
                         </div>
                       ) : null}
+                      {filteredCourseSettings.length === 0 ? (
+                        <div className="min-w-0">
+                          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                            General Reservation Category<span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={formState.reservation.general}
+                            onChange={(event) =>
+                              handleReservationGeneralChange(
+                                event.target.value as JoiningReservation['general']
+                              )
+                            }
+                            className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                          >
+                            <option value="oc">OC</option>
+                            <option value="ews">EWS</option>
+                            <option value="bc-a">BC-A</option>
+                            <option value="bc-b">BC-B</option>
+                            <option value="bc-c">BC-C</option>
+                            <option value="bc-d">BC-D</option>
+                            <option value="bc-e">BC-E</option>
+                            <option value="sc">SC</option>
+                            <option value="st">ST</option>
+                          </select>
+                        </div>
+                      ) : null}
+                      {filteredCourseSettings.length === 0 ? courseQuotaIntakeFields : null}
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          EWS (Economically Weaker Section)<span className="text-red-500">*</span>
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                            <input
+                              type="radio"
+                              name="ews"
+                              checked={formState.reservation.isEws === true}
+                              onChange={() => handleReservationEwsChange(true)}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Yes
+                          </label>
+                          <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                            <input
+                              type="radio"
+                              name="ews"
+                              checked={formState.reservation.isEws !== true}
+                              onChange={() => handleReservationEwsChange(false)}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            No
+                          </label>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Other Reservations
+                        </label>
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <Input
+                              value={otherReservationInput}
+                              onChange={(event) => setOtherReservationInput(event.target.value)}
+                              placeholder="Add NCC, Sports, PH, etc."
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="shrink-0"
+                            onClick={addOtherReservation}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                        {(formState.reservation.other || []).length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {(formState.reservation.other || []).map((value) => (
+                              <span
+                                key={value}
+                                className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
+                              >
+                                {value}
+                                <button
+                                  type="button"
+                                  className="text-blue-500"
+                                  onClick={() => removeOtherReservation(value)}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="min-w-0 space-y-4">
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                            Qualified examinations
+                          </label>
+                          <div className="flex flex-wrap gap-3">
+                            {[
+                              { key: 'ssc' as const, label: 'SSC' },
+                              { key: 'interOrDiploma' as const, label: 'Inter / Diploma' },
+                              { key: 'ug' as const, label: 'UG' },
+                            ].map((item) => (
+                              <label key={item.key} className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(formState.qualifications[item.key])}
+                                  onChange={() => toggleQualification(item.key)}
+                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                {item.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                            Merit
+                          </label>
+                          <div className="flex flex-wrap gap-3">
+                            <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                              <input
+                                type="radio"
+                                name="joining-merit"
+                                checked={formState.qualifications.merit === true}
+                                onChange={() => setMeritQualification(true)}
+                                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              Yes
+                            </label>
+                            <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                              <input
+                                type="radio"
+                                name="joining-merit"
+                                checked={formState.qualifications.merit === false}
+                                onChange={() => setMeritQualification(false)}
+                                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              No
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          Medium of Instruction
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          {mediumOptions.map((option) => (
+                            <label key={option.value} className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                              <input
+                                type="checkbox"
+                                checked={
+                                  Array.isArray(formState.qualifications.mediums) &&
+                                  formState.qualifications.mediums.includes(option.value)
+                                }
+                                onChange={() => toggleMediumSelection(option.value)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              {option.label}
+                            </label>
+                          ))}
+                        </div>
+                        {Array.isArray(formState.qualifications.mediums) &&
+                          formState.qualifications.mediums.includes('other') && (
+                            <div className="mt-3">
+                              <Input
+                                placeholder="Specify medium"
+                                value={formState.qualifications.otherMediumLabel || ''}
+                                onChange={(event) => handleMediumOtherLabelChange(event.target.value)}
+                              />
+                            </div>
+                          )}
+                      </div>
                     </div>
                     );
                   })()}
                 </>
               ) : null}
-              {configuredFee !== null && (
-                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 shadow-sm dark:border-blue-900/50 dark:bg-blue-900/30 dark:text-blue-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-blue-500 dark:text-blue-300">
-                        Configured Admission Fee
-                      </p>
-                      <p className="text-lg font-semibold">{formatCurrency(configuredFee)}</p>
-                    </div>
-                    {selectedBranchSetting?.branch ? (
-                      <p className="text-right text-xs text-blue-500 dark:text-blue-300">
-                        Branch: {selectedBranchSetting.branch.name}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              )}
               <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 Student profile
               </h3>
@@ -4348,22 +4633,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                               formState.studentInfo.name || lead?.name || lead?.enquiryNumber || 'Student'
                             ).trim() || 'Student',
                         }}
+                        studentContactFields={{
+                          phone: formState.studentInfo.phone || '',
+                          onPhoneChange: (value) => handleStudentInfoChange('phone', value),
+                          aadhaarNumber: formState.studentInfo.aadhaarNumber || '',
+                          onAadhaarChange: (value) => handleStudentInfoChange('aadhaarNumber', value),
+                          showAadhaar: showStudentAadhaar,
+                          onToggleShowAadhaar: () => setShowStudentAadhaar((prev) => !prev),
+                        }}
+                        omitIntakeYearSemesterFromGrid
                       />
                     </div>
                   ) : null}
                 </div>
               ) : null}
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {!hideJoiningStudentName ? (
-                <div>
-                  <Input
-                    label="Student Name"
-                    value={formState.studentInfo.name}
-                    onChange={(event) => handleStudentInfoChange('name', event.target.value)}
-                  />
-                </div>
-                ) : null}
-                {!hideJoiningStudentPhone ? (
+              {!showStudentContactBesidePreviousCollege ? (
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
                   <div>
                     <Input
                       label="Student mobile number"
@@ -4378,72 +4663,75 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       maxLength={15}
                     />
                   </div>
-                ) : null}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Aadhaar Number
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type={showStudentAadhaar ? 'text' : 'password'}
-                      value={formState.studentInfo.aadhaarNumber || ''}
-                      onChange={(event) =>
-                        handleStudentInfoChange('aadhaarNumber', event.target.value)
-                      }
-                      placeholder="12-digit Aadhaar number"
-                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
-                      maxLength={14}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => setShowStudentAadhaar((prev) => !prev)}
-                    >
-                      {showStudentAadhaar ? 'Hide' : 'Show'}
-                    </Button>
-                  </div>
-                </div>
-                {(!hideJoiningStudentGender || !hideJoiningDateOfBirth) ? (
-                <div className="grid grid-cols-2 gap-4">
-                  {!hideJoiningStudentGender ? (
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      Gender
+                      Aadhaar Number
                     </label>
-                    <select
-                      value={formState.studentInfo.gender || ''}
-                      onChange={(event) => handleStudentInfoChange('gender', event.target.value)}
-                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                    >
-                      <option value="">Select</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
+                    <div className="flex gap-2">
+                      <input
+                        type={showStudentAadhaar ? 'text' : 'password'}
+                        value={formState.studentInfo.aadhaarNumber || ''}
+                        onChange={(event) =>
+                          handleStudentInfoChange('aadhaarNumber', event.target.value)
+                        }
+                        placeholder="12-digit Aadhaar number"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                        maxLength={14}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setShowStudentAadhaar((prev) => !prev)}
+                      >
+                        {showStudentAadhaar ? 'Hide' : 'Show'}
+                      </Button>
+                    </div>
                   </div>
+                </div>
+              ) : null}
+              {!regHasDyn &&
+              (!hideJoiningStudentName || !hideJoiningStudentGender || !hideJoiningDateOfBirth) ? (
+                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                  {!hideJoiningStudentName ? (
+                    <div>
+                      <Input
+                        label="Student Name"
+                        value={formState.studentInfo.name}
+                        onChange={(event) => handleStudentInfoChange('name', event.target.value)}
+                      />
+                    </div>
                   ) : null}
                   {!hideJoiningDateOfBirth ? (
-                  <div>
-                    <Input
-                      label="Date of Birth"
-                      value={formState.studentInfo.dateOfBirth || ''}
-                      onChange={(event) => handleStudentInfoChange('dateOfBirth', event.target.value)}
-                      type="date"
-                    />
-                  </div>
+                    <div>
+                      <Input
+                        label="Date of Birth"
+                        value={formState.studentInfo.dateOfBirth || ''}
+                        onChange={(event) =>
+                          handleStudentInfoChange('dateOfBirth', event.target.value)
+                        }
+                        type="date"
+                      />
+                    </div>
+                  ) : null}
+                  {!hideJoiningStudentGender ? (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        Gender
+                      </label>
+                      <select
+                        value={formState.studentInfo.gender || ''}
+                        onChange={(event) => handleStudentInfoChange('gender', event.target.value)}
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                      >
+                        <option value="">Select</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
                   ) : null}
                 </div>
-                ) : null}
-                <div className="md:col-span-2">
-                  <ReferenceUserSelect
-                    label="Reference"
-                    value={reference1}
-                    onChange={setReference1}
-                    disabled={!canEditReferenceField}
-                    showAddUserButton={canEditReferenceField}
-                  />
-                </div>
-              </div>
+              ) : null}
             </section>
 
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
@@ -4456,7 +4744,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     Father Information
                   </h3>
                   <div className="mt-4 space-y-3">
-                    {!hideJoiningFatherName ? (
                     <div>
                       <Input
                         label="Father Name"
@@ -4464,7 +4751,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         onChange={(event) => handleParentChange('father', 'name', event.target.value)}
                       />
                     </div>
-                    ) : null}
                     <div>
                       <Input
                         label="Father Mobile Number"
@@ -4691,183 +4977,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             </section>
 
             <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                4. Reservation Category
-              </h2>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    General Reservation Category<span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formState.reservation.general}
-                    onChange={(event) =>
-                      handleReservationGeneralChange(
-                        event.target.value as JoiningReservation['general']
-                      )
-                    }
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                  >
-                    <option value="oc">OC</option>
-                    <option value="ews">EWS</option>
-                    <option value="bc-a">BC-A</option>
-                    <option value="bc-b">BC-B</option>
-                    <option value="bc-c">BC-C</option>
-                    <option value="bc-d">BC-D</option>
-                    <option value="bc-e">BC-E</option>
-                    <option value="sc">SC</option>
-                    <option value="st">ST</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    EWS (Economically Weaker Section)<span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-4 py-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="ews"
-                        checked={formState.reservation.isEws === true}
-                        onChange={() => handleReservationEwsChange(true)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm font-medium text-gray-700 dark:text-slate-200">Yes</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="ews"
-                        checked={formState.reservation.isEws !== true}
-                        onChange={() => handleReservationEwsChange(false)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm font-medium text-gray-700 dark:text-slate-200">No</span>
-                    </label>
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Other Reservations
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={otherReservationInput}
-                      onChange={(event) => setOtherReservationInput(event.target.value)}
-                      placeholder="Add NCC, Sports, PH, etc."
-                    />
-                    <Button type="button" variant="secondary" onClick={addOtherReservation}>
-                      Add
-                    </Button>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(formState.reservation.other || []).map((value) => (
-                      <span
-                        key={value}
-                        className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
-                      >
-                        {value}
-                        <button
-                          className="text-blue-500"
-                          onClick={() => removeOtherReservation(value)}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    {(formState.reservation.other || []).length === 0 && (
-                      <span className="text-xs text-gray-500">No additional reservations added.</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                5. Qualified Examinations
-              </h2>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div className="space-y-3">
-                  {[
-                    { key: 'ssc' as const, label: 'SSC' },
-                    { key: 'interOrDiploma' as const, label: 'Inter / Diploma' },
-                    { key: 'ug' as const, label: 'UG' },
-                  ].map((item) => (
-                    <label key={item.key} className="flex items-center gap-3 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(formState.qualifications[item.key])}
-                        onChange={() => toggleQualification(item.key)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      {item.label}
-                    </label>
-                  ))}
-                  <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 dark:border-slate-600 dark:bg-slate-800/40">
-                    <p className="text-sm font-medium text-gray-800 dark:text-slate-200">Merit</p>
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-700 dark:text-slate-300">
-                      <label className="inline-flex cursor-pointer items-center gap-2">
-                        <input
-                          type="radio"
-                          name="joining-merit"
-                          checked={formState.qualifications.merit === true}
-                          onChange={() => setMeritQualification(true)}
-                          className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        Yes
-                      </label>
-                      <label className="inline-flex cursor-pointer items-center gap-2">
-                        <input
-                          type="radio"
-                          name="joining-merit"
-                          checked={formState.qualifications.merit === false}
-                          onChange={() => setMeritQualification(false)}
-                          className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        No
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    Medium of Instruction
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    {mediumOptions.map((option) => (
-                      <label
-                        key={option.value}
-                        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:border-blue-300 focus-within:border-blue-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Array.isArray(formState.qualifications.mediums) && formState.qualifications.mediums.includes(option.value)}
-                          onChange={() => toggleMediumSelection(option.value)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        {option.label}
-                      </label>
-                    ))}
-                  </div>
-                  {Array.isArray(formState.qualifications.mediums) &&
-                    formState.qualifications.mediums.includes('other') && (
-                      <Input
-                        className="mt-3"
-                        placeholder="Specify medium"
-                        value={formState.qualifications.otherMediumLabel || ''}
-                        onChange={(event) => handleMediumOtherLabelChange(event.target.value)}
-                      />
-                    )}
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    6. Education History
+                    4. Education History
                   </h2>
                 </div>
                 <Button type="button" variant="secondary" onClick={addEducationHistory}>
@@ -4979,7 +5092,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    7. Siblings (Optional)
+                    5. Siblings (Optional)
                   </h2>
                 </div>
                 <Button type="button" variant="secondary" onClick={addSibling}>
@@ -5034,64 +5147,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 ))}
               </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  8. Documents Checklist
-                </h2>
-                <PrintableDocumentChecklist
-                  documentLabels={documentsChecklistForPrint.labels}
-                  documents={documentsChecklistForPrint.docs as Record<string, 'pending' | 'received' | undefined>}
-                  title="Documents Checklist"
-                  studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
-                  enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}
-                  printButtonLabel="Print checklist"
-                  className="shrink-0"
-                />
-              </div>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
-                  .filter(([key]) => !DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key))
-                  .map(([key, label]) => (
-                    <div
-                      key={key}
-                      className={`rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700 ${
-                        isPublicEdit
-                          ? 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'
-                          : 'flex items-center justify-between'
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
-                      </div>
-                      <div className={`flex gap-2 ${isPublicEdit ? 'flex-wrap' : ''}`}>
-                        {documentStatusOptions.map((statusOption) => (
-                          <label
-                            key={`${key}-${statusOption}`}
-                            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${(formState.documents[key] || 'pending') ===
-                              statusOption
-                              ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
-                              : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
-                              }`}
-                          >
-                            <input
-                              type="radio"
-                              name={`document-${key}`}
-                              value={statusOption}
-                              checked={(formState.documents[key] || 'pending') === statusOption}
-                              onChange={() => updateDocumentStatus(key, statusOption)}
-                              className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-
             </section>
 
             {renderWizardStepFooter(1)}
