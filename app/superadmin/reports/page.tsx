@@ -143,7 +143,6 @@ export default function ReportsPage() {
   const [callSubTab, setCallSubTab] = useState<'daily' | 'performance'>('daily');
   const [visitSubTab, setVisitSubTab] = useState<'record' | 'history' | 'edit' | 'leave'>('history');
   const [expandedDailyUsers, setExpandedDailyUsers] = useState<Set<string>>(new Set());
-  const [expandedPerformanceUsers, setExpandedPerformanceUsers] = useState<Set<string>>(new Set());
   const [performanceSearch, setPerformanceSearch] = useState('');
   const [visitSearch, setVisitSearch] = useState('');
   const [expandedVisitDiaryRows, setExpandedVisitDiaryRows] = useState<Set<string>>(new Set());
@@ -185,9 +184,6 @@ export default function ReportsPage() {
   const [dailyLimit, setDailyLimit] = useState(50);
   const [performancePage, setPerformancePage] = useState(1);
   const [performanceLimit, setPerformanceLimit] = useState(25);
-  /** Track whether an expanded user row shows 'history' (assignment dates) or 'portfolio' (current status breakdown). */
-  const [performanceViewModes, setPerformanceViewModes] = useState<Record<string, 'history' | 'portfolio'>>({});
-
   useEffect(() => {
     const tabFromUrl = searchParams?.get('tab');
     if (tabFromUrl && ['calls', 'conversions', 'users', 'abstract', 'activityLogs', 'visitDiary'].includes(tabFromUrl)) {
@@ -519,8 +515,7 @@ export default function ReportsPage() {
     queryKey: [
       'userAnalyticsSummary',
       'performancePaged',
-      filters.startDate,
-      filters.endDate,
+      'portfolio',
       filters.academicYear,
       performancePage,
       performanceLimit,
@@ -532,9 +527,8 @@ export default function ReportsPage() {
     ],
     queryFn: () =>
       leadAPI.getUserAnalytics({
-        startDate: filters.startDate,
-        endDate: filters.endDate,
         academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+        currentPortfolioOnly: true,
         includeAssignmentDetails: false,
         page: performancePage,
         limit: performanceLimit,
@@ -619,10 +613,6 @@ export default function ReportsPage() {
     performanceLimit,
   ]);
 
-  useEffect(() => {
-    setExpandedPerformanceUsers(new Set());
-  }, [performancePage]);
-
   /** Warm first page before opening Performance (paginated — smaller cohort SQL). */
   const prefetchUserPerformanceSummary = useCallback(() => {
     if (activeTab !== 'calls') return;
@@ -630,8 +620,7 @@ export default function ReportsPage() {
       queryKey: [
         'userAnalyticsSummary',
         'performancePaged',
-        filters.startDate,
-        filters.endDate,
+        'portfolio',
         filters.academicYear,
         1,
         performanceLimit,
@@ -643,9 +632,8 @@ export default function ReportsPage() {
       ],
       queryFn: () =>
         leadAPI.getUserAnalytics({
-          startDate: filters.startDate,
-          endDate: filters.endDate,
           academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+          currentPortfolioOnly: true,
           includeAssignmentDetails: false,
           page: 1,
           limit: performanceLimit,
@@ -676,90 +664,6 @@ export default function ReportsPage() {
     if (activeTab !== 'calls') return;
     prefetchUserPerformanceSummary();
   }, [activeTab, prefetchUserPerformanceSummary]);
-
-  const expandedPerformanceUserIds = useMemo(
-    () => Array.from(expandedPerformanceUsers).sort(),
-    [expandedPerformanceUsers]
-  );
-
-  // Load heavy assignment details only for expanded users.
-  const {
-    data: expandedPerformanceDetailsMap,
-    isLoading: isLoadingPerformanceAnalytics,
-    error: performanceAnalyticsError,
-  } = useQuery({
-    queryKey: [
-      'userAnalyticsPerformanceExpanded',
-      filters.startDate,
-      filters.endDate,
-      filters.academicYear,
-      performanceStudentGroup,
-      expandedPerformanceUserIds.join(','),
-    ],
-    queryFn: async () => {
-      if (expandedPerformanceUserIds.length === 0) return {};
-      const batchUserIds = expandedPerformanceUserIds.join(',');
-      try {
-        const data = await leadAPI.getUserAnalytics({
-          startDate: filters.startDate,
-          endDate: filters.endDate,
-          academicYear: filters.academicYear != null ? filters.academicYear : undefined,
-          studentGroup: performanceStudentGroup || undefined,
-          userId: batchUserIds,
-          includeAssignmentDetails: true,
-        });
-        const usersArr = Array.isArray(data?.users) ? data.users : [];
-        const map: Record<string, any> = {};
-        usersArr.forEach((u: any) => {
-          const uid = u.id || u.userId;
-          if (uid) map[uid] = u;
-        });
-        return map;
-      } catch (error) {
-        console.error('Batch analytics fetch failed:', error);
-        return {};
-      }
-    },
-    enabled: activeTab === 'calls' && callSubTab === 'performance' && expandedPerformanceUserIds.length > 0,
-    staleTime: 600_000,
-  });
-
-  // Load real-time portfolio breakdown (all-time snapshot of current leads table) for expanded users.
-  const {
-    data: expandedPortfolioDetailsMap,
-    isLoading: isLoadingPortfolioAnalytics,
-  } = useQuery({
-    queryKey: [
-      'userAnalyticsPortfolioExpanded',
-      filters.academicYear,
-      performanceStudentGroup,
-      expandedPerformanceUserIds.join(','),
-    ],
-    queryFn: async () => {
-      if (expandedPerformanceUserIds.length === 0) return {};
-      const batchUserIds = expandedPerformanceUserIds.join(',');
-      try {
-        const data = await leadAPI.getUserAnalytics({
-          academicYear: filters.academicYear != null ? filters.academicYear : undefined,
-          studentGroup: performanceStudentGroup || undefined,
-          userId: batchUserIds,
-          currentPortfolioOnly: true,
-        });
-        const usersArr = Array.isArray(data?.users) ? data.users : [];
-        const map: Record<string, any> = {};
-        usersArr.forEach((u: any) => {
-          const uid = u.id || u.userId;
-          if (uid) map[uid] = u;
-        });
-        return map;
-      } catch (error) {
-        console.error('Batch portfolio fetch failed:', error);
-        return {};
-      }
-    },
-    enabled: activeTab === 'calls' && callSubTab === 'performance' && expandedPerformanceUserIds.length > 0,
-    staleTime: 600_000,
-  });
 
   const performanceSummaryTotals = performanceUserAnalyticsData?.summaryTotals as
     | {
@@ -826,19 +730,29 @@ export default function ReportsPage() {
   const performanceSummary = useMemo(() => {
     const rows = performanceTableUsers;
     const ranking = [...rows]
-      .sort((a: any, b: any) => (Number(b?.calls?.total || 0) - Number(a?.calls?.total || 0))
-        || (Number(b?.interested || 0) - Number(a?.interested || 0))
-        || String(a?.name || a?.userName || '').localeCompare(String(b?.name || b?.userName || '')));
+      .sort(
+        (a: any, b: any) =>
+          Number(b?.totalAssigned || 0) - Number(a?.totalAssigned || 0) ||
+          String(a?.name || a?.userName || '').localeCompare(String(b?.name || b?.userName || ''))
+      );
+    let totalInterested = 0;
+    let totalAssignedStatus = 0;
+    rows.forEach((u: any) => {
+      const map = u?.statusBreakdown || {};
+      Object.entries(map).forEach(([status, count]) => {
+        const n = Number(count) || 0;
+        if (String(status).toLowerCase() === 'interested') totalInterested += n;
+        if (String(status).toLowerCase() === 'assigned') totalAssignedStatus += n;
+      });
+    });
     return {
       usersCovered: rows.length,
-      totalAssigned: rows.reduce((s: number, u: any) => s + getPerformanceTotalLeadsDisplay(u), 0),
-      totalDone: rows.reduce((s: number, u: any) => s + Number(u?.calls?.total || 0), 0),
-      totalBalance: rows.reduce((s: number, u: any) => s + getPerformanceBalanceDisplay(u), 0),
-      totalInterested: rows.reduce((s: number, u: any) => s + Number(u?.interested ?? 0), 0),
-      totalUnattended: rows.reduce((s: number, u: any) => s + Number(u?.reclaimedUniqueLeads ?? 0), 0),
+      totalPortfolio: rows.reduce((s: number, u: any) => s + Number(u?.totalAssigned || 0), 0),
+      totalAssignedStatus,
+      totalInterested,
       ranking,
     };
-  }, [performanceTableUsers, getPerformanceTotalLeadsDisplay, getPerformanceBalanceDisplay]);
+  }, [performanceTableUsers]);
 
   useEffect(() => {
     setDailyPage(1);
@@ -1019,6 +933,86 @@ export default function ReportsPage() {
     if (r === 'PRO') return 'pro';
     return 'pipeline';
   };
+
+  const getPortfolioStatusColumnsForRole = (roleName: unknown): string[] => {
+    const mode = getPerformanceExpandedMode(roleName, roleName, roleName);
+    if (mode === 'pro') return [...PRO_VISIT_STATUS_COLUMNS];
+    if (mode === 'counsellor') return [...COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED];
+    return ['Assigned', 'Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed'];
+  };
+
+  /** Canonical portfolio status counts for main table (matches former expanded Portfolio Breakdown). */
+  const buildPortfolioStatusBreakdown = (user: any, fu?: { roleName?: string }) => {
+    const breakdown = user?.statusBreakdown || {};
+    const totalLeads = Number(user?.totalAssigned || 0);
+    const roleKey = String(user?.roleName || fu?.roleName || '').toLowerCase();
+    const isPro = roleKey === 'pro' || (roleKey.includes('pro') && !roleKey.includes('counsel'));
+    const isCounsellor = roleKey.includes('counselor') || roleKey.includes('counsellor');
+    const allowedStatuses = isPro
+      ? (PRO_VISIT_STATUS_COLUMNS as unknown as string[])
+      : isCounsellor
+        ? (COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED as unknown as string[])
+        : [];
+
+    const counts: Record<string, number> = {};
+    allowedStatuses.forEach((s) => {
+      counts[s] = 0;
+    });
+
+    Object.entries(breakdown).forEach(([status, count]) => {
+      let targetStatus = status;
+      if (isCounsellor && status.toLowerCase() === 'not answered') {
+        targetStatus = 'Call Back';
+      }
+      const match = allowedStatuses.find((s) => s.toLowerCase() === targetStatus.toLowerCase());
+      if (match) {
+        counts[match] += Number(count);
+      } else if (
+        allowedStatuses.length === 0 &&
+        targetStatus.toLowerCase() !== 'not set' &&
+        targetStatus.toLowerCase() !== 'unknown' &&
+        Number(count) > 0
+      ) {
+        counts[targetStatus] = (counts[targetStatus] || 0) + Number(count);
+      }
+    });
+
+    const columns =
+      allowedStatuses.length > 0
+        ? [...allowedStatuses]
+        : Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+
+    return { totalLeads, counts, columns, statusLabel: isPro ? 'Visit Status' : isCounsellor ? 'Call Status' : 'Lead Status' };
+  };
+
+  const performancePortfolioColumns = useMemo((): string[] => {
+    const r = performanceRole.trim();
+    if (r === 'PRO') return [...PRO_VISIT_STATUS_COLUMNS];
+    if (r === 'Student Counselor') return [...COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED];
+    const ordered = new Set<string>();
+    performanceTableUsers.forEach((u: any) => {
+      getPortfolioStatusColumnsForRole(u.roleName).forEach((c) => ordered.add(c));
+    });
+    if (ordered.size > 0) return Array.from(ordered);
+    return [...COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED];
+  }, [performanceRole, performanceTableUsers]);
+
+  const performancePortfolioPageTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    performancePortfolioColumns.forEach((col) => {
+      totals[col] = 0;
+    });
+    let totalPortfolio = 0;
+    performanceTableUsers.forEach((u: any) => {
+      const fu = users.find((x: any) => x._id === u.userId || x.name === (u.name || u.userName));
+      const { totalLeads, counts } = buildPortfolioStatusBreakdown(u, fu);
+      totalPortfolio += totalLeads;
+      performancePortfolioColumns.forEach((col) => {
+        totals[col] += Number(counts[col] ?? 0);
+      });
+    });
+    return { totalPortfolio, statusTotals: totals };
+  }, [performanceTableUsers, performancePortfolioColumns, users]);
 
   const formatAssignedStudentGroups = (day: any) => {
     const entries = Object.entries(day?.studentGroupCounts || {})
@@ -2551,29 +2545,29 @@ export default function ReportsPage() {
                       style: CALL_REPORT_CARD_STYLES[0],
                     },
                     {
-                      label: 'Total assigned leads',
+                      label: 'Total portfolio leads',
                       value:
                         performanceSummaryTotals != null
                           ? performanceSummaryTotals.totalAssignedLeads
-                          : performanceTableUsers.reduce((sum: number, u: any) => sum + getPerformanceTotalLeadsDisplay(u), 0),
+                          : performanceSummary.totalPortfolio,
                       style: CALL_REPORT_CARD_STYLES[1],
                     },
                     {
-                      label: 'Total interested',
-                      value:
-                        performanceSummaryTotals != null
-                          ? performanceSummaryTotals.totalInterested
-                          : performanceTableUsers.reduce((sum: number, u: any) => sum + Number(u?.interested ?? 0), 0),
+                      label: 'Assigned (portfolio)',
+                      value: Number(performancePortfolioPageTotals.statusTotals['Assigned'] ?? 0).toLocaleString(),
                       style: CALL_REPORT_CARD_STYLES[2],
                     },
                     {
-                      label: 'Total callbacks / revisits',
-                      value: performanceSummaryTotals != null ? performanceSummaryTotals.totalCallbacksRevisits : 0,
+                      label: 'Interested (portfolio)',
+                      value:
+                        performanceSummaryTotals != null
+                          ? performanceSummaryTotals.totalInterested
+                          : performanceSummary.totalInterested,
                       style: CALL_REPORT_CARD_STYLES[3],
                     },
                     {
-                      label: 'Total unattended (reclaimed)',
-                      value: performanceSummaryTotals != null ? performanceSummaryTotals.totalUnattended : 0,
+                      label: 'Users on this page',
+                      value: performanceSummary.usersCovered,
                       style: CALL_REPORT_CARD_STYLES[4],
                     },
                   ].map((item, i) => (
@@ -3148,59 +3142,47 @@ export default function ReportsPage() {
 
               {/* User Performance Summary Sub-Tab */}
               {callSubTab === 'performance' && (
-                isLoadingPerformanceUserList || isFetchingPerformanceUserList ? (
+                isLoadingPerformanceUserList && !performanceUserAnalyticsData ? (
                   <Card className="p-10">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Loading user performance summary...</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Loading portfolio summary...</p>
                     </div>
                   </Card>
                 ) : performanceTableUsers.length > 0 ? (
                   <div className="space-y-4">
-                    {performanceAnalyticsError && (
-                      <Card className="p-3">
-                        <p className="text-xs text-red-600 dark:text-red-400">
-                          Some expanded user details failed to load. Collapse and expand again to retry.
-                        </p>
-                      </Card>
+                    {isFetchingPerformanceUserList && performanceUserAnalyticsData && (
+                      <p className="text-xs text-orange-600 dark:text-orange-400">Updating portfolio data…</p>
                     )}
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Current portfolio snapshot — lead counts by status for each user&apos;s assigned leads
+                      {performanceRole.trim() === 'Student Counselor'
+                        ? ' (call_status)'
+                        : performanceRole.trim() === 'PRO'
+                          ? ' (visit_status)'
+                          : ''}
+                      .
+                    </p>
                     <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
                       <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                         <thead>
                           <tr className="bg-slate-50 dark:bg-slate-800/50">
                             <th className="w-52 px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">User</th>
                             <th
-                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                              title="Student Counselor / PRO: sum of date-wise Total Allotted (same lead may appear in multiple buckets). Other roles: portfolio leads handled."
+                              className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                              title="Total leads currently assigned to this user (portfolio)"
                             >
-                              Total Leads
+                              Total Portfolio
                             </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                              title="Total calls and visits logged by this user in the selected period."
-                            >
-                              Calls/Visits Done
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                              title="Student Counselor / PRO: Total Leads (bucket sum) − Calls/Visits Done, minimum 0. Other roles: portfolio-style pending balance."
-                            >
-                              Balance
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                              title="Student Counselor: Interested + CET Applied on period-allotted cohort (current call_status). PRO: Interested on cohort (current visit_status). Other roles: Interested + CET Applied from pipeline status-change counts in the period."
-                            >
-                              Interested Leads
-                            </th>
-                            <th
-                              className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                              title="Student Counselor only: leads in the period-allotted cohort whose current call_status is Visited (cumulative bucket count). Other roles: not applicable."
-                            >
-                              Visited
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Confirmed</th>
-                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Admitted</th>
+                            {performancePortfolioColumns.map((col) => (
+                              <th
+                                key={col}
+                                className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                                title="Count in current portfolio"
+                              >
+                                {col}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
@@ -3208,729 +3190,62 @@ export default function ReportsPage() {
                             const fu = users.find((fu: any) => fu._id === user.userId || fu.name === (user.name || user.userName));
                             const baseRowBg = rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30';
                             const userLabel = user.name || user.userName;
-                            const isExpanded = expandedPerformanceUsers.has(user.userId);
-                            const detailUser = expandedPerformanceDetailsMap?.[user.userId];
-                            const assignmentsByDate = Array.isArray(detailUser?.assignmentsByDate) ? detailUser.assignmentsByDate : [];
-                            const expandedMode = getPerformanceExpandedMode(user.roleName, fu?.roleName, detailUser?.roleName);
-                            const reclaimedTotal = Number(user.reclaimedUniqueLeads || 0);
-                            const canExpand = true;
-                            const toggleExpand = () =>
-                              setExpandedPerformanceUsers((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(user.userId)) {
-                                  next.delete(user.userId);
-                                } else {
-                                  next.add(user.userId);
-                                }
-                                return next;
-                              });
+                            const portfolioRow = buildPortfolioStatusBreakdown(user, fu);
 
                             return (
-                              <Fragment key={user.userId}>
-                                <tr
-                                  className={`${baseRowBg} hover:bg-slate-100 dark:hover:bg-slate-700/50 ${canExpand ? 'cursor-pointer' : ''}`}
-                                  onClick={canExpand ? toggleExpand : undefined}
-                                >
-                                  <td className="w-52 px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                              <tr key={user.userId} className={`${baseRowBg} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
+                                <td className="w-52 px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                  <div className="min-w-0">
                                     <div className="flex items-center gap-2 min-w-0">
-                                      {canExpand ? (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleExpand();
-                                          }}
-                                          className="inline-flex items-center justify-center rounded p-0.5 hover:bg-slate-200/70 dark:hover:bg-slate-700"
-                                          aria-label={isExpanded ? `Collapse ${userLabel}` : `Expand ${userLabel}`}
-                                        >
-                                          <ChevronDown className={`w-3.5 h-3.5 text-orange-400 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                                        </button>
-                                      ) : (
-                                        <span className="w-4 h-4 inline-block" />
-                                      )}
-                                      <div className="min-w-0">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                          <span className="truncate">{userLabel}</span>
-                                          <span
-                                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                              user.isActive
-                                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
-                                                : 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300'
-                                            }`}
-                                          >
-                                            {user.isActive ? 'Active' : 'Inactive'}
-                                          </span>
-                                        </div>
-                                        <div className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
-                                          {(user.department || fu?.department || '—')} | {(user.designation || fu?.designation || '—')} | {(user.group || fu?.group || '—')}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
-                                    {getPerformanceTotalLeadsDisplay(user)}
-                                  </td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.calls?.total ?? 0}</td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm">
-                                    <div className="flex flex-col items-start gap-1">
-                                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
-                                        {getPerformanceBalanceDisplay(user)}
+                                      <span className="truncate">{userLabel}</span>
+                                      <span
+                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                          user.isActive
+                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+                                            : 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300'
+                                        }`}
+                                      >
+                                        {user.isActive ? 'Active' : 'Inactive'}
                                       </span>
-                                      {reclaimedTotal > 0 && (
-                                        <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                                          Date rows with unattended: {reclaimedTotal}
-                                        </span>
-                                      )}
                                     </div>
+                                    <div className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
+                                      {(user.department || fu?.department || '—')} | {(user.designation || fu?.designation || '—')} | {(user.group || fu?.group || '—')}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-orange-700 dark:text-orange-300 tabular-nums">
+                                  {portfolioRow.totalLeads.toLocaleString()}
+                                </td>
+                                {performancePortfolioColumns.map((col) => (
+                                  <td
+                                    key={`${user.userId}-${col}`}
+                                    className="whitespace-nowrap px-3 py-4 text-sm text-slate-900 dark:text-slate-100 tabular-nums"
+                                  >
+                                    {Number(portfolioRow.counts[col] ?? 0).toLocaleString()}
                                   </td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
-                                    {(() => {
-                                      const isCounsellor = String(user.roleName || '').trim() === 'Student Counselor';
-                                      const interested = Number(user.interested || 0);
-                                      const cetApplied = isCounsellor 
-                                        ? Number(user.statusBreakdown?.['CET Applied'] || user.statusBreakdown?.['cet applied'] || 0)
-                                        : 0;
-                                      return interested + cetApplied;
-                                    })()}
-                                  </td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
-{String(user.roleName || '').trim() === 'Student Counselor'
-                                      ? (user.visitedCumulative ?? 0)
-                                      : '—'}
-                                  </td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.convertedLeads ?? 0}</td>
-                                  <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900 dark:text-slate-100">{user.admittedLeads ?? user.statusBreakdown?.Admitted ?? 0}</td>
-                                </tr>
-                                {isExpanded && (
-                                  <tr className={`${baseRowBg}`}>
-                                    <td colSpan={8} className="px-6 py-4 border-t border-slate-200/70 dark:border-slate-700">
-                                      {/* View Toggle */}
-                                      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-2 dark:border-slate-800">
-                                        <div className="flex items-center gap-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() => setPerformanceViewModes(prev => ({ ...prev, [user.userId]: 'history' }))}
-                                            className={`rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
-                                              (performanceViewModes[user.userId] || 'history') === 'history'
-                                                ? 'bg-blue-600 text-white shadow-sm'
-                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                                            }`}
-                                          >
-                                            Assignment History
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => setPerformanceViewModes(prev => ({ ...prev, [user.userId]: 'portfolio' }))}
-                                            className={`rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
-                                              performanceViewModes[user.userId] === 'portfolio'
-                                                ? 'bg-orange-600 text-white shadow-sm'
-                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                                            }`}
-                                          >
-                                            Portfolio Breakdown
-                                          </button>
-                                        </div>
-                                        <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                                          {(performanceViewModes[user.userId] || 'history') === 'history' 
-                                            ? `Activity between ${filters.startDate} and ${filters.endDate}`
-                                            : `Current Portfolio Snapshot`}
-                                        </div>
-                                      </div>
-
-                                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/30 p-4">
-                                        {(performanceViewModes[user.userId] || 'history') === 'history' ? (
-                                          <>
-                                            {!detailUser ? (
-                                              <div className="py-5 text-center text-xs text-slate-500 dark:text-slate-400">
-                                                {isLoadingPerformanceAnalytics ? 'Loading date-wise assignment details...' : 'Details unavailable'}
-                                              </div>
-                                            ) : (
-                                              <>
-                                                {expandedMode === 'counsellor'
-                                                  ? (() => {
-                                                      const pc = detailUser?.expandedAssignmentDiagnostics?.performanceCohort as
-                                                        | {
-                                                            allottedDistinctLeads?: number;
-                                                            allottedByCallStatus?: Record<string, unknown>;
-                                                            periodBalanceByPortfolioRule?: number;
-                                                          }
-                                                        | undefined;
-                                                      const allottedMap = foldOutcomeCallMapToCanonical(pc?.allottedByCallStatus);
-                                                      const allottedDisplayMap = mergeNotAnsweredIntoCallBackForCounsellorDisplay(allottedMap);
-                                                      const knownCols = COUNSELLOR_CALL_STATUS_COLUMNS as unknown as string[];
-                                                      const expandedCols = COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED as unknown as string[];
-                                                      const allottedTotal = Number(pc?.allottedDistinctLeads ?? 0);
-                                                      /** Sum of per–date/target row totals; can exceed allottedTotal when the same lead appears in multiple buckets. */
-                                                      const sumBucketTotalAllotted = assignmentsByDate.reduce(
-                                                        (s: number, day: any) => s + Number(day?.totalAssigned ?? 0),
-                                                        0
-                                                      );
-                                                      const otherAllotted = sumDistinctOutcomeCallOutsideKnown(allottedMap, knownCols);
-                                                      const sumAllottedCols =
-                                                        expandedCols.reduce(
-                                                          (s, col) => s + countDistinctOutcomeCallByStatus(allottedDisplayMap, col),
-                                                          0
-                                                        ) + otherAllotted;
-                                                      const allottedOk = allottedTotal <= 0 || sumAllottedCols === allottedTotal;
-                                                      return (
-                                                        <>
-                                                          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                                                            <div className="min-w-0">
-                                                              <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                                                                Date-wise simplified assignment summary
-                                                              </h4>
-                                                              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-400">
-                                                                Columns by role: call_status (Student Counselor)
-                                                              </p>
-                                                            </div>
-                                                            <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0">
-                                                              {assignmentsByDate.length} row{assignmentsByDate.length !== 1 ? 's' : ''}
-                                                              <span className="text-slate-400 dark:text-slate-500">
-                                                                {' '}
-                                                                — one row per allotted date and target date
-                                                              </span>
-                                                            </span>
-                                                          </div>
-                                                          {!pc ? (
-                                                            <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
-                                                              Period totals unavailable — collapse and expand again, or refresh. Student Counselor analytics must load
-                                                              assignment details.
-                                                            </p>
-                                                          ) : null}
-                                                          <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60">
-                                                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-xs">
-                                                              <thead className="bg-slate-100 dark:bg-slate-800">
-                                                                <tr>
-                                                                  <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                                    Allotted Date
-                                                                  </th>
-                                                                  <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                                    Target Date
-                                                                  </th>
-                                                                  <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                                    Student Group Assigned
-                                                                  </th>
-                                                                  <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                                    Mandal Assigned
-                                                                  </th>
-                                                                  <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                                    Total Allotted
-                                                                  </th>
-                                                                  {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
-                                                                    <th
-                                                                      key={col}
-                                                                      className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap"
-                                                                      title="call_status"
-                                                                    >
-                                                                      {col}
-                                                                    </th>
-                                                                  ))}
-                                                                  <th
-                                                                    className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap"
-                                                                    title="Distinct students in this bucket with call_status Assigned (matches the Assigned column total for this row)"
-                                                                  >
-                                                                    Balance
-                                                                  </th>
-                                                                  <th
-                                                                    className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
-                                                                    title="Unattended (reclaimed) — distinct leads in this allotment row later taken back from this user; reclaim time may be outside the report range."
-                                                                  >
-                                                                    Unattended
-                                                                  </th>
-                                                                </tr>
-                                                              </thead>
-                                                              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                                                {assignmentsByDate.length > 0 ? (
-                                                                  assignmentsByDate.map((day: any) => {
-                                                                    const targetDateEntries = Object.entries(day.targetDateCounts || {}).sort((a: any, b: any) =>
-                                                                      String(a[0]).localeCompare(String(b[0]))
-                                                                    );
-                                                                    const targetDateText = targetDateEntries.length
-                                                                      ? targetDateEntries
-                                                                          .map(
-                                                                            ([targetDate, count]) =>
-                                                                              `${format(new Date(String(targetDate)), 'dd MMM yyyy')} (${Number(count) || 0})`
-                                                                          )
-                                                                          .join(', ')
-                                                                      : '—';
-                                                                    return (
-                                                                      <tr key={`${user.userId}-${day.detailRowKey || day.date}`}>
-                                                                        <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
-                                                                          {day.date ? format(new Date(day.date), 'dd MMM yyyy') : 'Unknown'}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{targetDateText}</td>
-                                                                        <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
-                                                                          {formatAssignedStudentGroups(day)}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
-                                                                          {formatAssignedMandals(day)}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-slate-900 dark:text-slate-100">
-                                                                          {Number(day?.totalAssigned || 0)}
-                                                                        </td>
-                                                                        {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
-                                                                          <td
-                                                                            key={col}
-                                                                            className="px-3 py-2 text-slate-900 dark:text-slate-100 tabular-nums"
-                                                                          >
-                                                                            {getCounsellorCallStatusCountForDisplay(day, col)}
-                                                                          </td>
-                                                                        ))}
-                                                                        <td className="bg-slate-50/90 px-3 py-2 text-slate-900 tabular-nums dark:bg-slate-900/50 dark:text-slate-100">
-                                                                          {getCounsellorAssignmentBalanceForDay(day)}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
-                                                                          <div className="flex flex-col gap-0.5">
-                                                                            <span className="font-semibold" title="Total Unattended (Reclaimed + Manual + Moved)">
-                                                                              {Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)}
-                                                                            </span>
-                                                                            {(Number(day?.reclaimedCount || 0) > 0 || Number(day?.manualUnassignedCount || 0) > 0 || Number(day?.movedToOtherUserCount || 0) > 0) && (
-                                                                              <div className="flex gap-1.5 text-[9px] opacity-75 font-medium">
-                                                                                {Number(day?.reclaimedCount || 0) > 0 && (
-                                                                                  <span title="Automated Reclaim (Expired/Failed)" className="text-red-600 dark:text-red-400">R:{day.reclaimedCount}</span>
-                                                                                )}
-                                                                                {Number(day?.manualUnassignedCount || 0) > 0 && (
-                                                                                  <span title="Manual Unassign (Moved to Pool)" className="text-orange-600 dark:text-orange-400">M:{day.manualUnassignedCount}</span>
-                                                                                )}
-                                                                                {Number(day?.movedToOtherUserCount || 0) > 0 && (
-                                                                                  <span title="Transferred (Moved to Other User)" className="text-blue-600 dark:text-blue-400">T:{day.movedToOtherUserCount}</span>
-                                                                                )}
-                                                                              </div>
-                                                                            )}
-                                                                          </div>
-                                                                        </td>
-                                                                      </tr>
-                                                                    );
-                                                                  })
-                                                                ) : (
-                                                                  <tr>
-                                                                    <td
-                                                                      colSpan={counsellorExpandedAssignmentColSpan}
-                                                                      className="px-3 py-3 text-center text-slate-500 dark:text-slate-400"
-                                                                    >
-                                                                      No date-wise assignment history found for the selected filters.
-                                                                    </td>
-                                                                  </tr>
-                                                                )}
-                                                              </tbody>
-                                                                <tfoot>
-                                                                  {(() => {
-                                                                    const sumRowsTotalAllotted = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
-                                                                    const sumRowsBalance = assignmentsByDate.reduce((s: number, day: any) => s + Number(getCounsellorAssignmentBalanceForDay(day)), 0);
-                                                                    
-                                                                    const sumRowsStatusMap: Record<string, number> = {};
-                                                                    COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.forEach(col => {
-                                                                      sumRowsStatusMap[col] = assignmentsByDate.reduce((s: number, day: any) => s + Number(getCounsellorCallStatusCountForDisplay(day, col)), 0);
-                                                                    });
-
-                                                                    return (
-                                                                      <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
-                                                                        <td colSpan={4} className="px-3 py-2 align-top">
-                                                                          <div className="font-semibold text-slate-900 dark:text-slate-100">Cumulative Total</div>
-                                                                          <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">
-                                                                            Sum of row counts above.
-                                                                          </div>
-                                                                        </td>
-                                                                        <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                                          {sumRowsTotalAllotted}
-                                                                        </td>
-                                                                        {COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((col) => (
-                                                                          <td
-                                                                            key={`foot-${col}`}
-                                                                            className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100"
-                                                                          >
-                                                                            {sumRowsStatusMap[col]}
-                                                                          </td>
-                                                                        ))}
-                                                                        <td
-                                                                          className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100"
-                                                                        >
-                                                                          {sumRowsBalance}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
-                                                                          {(() => {
-                                                                            const totalR = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
-                                                                            const totalM = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
-                                                                            const totalT = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
-                                                                            const totalAll = totalR + totalM + totalT;
-                                                                            return (
-                                                                              <div className="flex flex-col gap-0.5">
-                                                                                <span className="font-bold">{totalAll}</span>
-                                                                                {totalAll > 0 && (
-                                                                                  <div className="flex gap-1 text-[9px] opacity-75 font-medium">
-                                                                                    {totalR > 0 && <span>R:{totalR}</span>}
-                                                                                    {totalM > 0 && <span>M:{totalM}</span>}
-                                                                                    {totalT > 0 && <span>T:{totalT}</span>}
-                                                                                  </div>
-                                                                                )}
-                                                                              </div>
-                                                                            );
-                                                                          })()}
-                                                                        </td>
-                                                                      </tr>
-                                                                    );
-                                                                  })()}
-                                                                </tfoot>
-                                                            </table>
-                                                          </div>
-                                                        </>
-                                                      );
-                                                    })()
-                                                  : (
-                                                    <>
-                                                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                                                  <div className="min-w-0">
-                                                    <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                                                      Date-wise simplified assignment summary
-                                                    </h4>
-                                                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-400">
-                                                      {expandedMode === 'pro'
-                                                        ? 'Columns by role: visit_status (PRO)'
-                                                        : 'Columns by role: pipeline lead_status'}
-                                                    </p>
-                                                  </div>
-                                                  <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0">
-                                                    {assignmentsByDate.length} row{assignmentsByDate.length !== 1 ? 's' : ''}
-                                                    <span className="text-slate-400 dark:text-slate-500"> — one row per allotted date and target date</span>
-                                                  </span>
-                                                </div>
-                                                <p className="mb-3 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                                                  {expandedMode === 'pro'
-                                                    ? 'Visit status columns (PRO): distinct students per group by current visit_status. Main row Calls/Visits Done and Balance match the period footer (bucket-sum allotted minus non-Assigned visit_status counts).'
-                                                    : 'Pipeline columns: distinct students per group by lead_status. Calls/Visits Done = distinct leads with logged call outcomes in the period (non-counsellor/PRO staff).'}
-                                                </p>
-                                                {expandedMode === 'pro' &&
-                                                !detailUser?.expandedAssignmentDiagnostics?.performanceCohort?.allottedByVisitStatus ? (
-                                                  <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
-                                                    Period totals unavailable — collapse and expand again, or refresh. PRO analytics require assignment details with
-                                                    visit_status cohort.
-                                                  </p>
-                                                ) : null}
-                                                <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60">
-                                                  <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-xs">
-                                                    <thead className="bg-slate-100 dark:bg-slate-800">
-                                                      <tr>
-                                                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Allotted Date</th>
-                                                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Target Date</th>
-                                                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Student Group Assigned</th>
-                                                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Mandal Assigned</th>
-                                                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Total Allotted</th>
-                                                        {expandedMode === 'pro' ? (
-                                                          <>
-                                                            {PRO_VISIT_STATUS_COLUMNS.map((col) => (
-                                                              <th key={col} className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap" title="visit_status">
-                                                                {col}
-                                                              </th>
-                                                            ))}
-                                                            <th
-                                                              className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap"
-                                                              title="visit_status Assigned (distinct) in this bucket row"
-                                                            >
-                                                              Balance
-                                                            </th>
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200" title="Pipeline lead_status">
-                                                              Assigned
-                                                            </th>
-                                                            <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Interested</th>
-                                                            <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Not Interested</th>
-                                                            <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Wrong Data</th>
-                                                            <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Call Back</th>
-                                                            <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Confirmed</th>
-                                                          </>
-                                                        )}
-                                                        <th
-                                                          className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
-                                                          title="Unattended (reclaimed) — distinct leads in this row later taken back; reclaim time may be outside the report range."
-                                                        >
-                                                          Unattended
-                                                        </th>
-                                                      </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                                      {assignmentsByDate.length > 0 ? assignmentsByDate.map((day: any) => {
-                                                        const targetDateEntries = Object.entries(day.targetDateCounts || {})
-                                                          .sort((a: any, b: any) => String(a[0]).localeCompare(String(b[0])));
-                                                        const targetDateText = targetDateEntries.length
-                                                          ? targetDateEntries
-                                                            .map(([targetDate, count]) => `${format(new Date(String(targetDate)), 'dd MMM yyyy')} (${Number(count) || 0})`)
-                                                            .join(', ')
-                                                          : '—';
-                                                        return (
-                                                          <tr key={`${user.userId}-${day.detailRowKey || day.date}`}>
-                                                            <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{day.date ? format(new Date(day.date), 'dd MMM yyyy') : 'Unknown'}</td>
-                                                            <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{targetDateText}</td>
-                                                            <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{formatAssignedStudentGroups(day)}</td>
-                                                            <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{formatAssignedMandals(day)}</td>
-                                                            <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{Number(day?.totalAssigned || 0)}</td>
-                                                            {expandedMode === 'pro' ? (
-                                                              <>
-                                                                {PRO_VISIT_STATUS_COLUMNS.map((col) => (
-                                                                  <td key={col} className="px-3 py-2 text-slate-900 dark:text-slate-100 tabular-nums">
-                                                                    {getProVisitStatusCountForDisplay(day, col)}
-                                                                  </td>
-                                                                ))}
-                                                                <td className="bg-slate-50/90 px-3 py-2 text-slate-900 tabular-nums dark:bg-slate-900/50 dark:text-slate-100">
-                                                                  {getProAssignmentBalanceForDay(day)}
-                                                                </td>
-                                                              </>
-                                                            ) : (
-                                                              <>
-                                                                <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{getLeadStatusCount(day, 'Assigned')}</td>
-                                                                <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{getLeadStatusCount(day, 'Interested')}</td>
-                                                                <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{getLeadStatusCount(day, 'Not Interested')}</td>
-                                                                <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{getLeadStatusCount(day, 'Wrong Data')}</td>
-                                                                <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{getLeadStatusCount(day, 'Call Back')}</td>
-                                                                <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{getLeadStatusCount(day, 'Confirmed')}</td>
-                                                              </>
-                                                            )}
-                                                            <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
-                                                              <div className="flex flex-col gap-0.5">
-                                                                <span className="font-semibold" title="Total Unattended (Reclaimed + Manual + Moved)">
-                                                                  {Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)}
-                                                                </span>
-                                                                {(Number(day?.reclaimedCount || 0) > 0 || Number(day?.manualUnassignedCount || 0) > 0 || Number(day?.movedToOtherUserCount || 0) > 0) && (
-                                                                  <div className="flex gap-1.5 text-[9px] opacity-75 font-medium">
-                                                                    {Number(day?.reclaimedCount || 0) > 0 && (
-                                                                      <span title="Automated Reclaim (Expired/Failed)" className="text-red-600 dark:text-red-400">R:{day.reclaimedCount}</span>
-                                                                    )}
-                                                                    {Number(day?.manualUnassignedCount || 0) > 0 && (
-                                                                      <span title="Manual Unassign (Moved to Pool)" className="text-orange-600 dark:text-orange-400">M:{day.manualUnassignedCount}</span>
-                                                                    )}
-                                                                    {Number(day?.movedToOtherUserCount || 0) > 0 && (
-                                                                      <span title="Transferred (Moved to Other User)" className="text-blue-600 dark:text-blue-400">T:{day.movedToOtherUserCount}</span>
-                                                                    )}
-                                                                  </div>
-                                                                )}
-                                                              </div>
-                                                            </td>
-                                                          </tr>
-                                                        );
-                                                      }) : (
-                                                        <tr>
-                                                          <td
-                                                            colSpan={expandedMode === 'pro' ? 13 : 12}
-                                                            className="px-3 py-3 text-center text-slate-500 dark:text-slate-400"
-                                                          >
-                                                            No date-wise assignment history found for the selected filters.
-                                                          </td>
-                                                        </tr>
-                                                      )}
-                                                    </tbody>
-                                                      <tfoot>
-                                                        {(() => {
-                                                          const sumRowsTotalAllotted = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
-                                                          const sumRowsBalance = assignmentsByDate.reduce((s: number, day: any) => s + Number(getProAssignmentBalanceForDay(day)), 0);
-                                                          
-                                                          if (expandedMode === 'pro') {
-                                                            const sumRowsStatusMap: Record<string, number> = {};
-                                                            PRO_VISIT_STATUS_COLUMNS.forEach(col => {
-                                                              sumRowsStatusMap[col] = assignmentsByDate.reduce((s: number, day: any) => s + Number(getProVisitStatusCountForDisplay(day, col)), 0);
-                                                            });
-
-                                                            return (
-                                                              <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
-                                                                <td colSpan={4} className="px-3 py-2 align-top">
-                                                                  <div className="font-semibold text-slate-900 dark:text-slate-100">Cumulative Total</div>
-                                                                  <div className="mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400">Sum of rows above.</div>
-                                                                </td>
-                                                                <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">{sumRowsTotalAllotted}</td>
-                                                                {PRO_VISIT_STATUS_COLUMNS.map((col) => (
-                                                                  <td key={`foot-pro-${col}`} className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                                    {sumRowsStatusMap[col]}
-                                                                  </td>
-                                                                ))}
-                                                                <td className="bg-slate-200/90 px-3 py-2 tabular-nums font-semibold text-slate-900 dark:bg-slate-950/60 dark:text-slate-100">{sumRowsBalance}</td>
-                                                                <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
-                                                                  {(() => {
-                                                                    const totalR = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
-                                                                    const totalM = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
-                                                                    const totalT = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
-                                                                    const totalAll = totalR + totalM + totalT;
-                                                                    return (
-                                                                      <div className="flex flex-col gap-0.5">
-                                                                        <span className="font-bold">{totalAll}</span>
-                                                                        {totalAll > 0 && (
-                                                                          <div className="flex gap-1 text-[9px] opacity-75 font-medium">
-                                                                            {totalR > 0 && <span>R:{totalR}</span>}
-                                                                            {totalM > 0 && <span>M:{totalM}</span>}
-                                                                            {totalT > 0 && <span>T:{totalT}</span>}
-                                                                          </div>
-                                                                        )}
-                                                                      </div>
-                                                                    );
-                                                                  })()}
-                                                                </td>
-                                                              </tr>
-                                                            );
-                                                          } else {
-                                                            // Pipeline mode cumulative footer
-                                                            const statusCols = ['Assigned', 'Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed'];
-                                                            return (
-                                                              <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
-                                                                <td colSpan={4} className="px-3 py-2 align-top">
-                                                                  <div className="font-semibold text-slate-900 dark:text-slate-100">Cumulative Total</div>
-                                                                </td>
-                                                                <td className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">{sumRowsTotalAllotted}</td>
-                                                                {statusCols.map(col => (
-                                                                  <td key={`foot-pipe-${col}`} className="px-3 py-2 tabular-nums font-semibold text-slate-900 dark:text-slate-100">
-                                                                    {assignmentsByDate.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, col)), 0)}
-                                                                  </td>
-                                                                ))}
-                                                                <td className="px-3 py-2 text-amber-700 dark:text-amber-300">
-                                                                  {(() => {
-                                                                    const totalR = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
-                                                                    const totalM = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
-                                                                    const totalT = assignmentsByDate.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
-                                                                    const totalAll = totalR + totalM + totalT;
-                                                                    return (
-                                                                      <div className="flex flex-col gap-0.5">
-                                                                        <span className="font-bold">{totalAll}</span>
-                                                                        {totalAll > 0 && (
-                                                                          <div className="flex gap-1 text-[9px] opacity-75 font-medium">
-                                                                            {totalR > 0 && <span>R:{totalR}</span>}
-                                                                            {totalM > 0 && <span>M:{totalM}</span>}
-                                                                            {totalT > 0 && <span>T:{totalT}</span>}
-                                                                          </div>
-                                                                        )}
-                                                                      </div>
-                                                                    );
-                                                                  })()}
-                                                                </td>
-                                                              </tr>
-                                                            );
-                                                          }
-                                                        })()}
-                                                      </tfoot>
-                                                  </table>
-                                                </div>
-                                                    </>
-                                                  )}
-                                              </>
-                                            )}
-                                          </>
-                                        ) : (
-                                          /* Portfolio Breakdown View */
-                                          <div className="rounded-xl border border-orange-100 bg-orange-50/20 p-4 dark:border-orange-900/30 dark:bg-orange-900/10">
-                                            {(() => {
-                                              const pUser = expandedPortfolioDetailsMap?.[user.userId];
-                                              if (isLoadingPortfolioAnalytics && !pUser) {
-                                                return (
-                                                  <div className="flex flex-col items-center justify-center py-10 text-slate-500">
-                                                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent mb-2"></div>
-                                                    <p className="text-xs font-medium">Fetching current portfolio...</p>
-                                                  </div>
-                                                );
-                                              }
-                                              if (!pUser) {
-                                                return (
-                                                  <div className="py-10 text-center text-xs text-slate-500">
-                                                    Portfolio data unavailable.
-                                                  </div>
-                                                );
-                                              }
-
-                                              const breakdown = pUser.statusBreakdown || {};
-                                              const totalLeads = Number(pUser.totalAssigned || 0);
-                                              
-                                              // Determine status label context based on role
-                                              const roleKey = String(user.roleName || fu?.roleName || '').toLowerCase();
-                                              const isPro = roleKey.includes('pro');
-                                              const isCounsellor = roleKey.includes('counselor') || roleKey.includes('counsellor');
-                                              const statusLabel = isPro ? 'Visit Status' : (isCounsellor ? 'Call Status' : 'Lead Status');
-
-                                              // Canonical statuses to display (even if count is 0)
-                                              const allowedStatuses = isPro 
-                                                ? (PRO_VISIT_STATUS_COLUMNS as unknown as string[])
-                                                : (isCounsellor ? (COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED as unknown as string[]) : []);
-
-                                              // Initialize counts with 0 for all allowed statuses
-                                              const finalBreakdown: Record<string, number> = {};
-                                              allowedStatuses.forEach(s => { finalBreakdown[s] = 0; });
-
-                                              // Aggregate counts from backend
-                                              Object.entries(breakdown).forEach(([status, count]) => {
-                                                let targetStatus = status;
-                                                if (isCounsellor && status.toLowerCase() === 'not answered') {
-                                                  targetStatus = 'Call Back';
-                                                }
-                                                
-                                                const match = allowedStatuses.find(s => s.toLowerCase() === targetStatus.toLowerCase());
-                                                if (match) {
-                                                  finalBreakdown[match] += Number(count);
-                                                } else if (allowedStatuses.length === 0 || (targetStatus.toLowerCase() !== 'not set' && targetStatus.toLowerCase() !== 'unknown' && Number(count) > 0)) {
-                                                  finalBreakdown[targetStatus] = (finalBreakdown[targetStatus] || 0) + Number(count);
-                                                }
-                                              });
-
-                                              const entries = Object.entries(finalBreakdown);
-                                              if (allowedStatuses.length > 0) {
-                                                entries.sort((a, b) => {
-                                                  const idxA = allowedStatuses.indexOf(a[0]);
-                                                  const idxB = allowedStatuses.indexOf(b[0]);
-                                                  if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                                                  if (idxA !== -1) return -1;
-                                                  if (idxB !== -1) return 1;
-                                                  return b[1] - a[1];
-                                                });
-                                              } else {
-                                                entries.sort((a, b) => b[1] - a[1]);
-                                              }
-
-                                              return (
-                                                <div className="space-y-4">
-                                                  <div className="flex items-center justify-between">
-                                                    <div>
-                                                      <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Status Breakdown</h4>
-                                                      <p className="text-[11px] text-slate-500">{statusLabel} of {totalLeads.toLocaleString()} leads in portfolio</p>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                      <div className="rounded-lg bg-white px-3 py-1.5 shadow-sm dark:bg-slate-800">
-                                                        <span className="block text-[10px] font-bold uppercase text-slate-400">Total Portfolio</span>
-                                                        <span className="text-lg font-black text-orange-600">{totalLeads.toLocaleString()}</span>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-
-                                                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                                                    {entries.map(([status, count]) => (
-                                                      <div 
-                                                        key={status} 
-                                                        className="group relative flex flex-col rounded-lg border border-slate-200 bg-white p-3 transition-all hover:border-orange-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
-                                                      >
-                                                        <span className="mb-1 truncate text-[11px] font-bold text-slate-500 group-hover:text-orange-600 dark:text-slate-400">
-                                                          {status || 'Unknown'}
-                                                        </span>
-                                                        <span className="text-xl font-black text-slate-800 dark:text-slate-100">
-                                                          {Number(count).toLocaleString()}
-                                                        </span>
-                                                        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
-                                                          <div 
-                                                            className="h-full bg-orange-500 transition-all duration-1000" 
-                                                            style={{ width: `${totalLeads > 0 ? Math.max(0, (Number(count) / totalLeads) * 100) : 0}%` }}
-                                                        />
-                                                        </div>
-                                                        <span className="mt-1 text-[10px] font-medium text-slate-400">
-                                                          {totalLeads > 0 ? ((Number(count) / totalLeads) * 100).toFixed(1) : '0.0'}% of portfolio
-                                                        </span>
-                                                      </div>
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              );
-                                            })()}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
-                              </Fragment>
+                                ))}
+                              </tr>
                             );
                           })}
                         </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
+                            <td className="px-6 py-3 text-xs font-semibold text-slate-900 dark:text-slate-100">
+                              Page total
+                            </td>
+                            <td className="px-4 py-3 text-sm font-bold tabular-nums text-orange-700 dark:text-orange-300">
+                              {performancePortfolioPageTotals.totalPortfolio.toLocaleString()}
+                            </td>
+                            {performancePortfolioColumns.map((col) => (
+                              <td
+                                key={`foot-${col}`}
+                                className="px-3 py-3 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100"
+                              >
+                                {Number(performancePortfolioPageTotals.statusTotals[col] ?? 0).toLocaleString()}
+                              </td>
+                            ))}
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                     {performanceUserAnalyticsData?.pagination &&
@@ -3985,36 +3300,30 @@ export default function ReportsPage() {
                           </div>
                         </div>
                       )}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                       <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Users (This Page)</p>
                         <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.usersCovered}</p>
                       </Card>
                       <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Total Leads (This Page)</p>
-                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.totalAssigned}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Portfolio Leads (This Page)</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.totalPortfolio.toLocaleString()}</p>
                       </Card>
                       <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Interested Leads (This Page)</p>
-                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.totalInterested}</p>
-                      </Card>
-                      <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Callbacks / Revisits</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Assigned (This Page)</p>
                         <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                          {Number(performanceSummaryTotals?.totalCallbacksRevisits ?? 0).toLocaleString()}
+                          {Number(performancePortfolioPageTotals.statusTotals['Assigned'] ?? 0).toLocaleString()}
                         </p>
                       </Card>
                       <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Unattended Leads</p>
-                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                          {Number(performanceSummaryTotals?.totalUnattended ?? 0).toLocaleString()}
-                        </p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Interested (This Page)</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.totalInterested.toLocaleString()}</p>
                       </Card>
                     </div>
                     <Card className="p-4 border-slate-200 dark:border-slate-700">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">User Performance Ranking</h4>
-                        <span className="text-xs text-slate-500">Top to least by Calls/Visits Done</span>
+                        <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Portfolio Ranking (This Page)</h4>
+                        <span className="text-xs text-slate-500">Top to least by total portfolio</span>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-xs">
@@ -4022,21 +3331,25 @@ export default function ReportsPage() {
                             <tr className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
                               <th className="text-left py-2">Rank</th>
                               <th className="text-left py-2">User</th>
-                              <th className="text-left py-2">Calls/Visits Done</th>
+                              <th className="text-left py-2">Total Portfolio</th>
+                              <th className="text-left py-2">Assigned</th>
                               <th className="text-left py-2">Interested</th>
-                              <th className="text-left py-2">Balance</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {performanceSummary.ranking.map((u: any, idx: number) => (
-                              <tr key={`${u.userId}-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
-                                <td className="py-2">{idx + 1}</td>
-                                <td className="py-2">{u.name || u.userName}</td>
-                                <td className="py-2 font-semibold">{u.calls?.total ?? 0}</td>
-                                <td className="py-2">{u.interested ?? 0}</td>
-                                <td className="py-2">{getPerformanceBalanceDisplay(u)}</td>
-                              </tr>
-                            ))}
+                            {performanceSummary.ranking.map((u: any, idx: number) => {
+                              const fu = users.find((x: any) => x._id === u.userId || x.name === (u.name || u.userName));
+                              const { totalLeads, counts } = buildPortfolioStatusBreakdown(u, fu);
+                              return (
+                                <tr key={`${u.userId}-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
+                                  <td className="py-2">{idx + 1}</td>
+                                  <td className="py-2">{u.name || u.userName}</td>
+                                  <td className="py-2 font-semibold tabular-nums">{totalLeads.toLocaleString()}</td>
+                                  <td className="py-2 tabular-nums">{Number(counts['Assigned'] ?? 0).toLocaleString()}</td>
+                                  <td className="py-2 tabular-nums">{Number(counts['Interested'] ?? 0).toLocaleString()}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
