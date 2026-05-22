@@ -552,7 +552,7 @@ export default function ReportsPage() {
         startDate: filters.startDate,
         endDate: filters.endDate,
         userId: filters.userId || undefined,
-        includeAssignmentDetails: true,
+        visitDiaryOnly: true,
       }),
     enabled: activeTab === 'visitDiary' && (visitSubTab === 'history' || visitSubTab === 'edit'),
     staleTime: 300_000,

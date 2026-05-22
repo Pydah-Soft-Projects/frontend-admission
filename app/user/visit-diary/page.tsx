@@ -101,7 +101,7 @@ export default function VisitDiaryPage() {
         startDate: historyStartDate,
         endDate: historyEndDate,
         userId: user.id,
-        includeAssignmentDetails: true
+        visitDiaryOnly: true,
       });
     },
     enabled: activeTab === 'history' && !!user?.id,

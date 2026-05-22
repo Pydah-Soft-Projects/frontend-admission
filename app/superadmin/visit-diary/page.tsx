@@ -101,18 +101,21 @@ export default function SuperAdminVisitDiaryPage() {
         startDate: selectedDate,
         endDate: selectedDate,
         userId: selectedProId || undefined,
-        includeAssignmentDetails: true,
-        role: 'PRO'
+        visitDiaryOnly: true,
       });
       
       const users = response?.users || [];
       if (selectedProId) {
         const proData = users.find((u: any) => (u.id || u.userId) === selectedProId);
-        return proData?.assignmentDetails || [];
+        return proData?.visitDiaryUpdates || [];
       }
       
-      // If no pro selected, return all assignments for all PROs
-      return users.flatMap((u: any) => (u.assignmentDetails || []).map((a: any) => ({ ...a, proName: u.name || u.userName })));
+      return users.flatMap((u: any) =>
+        (u.visitDiaryUpdates || []).map((day: any) => ({
+          ...day,
+          proName: u.name || u.userName,
+        }))
+      );
     },
     enabled: activeTab === 'history',
   });
