@@ -256,6 +256,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     pathname === '/superadmin/communications/templates' ||
     pathname === '/superadmin/form-builder' ||
     pathname === '/superadmin/utm-builder' ||
+    pathname === '/superadmin/leads/assign' ||
     isSuperadminLeadDetail;
 
   const minimalMobileHeaderTitle =
@@ -265,6 +266,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         ? 'Communications'
         : pathname === '/superadmin/utm-builder'
           ? 'UTM URL Builder'
+          : pathname === '/superadmin/leads/assign'
+            ? 'Assign Leads'
           : isSuperadminLeadDetail
             ? 'Lead details'
             : 'Menu';

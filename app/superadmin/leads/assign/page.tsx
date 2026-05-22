@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
 import { leadAPI, userAPI, locationsAPI } from '@/lib/api';
 import { User, FilterOptions, Lead } from '@/types';
@@ -18,6 +18,22 @@ import { showToast } from '@/lib/toast';
 // import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
 type AssignmentMode = 'bulk' | 'single' | 'remove' | 'stats' | 'institution';
+
+/** Unwrap `{ success, data }` or raw stats payload from assign/stats API. */
+function unwrapAssignmentStatsPayload(response: unknown): AssignmentStats {
+  const r = response as { data?: AssignmentStats; totalLeads?: number } | null | undefined;
+  if (!r) {
+    return { totalLeads: 0, assignedCount: 0, unassignedCount: 0, mandalBreakdown: [], stateBreakdown: [] };
+  }
+  const inner = r.data;
+  if (inner && typeof inner.totalLeads === 'number') {
+    return inner;
+  }
+  if (typeof r.totalLeads === 'number') {
+    return r as AssignmentStats;
+  }
+  return { totalLeads: 0, assignedCount: 0, unassignedCount: 0, mandalBreakdown: [], stateBreakdown: [] };
+}
 
 /** Assign-leads dropdowns: show name + HRMS department (API hydrates department on `/users/assignable`). */
 function assignableUserOptionLabel(user: User): string {
@@ -77,13 +93,13 @@ export default function AssignLeadsPage() {
   const [academicYear, setAcademicYear] = useState<number | ''>(2026);
   const [studentGroup, setStudentGroup] = useState<string>('');
   const [count, setCount] = useState<number | ''>(1000);
-  const [targetDate, setTargetDate] = useState<string>('');
   const [cycleNumber, setCycleNumber] = useState<number | ''>('');
   const [source, setSource] = useState('');
   const [minRank, setMinRank] = useState<number | ''>('');
   const [maxRank, setMaxRank] = useState<number | ''>('');
   const [debouncedMinRank, setDebouncedMinRank] = useState<number | ''>('');
   const [debouncedMaxRank, setDebouncedMaxRank] = useState<number | ''>('');
+  const [debouncedSource, setDebouncedSource] = useState('');
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -93,6 +109,11 @@ export default function AssignLeadsPage() {
     }, 300);
     return () => clearTimeout(t);
   }, [minRank, maxRank]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSource(source), 400);
+    return () => clearTimeout(t);
+  }, [source]);
 
   // Location dropdowns (cascade: State → District → Mandal) from locations API
   type LocationOption = { id: string; name: string };
@@ -141,8 +162,6 @@ export default function AssignLeadsPage() {
   const [institutionAcademicYear, setInstitutionAcademicYear] = useState<number | ''>(2026);
   const [institutionUserId, setInstitutionUserId] = useState<string>('');
   const [institutionCount, setInstitutionCount] = useState<number | ''>('');
-  const [institutionTargetDate, setInstitutionTargetDate] = useState('');
-  const [singleAssignTargetDate, setSingleAssignTargetDate] = useState('');
   const [institutionCycleNumber, setInstitutionCycleNumber] = useState<number | ''>('');
 
   // Export Confirmation State
@@ -238,7 +257,7 @@ export default function AssignLeadsPage() {
         });
 
       const loadFilters = leadAPI
-        .getFilterOptions()
+        .getFilterOptions(academicYear !== '' ? { academicYear } : undefined)
         .then(async (filtersResponse) => {
           const raw = filtersResponse?.data ?? filtersResponse ?? {};
           const options: FilterOptions = {
@@ -276,7 +295,18 @@ export default function AssignLeadsPage() {
     };
 
     load();
-  }, [currentUser]);
+  }, [currentUser, academicYear]);
+
+  // If academic year (or filter reload) drops the current source from the list, clear it so stats match the dropdown.
+  useEffect(() => {
+    if (!source || !filters?.sources?.length) return;
+    const normalized = filters.sources.map((s) => String(s).trim());
+    if (!normalized.includes(String(source).trim())) {
+      setSource('');
+      setMinRank('');
+      setMaxRank('');
+    }
+  }, [filters?.sources, source]);
 
   // Load states from locations API (cascade source for State → District → Mandal)
   useEffect(() => {
@@ -525,7 +555,8 @@ export default function AssignLeadsPage() {
   const statsQueryMandal = mode === 'stats' ? debouncedStatsMandal : mode === 'institution' ? '' : mandal;
   const statsQueryVillage = mode === 'stats' ? debouncedStatsVillage : mode === 'institution' ? '' : village;
 
-  const statsQuerySource = mode === 'bulk' ? source : '';
+  const statsQuerySource =
+    mode === 'institution' || mode === 'remove' || mode === 'single' ? '' : debouncedSource;
   const statsQueryMinRank = mode === 'bulk' ? debouncedMinRank : '';
   const statsQueryMaxRank = mode === 'bulk' ? debouncedMaxRank : '';
 
@@ -540,29 +571,20 @@ export default function AssignLeadsPage() {
   // Fetch assignment statistics (scoped by academic year, student group, and location)
   const activeUserId = mode === 'institution' ? institutionUserId : selectedUserId;
   const targetUser = users.find(u => (u.id || u._id) === activeUserId);
-  const targetRole = targetUser?.roleName?.trim().toUpperCase();
-  /** Matches backend: PRO assigns `pro_target_date`; other assignable roles use `counsellor_target_date`. */
-  const assignSlotIsPro =
-    targetRole === 'PRO' || (mode === 'bulk' && bulkSelectedRole === 'PRO');
-  const hasTargetDateRoleContext =
-    mode === 'institution'
-      ? !!institutionUserId
-      : mode === 'bulk'
-        ? !!bulkSelectedRole
-        : !!selectedUserId;
-  const targetDateFieldLabel = !hasTargetDateRoleContext
-    ? 'Target date (auto-reclaim)'
-    : assignSlotIsPro
-      ? 'PRO target date (field visit / auto-reclaim)'
-      : 'Counsellor target date (call workflow / auto-reclaim)';
-
+  const selectedUserRole = targetUser?.roleName?.trim().toUpperCase();
+  const bulkRoleNormalized = bulkSelectedRole?.trim().toUpperCase() || '';
+  /** Stats/assign slot: selected user role, else bulk role picker (backend defaults to counsellor if omitted). */
+  const effectiveTargetRole =
+    mode === 'bulk'
+      ? selectedUserRole || bulkRoleNormalized || undefined
+      : selectedUserRole || undefined;
   const {
     data: statsData,
     refetch: refetchStats,
     isLoading: isStatsLoading,
     isFetching: isStatsFetching
   } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStats', mode, statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
+    queryKey: ['assignmentStats', mode, statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, effectiveTargetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         village: statsQueryVillage || undefined,
@@ -572,16 +594,14 @@ export default function AssignLeadsPage() {
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
         studentGroup: statsQueryStudentGroup || undefined,
         cycleNumber: statsQueryCycleNumber !== '' ? statsQueryCycleNumber : undefined,
-        targetRole: targetRole || undefined,
+        targetRole: effectiveTargetRole || undefined,
         includeBreakdowns: mode === 'stats',
-        summaryOnly: mode === 'stats',
+        summaryOnly: mode !== 'stats',
         source: statsQuerySource || undefined,
         minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
         maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
-      // Backend returns { success, data: { totalLeads, assignedCount, ... }, message }
-      const payload = response?.data ?? response ?? {};
-      return { data: payload };
+      return { data: unwrapAssignmentStatsPayload(response) };
     },
     enabled:
       isReady &&
@@ -589,14 +609,15 @@ export default function AssignLeadsPage() {
       mode !== 'remove' &&
       mode !== 'institution' &&
       !(mode === 'bulk' && academicYear === ''),
-    staleTime: 20_000,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
   const stats = statsData?.data;
 
   const { data: statsBreakdownsData, isFetching: isBreakdownsFetching } = useQuery<{ data: AssignmentStats }>({
-    queryKey: ['assignmentStatsBreakdowns', statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
+    queryKey: ['assignmentStatsBreakdowns', statsQueryVillage, statsQueryMandal, statsQueryDistrict, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, effectiveTargetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         village: statsQueryVillage || undefined,
@@ -606,17 +627,17 @@ export default function AssignLeadsPage() {
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
         studentGroup: statsQueryStudentGroup || undefined,
         cycleNumber: statsQueryCycleNumber !== '' ? statsQueryCycleNumber : undefined,
-        targetRole: targetRole || undefined,
+        targetRole: effectiveTargetRole || undefined,
         includeBreakdowns: true,
         source: statsQuerySource || undefined,
         minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
         maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
-      const payload = response?.data ?? response ?? {};
-      return { data: payload };
+      return { data: unwrapAssignmentStatsPayload(response) };
     },
     enabled: isReady && !!currentUser && mode === 'stats',
-    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
@@ -630,7 +651,7 @@ export default function AssignLeadsPage() {
     : undefined;
 
   const { data: districtGeoStatsRaw, isFetching: isDistrictGeoFetching } = useQuery({
-    queryKey: ['assignmentStatsGeo', 'district', mode, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
+    queryKey: ['assignmentStatsGeo', 'district', mode, statsQueryState, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, effectiveTargetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
@@ -638,14 +659,14 @@ export default function AssignLeadsPage() {
         cycleNumber: statsQueryCycleNumber !== '' ? statsQueryCycleNumber : undefined,
         state: statsQueryState || undefined,
         geoBreakdown: 'district',
-        targetRole: targetRole || undefined,
+        targetRole: effectiveTargetRole || undefined,
         includeBreakdowns: false,
+        summaryOnly: true,
         source: statsQuerySource || undefined,
         minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
         maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
-      const payload = (response?.data ?? response) as AssignmentStats;
-      return payload;
+      return unwrapAssignmentStatsPayload(response);
     },
     enabled:
       isReady &&
@@ -653,12 +674,13 @@ export default function AssignLeadsPage() {
       (mode === 'bulk' || mode === 'stats') &&
       !!statsQueryState &&
       !(mode === 'bulk' && academicYear === ''),
-    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
   const { data: mandalGeoStatsRaw, isFetching: isMandalGeoFetching } = useQuery({
-    queryKey: ['assignmentStatsGeo', 'mandal', mode, statsQueryState, statsQueryDistrict, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
+    queryKey: ['assignmentStatsGeo', 'mandal', mode, statsQueryState, statsQueryDistrict, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, effectiveTargetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
@@ -667,14 +689,14 @@ export default function AssignLeadsPage() {
         state: statsQueryState || undefined,
         district: statsQueryDistrict || undefined,
         geoBreakdown: 'mandal',
-        targetRole: targetRole || undefined,
+        targetRole: effectiveTargetRole || undefined,
         includeBreakdowns: false,
+        summaryOnly: true,
         source: statsQuerySource || undefined,
         minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
         maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
-      const payload = (response?.data ?? response) as AssignmentStats;
-      return payload;
+      return unwrapAssignmentStatsPayload(response);
     },
     enabled:
       isReady &&
@@ -683,12 +705,13 @@ export default function AssignLeadsPage() {
       !!statsQueryState &&
       !!statsQueryDistrict &&
       !(mode === 'bulk' && academicYear === ''),
-    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
   const { data: villageGeoStatsRaw, isFetching: isVillageGeoFetching } = useQuery({
-    queryKey: ['assignmentStatsGeo', 'village', mode, statsQueryState, statsQueryDistrict, statsQueryMandal, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, targetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
+    queryKey: ['assignmentStatsGeo', 'village', mode, statsQueryState, statsQueryDistrict, statsQueryMandal, statsQueryAcademicYear, statsQueryStudentGroup, statsQueryCycleNumber, effectiveTargetRole, statsQuerySource, statsQueryMinRank, statsQueryMaxRank],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         academicYear: statsQueryAcademicYear !== '' ? statsQueryAcademicYear : undefined,
@@ -698,14 +721,14 @@ export default function AssignLeadsPage() {
         district: statsQueryDistrict || undefined,
         mandal: statsQueryMandal || undefined,
         geoBreakdown: 'village',
-        targetRole: targetRole || undefined,
+        targetRole: effectiveTargetRole || undefined,
         includeBreakdowns: false,
+        summaryOnly: true,
         source: statsQuerySource || undefined,
         minRank: statsQuerySource && statsQueryMinRank !== '' ? statsQueryMinRank : undefined,
         maxRank: statsQuerySource && statsQueryMaxRank !== '' ? statsQueryMaxRank : undefined,
       });
-      const payload = (response?.data ?? response) as any;
-      return payload;
+      return unwrapAssignmentStatsPayload(response);
     },
     enabled:
       isReady &&
@@ -715,7 +738,8 @@ export default function AssignLeadsPage() {
       !!statsQueryDistrict &&
       !!statsQueryMandal &&
       !(mode === 'bulk' && academicYear === ''),
-    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
@@ -820,13 +844,13 @@ export default function AssignLeadsPage() {
       institutionAcademicYear,
       institutionStudentGroup,
       institutionCycleNumber,
-      targetRole,
+      effectiveTargetRole,
     ],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
         academicYear: institutionAcademicYear !== '' ? institutionAcademicYear : undefined,
         studentGroup: institutionStudentGroup || undefined,
-        targetRole: targetRole || undefined,
+        targetRole: effectiveTargetRole || undefined,
         includeBreakdowns: false,
         summaryOnly: true,
         cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
@@ -857,7 +881,7 @@ export default function AssignLeadsPage() {
       institutionStudentGroup,
       institutionForBreakdown,
       institutionCycleNumber,
-      targetRole,
+      effectiveTargetRole,
     ],
     queryFn: async () => {
       const response = await leadAPI.getAssignmentStats({
@@ -865,7 +889,7 @@ export default function AssignLeadsPage() {
         studentGroup: institutionStudentGroup || undefined,
         forBreakdown: institutionForBreakdown,
         institutionBreakdownOnly: true,
-        targetRole: targetRole || undefined,
+        targetRole: effectiveTargetRole || undefined,
         includeBreakdowns: false,
         cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
       });
@@ -907,8 +931,10 @@ export default function AssignLeadsPage() {
     mode === 'institution'
       ? !institutionStudentGroup || institutionAcademicYear === ''
         ? true
-        : isInstitutionSummaryLoading || isInstitutionSummaryFetching
-      : isStatsLoading || isStatsFetching;
+        : isInstitutionSummaryLoading
+      : isStatsLoading;
+  const dashboardStatsRefreshing =
+    mode === 'institution' ? isInstitutionSummaryFetching : isStatsFetching;
 
   const institutionDropdownOptions = useMemo(() => {
     const rows = institutionStats?.institutionBreakdown || [];
@@ -1028,7 +1054,6 @@ export default function AssignLeadsPage() {
       count?: number;
       leadIds?: string[];
       institutionName?: string;
-      targetDate?: string;
       cycleNumber?: number | string;
     }) => leadAPI.assignLeads(payload),
     onSuccess: (response) => {
@@ -1140,10 +1165,6 @@ export default function AssignLeadsPage() {
       showToast.error('Count must be greater than zero.');
       return;
     }
-    if (!assignSlotIsPro && (!targetDate || !String(targetDate).trim())) {
-      showToast.error('Target date is required (used for automated reclaim).');
-      return;
-    }
 
     assignMutation.mutate({
       userId: selectedUserId,
@@ -1153,7 +1174,6 @@ export default function AssignLeadsPage() {
       village: village || undefined,
       academicYear,
       studentGroup: studentGroup || undefined,
-      targetDate: assignSlotIsPro ? null : targetDate.trim(),
       cycleNumber: cycleNumber !== '' ? cycleNumber : undefined,
       count,
       source: source || undefined,
@@ -1172,15 +1192,10 @@ export default function AssignLeadsPage() {
       showToast.error('Please select a lead to assign.');
       return;
     }
-    if (!assignSlotIsPro && (!singleAssignTargetDate || !String(singleAssignTargetDate).trim())) {
-      showToast.error('Target date is required (used for automated reclaim).');
-      return;
-    }
 
     assignMutation.mutate({
       userId: selectedUserId,
       leadIds: [selectedLeadId],
-      targetDate: assignSlotIsPro ? null : singleAssignTargetDate.trim(),
     });
   };
 
@@ -1206,10 +1221,6 @@ export default function AssignLeadsPage() {
       showToast.error('Count must be greater than zero.');
       return;
     }
-    if (!assignSlotIsPro && (!institutionTargetDate || !String(institutionTargetDate).trim())) {
-      showToast.error('Target date is required (used for automated reclaim).');
-      return;
-    }
 
     assignMutation.mutate({
       userId: institutionUserId,
@@ -1217,7 +1228,6 @@ export default function AssignLeadsPage() {
       studentGroup: institutionStudentGroup,
       institutionName: institutionName.trim(),
       count: institutionCount,
-      targetDate: assignSlotIsPro ? null : institutionTargetDate.trim(),
       cycleNumber: institutionCycleNumber !== '' ? institutionCycleNumber : undefined,
     });
   };
@@ -1448,19 +1458,24 @@ export default function AssignLeadsPage() {
           ))}
         </div>
       ) : dashboardStats ? (
+        <div className="space-y-2">
+          {dashboardStatsRefreshing ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">Updating counts…</p>
+          ) : null}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Card className="p-3 bg-[#3b82f6] text-[#ffffff] border-none shadow-md dark:bg-[#2563eb]">
             <div className="text-sm font-medium text-[#f1f5f9]">Total Leads</div>
-            <div className="mt-1 text-xl font-bold text-[#ffffff]">{dashboardStats.totalLeads.toLocaleString()}</div>
+            <div className="mt-1 text-xl font-bold text-[#ffffff]">{Number(dashboardStats.totalLeads || 0).toLocaleString()}</div>
           </Card>
           <Card className="p-3 bg-[#10b981] text-[#ffffff] border-none shadow-md dark:bg-[#059669]">
-            <div className="text-sm font-medium text-[#f1f5f9]">{targetRole === 'PRO' ? 'Assigned to PROs' : 'Assigned Leads'}</div>
-            <div className="mt-1 text-xl font-bold text-[#ffffff]">{dashboardStats.assignedCount.toLocaleString()}</div>
+            <div className="text-sm font-medium text-[#f1f5f9]">{effectiveTargetRole === 'PRO' ? 'Assigned to PROs' : 'Assigned Leads'}</div>
+            <div className="mt-1 text-xl font-bold text-[#ffffff]">{Number(dashboardStats.assignedCount || 0).toLocaleString()}</div>
           </Card>
           <Card className="p-3 bg-[#f97316] text-[#ffffff] border-none shadow-md dark:bg-[#ea580c]">
-            <div className="text-sm font-medium text-[#f1f5f9]">{targetRole === 'PRO' ? 'Available for Assignment' : 'Unassigned Leads'}</div>
-            <div className="mt-1 text-xl font-bold text-[#ffffff]">{dashboardStats.unassignedCount.toLocaleString()}</div>
+            <div className="text-sm font-medium text-[#f1f5f9]">{effectiveTargetRole === 'PRO' ? 'Available for Assignment' : 'Unassigned Leads'}</div>
+            <div className="mt-1 text-xl font-bold text-[#ffffff]">{Number(dashboardStats.unassignedCount || 0).toLocaleString()}</div>
           </Card>
+        </div>
         </div>
       ) : null}
 
@@ -1762,7 +1777,7 @@ export default function AssignLeadsPage() {
           ) : mode === 'institution' ? (
             <form onSubmit={handleInstitutionAssign} className="space-y-6">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                First choose assignee, student group, and academic year, then cycle and target date, then pick a <strong>{institutionUseSchools ? 'school' : 'college'}</strong> and how many leads to assign. The institution list comes from the server for those filters.
+                First choose assignee, student group, and academic year, then cycle, then pick a <strong>{institutionUseSchools ? 'school' : 'college'}</strong> and how many leads to assign. The institution list comes from the server for those filters.
               </p>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="min-w-0">
@@ -1848,23 +1863,6 @@ export default function AssignLeadsPage() {
                     ))}
                   </select>
                 </div>
-                {!assignSlotIsPro && (
-                  <div className="min-w-0">
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      {targetDateFieldLabel} *
-                    </label>
-                    <Input
-                      type="date"
-                      value={institutionTargetDate}
-                      onChange={(e) => setInstitutionTargetDate(e.target.value)}
-                      className="w-full min-w-0 px-3 py-2 text-sm"
-                      required
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                      Applies to the counsellor assignment slot only for the selected user.
-                    </p>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1885,7 +1883,7 @@ export default function AssignLeadsPage() {
                         : isInstitutionBreakdownLoading || isInstitutionBreakdownFetching
                           ? 'Loading institutions…'
                           : institutionDropdownOptions.length === 0
-                            ? `No ${institutionUseSchools ? 'schools' : 'colleges'} with matching ${targetRole === 'PRO' ? 'available' : 'unassigned'} leads`
+                            ? `No ${institutionUseSchools ? 'schools' : 'colleges'} with matching ${effectiveTargetRole === 'PRO' ? 'available' : 'unassigned'} leads`
                             : `Select ${institutionUseSchools ? 'school' : 'college'}…`}
                     </option>
                     {institutionDropdownOptions.map((item) => (
@@ -1909,7 +1907,7 @@ export default function AssignLeadsPage() {
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                     This {institutionUseSchools ? 'school' : 'college'}: U{' '}
-                    {selectedInstitutionUnassigned.toLocaleString()} ({targetRole === 'PRO' ? 'available' : 'unassigned'}) · A{' '}
+                    {selectedInstitutionUnassigned.toLocaleString()} ({effectiveTargetRole === 'PRO' ? 'available' : 'unassigned'}) · A{' '}
                     {selectedInstitutionAssigned.toLocaleString()} (assigned in scope).
                   </p>
                 </div>
@@ -1922,8 +1920,7 @@ export default function AssignLeadsPage() {
                     !institutionUserId ||
                     !institutionStudentGroup ||
                     !institutionName ||
-                    institutionAcademicYear === '' ||
-                    (!assignSlotIsPro && !String(institutionTargetDate).trim())
+                    institutionAcademicYear === ''
                   }
                 >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign by ' + (institutionUseSchools ? 'school' : 'college')}
@@ -2299,20 +2296,6 @@ export default function AssignLeadsPage() {
                     ))}
                   </select>
                 </div>
-                {!assignSlotIsPro && (
-                  <div className="min-w-0">
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      {targetDateFieldLabel} *
-                    </label>
-                    <Input
-                      type="date"
-                      value={targetDate}
-                      onChange={(e) => setTargetDate(e.target.value)}
-                      className="w-full min-w-0 px-3 py-2 text-sm"
-                      required
-                    />
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3 items-end">
@@ -2372,15 +2355,9 @@ export default function AssignLeadsPage() {
               </div>
 
               <p className="text-xs text-gray-500 dark:text-slate-400">
-                {targetRole === 'PRO'
+                {effectiveTargetRole === 'PRO'
                   ? 'Available leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'
-                  : 'Only unassigned leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'}{' '}
-                {!assignSlotIsPro && (
-                  <>
-                    This date is saved on each lead as the counsellor slot only (`counsellor_target_date`). It does not change an existing PRO target date.{' '}
-                    Reclaim runs when that slot&apos;s date is due (pipeline rules apply). &quot;Assigned&quot; keeps the same cycle; &quot;Not Interested&quot; and &quot;Wrong Data&quot; advance cycle on reclaim when the lead is fully unassigned.
-                  </>
-                )}
+                  : 'Only unassigned leads for the selected academic year will be assigned. Summary cards above use these filters on the Bulk tab.'}
               </p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -2482,7 +2459,7 @@ export default function AssignLeadsPage() {
                   required
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Number of {targetRole === 'PRO' ? 'available' : 'unassigned'} leads to assign. Available: {stats?.unassignedCount.toLocaleString() || 0} leads
+                  Number of {effectiveTargetRole === 'PRO' ? 'available' : 'unassigned'} leads to assign. Available: {stats?.unassignedCount.toLocaleString() || 0} leads
                   {academicYear !== '' && ` for ${academicYear}`}
                   {studentGroup && `, ${studentGroup}`}
                   {source && `, Source: ${source}`}
@@ -2503,8 +2480,7 @@ export default function AssignLeadsPage() {
                   disabled={
                     assignMutation.isPending ||
                     !selectedUserId ||
-                    academicYear === '' ||
-                    (!assignSlotIsPro && !String(targetDate).trim())
+                    academicYear === ''
                   }
                 >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Leads'}
@@ -2521,7 +2497,6 @@ export default function AssignLeadsPage() {
                     setStudentGroup('');
                     setAcademicYear(2026);
                     setCycleNumber('');
-                    setTargetDate('');
                     setCount('');
                     setSource('');
                     setMinRank('');
@@ -2644,32 +2619,13 @@ export default function AssignLeadsPage() {
                 </p>
               </div>
 
-              {!assignSlotIsPro && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                    {targetDateFieldLabel} *
-                  </label>
-                  <Input
-                    type="date"
-                    value={singleAssignTargetDate}
-                    onChange={(e) => setSingleAssignTargetDate(e.target.value)}
-                    className="w-full max-w-xs px-3 py-2 text-sm"
-                    required
-                  />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                    Saved as counsellor slot only; PRO slot dates are unchanged.
-                  </p>
-                </div>
-              )}
-
               <div className="flex items-center gap-3">
                 <Button
                   type="submit"
                   disabled={
                     assignMutation.isPending ||
                     !selectedUserId ||
-                    !selectedLeadId ||
-                    (!assignSlotIsPro && !String(singleAssignTargetDate).trim())
+                    !selectedLeadId
                   }
                 >
                   {assignMutation.isPending ? 'Assigning…' : 'Assign Lead'}
@@ -2683,7 +2639,6 @@ export default function AssignLeadsPage() {
                     setLeadSearch('');
                     setSearchResults([]);
                     setShowSearchResults(false);
-                    setSingleAssignTargetDate('');
                   }}
                   disabled={assignMutation.isPending}
                 >
