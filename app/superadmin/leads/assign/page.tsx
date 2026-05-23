@@ -14,6 +14,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import UnassignedLocationPrintView from '@/components/superadmin/UnassignedLocationPrintView';
 import * as XLSX from 'xlsx';
 import { showToast } from '@/lib/toast';
+import {
+  buildAssignedLeadExcelRow,
+  type AssignmentExportMeta,
+  type AssignedLeadExportRow,
+} from '@/lib/assignmentExport';
 
 // import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
@@ -168,10 +173,12 @@ export default function AssignLeadsPage() {
 
   // Export Confirmation State
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [exportData, setExportData] = useState<any[]>([]);
+  const [exportData, setExportData] = useState<AssignedLeadExportRow[]>([]);
   const [exportFileName, setExportFileName] = useState('');
   /** Backend sends targetRole; PRO exports include district, mandal, village, full address */
   const [exportTargetRole, setExportTargetRole] = useState<string | null>(null);
+  /** Present when bulk assign used a source (+ optional rank range); drives dynamic Excel columns. */
+  const [exportMeta, setExportMeta] = useState<AssignmentExportMeta | null>(null);
 
   const handleConfirmExport = () => {
     try {
@@ -189,28 +196,9 @@ export default function AssignLeadsPage() {
         });
       }
 
-      const dataToExport = sortedExportData.map((lead: any) => {
-        if (isProExport) {
-          return {
-            'Lead Name': lead.name ?? '',
-            'Phone Number': lead.phone ?? '',
-            'Father Name': lead.fatherName ?? '',
-            'Father Phone': lead.fatherPhone ?? '',
-            District: lead.district ?? '',
-            Mandal: lead.mandal ?? '',
-            Village: lead.village ?? '',
-            'Full Address': lead.address ?? '',
-            Remarks: lead.remarks || '',
-          };
-        }
-        return {
-          'Lead Name': lead.name ?? '',
-          'Phone Number': lead.phone ?? '',
-          'Father Name': lead.fatherName ?? '',
-          'Father Phone': lead.fatherPhone ?? '',
-          Remarks: lead.remarks || '',
-        };
-      });
+      const dataToExport = sortedExportData.map((lead) =>
+        buildAssignedLeadExcelRow(lead, isProExport, exportMeta)
+      );
 
       const worksheet = XLSX.utils.json_to_sheet(dataToExport);
       const workbook = XLSX.utils.book_new();
@@ -226,6 +214,7 @@ export default function AssignLeadsPage() {
       setExportData([]);
       setExportFileName('');
       setExportTargetRole(null);
+      setExportMeta(null);
     }
   };
 
@@ -1119,6 +1108,9 @@ export default function AssignLeadsPage() {
       leadIds?: string[];
       institutionName?: string;
       cycleNumber?: number | string;
+      source?: string;
+      minRank?: number | string;
+      maxRank?: number | string;
     }) => leadAPI.assignLeads(payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
@@ -1134,14 +1126,19 @@ export default function AssignLeadsPage() {
       showToast.success(`Successfully assigned ${assignedCount} lead${assignedCount !== 1 ? 's' : ''} to ${userName}`);
 
       // Auto-export assigned leads to Excel (Ask for confirmation first)
-      const assignedLeads = response.data?.assignedLeads || response.assignedLeads || [];
+      const assignedLeads = (response.data?.assignedLeads || response.assignedLeads || []) as AssignedLeadExportRow[];
       if (assignedLeads.length > 0) {
+        const meta = (response.data?.exportMeta ?? response.exportMeta ?? null) as AssignmentExportMeta | null;
         setExportData(assignedLeads);
+        setExportMeta(meta);
         setExportTargetRole(
           (response.data?.targetRole ?? response.targetRole ?? null) as string | null
         );
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        setExportFileName(`Assigned_Leads_${userName}_${timestamp}.xlsx`);
+        const sourceSlug = meta?.source
+          ? `_${String(meta.source).replace(/[^\w-]+/g, '_').slice(0, 40)}`
+          : '';
+        setExportFileName(`Assigned_Leads_${userName}${sourceSlug}_${timestamp}.xlsx`);
         setShowExportDialog(true);
       }
 
@@ -2837,6 +2834,7 @@ export default function AssignLeadsPage() {
             setExportData([]);
             setExportFileName('');
             setExportTargetRole(null);
+            setExportMeta(null);
           }
         }}
       >
@@ -2845,6 +2843,19 @@ export default function AssignLeadsPage() {
             <DialogTitle>Export Assigned Leads?</DialogTitle>
             <DialogDescription>
               Lead assignment was successful. Would you like to download the list of assigned leads as an Excel file?
+              {exportMeta?.source ? (
+                <span className="mt-2 block text-slate-600 dark:text-slate-300">
+                  Source filter: <strong>{exportMeta.source}</strong>
+                  {exportMeta.minRank != null || exportMeta.maxRank != null
+                    ? ` (rank ${exportMeta.minRank ?? '—'}–${exportMeta.maxRank ?? '—'})`
+                    : ''}
+                  {exportMeta.dynamicFieldColumns?.length
+                    ? ` · Extra columns: ${exportMeta.dynamicFieldColumns.map((c) => c.label).join(', ')}`
+                    : exportMeta.includeRankColumn
+                      ? ' · Includes Rank column'
+                      : ''}
+                </span>
+              ) : null}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
