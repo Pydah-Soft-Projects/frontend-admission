@@ -23,7 +23,7 @@ export const ADMISSION_WORKFLOW_STEPS = [
     label: 'Step 2',
     title: 'Admission fee workflow',
     description:
-      'Certificate checklist, admission fees from Fee Configuration, and cash / online collection.',
+      'Certificate checklist and direct admission fee entry (amount and reference ID).',
     scrollId: 'joining-wizard-step-2',
     admissionScrollId: 'admission-step-two',
     tone: 'indigo' as const,

@@ -136,7 +136,23 @@ const formatCurrency = (amount?: number | null) => {
 
 const formatDateTime = (value?: string) => {
   if (!value) return '—';
-  return new Date(value).toLocaleString();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+};
+
+const parsePaymentTransactionsResponse = (response: unknown): PaymentTransaction[] => {
+  const payload = (response as { data?: unknown } | null)?.data ?? response;
+  if (Array.isArray(payload)) {
+    return payload as PaymentTransaction[];
+  }
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { data?: unknown }).data)) {
+    return (payload as { data: PaymentTransaction[] }).data;
+  }
+  return [];
 };
 
 /** Radio/checkbox pills in Course & Quota — same padding as adjacent selects/inputs (px-4 py-3). */
@@ -2219,32 +2235,39 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     return null;
   }, [cashfreeConfigResponse]);
 
+  const resolvedPaymentLeadId = useMemo(() => {
+    const fromJoining = joiningRecord?.leadId;
+    if (fromJoining && String(fromJoining).trim()) return String(fromJoining).trim();
+    const fromLead = lead?._id || lead?.id;
+    if (fromLead && String(fromLead).trim()) return String(fromLead).trim();
+    return undefined;
+  }, [joiningRecord?.leadId, lead?._id, lead?.id]);
+
+  const paymentTransactionsQueryKey = useMemo(
+    () => ['payments', 'transactions', joiningRecord?._id, resolvedPaymentLeadId] as const,
+    [joiningRecord?._id, resolvedPaymentLeadId]
+  );
+
   const {
     data: transactionsResponse,
     isLoading: isLoadingTransactions,
     refetch: refetchTransactions,
   } = useQuery({
-    queryKey: ['payments', 'transactions', leadId, joiningRecord?._id],
-    enabled: !isPublicEdit && !!leadId && !!joiningRecord?._id,
+    queryKey: paymentTransactionsQueryKey,
+    enabled: !isPublicEdit && !!joiningRecord?._id,
     queryFn: async () => {
       const response = await paymentAPI.listTransactions({
         joiningId: joiningRecord?._id,
-        leadId: leadId as string
+        ...(resolvedPaymentLeadId ? { leadId: resolvedPaymentLeadId } : {}),
       });
       return response;
     },
   });
 
-  const transactions: PaymentTransaction[] = useMemo(() => {
-    const payload = transactionsResponse?.data;
-    if (Array.isArray(payload)) {
-      return payload as PaymentTransaction[];
-    }
-    if (payload && Array.isArray((payload as any).data)) {
-      return (payload as any).data as PaymentTransaction[];
-    }
-    return [];
-  }, [transactionsResponse]);
+  const transactions: PaymentTransaction[] = useMemo(
+    () => parsePaymentTransactionsResponse(transactionsResponse),
+    [transactionsResponse]
+  );
 
   useEffect(() => {
     if (isPublicEdit) {
@@ -2805,8 +2828,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
     setPaymentFormState((prev) => ({ ...prev, isProcessing: true }));
     try {
-      await paymentAPI.recordCashPayment({
-        ...(lead?._id && { leadId: lead._id }),
+      const recordResponse = await paymentAPI.recordCashPayment({
+        ...(resolvedPaymentLeadId ? { leadId: resolvedPaymentLeadId } : lead?._id ? { leadId: lead._id } : {}),
         joiningId: joiningRecord?._id,
         admissionId: admissionRecord?._id,
         courseId: formState.courseInfo.courseId,
@@ -2827,6 +2850,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         }),
       });
 
+      const recordedTransaction = (recordResponse as { data?: PaymentTransaction } | null)?.data;
+      if (recordedTransaction?._id) {
+        queryClient.setQueryData(paymentTransactionsQueryKey, (prev: unknown) => {
+          const existing = parsePaymentTransactionsResponse(prev);
+          const withoutDup = existing.filter((tx) => tx._id !== recordedTransaction._id);
+          return { data: [recordedTransaction, ...withoutDup] };
+        });
+      }
+
       showToast.success(
         selectedFeeHead
           ? `Cash payment recorded for ${selectedFeeHead.feeHeadName || 'selected fee head'}`
@@ -2837,9 +2869,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       setShouldPromptPayment(false);
       setIsAdditionalFeeMode(false);
 
+      const refetchJoiningResult = await refetch();
+      const refreshedJoining = refetchJoiningResult.data?.data?.joining as Joining | undefined;
+      if (refreshedJoining?.paymentSummary) {
+        setPaymentSummary(refreshedJoining.paymentSummary);
+      }
+
       await Promise.all([
-        refetch(),
         refetchTransactions(),
+        queryClient.invalidateQueries({ queryKey: paymentTransactionsQueryKey }),
         status === 'approved' ? refetchAdmission() : Promise.resolve(),
       ]);
     } catch (error: any) {
@@ -5252,6 +5290,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       Certificate checklist &amp; fee lines
                     </h2>
                     <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+                      Program certificate rules from student database settings. Record admission fee payments directly
+                      on this step — enter amount and reference ID in the payments section below.
+                    </p>
+                    <p className="mt-2 hidden max-w-3xl text-sm text-slate-600 dark:text-slate-400">
                       Program certificate rules from student database settings. Admission fees below come from{' '}
                       <span className="font-medium">Payments → Fee Configuration</span> (per course &amp; branch), not
                       the Fee Management database.
@@ -5337,6 +5379,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         return !prev;
                       });
                     }}
+                    paymentAmount={paymentFormState.amount}
+                    paymentReferenceId={paymentFormState.referenceId}
+                    onPaymentAmountChange={(value) =>
+                      setPaymentFormState((prev) => ({ ...prev, amount: value }))
+                    }
+                    onPaymentReferenceChange={(value) =>
+                      setPaymentFormState((prev) => ({ ...prev, referenceId: value }))
+                    }
+                    onRecordCashPayment={handleCashPaymentSubmit}
+                    paymentRecordDisabled={paymentFormState.isProcessing || !canWritePayments}
                   />
                 ) : !isPublicEdit && !joiningRecord?._id ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
