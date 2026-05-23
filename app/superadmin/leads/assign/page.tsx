@@ -14,6 +14,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import UnassignedLocationPrintView from '@/components/superadmin/UnassignedLocationPrintView';
 import * as XLSX from 'xlsx';
 import { showToast } from '@/lib/toast';
+import {
+  buildAssignedLeadExcelRow,
+  type AssignmentExportMeta,
+  type AssignedLeadExportRow,
+} from '@/lib/assignmentExport';
 
 // import { useDashboardHeader } from '@/components/layout/DashboardShell';
 
@@ -135,6 +140,8 @@ export default function AssignLeadsPage() {
   const [removeStudentGroup, setRemoveStudentGroup] = useState<string>('');
   const [removeCycleNumber, setRemoveCycleNumber] = useState<number | ''>('');
   const [removeCount, setRemoveCount] = useState<number | ''>('');
+  /** Status buckets selected for bulk unassign (call_status or visit_status by role). */
+  const [removeSelectedStatuses, setRemoveSelectedStatuses] = useState<string[]>([]);
 
   const STUDENT_GROUP_OPTIONS = ['10th', 'Inter', 'Inter-MPC', 'Inter-BIPC', 'Degree', 'Diploma'];
   const studentGroupOptions = filters?.studentGroups?.length ? filters.studentGroups : STUDENT_GROUP_OPTIONS;
@@ -166,10 +173,12 @@ export default function AssignLeadsPage() {
 
   // Export Confirmation State
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [exportData, setExportData] = useState<any[]>([]);
+  const [exportData, setExportData] = useState<AssignedLeadExportRow[]>([]);
   const [exportFileName, setExportFileName] = useState('');
   /** Backend sends targetRole; PRO exports include district, mandal, village, full address */
   const [exportTargetRole, setExportTargetRole] = useState<string | null>(null);
+  /** Present when bulk assign used a source (+ optional rank range); drives dynamic Excel columns. */
+  const [exportMeta, setExportMeta] = useState<AssignmentExportMeta | null>(null);
 
   const handleConfirmExport = () => {
     try {
@@ -187,28 +196,9 @@ export default function AssignLeadsPage() {
         });
       }
 
-      const dataToExport = sortedExportData.map((lead: any) => {
-        if (isProExport) {
-          return {
-            'Lead Name': lead.name ?? '',
-            'Phone Number': lead.phone ?? '',
-            'Father Name': lead.fatherName ?? '',
-            'Father Phone': lead.fatherPhone ?? '',
-            District: lead.district ?? '',
-            Mandal: lead.mandal ?? '',
-            Village: lead.village ?? '',
-            'Full Address': lead.address ?? '',
-            Remarks: lead.remarks || '',
-          };
-        }
-        return {
-          'Lead Name': lead.name ?? '',
-          'Phone Number': lead.phone ?? '',
-          'Father Name': lead.fatherName ?? '',
-          'Father Phone': lead.fatherPhone ?? '',
-          Remarks: lead.remarks || '',
-        };
-      });
+      const dataToExport = sortedExportData.map((lead) =>
+        buildAssignedLeadExcelRow(lead, isProExport, exportMeta)
+      );
 
       const worksheet = XLSX.utils.json_to_sheet(dataToExport);
       const workbook = XLSX.utils.book_new();
@@ -224,6 +214,7 @@ export default function AssignLeadsPage() {
       setExportData([]);
       setExportFileName('');
       setExportTargetRole(null);
+      setExportMeta(null);
     }
   };
 
@@ -967,38 +958,100 @@ export default function AssignLeadsPage() {
     return institutionCountsByNameNorm.get(k)?.a ?? 0;
   }, [institutionName, institutionCountsByNameNorm]);
 
-  // Assigned count for selected user (remove tab only — drives top cards there)
+  const removePortfolioFilters = useMemo(
+    () => ({
+      userId: removeUserId,
+      village: removeVillage || undefined,
+      mandal: removeMandal || undefined,
+      district: removeDistrict || undefined,
+      state: removeState || undefined,
+      academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
+      studentGroup: removeStudentGroup || undefined,
+      cycleNumber: removeCycleNumber !== '' ? removeCycleNumber : undefined,
+    }),
+    [
+      removeUserId,
+      removeVillage,
+      removeMandal,
+      removeDistrict,
+      removeState,
+      removeAcademicYear,
+      removeStudentGroup,
+      removeCycleNumber,
+    ]
+  );
+
   const {
-    data: assignedCountData,
-    isLoading: isRemoveUserCountLoading,
-    isFetching: isRemoveUserCountFetching,
-    isError: isRemoveUserCountError,
-  } = useQuery<{ data: { count: number } }>({
-    queryKey: ['assignedCountForUser', removeUserId, removeVillage, removeMandal, removeDistrict, removeState, removeAcademicYear, removeStudentGroup, removeCycleNumber],
-    queryFn: async () => {
-      if (!removeUserId) return { data: { count: 0 } };
-      const { count } = await leadAPI.getAssignedCountForUser({
-        userId: removeUserId,
-        village: removeVillage || undefined,
-        mandal: removeMandal || undefined,
-        district: removeDistrict || undefined,
-        state: removeState || undefined,
-        academicYear: removeAcademicYear !== '' ? removeAcademicYear : undefined,
-        studentGroup: removeStudentGroup || undefined,
-        cycleNumber: removeCycleNumber !== '' ? removeCycleNumber : undefined,
-      });
-      return { data: { count } };
-    },
+    data: removePortfolio,
+    isLoading: isRemovePortfolioLoading,
+    isFetching: isRemovePortfolioFetching,
+    isError: isRemovePortfolioError,
+  } = useQuery({
+    queryKey: ['assignmentPortfolio', removePortfolioFilters],
+    queryFn: () => leadAPI.getAssignmentPortfolio(removePortfolioFilters),
     enabled: isReady && mode === 'remove' && !!removeUserId,
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
   });
-  const assignedToUserCount = assignedCountData?.data?.count ?? 0;
+
   const removeUserIdNorm = removeUserId.trim().toLowerCase();
   const removeTargetUser = users.find(
     (u) => String(u.id || u._id || '').trim().toLowerCase() === removeUserIdNorm
   );
-  const removeTargetRoleLabel = removeTargetUser?.roleName?.trim() || 'User';
+  const removeTargetRoleLabel = removeTargetUser?.roleName?.trim() || removePortfolio?.roleName || 'User';
+  const removeIsPro = removeTargetRoleLabel.toUpperCase() === 'PRO';
+  const removeIsCounsellor =
+    removeTargetRoleLabel.toLowerCase().includes('counsel') ||
+    removeTargetRoleLabel.toLowerCase().includes('counsellor');
+  const removeStatusChannelLabel =
+    removePortfolio?.statusChannel === 'visit_status'
+      ? 'Visit status'
+      : removePortfolio?.statusChannel === 'call_status'
+        ? 'Call status'
+        : 'Lead status';
+
+  const removeStatusBreakdown = useMemo(
+    () =>
+      (Array.isArray(removePortfolio?.statusBreakdown) ? removePortfolio.statusBreakdown : []) as {
+        status: string;
+        count: number;
+      }[],
+    [removePortfolio?.statusBreakdown]
+  );
+
+  const removePortfolioTotal = Number(removePortfolio?.total ?? 0);
+
+  const removeStatusCountByLabel = useMemo(() => {
+    const map = new Map<string, number>();
+    removeStatusBreakdown.forEach((row) => {
+      map.set(row.status, Number(row.count) || 0);
+    });
+    return map;
+  }, [removeStatusBreakdown]);
+
+  const removeSelectedCount = useMemo(() => {
+    if (!removeSelectedStatuses.length) return 0;
+    return removeSelectedStatuses.reduce(
+      (sum, status) => sum + (removeStatusCountByLabel.get(status) || 0),
+      0
+    );
+  }, [removeSelectedStatuses, removeStatusCountByLabel]);
+
+  const removeAssignableMax = removeSelectedStatuses.length > 0 ? removeSelectedCount : removePortfolioTotal;
+
+  useEffect(() => {
+    setRemoveSelectedStatuses([]);
+    setRemoveCount('');
+  }, [
+    removeUserId,
+    removeVillage,
+    removeMandal,
+    removeDistrict,
+    removeState,
+    removeAcademicYear,
+    removeStudentGroup,
+    removeCycleNumber,
+  ]);
 
   // Search leads for single assignment
   useEffect(() => {
@@ -1055,6 +1108,9 @@ export default function AssignLeadsPage() {
       leadIds?: string[];
       institutionName?: string;
       cycleNumber?: number | string;
+      source?: string;
+      minRank?: number | string;
+      maxRank?: number | string;
     }) => leadAPI.assignLeads(payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
@@ -1070,14 +1126,19 @@ export default function AssignLeadsPage() {
       showToast.success(`Successfully assigned ${assignedCount} lead${assignedCount !== 1 ? 's' : ''} to ${userName}`);
 
       // Auto-export assigned leads to Excel (Ask for confirmation first)
-      const assignedLeads = response.data?.assignedLeads || response.assignedLeads || [];
+      const assignedLeads = (response.data?.assignedLeads || response.assignedLeads || []) as AssignedLeadExportRow[];
       if (assignedLeads.length > 0) {
+        const meta = (response.data?.exportMeta ?? response.exportMeta ?? null) as AssignmentExportMeta | null;
         setExportData(assignedLeads);
+        setExportMeta(meta);
         setExportTargetRole(
           (response.data?.targetRole ?? response.targetRole ?? null) as string | null
         );
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        setExportFileName(`Assigned_Leads_${userName}_${timestamp}.xlsx`);
+        const sourceSlug = meta?.source
+          ? `_${String(meta.source).replace(/[^\w-]+/g, '_').slice(0, 40)}`
+          : '';
+        setExportFileName(`Assigned_Leads_${userName}${sourceSlug}_${timestamp}.xlsx`);
         setShowExportDialog(true);
       }
 
@@ -1126,10 +1187,12 @@ export default function AssignLeadsPage() {
       studentGroup?: string;
       cycleNumber?: number | string;
       count: number;
+      statuses?: string[];
     }) => leadAPI.removeAssignments(payload),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['assignmentStats'] });
+      queryClient.invalidateQueries({ queryKey: ['assignmentPortfolio'] });
       queryClient.invalidateQueries({ queryKey: ['assignedCountForUser'] });
       refetchStats();
       const removed = response.data?.removed ?? response.removed ?? 0;
@@ -1143,7 +1206,8 @@ export default function AssignLeadsPage() {
       setRemoveAcademicYear('');
       setRemoveStudentGroup('');
       setRemoveCycleNumber('');
-      setRemoveCount(100);
+      setRemoveCount('');
+      setRemoveSelectedStatuses([]);
     },
     onError: (error: any) => {
       console.error('Remove assignments error:', error);
@@ -1238,13 +1302,19 @@ export default function AssignLeadsPage() {
       showToast.error('Please select a user to remove assignments from.');
       return;
     }
+    if (removeSelectedStatuses.length === 0) {
+      showToast.error(`Select at least one ${removeStatusChannelLabel.toLowerCase()} to remove.`);
+      return;
+    }
     const countVal = Number(removeCount);
     if (Number.isNaN(countVal) || countVal <= 0) {
       showToast.error('Count must be greater than zero.');
       return;
     }
-    if (countVal > assignedToUserCount) {
-      showToast.error(`This user has only ${assignedToUserCount} assigned lead(s). Enter a count up to ${assignedToUserCount}.`);
+    if (countVal > removeAssignableMax) {
+      showToast.error(
+        `Only ${removeAssignableMax.toLocaleString()} lead(s) match the selected status(es). Lower the count or add more statuses.`
+      );
       return;
     }
     removeAssignmentsMutation.mutate({
@@ -1257,7 +1327,16 @@ export default function AssignLeadsPage() {
       studentGroup: removeStudentGroup || undefined,
       cycleNumber: removeCycleNumber !== '' ? removeCycleNumber : undefined,
       count: countVal,
+      statuses: removeSelectedStatuses,
+      ...(removeIsPro ? { visitStatuses: removeSelectedStatuses } : {}),
+      ...(!removeIsPro && removeIsCounsellor ? { callStatuses: removeSelectedStatuses } : {}),
     });
+  };
+
+  const toggleRemoveStatus = (status: string) => {
+    setRemoveSelectedStatuses((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
   };
 
   // const header = useMemo(
@@ -1409,7 +1488,7 @@ export default function AssignLeadsPage() {
               Choose a user in the tab below. The summary cards will show how many leads are assigned to them for the filters you set there (academic year, group, cycle, location).
             </p>
           </Card>
-        ) : isRemoveUserCountLoading || isRemoveUserCountFetching ? (
+        ) : isRemovePortfolioLoading || isRemovePortfolioFetching ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {[1, 2, 3].map((i) => (
               <Card key={i} className="p-4 space-y-2">
@@ -1419,31 +1498,38 @@ export default function AssignLeadsPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <Card className="p-3 bg-[#3b82f6] text-[#ffffff] border-none shadow-md dark:bg-[#2563eb]">
               <div className="text-sm font-medium text-[#f1f5f9]">Selected user</div>
-              <div className="mt-1 text-lg font-bold leading-tight text-[#ffffff]">{removeTargetUser?.name ?? '—'}</div>
+              <div className="mt-1 text-lg font-bold leading-tight text-[#ffffff]">{removeTargetUser?.name ?? removePortfolio?.userName ?? '—'}</div>
               <div className="mt-1 text-xs text-[#e2e8f0]">{removeTargetUser?.email ?? ''}</div>
               {!removeTargetUser && removeUserId ? (
                 <div className="mt-2 text-xs text-amber-200">User id does not match the loaded list — try refreshing the page.</div>
               ) : null}
             </Card>
             <Card className="p-3 bg-[#10b981] text-[#ffffff] border-none shadow-md dark:bg-[#059669]">
-              <div className="text-sm font-medium text-[#f1f5f9]">Assigned (matches tab filters)</div>
+              <div className="text-sm font-medium text-[#f1f5f9]">Portfolio total</div>
               <div className="mt-1 text-xl font-bold text-[#ffffff]">
-                {isRemoveUserCountError ? '—' : assignedToUserCount.toLocaleString()}
+                {isRemovePortfolioError ? '—' : removePortfolioTotal.toLocaleString()}
               </div>
-              <div className="mt-1 text-xs text-[#d1fae5]">
-                {isRemoveUserCountError
-                  ? 'Could not load count. Check network or try again.'
-                  : 'Maximum you can remove in one action (subject to the count you enter).'}
+              <div className="mt-1 text-xs text-[#d1fae5]">Leads assigned with current filters.</div>
+            </Card>
+            <Card className="p-3 bg-[#8b5cf6] text-[#ffffff] border-none shadow-md dark:bg-[#7c3aed]">
+              <div className="text-sm font-medium text-[#f1f5f9]">Selected statuses</div>
+              <div className="mt-1 text-xl font-bold text-[#ffffff]">
+                {removeSelectedStatuses.length === 0 ? '—' : removeSelectedCount.toLocaleString()}
+              </div>
+              <div className="mt-1 text-xs text-[#ede9fe]">
+                {removeSelectedStatuses.length === 0
+                  ? 'Pick status(es) below to scope removal.'
+                  : `${removeSelectedStatuses.length} status bucket(s) selected.`}
               </div>
             </Card>
             <Card className="p-3 bg-[#f97316] text-[#ffffff] border-none shadow-md dark:bg-[#ea580c]">
-              <div className="text-sm font-medium text-[#f1f5f9]">Role</div>
+              <div className="text-sm font-medium text-[#f1f5f9]">Role · {removeStatusChannelLabel}</div>
               <div className="mt-1 text-xl font-bold text-[#ffffff]">{removeTargetRoleLabel}</div>
               <div className="mt-1 text-xs text-[#ffedd5]">
-                {removeTargetRoleLabel === 'PRO' ? 'Uses PRO assignment field.' : 'Uses counsellor assignment field.'}
+                {removeIsPro ? 'PRO field visits (visit_status).' : removeIsCounsellor ? 'Counsellor calls (call_status).' : 'Lead status buckets.'}
               </div>
             </Card>
           </div>
@@ -1993,9 +2079,94 @@ export default function AssignLeadsPage() {
                   )}
                 </select>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Leads currently assigned to this user will become unassigned (pool).
+                  Leads currently assigned to this user will return to the unassigned pool. Choose which {removeStatusChannelLabel.toLowerCase()} buckets to clear.
                 </p>
               </div>
+
+              {removeUserId ? (
+                <Card className="border border-slate-200 dark:border-slate-700 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Portfolio by {removeStatusChannelLabel}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        Select one or more statuses to remove. Counts respect the filters below.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={removeStatusBreakdown.length === 0}
+                        onClick={() =>
+                          setRemoveSelectedStatuses(
+                            removeStatusBreakdown.map((row) => row.status).filter(Boolean)
+                          )
+                        }
+                      >
+                        Select all
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setRemoveSelectedStatuses([])}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+
+                  {isRemovePortfolioLoading || isRemovePortfolioFetching ? (
+                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                      {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <Skeleton key={i} variant="text" height="48px" className="rounded-lg" />
+                      ))}
+                    </div>
+                  ) : isRemovePortfolioError ? (
+                    <p className="mt-4 text-sm text-red-600 dark:text-red-400">
+                      Could not load portfolio. Check your connection and try again.
+                    </p>
+                  ) : removeStatusBreakdown.length === 0 ? (
+                    <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                      No assigned leads match the current filters for this user.
+                    </p>
+                  ) : (
+                    <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {removeStatusBreakdown.map((row) => {
+                        const checked = removeSelectedStatuses.includes(row.status);
+                        return (
+                          <label
+                            key={row.status}
+                            className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                              checked
+                                ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-900/20'
+                                : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleRemoveStatus(row.status)}
+                                className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                              />
+                              <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
+                                {row.status}
+                              </span>
+                            </span>
+                            <span className="text-sm font-bold tabular-nums text-slate-700 dark:text-slate-300 shrink-0">
+                              {Number(row.count).toLocaleString()}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+              ) : null}
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
@@ -2147,19 +2318,23 @@ export default function AssignLeadsPage() {
                 <Input
                   type="number"
                   min={1}
-                  max={Math.max(assignedToUserCount, 10000)}
+                  max={Math.max(removeAssignableMax, 1)}
                   value={removeCount}
                   onChange={(event) => setRemoveCount(event.target.value === '' ? '' : Number(event.target.value))}
                   required
+                  disabled={removeSelectedStatuses.length === 0 || removeAssignableMax === 0}
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Assigned to this user: {assignedToUserCount.toLocaleString()} leads
-                  {removeAcademicYear !== '' && ` for ${removeAcademicYear}`}
-                  {removeStudentGroup && `, ${removeStudentGroup}`}
-                  {removeCycleNumber !== '' && `, cycle ${removeCycleNumber}`}
-                  {removeVillage && ` in ${removeVillage}`}
-                  {removeMandal && `, ${removeMandal}`}
-                  {removeState && `, ${removeState}`}
+                  Portfolio: {removePortfolioTotal.toLocaleString()} lead(s)
+                  {removeSelectedStatuses.length > 0 && (
+                    <> · Selected statuses: {removeSelectedCount.toLocaleString()} removable</>
+                  )}
+                  {removeAcademicYear !== '' && ` · year ${removeAcademicYear}`}
+                  {removeStudentGroup && ` · ${removeStudentGroup}`}
+                  {removeCycleNumber !== '' && ` · cycle ${removeCycleNumber}`}
+                  {removeVillage && ` · ${removeVillage}`}
+                  {removeMandal && ` · ${removeMandal}`}
+                  {removeState && ` · ${removeState}`}
                 </p>
               </div>
 
@@ -2170,8 +2345,9 @@ export default function AssignLeadsPage() {
                   disabled={
                     removeAssignmentsMutation.isPending ||
                     !removeUserId ||
+                    removeSelectedStatuses.length === 0 ||
                     Number(removeCount) <= 0 ||
-                    assignedToUserCount === 0
+                    removeAssignableMax === 0
                   }
                   className="border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900/20"
                 >
@@ -2189,6 +2365,7 @@ export default function AssignLeadsPage() {
                     setRemoveStudentGroup('');
                     setRemoveCycleNumber('');
                     setRemoveCount('');
+                    setRemoveSelectedStatuses([]);
                   }}
                   disabled={removeAssignmentsMutation.isPending}
                 >
@@ -2657,6 +2834,7 @@ export default function AssignLeadsPage() {
             setExportData([]);
             setExportFileName('');
             setExportTargetRole(null);
+            setExportMeta(null);
           }
         }}
       >
@@ -2665,6 +2843,19 @@ export default function AssignLeadsPage() {
             <DialogTitle>Export Assigned Leads?</DialogTitle>
             <DialogDescription>
               Lead assignment was successful. Would you like to download the list of assigned leads as an Excel file?
+              {exportMeta?.source ? (
+                <span className="mt-2 block text-slate-600 dark:text-slate-300">
+                  Source filter: <strong>{exportMeta.source}</strong>
+                  {exportMeta.minRank != null || exportMeta.maxRank != null
+                    ? ` (rank ${exportMeta.minRank ?? '—'}–${exportMeta.maxRank ?? '—'})`
+                    : ''}
+                  {exportMeta.dynamicFieldColumns?.length
+                    ? ` · Extra columns: ${exportMeta.dynamicFieldColumns.map((c) => c.label).join(', ')}`
+                    : exportMeta.includeRankColumn
+                      ? ' · Includes Rank column'
+                      : ''}
+                </span>
+              ) : null}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
