@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
-import { managerAPI, leadAPI } from '@/lib/api';
+import { managerAPI, locationsAPI } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { Lead, User } from '@/types';
 import { Button } from '@/components/ui/Button';
@@ -13,7 +13,20 @@ import { Input } from '@/components/ui/Input';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
-import Link from 'next/link';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/Dialog';
+import {
+  MANAGER_LEADS_EXPORT_COLUMNS,
+  ManagerLeadsExportColumnKey,
+  getDefaultExportColumnSelection,
+  getSelectedExportColumnKeys,
+} from '@/lib/managerLeadsExport';
 // Using inline icons
 
 // Debounce hook for search
@@ -40,16 +53,28 @@ export default function ManagerLeadsPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
   const [search, setSearch] = useState('');
-  const [enquiryNumber, setEnquiryNumber] = useState('');
   const [leadStatus, setLeadStatus] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [filterState, setFilterState] = useState('');
+  const [filterDistrict, setFilterDistrict] = useState('');
+  const [filterMandal, setFilterMandal] = useState('');
+  const [filterVillage, setFilterVillage] = useState('');
+  const [locationStates, setLocationStates] = useState<{ id: string; name: string }[]>([]);
+  const [locationDistricts, setLocationDistricts] = useState<{ id: string; name: string }[]>([]);
+  const [locationMandals, setLocationMandals] = useState<{ id: string; name: string }[]>([]);
+  const [locationVillages, setLocationVillages] = useState<{ id: string; name: string }[]>([]);
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportColumnSelection, setExportColumnSelection] = useState<
+    Record<ManagerLeadsExportColumnKey, boolean>
+  >(getDefaultExportColumnSelection);
 
   // Debounce search inputs
   const debouncedSearch = useDebounce(search, 700);
-  const debouncedEnquiryNumber = useDebounce(enquiryNumber, 500);
+
+  const selectClass =
+    'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm disabled:opacity-50';
 
   // Check authentication
   useEffect(() => {
@@ -86,19 +111,159 @@ export default function ManagerLeadsPage() {
     }
   }, [teamData]);
 
+  // Load states for location filters
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listStates();
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationStates(
+          arr.map((s: { id?: string; name: string }) => ({
+            id: s.id || '',
+            name: s.name || String(s),
+          }))
+        );
+      } catch (e) {
+        if (!cancelled) console.error('Failed to load states for manager leads:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!filterState) {
+      setLocationDistricts([]);
+      setLocationMandals([]);
+      setLocationVillages([]);
+      setFilterDistrict('');
+      setFilterMandal('');
+      setFilterVillage('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listDistricts({ stateName: filterState });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationDistricts(
+          arr.map((d: { id?: string; name: string }) => ({
+            id: d.id || '',
+            name: d.name || String(d),
+          }))
+        );
+        setLocationMandals([]);
+        setLocationVillages([]);
+        setFilterDistrict('');
+        setFilterMandal('');
+        setFilterVillage('');
+      } catch {
+        if (!cancelled) setLocationDistricts([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filterState]);
+
+  useEffect(() => {
+    if (!filterState || !filterDistrict) {
+      setLocationMandals([]);
+      setLocationVillages([]);
+      setFilterMandal('');
+      setFilterVillage('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listMandals({
+          stateName: filterState,
+          districtName: filterDistrict,
+        });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationMandals(
+          arr.map((m: { id?: string; name: string }) => ({
+            id: m.id || '',
+            name: m.name || String(m),
+          }))
+        );
+        setLocationVillages([]);
+        setFilterMandal('');
+        setFilterVillage('');
+      } catch {
+        if (!cancelled) setLocationMandals([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filterState, filterDistrict]);
+
+  useEffect(() => {
+    if (!filterState || !filterDistrict || !filterMandal) {
+      setLocationVillages([]);
+      setFilterVillage('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await locationsAPI.listVillages({
+          stateName: filterState,
+          districtName: filterDistrict,
+          mandalName: filterMandal,
+        });
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setLocationVillages(
+          arr.map((v: { id?: string; name: string }) => ({
+            id: v.id || v.name || '',
+            name: v.name || String(v),
+          }))
+        );
+        setFilterVillage('');
+      } catch {
+        if (!cancelled) setLocationVillages([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filterState, filterDistrict, filterMandal]);
+
   // Build query filters
   const queryFilters = useMemo(() => {
-    const filters: any = {
+    const filters: Record<string, string | number> = {
       page,
       limit,
     };
     const searchTrimmed = debouncedSearch?.trim() ?? '';
     if (searchTrimmed.length >= 2) filters.search = searchTrimmed;
-    if (debouncedEnquiryNumber) filters.enquiryNumber = debouncedEnquiryNumber;
     if (leadStatus) filters.leadStatus = leadStatus;
     if (assignedTo) filters.assignedTo = assignedTo;
+    if (filterState) filters.state = filterState;
+    if (filterDistrict) filters.district = filterDistrict;
+    if (filterMandal) filters.mandal = filterMandal;
+    if (filterVillage) filters.village = filterVillage;
     return filters;
-  }, [page, limit, debouncedSearch, debouncedEnquiryNumber, leadStatus, assignedTo]);
+  }, [
+    page,
+    limit,
+    debouncedSearch,
+    leadStatus,
+    assignedTo,
+    filterState,
+    filterDistrict,
+    filterMandal,
+    filterVillage,
+  ]);
 
   // Fetch leads
   const {
@@ -109,33 +274,81 @@ export default function ManagerLeadsPage() {
     queryKey: ['manager-leads', queryFilters],
     queryFn: async () => {
       const response = await managerAPI.getLeads(queryFilters);
-      return response.data || response;
+      const raw =
+        response && typeof response === 'object' && 'leads' in response
+          ? response
+          : response && typeof response === 'object' && response.data && typeof response.data === 'object'
+            ? response.data
+            : null;
+      if (!raw || !Array.isArray((raw as { leads?: Lead[] }).leads)) {
+        return {
+          leads: [],
+          pagination: { page: 1, limit: 50, total: 0, pages: 0 },
+          needsUpdateCount: 0,
+        };
+      }
+      const payload = raw as {
+        leads: Lead[];
+        pagination?: { page?: number; limit?: number; total?: number; pages?: number };
+        needsUpdateCount?: number;
+      };
+      const p = payload.pagination || {};
+      const total = Number(p.total) || 0;
+      const limitNum = Number(p.limit) || limit;
+      return {
+        leads: payload.leads,
+        pagination: {
+          page: Number(p.page) || 1,
+          limit: limitNum,
+          total,
+          pages: Number(p.pages) || (total > 0 ? Math.ceil(total / limitNum) : 0),
+        },
+        needsUpdateCount: Number(payload.needsUpdateCount) || 0,
+      };
     },
     enabled: !!user,
     staleTime: 30000,
   });
 
   const leads = leadsData?.leads || [];
-  const pagination = leadsData?.pagination || { page: 1, limit: 50, total: 0, pages: 1 };
-  const needsUpdateCount = leadsData?.needsUpdateCount ?? 0;
+  const pagination = useMemo(() => {
+    const p = leadsData?.pagination || { page: 1, limit: 50, total: 0, pages: 0 };
+    const total = Number(p.total) || 0;
+    const limitNum = Number(p.limit) || limit;
+    const pageNum = Number(p.page) || 1;
+    const pages = Number(p.pages) || (total > 0 ? Math.ceil(total / limitNum) : 0);
+    return { page: pageNum, limit: limitNum, total, pages };
+  }, [leadsData, limit]);
+  const filteredTotal = pagination.total;
+
+  const hasActiveFilters =
+    !!search ||
+    !!leadStatus ||
+    !!assignedTo ||
+    !!filterState ||
+    !!filterDistrict ||
+    !!filterMandal ||
+    !!filterVillage;
+
+  const teamLeadsTitleWithCount = (
+    <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
+      <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Team Leads</h1>
+      {isLoading ? (
+        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Loading…</span>
+      ) : (
+        <span className="text-base font-semibold text-slate-600 dark:text-slate-300">
+          ({filteredTotal.toLocaleString()} lead{filteredTotal === 1 ? '' : 's'}
+          {hasActiveFilters ? ' matching filters' : ' total'})
+        </span>
+      )}
+    </div>
+  );
 
   useEffect(() => {
-    setHeaderContent(
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">All Leads</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Manage leads assigned to you and your team ({pagination.total} total)
-          {needsUpdateCount > 0 && (
-            <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-              {needsUpdateCount} need{needsUpdateCount === 1 ? 's' : ''} update
-            </span>
-          )}
-        </p>
-      </div>
-    );
+    setHeaderContent(teamLeadsTitleWithCount);
 
     return () => clearHeaderContent();
-  }, [setHeaderContent, clearHeaderContent, pagination.total, needsUpdateCount]);
+  }, [setHeaderContent, clearHeaderContent, filteredTotal, hasActiveFilters, isLoading]);
 
   useEffect(() => {
     setMobileTopBar({ title: 'Team Leads', iconKey: 'team-leads' });
@@ -145,19 +358,13 @@ export default function ManagerLeadsPage() {
   // Clear filters
   const clearFilters = () => {
     setSearch('');
-    setEnquiryNumber('');
     setLeadStatus('');
     setAssignedTo('');
+    setFilterState('');
+    setFilterDistrict('');
+    setFilterMandal('');
+    setFilterVillage('');
     setPage(1);
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   // Get status badge color
@@ -187,39 +394,45 @@ export default function ManagerLeadsPage() {
     }
   };
 
-  const hasActiveFilters = search || enquiryNumber || leadStatus || assignedTo;
+  const selectedExportColumnCount = getSelectedExportColumnKeys(exportColumnSelection).length;
 
-  // Handle export to Excel
+  const setAllExportColumns = (checked: boolean) => {
+    setExportColumnSelection(
+      MANAGER_LEADS_EXPORT_COLUMNS.reduce(
+        (acc, col) => {
+          acc[col.key] = checked;
+          return acc;
+        },
+        {} as Record<ManagerLeadsExportColumnKey, boolean>
+      )
+    );
+  };
+
   const handleExportExcel = async () => {
+    const columns = getSelectedExportColumnKeys(exportColumnSelection);
+    if (columns.length === 0) {
+      showToast.error('Select at least one column to export.');
+      return;
+    }
+
     try {
       setIsExporting(true);
-      
-      // Build filters matching current view
-      const exportFilters: any = {
-        ...queryFilters,
-      };
-      // remove pagination from export
-      delete exportFilters.page;
-      delete exportFilters.limit;
 
-      const blob = await leadAPI.exportLeads(exportFilters);
-      
-      // Create a URL for the blob
+      const { page: _page, limit: _limit, ...exportFilters } = queryFilters;
+      const blob = await managerAPI.exportLeads({ ...exportFilters, columns });
+
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
-      
-      // Generate filename with date
       const date = new Date().toISOString().split('T')[0];
       link.setAttribute('download', `team_leads_export_${date}.xlsx`);
-      
-      // Append to document, click and cleanup
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
-      showToast.success('Excel export started successfully');
+
+      setExportModalOpen(false);
+      showToast.success('Excel downloaded successfully');
     } catch (error) {
       console.error('Error exporting leads:', error);
       showToast.error('Failed to export leads. Please try again.');
@@ -230,127 +443,190 @@ export default function ManagerLeadsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Mobile: count inline after title (title also in top bar) */}
+      <div className="lg:hidden flex flex-wrap items-baseline gap-2">
+        <span className="text-lg font-bold text-slate-900 dark:text-white">Team Leads</span>
+        {!isLoading && (
+          <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+            ({filteredTotal.toLocaleString()} lead{filteredTotal === 1 ? '' : 's'}
+            {hasActiveFilters ? ' matching filters' : ' total'})
+          </span>
+        )}
+      </div>
+
       {/* Search and Filters */}
-      <Card className="p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search by name or enquiry number (enquiry # also has its own field below) */}
-          <div className="flex-1">
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
-              <Input
-                type="text"
-                placeholder="Search by name or enquiry #"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="pl-10 py-2 text-sm"
-              />
-            </div>
+      <Card className="p-4 space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            <Input
+              type="text"
+              placeholder="Search by name or enquiry number"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="pl-10 py-2 text-sm"
+            />
           </div>
-
-          {/* Search by Enquiry Number */}
-          <div className="flex-1">
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
-              <Input
-                type="text"
-                placeholder="Search by Enquiry Number"
-                value={enquiryNumber}
-                onChange={(e) => {
-                  setEnquiryNumber(e.target.value);
-                  setPage(1);
-                }}
-                className="pl-10 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          {/* Filter Toggle */}
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant={showFilters ? 'primary' : 'outline'}
-              onClick={() => setShowFilters(!showFilters)}
-              className="h-10"
-            >
-              <span className="mr-2">⚙</span>
-              Filters
-            </Button>
+          <div className="flex gap-2 shrink-0">
             {hasActiveFilters && (
               <Button size="sm" variant="outline" onClick={clearFilters} className="h-10">
-                <span className="mr-2">×</span>
-                Clear
+                Clear filters
               </Button>
             )}
             <Button
               size="sm"
-              variant="outline"
-              onClick={handleExportExcel}
+              variant="primary"
+              onClick={() => {
+                setExportColumnSelection(getDefaultExportColumnSelection());
+                setExportModalOpen(true);
+              }}
               disabled={isExporting}
-              className="h-10 border-green-600 text-green-600 hover:bg-green-50 dark:border-green-500 dark:text-green-500 dark:hover:bg-green-900/20"
+              isLoading={isExporting}
+              className="h-10"
             >
-              {isExporting ? (
-                <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin mr-2"></div>
-              ) : (
-                <span className="mr-2">📥</span>
-              )}
-              {isExporting ? 'Exporting...' : 'Export Excel'}
+              <span className="mr-2">📥</span>
+              Export Excel
             </Button>
           </div>
         </div>
 
-        {/* Expanded Filters */}
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Lead Status
-              </label>
-              <select
-                value={leadStatus}
-                onChange={(e) => {
-                  setLeadStatus(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
-              >
-                <option value="">All Statuses</option>
-                <option value="New">New</option>
-                <option value="Contacted">Contacted</option>
-                <option value="Interested">Interested</option>
-                <option value="Qualified">Qualified</option>
-                <option value="Converted">Converted</option>
-                <option value="Confirmed">Confirmed</option>
-                <option value="Not Interested">Not Interested</option>
-                <option value="Lost">Lost</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Assigned To
-              </label>
-              <select
-                value={assignedTo}
-                onChange={(e) => {
-                  setAssignedTo(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
-              >
-                <option value="">All Team Members</option>
-                <option value={user?._id}>Me ({user?.name})</option>
-                {teamMembers.map((member) => (
-                  <option key={member._id} value={member._id}>
-                    {member.name} ({member.roleName})
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Lead Status
+            </label>
+            <select
+              value={leadStatus}
+              onChange={(e) => {
+                setLeadStatus(e.target.value);
+                setPage(1);
+              }}
+              className={selectClass}
+            >
+              <option value="">All Statuses</option>
+              <option value="New">New</option>
+              <option value="Contacted">Contacted</option>
+              <option value="Interested">Interested</option>
+              <option value="Qualified">Qualified</option>
+              <option value="Converted">Converted</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="Not Interested">Not Interested</option>
+              <option value="Lost">Lost</option>
+            </select>
           </div>
-        )}
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Assigned To
+            </label>
+            <select
+              value={assignedTo}
+              onChange={(e) => {
+                setAssignedTo(e.target.value);
+                setPage(1);
+              }}
+              className={selectClass}
+            >
+              <option value="">All Team Members</option>
+              <option value={user?._id}>Me ({user?.name})</option>
+              {teamMembers.map((member) => (
+                <option key={member._id} value={member._id}>
+                  {member.name} ({member.roleName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              State
+            </label>
+            <select
+              value={filterState}
+              onChange={(e) => {
+                setFilterState(e.target.value);
+                setPage(1);
+              }}
+              className={selectClass}
+            >
+              <option value="">All States</option>
+              {locationStates.map((s) => (
+                <option key={s.id || s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              District
+            </label>
+            <select
+              value={filterDistrict}
+              onChange={(e) => {
+                setFilterDistrict(e.target.value);
+                setPage(1);
+              }}
+              disabled={!filterState}
+              className={selectClass}
+            >
+              <option value="">{filterState ? 'All Districts' : 'Select state'}</option>
+              {locationDistricts.map((d) => (
+                <option key={d.id || d.name} value={d.name}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Mandal
+            </label>
+            <select
+              value={filterMandal}
+              onChange={(e) => {
+                setFilterMandal(e.target.value);
+                setPage(1);
+              }}
+              disabled={!filterDistrict}
+              className={selectClass}
+            >
+              <option value="">{filterDistrict ? 'All Mandals' : 'Select district'}</option>
+              {locationMandals.map((m) => (
+                <option key={m.id || m.name} value={m.name}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Village
+            </label>
+            <select
+              value={filterVillage}
+              onChange={(e) => {
+                setFilterVillage(e.target.value);
+                setPage(1);
+              }}
+              disabled={!filterMandal}
+              className={selectClass}
+            >
+              <option value="">{filterMandal ? 'All Villages' : 'Select mandal'}</option>
+              {locationVillages.map((v) => (
+                <option key={v.id || v.name} value={v.name}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </Card>
 
       {/* Leads Table */}
@@ -362,10 +638,25 @@ export default function ManagerLeadsPage() {
             <p className="text-red-600 dark:text-red-400">Error loading leads. Please try again.</p>
           </div>
         ) : leads.length === 0 ? (
-          <EmptyState
-            title="No leads found"
-            description="Try adjusting your search or filters to find leads."
-          />
+          <>
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
+              {filteredTotal === 0 ? (
+                <>No leads{hasActiveFilters ? ' matching filters' : ''}</>
+              ) : (
+                <>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    {filteredTotal.toLocaleString()}
+                  </span>{' '}
+                  lead{filteredTotal === 1 ? '' : 's'}
+                  {hasActiveFilters ? ' match filters' : ' total'} (none on this page)
+                </>
+              )}
+            </div>
+            <EmptyState
+              title="No leads found"
+              description="Try adjusting your search or filters to find leads."
+            />
+          </>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -373,13 +664,16 @@ export default function ManagerLeadsPage() {
                 <thead className="bg-gray-50 dark:bg-gray-800/50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                      Enquiry #
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                       Name
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                       Phone
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      District
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Student Group
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                       Status
@@ -387,23 +681,23 @@ export default function ManagerLeadsPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                       Assigned To
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                   {leads.map((lead: Lead) => (
                     <tr
                       key={lead._id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => router.push(`/manager/leads/${lead._id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          router.push(`/manager/leads/${lead._id}`);
+                        }
+                      }}
+                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
                     >
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                        {lead.enquiryNumber || '-'}
-                      </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                         <span className="flex items-center gap-1.5">
                           {lead.name}
@@ -414,6 +708,12 @@ export default function ManagerLeadsPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {lead.phone}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        {lead.district || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        {lead.studentGroup || '-'}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -429,35 +729,25 @@ export default function ManagerLeadsPage() {
                           ? lead.assignedTo.name
                           : 'Unassigned'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {formatDate(lead.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link href={`/manager/leads/${lead._id}`}>
-                          <Button size="sm" variant="outline">
-                            👁
-                            View
-                          </Button>
-                        </Link>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination */}
-            {pagination.pages > 1 && (
-              <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div className="text-sm text-gray-700 dark:text-gray-300">
-                  Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, pagination.total)} of{' '}
-                  {pagination.total} leads
-                  {needsUpdateCount > 0 && (
-                    <span className="ml-3 inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200 ring-1 ring-inset ring-amber-600/20">
-                      {needsUpdateCount} need{needsUpdateCount === 1 ? 's' : ''} update
-                    </span>
-                  )}
-                </div>
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                {filteredTotal === 0 ? (
+                  <>No leads{hasActiveFilters ? ' matching filters' : ''}</>
+                ) : (
+                  <>
+                    Showing {((page - 1) * limit) + 1}–{Math.min(page * limit, filteredTotal)} of{' '}
+                    <span className="font-semibold">{filteredTotal.toLocaleString()}</span>
+                    {hasActiveFilters ? ' filtered' : ''} lead{filteredTotal === 1 ? '' : 's'}
+                  </>
+                )}
+              </div>
+              {pagination.pages > 1 && (
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -467,6 +757,9 @@ export default function ManagerLeadsPage() {
                   >
                     Previous
                   </Button>
+                  <span className="flex items-center text-sm text-gray-600 dark:text-gray-400 px-1">
+                    Page {page} of {pagination.pages}
+                  </span>
                   <Button
                     size="sm"
                     variant="outline"
@@ -476,11 +769,94 @@ export default function ManagerLeadsPage() {
                     Next
                   </Button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </Card>
+
+      <Dialog open={exportModalOpen} onOpenChange={setExportModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0">
+          <div className="shrink-0 px-6 pt-6 pr-12">
+            <DialogHeader>
+              <DialogTitle>Export Excel</DialogTitle>
+              <DialogDescription>
+                Choose columns to include. Export uses your current filters (
+                {filteredTotal.toLocaleString()} lead{filteredTotal === 1 ? '' : 's'}
+                {hasActiveFilters ? ' matching filters' : ''}).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-wrap items-center gap-2 py-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setExportColumnSelection(getDefaultExportColumnSelection())}
+              >
+                Basic columns
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setAllExportColumns(true)}>
+                Select all
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setAllExportColumns(false)}>
+                Clear all
+              </Button>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {selectedExportColumnCount} of {MANAGER_LEADS_EXPORT_COLUMNS.length} selected
+              </span>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+              {MANAGER_LEADS_EXPORT_COLUMNS.map((col) => (
+                <label
+                  key={col.key}
+                  className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer rounded-md px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                >
+                  <input
+                    type="checkbox"
+                    checked={exportColumnSelection[col.key]}
+                    onChange={(e) => {
+                      setExportColumnSelection((prev) => ({
+                        ...prev,
+                        [col.key]: e.target.checked,
+                      }));
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-[#ea580c] focus:ring-[#fdba74] dark:border-gray-600"
+                  />
+                  <span>{col.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter className="shrink-0 mt-0 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-slate-800/80 gap-3 sm:gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setExportModalOpen(false)}
+              disabled={isExporting}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={isExporting || selectedExportColumnCount === 0}
+              isLoading={isExporting}
+              className="w-full sm:w-auto"
+            >
+              {isExporting ? 'Downloading…' : 'Download Excel'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

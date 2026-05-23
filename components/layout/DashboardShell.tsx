@@ -836,12 +836,16 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                   useMobileBottomNav && 'pb-20 pt-[calc(2.75rem+env(safe-area-inset-top))] lg:pt-6 lg:pb-8'
                 )}
               >
-                {/* Desktop-only simple heading for Counselor pages */}
+                {/* Desktop heading for user / manager (custom headerContent or title) */}
                 {useMobileBottomNav && (
                   <div className="hidden lg:block mb-8 px-1">
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-                      {mobileTopBar?.title || title}
-                    </h1>
+                    {headerContent ? (
+                      headerContent
+                    ) : (
+                      <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                        {mobileTopBar?.title || title}
+                      </h1>
+                    )}
                   </div>
                 )}
                 <div className={cn(

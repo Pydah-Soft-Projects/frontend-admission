@@ -261,6 +261,7 @@ export const leadAPI = {
     return response.data?.data || response.data;
   },
   exportLeads: async (filters?: {
+    village?: string;
     mandal?: string;
     district?: string;
     state?: string;
@@ -2103,9 +2104,11 @@ export const managerAPI = {
     limit?: number;
     search?: string;
     enquiryNumber?: string;
-    mandal?: string;
     state?: string;
     district?: string;
+    mandal?: string;
+    village?: string;
+    assignedTo?: string;
     leadStatus?: string;
     applicationStatus?: string;
     courseInterested?: string;
@@ -2118,9 +2121,11 @@ export const managerAPI = {
     if (filters?.limit) params.append('limit', String(filters.limit));
     if (filters?.search) params.append('search', filters.search);
     if (filters?.enquiryNumber) params.append('enquiryNumber', filters.enquiryNumber);
-    if (filters?.mandal) params.append('mandal', filters.mandal);
     if (filters?.state) params.append('state', filters.state);
     if (filters?.district) params.append('district', filters.district);
+    if (filters?.mandal) params.append('mandal', filters.mandal);
+    if (filters?.village) params.append('village', filters.village);
+    if (filters?.assignedTo) params.append('assignedTo', filters.assignedTo);
     if (filters?.leadStatus) params.append('leadStatus', filters.leadStatus);
     if (filters?.applicationStatus) params.append('applicationStatus', filters.applicationStatus);
     if (filters?.courseInterested) params.append('courseInterested', filters.courseInterested);
@@ -2129,6 +2134,39 @@ export const managerAPI = {
     if (filters?.endDate) params.append('endDate', filters.endDate);
     const response = await api.get(`/manager/leads?${params.toString()}`);
     return response.data?.data || response.data;
+  },
+  exportLeads: async (filters?: {
+    columns?: string[];
+    search?: string;
+    enquiryNumber?: string;
+    state?: string;
+    district?: string;
+    mandal?: string;
+    village?: string;
+    assignedTo?: string;
+    leadStatus?: string;
+    applicationStatus?: string;
+    courseInterested?: string;
+    source?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.columns?.length) {
+      params.append('columns', filters.columns.join(','));
+    }
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (key === 'columns') return;
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const response = await api.get(`/manager/leads/export?${params.toString()}`, {
+      responseType: 'blob',
+    });
+    return response.data;
   },
   getAnalytics: async (filters?: { startDate?: string; endDate?: string }) => {
     const params = new URLSearchParams();
