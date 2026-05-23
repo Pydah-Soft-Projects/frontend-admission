@@ -23,8 +23,10 @@ import {
 } from '@/components/ui/Dialog';
 import {
   MANAGER_LEADS_EXPORT_COLUMNS,
+  MANAGER_LEADS_EXPORT_COLUMN_GROUPS,
   ManagerLeadsExportColumnKey,
   getDefaultExportColumnSelection,
+  getExportColumnsByGroup,
   getSelectedExportColumnKeys,
 } from '@/lib/managerLeadsExport';
 // Using inline icons
@@ -808,28 +810,39 @@ export default function ManagerLeadsPage() {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-              {MANAGER_LEADS_EXPORT_COLUMNS.map((col) => (
-                <label
-                  key={col.key}
-                  className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer rounded-md px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/60"
-                >
-                  <input
-                    type="checkbox"
-                    checked={exportColumnSelection[col.key]}
-                    onChange={(e) => {
-                      setExportColumnSelection((prev) => ({
-                        ...prev,
-                        [col.key]: e.target.checked,
-                      }));
-                    }}
-                    className="h-4 w-4 rounded border-gray-300 text-[#ea580c] focus:ring-[#fdba74] dark:border-gray-600"
-                  />
-                  <span>{col.label}</span>
-                </label>
-              ))}
-            </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2 space-y-4">
+            {MANAGER_LEADS_EXPORT_COLUMN_GROUPS.map((group) => {
+              const cols = getExportColumnsByGroup(group.id);
+              if (cols.length === 0) return null;
+              return (
+                <div key={group.id}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                    {group.label}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                    {cols.map((col) => (
+                      <label
+                        key={col.key}
+                        className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer rounded-md px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={exportColumnSelection[col.key]}
+                          onChange={(e) => {
+                            setExportColumnSelection((prev) => ({
+                              ...prev,
+                              [col.key]: e.target.checked,
+                            }));
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-[#ea580c] focus:ring-[#fdba74] dark:border-gray-600"
+                        />
+                        <span>{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <DialogFooter className="shrink-0 mt-0 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-slate-800/80 gap-3 sm:gap-3">
