@@ -25,7 +25,7 @@ import {
   resolveAdmissionStatCourseLabel,
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
-import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil } from 'lucide-react';
+import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X } from 'lucide-react';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -61,9 +61,9 @@ const abstractBlockOutline = 'border-2 border-slate-300 dark:border-slate-600';
 const abstractBlockCellStart = 'border-l-2 border-slate-300 dark:border-slate-600';
 const abstractBlockCellEnd = 'border-r-2 border-slate-300 dark:border-slate-600';
 const abstractGroupHeaderClass =
-  'px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wider';
+  'px-1.5 py-1.5 text-center text-[9px] font-bold uppercase tracking-wider sm:px-3 sm:py-2.5 sm:text-[11px]';
 const abstractSubHeaderClass =
-  'px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider';
+  'px-1.5 py-1.5 text-center text-[9px] font-bold uppercase tracking-wider sm:px-3 sm:py-2 sm:text-[10px]';
 
 type AbstractIntakeEditRow = {
   courseId: string;
@@ -121,9 +121,9 @@ const StatCardTwoLineLabel = ({
   className: string;
 }) => {
   const [line1, line2] = splitStatCardLabelTwoLines(label);
-  const lineClass = `line-clamp-1 text-[10px] font-bold uppercase leading-[1.2] tracking-wide sm:text-[11px] ${className}`;
+  const lineClass = `line-clamp-1 text-[9px] font-bold uppercase leading-[1.15] tracking-wide sm:text-[10px] md:text-[11px] ${className}`;
   return (
-    <div className="flex min-h-[2.4rem] shrink-0 flex-col justify-center gap-px">
+    <div className="flex min-h-[1.75rem] shrink-0 flex-col justify-center gap-px sm:min-h-[2.4rem]">
       <p className={lineClass}>{line1}</p>
       {line2 ? <p className={lineClass}>{line2}</p> : <p className={`${lineClass} invisible`} aria-hidden>.</p>}
     </div>
@@ -243,6 +243,7 @@ const CompletedAdmissionsPage = () => {
   const [referenceEditValue, setReferenceEditValue] = useState('');
   /** Stats drill-down: college card selected → show its course cards below. */
   const [selectedStatsCollegeId, setSelectedStatsCollegeId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
   const { colleges, isLoading: collegesLoading } = useInstitutions();
@@ -281,6 +282,28 @@ const CompletedAdmissionsPage = () => {
   const branches = Array.isArray(branchesData) ? branchesData : (branchesData as any)?.data || [];
 
   const [isExporting, setIsExporting] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (collegeFilter) count += 1;
+    if (courseFilter) count += 1;
+    if (branchFilter) count += 1;
+    if (statusFilter !== 'active') count += 1;
+    if (dateRange.from) count += 1;
+    if (dateRange.to) count += 1;
+    return count;
+  }, [collegeFilter, courseFilter, branchFilter, statusFilter, dateRange.from, dateRange.to]);
+
+  const clearFilters = () => {
+    setCollegeFilter('');
+    setCourseFilter('');
+    setBranchFilter('');
+    setStatusFilter('active');
+    setDateRange({ from: '', to: '' });
+    setSearchTerm('');
+    setSelectedStatsCollegeId(null);
+    setPage(1);
+  };
 
   const statsThroughDate = dateRange.to || formatLocalDateIso(new Date());
 
@@ -697,38 +720,49 @@ const CompletedAdmissionsPage = () => {
   }, [headerContent, setHeaderContent, clearHeaderContent]);
 
   const statCardsGridClass =
-    'grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-10';
+    'grid w-full grid-cols-3 gap-1.5 sm:grid-cols-3 sm:gap-2 md:grid-cols-5 md:gap-2 xl:grid-cols-10';
 
   const statCardShell =
-    'flex h-[5rem] w-full min-w-0 flex-col !rounded-lg border border-slate-200/90 bg-white !p-0 !shadow-sm transition-shadow hover:!scale-100 hover:!shadow-md dark:border-slate-700 dark:bg-slate-900';
+    'flex h-[3.75rem] w-full min-w-0 flex-col !rounded-md border border-slate-200/90 bg-white !p-0 !shadow-sm transition-shadow hover:!scale-100 hover:!shadow-md sm:h-[5rem] sm:!rounded-lg dark:border-slate-700 dark:bg-slate-900';
 
   const statCardShellCollege =
-    'flex h-[6.5rem] w-full min-w-0 flex-col !rounded-lg border border-slate-200/90 bg-white !p-0 !shadow-sm transition-shadow hover:!scale-100 hover:!shadow-md dark:border-slate-700 dark:bg-slate-900';
+    'flex h-[4.25rem] w-full min-w-0 flex-col !rounded-md border border-slate-200/90 bg-white !p-0 !shadow-sm transition-shadow hover:!scale-100 hover:!shadow-md sm:h-[6.5rem] sm:!rounded-lg dark:border-slate-700 dark:bg-slate-900';
 
   const statCardSelectedClass =
     '!ring-2 !ring-blue-500 !border-blue-400 dark:!ring-blue-400 dark:!border-blue-500';
 
-  const statCardInner = 'flex h-full min-w-0 flex-col justify-center px-2 py-2 sm:px-2.5 sm:py-2.5';
+  const statCardInner =
+    'flex h-full min-w-0 flex-col justify-center px-1.5 py-1.5 sm:px-2 sm:py-2 md:px-2.5 md:py-2.5';
 
   const renderStatCounts = (active: number, cancelled: number) => (
-    <div className="mt-1.5 grid grid-cols-2 divide-x divide-slate-200/90 dark:divide-slate-600">
-      <div className="flex items-baseline justify-center gap-px pr-1">
-        <span className="text-lg font-bold leading-none tabular-nums text-slate-900 sm:text-xl lg:text-2xl dark:text-slate-100">
+    <div className="mt-1 grid grid-cols-2 divide-x divide-slate-200/90 sm:mt-1.5 dark:divide-slate-600">
+      <div className="flex items-baseline justify-center gap-px pr-0.5">
+        <span className="text-sm font-bold leading-none tabular-nums text-slate-900 sm:text-lg md:text-xl lg:text-2xl dark:text-slate-100">
           {active}
         </span>
-        <span className="text-[10px] font-bold text-blue-600 sm:text-xs dark:text-blue-400">A</span>
+        <span className="text-[9px] font-bold text-blue-600 sm:text-[10px] md:text-xs dark:text-blue-400">A</span>
       </div>
-      <div className="flex items-baseline justify-center gap-px pl-1">
-        <span className="text-lg font-bold leading-none tabular-nums text-slate-900 sm:text-xl lg:text-2xl dark:text-slate-100">
+      <div className="flex items-baseline justify-center gap-px pl-0.5">
+        <span className="text-sm font-bold leading-none tabular-nums text-slate-900 sm:text-lg md:text-xl lg:text-2xl dark:text-slate-100">
           {cancelled}
         </span>
-        <span className="text-[10px] font-bold text-red-600 sm:text-xs dark:text-red-400">C</span>
+        <span className="text-[9px] font-bold text-red-600 sm:text-[10px] md:text-xs dark:text-red-400">C</span>
       </div>
     </div>
   );
 
+  const tableThClass =
+    'px-2 py-2 text-left text-[9px] font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:py-3 sm:text-[10px] md:px-6 md:py-4 md:text-xs dark:text-slate-400';
+  const tableTdClass = 'px-2 py-2 text-sm sm:px-4 sm:py-3 md:px-6 md:py-4';
+  const abstractThClass =
+    'border-r border-slate-200 px-2 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-slate-500 sm:px-3 sm:py-2.5 sm:text-[10px] dark:border-slate-700';
+  const abstractTdClass = 'px-2 py-2 text-center text-xs sm:px-3 sm:py-3 sm:text-sm';
+  const pivotThClass =
+    'px-2 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-slate-500 sm:px-3 sm:py-3 sm:text-[10px]';
+  const pivotTdClass = 'px-2 py-2 text-center text-xs font-semibold sm:px-3 sm:py-3 sm:text-sm';
+
   return (
-    <div className="w-full space-y-6 pb-12">
+    <div className="w-full space-y-4 pb-8 sm:space-y-6 sm:pb-12">
       <Dialog
         open={!!referenceEditTarget}
         onOpenChange={(open) => {
@@ -1039,7 +1073,7 @@ const CompletedAdmissionsPage = () => {
             {Array.from({ length: 10 }).map((_, i) => (
               <div
                 key={`stats-skeleton-${i}`}
-                className="h-[5rem] w-full min-w-0 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800"
+                className="h-[3.75rem] w-full min-w-0 animate-pulse rounded-md bg-slate-100 sm:h-[5rem] sm:rounded-lg dark:bg-slate-800"
               />
             ))}
           </div>
@@ -1056,7 +1090,7 @@ const CompletedAdmissionsPage = () => {
                 }`}
               >
                 <div className={statCardInner} title="All colleges combined">
-                  <p className="truncate text-xs font-bold uppercase tracking-wide text-blue-800 sm:text-sm dark:text-blue-200">
+                  <p className="truncate text-[10px] font-bold uppercase tracking-wide text-blue-800 sm:text-xs md:text-sm dark:text-blue-200">
                     Total
                   </p>
                   {renderStatCounts(totalAdmissionsCount, totalCancelledCount)}
@@ -1105,7 +1139,7 @@ const CompletedAdmissionsPage = () => {
                     return (
                       <Card key={key} noPadding className={statCardShell}>
                         <div className={statCardInner} title={label}>
-                          <p className="truncate text-xs font-bold uppercase tracking-wide text-slate-700 sm:text-sm dark:text-slate-200">
+                          <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-700 sm:text-xs md:text-sm dark:text-slate-200">
                             {label}
                           </p>
                           {renderStatCounts(active, cancelled)}
@@ -1121,83 +1155,129 @@ const CompletedAdmissionsPage = () => {
       </div>
 
       {/* Combined Filters & Tabs Bar */}
-      <Card className="bg-slate-50/50 p-4 dark:bg-slate-900/50">
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-            {/* Tabs Switcher */}
-            <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-slate-200/50 p-1 dark:bg-slate-800/50">
+      <Card className="bg-slate-50/50 p-3 sm:p-4 dark:bg-slate-900/50">
+        <div className="flex flex-col gap-4 sm:gap-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Tabs Switcher — horizontal scroll on mobile */}
+            <div className="-mx-1 flex items-center gap-1 overflow-x-auto rounded-2xl bg-slate-200/50 p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden dark:bg-slate-800/50">
               <button
                 onClick={() => setActiveTab('abstract')}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
                   activeTab === 'abstract'
                     ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
                     : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
                 }`}
               >
-                <LayoutGrid className="h-4 w-4" />
-                Abstract
+                <LayoutGrid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="whitespace-nowrap">Abstract</span>
               </button>
               <button
                 onClick={() => setActiveTab('detailed')}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
                   activeTab === 'detailed'
                     ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
                     : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
                 }`}
               >
-                <List className="h-4 w-4" />
-                Detailed View
+                <List className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="whitespace-nowrap">Detailed</span>
               </button>
               <button
                 onClick={() => setActiveTab('student-info')}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
                   activeTab === 'student-info'
                     ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
                     : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
                 }`}
               >
-                <Filter className="h-4 w-4" />
-                Student Info
+                <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="whitespace-nowrap">Student Info</span>
               </button>
               <button
                 onClick={() => setActiveTab('reference-list')}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
                   activeTab === 'reference-list'
                     ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
                     : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
                 }`}
               >
-                <UserCircle className="h-4 w-4" />
-                Reference list
+                <UserCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="whitespace-nowrap">Reference</span>
               </button>
               <button
                 onClick={() => setActiveTab('date-wise')}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
                   activeTab === 'date-wise'
                     ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
                     : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
                 }`}
               >
-                <CalendarDays className="h-4 w-4" />
-                Date-wise
+                <CalendarDays className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="whitespace-nowrap">Date-wise</span>
               </button>
             </div>
 
-            {/* Quick Actions / Export (Moved here for better layout) */}
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
                <Button 
                  variant="outline" 
                  size="sm" 
-                 className="gap-2"
+                 className="w-full gap-2 sm:w-auto"
                  onClick={handleExportExcel}
                  isLoading={isExporting}
                >
-                 <Download className="h-4 w-4" /> Export XLSX
+                 <Download className="h-4 w-4" />
+                 <span className="sm:hidden">Export</span>
+                 <span className="hidden sm:inline">Export XLSX</span>
                </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-8">
+          {/* Search — always visible on mobile */}
+          <div className="md:hidden">
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Search
+            </label>
+            <Input
+              placeholder="Search student, admission #, phone..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              className="h-[38px]"
+            />
+          </div>
+
+          {/* Mobile filter toggle */}
+          <div className="flex flex-wrap items-center gap-2 md:hidden">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowFilters((prev) => !prev)}
+            >
+              <Filter className="h-4 w-4" />
+              {showFilters ? 'Hide' : 'Show'} Filters
+              {activeFilterCount > 0 ? (
+                <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </Button>
+            {(activeFilterCount > 0 || searchTerm.trim()) ? (
+              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={clearFilters}>
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </Button>
+            ) : null}
+          </div>
+
+          <div
+            className={`grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-8 ${
+              showFilters ? 'grid' : 'hidden md:grid'
+            }`}
+          >
             <div>
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 College
@@ -1305,7 +1385,7 @@ const CompletedAdmissionsPage = () => {
               </div>
             </div>
 
-            <div className="md:col-span-2 lg:col-span-2">
+            <div className="hidden md:col-span-2 md:block lg:col-span-2">
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Search</label>
               <Input
                 placeholder="Search student, admission #, phone..."
@@ -1324,20 +1404,14 @@ const CompletedAdmissionsPage = () => {
       {activeTab === 'abstract' ? (
         <div className="w-full">
           <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <div className="-mx-1 overflow-x-auto sm:mx-0">
+              <table className="min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800/80">
-                    <th
-                      rowSpan={2}
-                      className="border-r border-slate-200 px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-700"
-                    >
+                    <th rowSpan={2} className={abstractThClass}>
                       Course
                     </th>
-                    <th
-                      rowSpan={2}
-                      className="border-r border-slate-200 px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-700"
-                    >
+                    <th rowSpan={2} className={abstractThClass}>
                       Branch
                     </th>
                     <th
@@ -1372,7 +1446,7 @@ const CompletedAdmissionsPage = () => {
                     </th>
                     <th
                       rowSpan={2}
-                      className="w-14 px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className="w-10 px-2 py-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-500 sm:w-14 sm:px-4 sm:py-3 sm:text-[10px]"
                     >
                       Edit
                     </th>
@@ -1428,53 +1502,53 @@ const CompletedAdmissionsPage = () => {
                         key={`${row.courseId || row.courseName}-${row.branchId || row.branchName}-${String(row.lateralTrack ?? 0)}-${idx}`}
                         className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
                       >
-                        <td className="px-4 py-3">
-                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                        <td className={`${abstractTdClass} text-left`}>
+                          <span className="text-xs font-bold text-slate-900 sm:text-sm dark:text-slate-100">
                             {getCourseName(row.courseId) || row.courseName || 'Unknown Course'}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                        <td className={`${abstractTdClass} text-left`}>
+                          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 sm:px-2 sm:text-xs dark:bg-slate-800 dark:text-slate-400">
                             {getBranchName(row.branchId) || row.branchName || '—'}
                           </span>
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-blue-600 dark:text-blue-400 ${abstractBlockCellStart}`}>
+                        <td className={`${abstractTdClass} font-bold text-blue-600 dark:text-blue-400 ${abstractBlockCellStart}`}>
                           {row.totalAdmissions ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
+                        <td className={`${abstractTdClass} font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.totalCancelled ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300 ${abstractBlockCellStart}`}>
+                        <td className={`${abstractTdClass} font-semibold text-slate-700 dark:text-slate-300 ${abstractBlockCellStart}`}>
                           {formatAbstractIntake(row.cqIntake)}
                         </td>
-                        <td className="px-4 py-3 text-center text-sm font-bold text-blue-600 dark:text-blue-400">
+                        <td className={`${abstractTdClass} font-bold text-blue-600 dark:text-blue-400`}>
                           {row.cqAdmitted ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
+                        <td className={`${abstractTdClass} font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.cqCancelled ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300 ${abstractBlockCellStart}`}>
+                        <td className={`${abstractTdClass} font-semibold text-slate-700 dark:text-slate-300 ${abstractBlockCellStart}`}>
                           {formatAbstractIntake(row.mqIntake)}
                         </td>
-                        <td className="px-4 py-3 text-center text-sm font-bold text-amber-600 dark:text-amber-400">
+                        <td className={`${abstractTdClass} font-bold text-amber-600 dark:text-amber-400`}>
                           {row.mqAdmitted ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
+                        <td className={`${abstractTdClass} font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.mqCancelled ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-violet-600 dark:text-violet-400 ${abstractBlockCellStart}`}>
+                        <td className={`${abstractTdClass} font-bold text-violet-600 dark:text-violet-400 ${abstractBlockCellStart}`}>
                           {row.spotAdmitted ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
+                        <td className={`${abstractTdClass} font-bold text-red-600 dark:text-red-400 ${abstractBlockCellEnd}`}>
                           {row.spotCancelled ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-emerald-600 dark:text-emerald-400 ${abstractBlockCellStart}`}>
+                        <td className={`${abstractTdClass} font-bold text-emerald-600 dark:text-emerald-400 ${abstractBlockCellStart}`}>
                           {row.meritYes ?? 0}
                         </td>
-                        <td className={`px-4 py-3 text-center text-sm font-bold text-slate-700 dark:text-slate-300 ${abstractBlockCellEnd}`}>
+                        <td className={`${abstractTdClass} font-bold text-slate-700 dark:text-slate-300 ${abstractBlockCellEnd}`}>
                           {row.meritNo ?? 0}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className={abstractTdClass}>
                           <button
                             type="button"
                             onClick={() => openIntakeEditor(row)}
@@ -1499,44 +1573,30 @@ const CompletedAdmissionsPage = () => {
         </div>
       ) : activeTab === 'detailed' ? (
         <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
+          <div className="-mx-1 overflow-x-auto sm:mx-0">
+            <table className="min-w-[640px] w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
               <thead className="bg-slate-50/80 backdrop-blur-sm dark:bg-slate-900/70">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Admission #
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Student
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Course
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Branch
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Updated
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Actions
-                  </th>
+                  <th className={tableThClass}>Admission #</th>
+                  <th className={tableThClass}>Student</th>
+                  <th className={tableThClass}>Course</th>
+                  <th className={tableThClass}>Branch</th>
+                  <th className={tableThClass}>Status</th>
+                  <th className={`${tableThClass} hidden sm:table-cell`}>Updated</th>
+                  <th className={`${tableThClass} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
                 {isLoading || isFetching ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-sm text-slate-500">
-                      <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
-                      <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">Loading admissions…</p>
+                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                      <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-400 border-t-transparent sm:h-12 sm:w-12" />
+                      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400 sm:mt-4">Loading admissions…</p>
                     </td>
                   </tr>
                 ) : isEmpty ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
                       <p className="mt-1 text-xs uppercase tracking-[0.3em] text-slate-400">
                         Adjust filters or search criteria.
@@ -1546,33 +1606,33 @@ const CompletedAdmissionsPage = () => {
                 ) : (
                   admissions.map((record) => (
                     <tr key={record._id} className="transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60">
-                      <td className="px-6 py-4 text-sm font-semibold text-blue-600 dark:text-blue-300">
+                      <td className={`${tableTdClass} font-semibold text-blue-600 dark:text-blue-300`}>
                         {record.admissionNumber}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-100">
+                      <td className={`${tableTdClass} text-slate-900 dark:text-slate-100`}>
                         {record.studentInfo?.name ?? '—'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                      <td className={`${tableTdClass} text-slate-600 dark:text-slate-300`}>
                         {resolveJoiningOrAdmissionCourseLabel(record, getCourseName) || '—'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                      <td className={`${tableTdClass} text-slate-600 dark:text-slate-300`}>
                         {getBranchName(record.courseInfo?.branchId) || record.courseInfo?.branch || '—'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                      <td className={tableTdClass}>
                         {(() => {
                           const badge = getAdmissionStatusBadge(record.status);
                           return (
-                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badge.className}`}>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold sm:px-3 sm:py-1 sm:text-xs ${badge.className}`}>
                               {badge.label}
                             </span>
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-500">
+                      <td className={`${tableTdClass} hidden text-slate-500 sm:table-cell`}>
                         {record.updatedAt ? new Date(record.updatedAt).toLocaleString() : '—'}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex flex-wrap justify-end gap-2">
+                      <td className={`${tableTdClass} text-right`}>
+                        <div className="flex flex-wrap justify-end gap-1 sm:gap-2">
                           {canEditAdmission && record.status !== ADMISSION_CANCELLED_STATUS && (
                             <Button
                               variant="danger"
@@ -1628,14 +1688,15 @@ const CompletedAdmissionsPage = () => {
           </div>
 
           {pagination.pages > 1 && (
-            <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-200 p-4 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              <div>
+            <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 p-3 text-sm text-slate-600 sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4 dark:border-slate-700 dark:text-slate-300">
+              <div className="text-center sm:text-left">
                 Page {pagination.page} of {pagination.pages}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="flex-1 sm:flex-none"
                   onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
                   disabled={pagination.page === 1 || isFetching}
                 >
@@ -1644,6 +1705,7 @@ const CompletedAdmissionsPage = () => {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="flex-1 sm:flex-none"
                   onClick={() => setPage((prev) => Math.min(prev + 1, pagination.pages))}
                   disabled={pagination.page === pagination.pages || isFetching}
                 >
@@ -1655,75 +1717,75 @@ const CompletedAdmissionsPage = () => {
         </Card>
       ) : activeTab === 'student-info' ? (
         <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
+          <div className="-mx-1 overflow-x-auto sm:mx-0">
+            <table className="min-w-[900px] w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
               <thead className="bg-slate-50/80 backdrop-blur-sm dark:bg-slate-900/70">
                 <tr>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Admission #</th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Timestamp</th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Course / Branch</th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Student Name</th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Contact No</th>
-                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Quota</th>
-                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Caste</th>
-                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">EWS</th>
-                  <th className="px-6 py-4 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Certificates</th>
-                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Paid</th>
-                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Source</th>
-                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Reference</th>
+                  <th className={tableThClass}>Admission #</th>
+                  <th className={`${tableThClass} hidden md:table-cell`}>Timestamp</th>
+                  <th className={tableThClass}>Course / Branch</th>
+                  <th className={tableThClass}>Student Name</th>
+                  <th className={`${tableThClass} hidden sm:table-cell`}>Contact No</th>
+                  <th className={`${tableThClass} text-center`}>Quota</th>
+                  <th className={`${tableThClass} text-center hidden lg:table-cell`}>Caste</th>
+                  <th className={`${tableThClass} text-center hidden lg:table-cell`}>EWS</th>
+                  <th className={`${tableThClass} text-center hidden xl:table-cell`}>Certificates</th>
+                  <th className={`${tableThClass} text-right`}>Paid</th>
+                  <th className={`${tableThClass} text-right hidden md:table-cell`}>Source</th>
+                  <th className={`${tableThClass} text-right hidden lg:table-cell`}>Reference</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
                 {isLoading || isFetching ? (
                   <tr>
-                    <td colSpan={12} className="px-6 py-16 text-center text-sm text-slate-500">
-                      <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-400 border-t-transparent" />
-                      <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">Loading admissions…</p>
+                    <td colSpan={12} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                      <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-400 border-t-transparent sm:h-12 sm:w-12" />
+                      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400 sm:mt-4">Loading admissions…</p>
                     </td>
                   </tr>
                 ) : isEmpty ? (
                   <tr>
-                    <td colSpan={12} className="px-6 py-16 text-center text-sm text-slate-500">
+                    <td colSpan={12} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
                     </td>
                   </tr>
                 ) : (
                   admissions.map((record: any) => (
                     <tr key={record._id} className="transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60">
-                      <td className="px-6 py-4 text-sm font-bold text-blue-600 dark:text-blue-400">
+                      <td className={`${tableTdClass} font-bold text-blue-600 dark:text-blue-400`}>
                         {record.admissionNumber}
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-500">
+                      <td className={`${tableTdClass} hidden text-xs text-slate-500 md:table-cell`}>
                         {record.createdAt ? new Date(record.createdAt).toLocaleString() : '—'}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className={tableTdClass}>
                         <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{record.courseInfo?.course || '—'}</span>
+                          <span className="text-xs font-semibold text-slate-900 sm:text-sm dark:text-slate-100">{record.courseInfo?.course || '—'}</span>
                           <span className="text-[10px] text-slate-500">{record.courseInfo?.branch || '—'}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
                         {record.studentInfo?.name ?? '—'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                      <td className={`${tableTdClass} hidden text-slate-600 sm:table-cell dark:text-slate-400`}>
                         {record.studentInfo?.phone ?? '—'}
                       </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                      <td className={`${tableTdClass} text-center`}>
+                        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-600 sm:px-2 sm:py-1 sm:text-[10px] dark:bg-slate-800 dark:text-slate-400">
                           {record.courseInfo?.quota || '—'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase">
+                      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
+                        <span className="text-[10px] font-semibold uppercase text-slate-700 sm:text-xs dark:text-slate-300">
                           {record.reservation?.general || 'OC'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
                         {(() => {
                           const ewsLabel = formatReservationEws(record.reservation);
                           return (
                             <span
-                              className={`text-xs font-semibold ${
+                              className={`text-[10px] font-semibold sm:text-xs ${
                                 ewsLabel === 'Yes'
                                   ? 'text-emerald-700 dark:text-emerald-400'
                                   : 'text-slate-600 dark:text-slate-400'
@@ -1734,15 +1796,15 @@ const CompletedAdmissionsPage = () => {
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className={`${tableTdClass} hidden text-center xl:table-cell`}>
                         {(() => {
                            const docs = record.documents || {};
                            const received = Object.values(docs).filter(v => v === 'received').length;
                            const total = Object.values(docs).length;
                            return (
                              <div className="flex flex-col items-center gap-1">
-                               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{received}/{total}</span>
-                               <div className="h-1 w-12 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                               <span className="text-[10px] font-bold text-slate-700 sm:text-xs dark:text-slate-300">{received}/{total}</span>
+                               <div className="h-1 w-10 overflow-hidden rounded-full bg-slate-100 sm:w-12 dark:bg-slate-800">
                                  <div 
                                    className="h-full bg-blue-500" 
                                    style={{ width: `${(received / (total || 1)) * 100}%` }}
@@ -1752,15 +1814,15 @@ const CompletedAdmissionsPage = () => {
                            );
                         })()}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      <td className={`${tableTdClass} text-right`}>
+                        <span className="text-xs font-bold text-slate-900 sm:text-sm dark:text-slate-100">
                           {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.totalPaid || 0)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right text-xs text-slate-600 dark:text-slate-400">
+                      <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 md:table-cell dark:text-slate-400`}>
                         {resolveAdmissionSource(record) || '—'}
                       </td>
-                      <td className="px-6 py-4 text-right text-xs text-slate-600 dark:text-slate-400">
+                      <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 lg:table-cell dark:text-slate-400`}>
                         {resolveAdmissionReference1(record) || '—'}
                       </td>
                     </tr>
@@ -1771,45 +1833,45 @@ const CompletedAdmissionsPage = () => {
           </div>
           
           {pagination.pages > 1 && (
-            <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-200 p-4 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              <div>
+            <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 p-3 text-sm text-slate-600 sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4 dark:border-slate-700 dark:text-slate-300">
+              <div className="text-center sm:text-left">
                 Page {pagination.page} of {pagination.pages}
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage(prev => Math.max(prev - 1, 1))} disabled={pagination.page === 1 || isFetching}>Previous</Button>
-                <Button variant="outline" size="sm" onClick={() => setPage(prev => Math.min(prev + 1, pagination.pages))} disabled={pagination.page === pagination.pages || isFetching}>Next</Button>
+              <div className="flex items-center justify-center gap-2">
+                <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => setPage(prev => Math.max(prev - 1, 1))} disabled={pagination.page === 1 || isFetching}>Previous</Button>
+                <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => setPage(prev => Math.min(prev + 1, pagination.pages))} disabled={pagination.page === pagination.pages || isFetching}>Next</Button>
               </div>
             </div>
           )}
         </Card>
       ) : activeTab === 'reference-list' ? (
         <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
-          <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Reference list</h3>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <div className="bg-slate-50 px-3 py-3 sm:px-6 sm:py-4 dark:bg-slate-800/50">
+            <h3 className="text-sm font-semibold text-slate-900 sm:text-base dark:text-slate-100">Reference list</h3>
+            <p className="mt-1 text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">
               Admissions grouped by student Reference 1 (from each admission record), broken down by course. Uses the course, branch, status, and admission date filters above.
             </p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <div className="-mx-1 overflow-x-auto sm:mx-0">
+            <table className="min-w-[480px] w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead>
                 <tr className="bg-white dark:bg-slate-900">
-                  <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900">
+                  <th className={`sticky left-0 z-10 bg-white ${pivotThClass} dark:bg-slate-900`}>
                     S. No.
                   </th>
-                  <th className="sticky left-14 z-10 bg-white px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900">
+                  <th className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotThClass} dark:bg-slate-900`}>
                     Reference
                   </th>
                   {referenceCourses.map((c) => (
                     <th
                       key={c.courseId}
                       title={c.courseName}
-                      className="max-w-[160px] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className={`max-w-[100px] text-center sm:max-w-[160px] ${pivotThClass}`}
                     >
                       <span className="line-clamp-2">{c.courseName}</span>
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  <th className={`${pivotThClass} text-center text-slate-600 dark:text-slate-300`}>
                     Total
                   </th>
                 </tr>
@@ -1847,18 +1909,18 @@ const CompletedAdmissionsPage = () => {
                         key={row.referenceKey ?? `ref-${idx}`}
                         className="transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
                       >
-                        <td className="sticky left-0 z-10 bg-white px-4 py-3 text-sm font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                        <td className={`sticky left-0 z-10 bg-white ${pivotTdClass} font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-300`}>
                           {idx + 1}
                         </td>
-                        <td className="sticky left-14 z-10 bg-white px-4 py-3 text-sm font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+                        <td className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotTdClass} font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100`}>
                           {row.name}
                         </td>
                         {referenceCourses.map((c) => (
-                          <td key={c.courseId} className="px-3 py-3 text-center text-sm font-semibold text-blue-600 dark:text-blue-400">
+                          <td key={c.courseId} className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}>
                             {Number(row.counts?.[c.courseId]) || 0}
                           </td>
                         ))}
-                        <td className="px-4 py-3 text-center text-sm font-bold text-slate-900 dark:text-slate-100">
+                        <td className={`${pivotTdClass} font-bold text-slate-900 dark:text-slate-100`}>
                           {rowTotal}
                         </td>
                       </tr>
@@ -1871,29 +1933,29 @@ const CompletedAdmissionsPage = () => {
         </Card>
       ) : activeTab === 'date-wise' ? (
         <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
-          <div className="bg-slate-50 px-6 py-4 dark:bg-slate-800/50">
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Date-wise admissions</h3>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <div className="bg-slate-50 px-3 py-3 sm:px-6 sm:py-4 dark:bg-slate-800/50">
+            <h3 className="text-sm font-semibold text-slate-900 sm:text-base dark:text-slate-100">Date-wise admissions</h3>
+            <p className="mt-1 text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">
               Count of admissions on each calendar day by course, using each student&apos;s admission date (not last updated). Uses the same filters as above.
             </p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <div className="-mx-1 overflow-x-auto sm:mx-0">
+            <table className="min-w-[480px] w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead>
                 <tr className="bg-white dark:bg-slate-900">
-                  <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-900">
+                  <th className={`sticky left-0 z-10 bg-white ${pivotThClass} dark:bg-slate-900`}>
                     Date
                   </th>
                   {dateWiseCourses.map((c) => (
                     <th
                       key={c.courseId}
                       title={c.courseName}
-                      className="max-w-[160px] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className={`max-w-[100px] text-center sm:max-w-[160px] ${pivotThClass}`}
                     >
                       <span className="line-clamp-2">{c.courseName}</span>
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  <th className={`${pivotThClass} text-center text-slate-600 dark:text-slate-300`}>
                     Total
                   </th>
                 </tr>
@@ -1941,15 +2003,15 @@ const CompletedAdmissionsPage = () => {
                         key={row.date}
                         className="transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
                       >
-                        <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-3 text-sm font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+                        <td className={`sticky left-0 z-10 whitespace-nowrap bg-white ${pivotTdClass} font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100`}>
                           {displayDate}
                         </td>
                         {dateWiseCourses.map((c) => (
-                          <td key={c.courseId} className="px-3 py-3 text-center text-sm font-semibold text-blue-600 dark:text-blue-400">
+                          <td key={c.courseId} className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}>
                             {Number(row.counts?.[c.courseId]) || 0}
                           </td>
                         ))}
-                        <td className="px-4 py-3 text-center text-sm font-bold text-slate-900 dark:text-slate-100">
+                        <td className={`${pivotTdClass} font-bold text-slate-900 dark:text-slate-100`}>
                           {rowTotal}
                         </td>
                       </tr>
