@@ -216,6 +216,15 @@ function isHiddenNorm(n: string): boolean {
   ) {
     return true;
   }
+  if (
+    n === 'preferred_mobile_number' ||
+    n === 'preferred_mobile' ||
+    n === 'preferred_mobileno' ||
+    n === 'preferred_phone' ||
+    n === 'preferred_contact_number'
+  ) {
+    return true;
+  }
 
   // Parent / guardian "mobile number 1" and "mobile number 2" style slots from registration JSON.
   if (

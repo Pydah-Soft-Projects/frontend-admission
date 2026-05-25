@@ -428,6 +428,8 @@ export interface JoiningStudentInfo {
   name: string;
   aadhaarNumber?: string;
   phone?: string;
+  /** Selected from student / father / mother mobiles for SMS and primary contact. */
+  preferredMobileNumber?: string;
   gender?: string;
   dateOfBirth?: string;
 }

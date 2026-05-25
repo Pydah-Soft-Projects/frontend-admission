@@ -48,6 +48,44 @@ type JoiningOrAdmissionLike = {
   lead?: { courseInterested?: string | null };
 };
 
+/** Course label for admission stats cards / aggregates (`lateralTrack` from stats API). */
+export function resolveAdmissionStatCourseLabel(args: {
+  courseId?: string | null;
+  courseName?: string | null;
+  lateralTrack?: number | string | null;
+  getCourseName?: (courseId?: string | null) => string;
+}): string {
+  const lateral = Number(args.lateralTrack) === 1;
+  const fromApi = String(args.courseName || '').trim();
+  const fromCatalog = String(args.getCourseName?.(args.courseId) || '').trim();
+
+  const genericLabels = new Set([
+    'degree',
+    'diploma',
+    'inter',
+    '10th',
+    '10+2',
+    'others',
+    'dap-ptv',
+  ]);
+  const isGeneric = (name: string) => {
+    const n = name.trim().toLowerCase();
+    return !n || genericLabels.has(n);
+  };
+
+  let base =
+    fromApi && !isGeneric(fromApi) ? fromApi : fromCatalog || fromApi;
+  if (!base) return 'Other';
+
+  base = base.replace(/\s*\(lateral\)\s*/gi, '').trim();
+  const isLateral = lateral || /\(lateral\)/i.test(fromApi);
+
+  if (isBtechCourseFromCatalog(base, null)) {
+    return formatBtechCourseDisplayLabel(base, isLateral);
+  }
+  return isLateral && /\(lateral\)/i.test(fromApi) ? fromApi : base;
+}
+
 export function resolveJoiningOrAdmissionCourseLabel(
   record: JoiningOrAdmissionLike | null | undefined,
   getCourseName?: (courseId?: string | null) => string

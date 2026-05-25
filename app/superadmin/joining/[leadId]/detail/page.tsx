@@ -288,6 +288,14 @@ export default function JoiningDetailPage() {
                 </p>
               </div>
               <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Preferred mobile
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {joining.studentInfo?.preferredMobileNumber || '—'}
+                </p>
+              </div>
+              <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Gender</p>
                 <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {joining.studentInfo?.gender || '—'}

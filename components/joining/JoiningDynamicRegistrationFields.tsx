@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from 'react';
 import { Camera, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { PreferredMobileNumberSelect } from '@/components/joining/PreferredMobileNumberSelect';
 import { Input } from '@/components/ui/Input';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
@@ -358,10 +359,15 @@ type Props = {
   studentContactFields?: {
     phone: string;
     onPhoneChange: (value: string) => void;
+    preferredMobileNumber?: string;
+    onPreferredMobileChange?: (value: string) => void;
+    fatherPhone?: string;
+    motherPhone?: string;
     aadhaarNumber: string;
     onAadhaarChange: (value: string) => void;
     showAadhaar: boolean;
     onToggleShowAadhaar: () => void;
+    contactFieldsDisabled?: boolean;
   };
   /** Current academic year / semester are shown beside Course & Quota on the joining page. */
   omitIntakeYearSemesterFromGrid?: boolean;
@@ -748,7 +754,7 @@ export function JoiningDynamicRegistrationFields({
         </div>
       ) : null}
       {apaarField && studentContactFields && !contactBesidePreviousCollege ? (
-        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="min-w-0">{renderApaarFieldControl(apaarField)}</div>
           <div className="min-w-0">
             <Input
@@ -760,8 +766,19 @@ export function JoiningDynamicRegistrationFields({
               onChange={(e) => studentContactFields.onPhoneChange(e.target.value.replace(/\D/g, ''))}
               placeholder="10-digit mobile"
               maxLength={15}
+              disabled={studentContactFields.contactFieldsDisabled}
             />
           </div>
+          {studentContactFields.onPreferredMobileChange ? (
+            <PreferredMobileNumberSelect
+              value={studentContactFields.preferredMobileNumber}
+              onChange={studentContactFields.onPreferredMobileChange}
+              studentPhone={studentContactFields.phone}
+              fatherPhone={studentContactFields.fatherPhone}
+              motherPhone={studentContactFields.motherPhone}
+              disabled={studentContactFields.contactFieldsDisabled}
+            />
+          ) : null}
           <div className="min-w-0">
             <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
               Aadhaar Number

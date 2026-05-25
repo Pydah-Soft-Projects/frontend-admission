@@ -17,6 +17,7 @@ import {
 } from '@/lib/api';
 import { joiningPublicApi } from '@/lib/joiningPublicApi';
 import { JoiningDynamicRegistrationFields } from '@/components/joining/JoiningDynamicRegistrationFields';
+import { PreferredMobileNumberSelect } from '@/components/joining/PreferredMobileNumberSelect';
 import {
   isApaarIdField,
   isFixedAcademicYearField,
@@ -416,6 +417,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       name: joining?.studentInfo?.name || '',
       aadhaarNumber: joining?.studentInfo?.aadhaarNumber || '',
       phone: joining?.studentInfo?.phone || '',
+      preferredMobileNumber: joining?.studentInfo?.preferredMobileNumber || '',
       gender: joining?.studentInfo?.gender || '',
       dateOfBirth: normalizeDateInput(joining?.studentInfo?.dateOfBirth),
     },
@@ -4686,10 +4688,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         studentContactFields={{
                           phone: formState.studentInfo.phone || '',
                           onPhoneChange: (value) => handleStudentInfoChange('phone', value),
+                          preferredMobileNumber: formState.studentInfo.preferredMobileNumber || '',
+                          onPreferredMobileChange: (value) =>
+                            handleStudentInfoChange('preferredMobileNumber', value),
+                          fatherPhone: formState.parents.father.phone,
+                          motherPhone: formState.parents.mother.phone,
                           aadhaarNumber: formState.studentInfo.aadhaarNumber || '',
                           onAadhaarChange: (value) => handleStudentInfoChange('aadhaarNumber', value),
                           showAadhaar: showStudentAadhaar,
                           onToggleShowAadhaar: () => setShowStudentAadhaar((prev) => !prev),
+                          contactFieldsDisabled: !canWriteJoining && !isAdmissionEditable,
                         }}
                         omitIntakeYearSemesterFromGrid
                       />
@@ -4713,6 +4721,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       maxLength={15}
                     />
                   </div>
+                  <PreferredMobileNumberSelect
+                    value={formState.studentInfo.preferredMobileNumber}
+                    onChange={(value) => handleStudentInfoChange('preferredMobileNumber', value)}
+                    studentPhone={formState.studentInfo.phone}
+                    fatherPhone={formState.parents.father.phone}
+                    motherPhone={formState.parents.mother.phone}
+                    disabled={!canWriteJoining && !isAdmissionEditable}
+                  />
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
                       Aadhaar Number
@@ -4737,6 +4753,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       </Button>
                     </div>
                   </div>
+                </div>
+              ) : null}
+              {showStudentContactBesidePreviousCollege ? (
+                <div className="mt-4 md:max-w-md">
+                  <PreferredMobileNumberSelect
+                    value={formState.studentInfo.preferredMobileNumber}
+                    onChange={(value) => handleStudentInfoChange('preferredMobileNumber', value)}
+                    studentPhone={formState.studentInfo.phone}
+                    fatherPhone={formState.parents.father.phone}
+                    motherPhone={formState.parents.mother.phone}
+                    disabled={!canWriteJoining && !isAdmissionEditable}
+                  />
                 </div>
               ) : null}
               {!regHasDyn &&
