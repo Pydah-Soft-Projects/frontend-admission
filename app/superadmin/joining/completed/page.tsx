@@ -241,8 +241,6 @@ const CompletedAdmissionsPage = () => {
   const [studentInfoViewRecord, setStudentInfoViewRecord] = useState<Admission | null>(null);
   const [referenceEditTarget, setReferenceEditTarget] = useState<Admission | null>(null);
   const [referenceEditValue, setReferenceEditValue] = useState('');
-  /** Stats drill-down: college card selected → show its course cards below. */
-  const [selectedStatsCollegeId, setSelectedStatsCollegeId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
@@ -301,7 +299,6 @@ const CompletedAdmissionsPage = () => {
     setStatusFilter('active');
     setDateRange({ from: '', to: '' });
     setSearchTerm('');
-    setSelectedStatsCollegeId(null);
     setPage(1);
   };
 
@@ -362,7 +359,9 @@ const CompletedAdmissionsPage = () => {
     return map;
   }, [colleges]);
 
-  const resolveStatCourseLabel = (row: AdmissionCourseStat) =>
+  const resolveStatCourseLabel = (
+    row: Pick<AdmissionCourseStat, 'courseId' | 'courseName' | 'lateralTrack'>
+  ) =>
     resolveAdmissionStatCourseLabel({
       courseId: row.courseId,
       courseName: row.courseName,
@@ -370,75 +369,18 @@ const CompletedAdmissionsPage = () => {
       getCourseName,
     });
 
-  /** Stats cards: college groups with rolled-up A/C counts for the top row. */
-  const courseStatsByCollege = useMemo(() => {
-    const otherKey = '__other__';
-    type CollegeGroup = {
-      collegeId: string;
-      collegeName: string;
-      courses: AdmissionCourseStat[];
-      totalAdmissions: number;
-      totalCancelled: number;
-    };
-    const byCollege = new Map<string, CollegeGroup>();
-
-    for (const row of courseStatsForCards) {
-      const courseId = String(row.courseId ?? '').trim();
-      const collegeId = courseIdToCollegeId.get(courseId) || otherKey;
-      const collegeName =
-        collegeId === otherKey
-          ? 'Other'
-          : collegeNameById.get(collegeId) ||
-            getCollegeNameForCourse(row.courseId) ||
-            'Unknown college';
-
-      if (!byCollege.has(collegeId)) {
-        byCollege.set(collegeId, {
-          collegeId,
-          collegeName,
-          courses: [],
-          totalAdmissions: 0,
-          totalCancelled: 0,
-        });
-      }
-      const group = byCollege.get(collegeId)!;
-      group.courses.push(row);
-      group.totalAdmissions += Number(row.totalAdmissions) || 0;
-      group.totalCancelled += Number(row.totalCancelled) || 0;
-    }
-
-    const groups = [...byCollege.values()];
-    groups.sort((a, b) => {
-      if (a.collegeId === otherKey) return 1;
-      if (b.collegeId === otherKey) return -1;
-      return a.collegeName.localeCompare(b.collegeName, undefined, { sensitivity: 'base' });
-    });
-    groups.forEach((g) => {
-      g.courses.sort(
-        (a, b) => (Number(b.totalAdmissions) || 0) - (Number(a.totalAdmissions) || 0)
+  const resolveStatCollegeName = (row: AdmissionCourseStat) => {
+    const courseId = String(row.courseId ?? '').trim();
+    const collegeId = courseId ? courseIdToCollegeId.get(courseId) : undefined;
+    if (collegeId) {
+      return (
+        collegeNameById.get(collegeId) ||
+        getCollegeNameForCourse(row.courseId) ||
+        'Unknown college'
       );
-    });
-    return groups;
-  }, [
-    courseStatsForCards,
-    courseIdToCollegeId,
-    collegeNameById,
-    getCollegeNameForCourse,
-  ]);
-
-  const selectedCollegeStatsGroup = useMemo(
-    () => courseStatsByCollege.find((g) => g.collegeId === selectedStatsCollegeId) ?? null,
-    [courseStatsByCollege, selectedStatsCollegeId]
-  );
-
-  useEffect(() => {
-    if (
-      selectedStatsCollegeId &&
-      !courseStatsByCollege.some((g) => g.collegeId === selectedStatsCollegeId)
-    ) {
-      setSelectedStatsCollegeId(null);
     }
-  }, [courseStatsByCollege, selectedStatsCollegeId]);
+    return getCollegeNameForCourse(row.courseId) || 'Other';
+  };
 
   useEffect(() => {
     if (!collegeFilter) return;
@@ -449,7 +391,6 @@ const CompletedAdmissionsPage = () => {
         setBranchFilter('');
       }
     }
-    setSelectedStatsCollegeId(collegeFilter);
   }, [collegeFilter, courseFilter, courseIdToCollegeId]);
 
   const saveBranchIntakeMutation = useMutation({
@@ -724,12 +665,6 @@ const CompletedAdmissionsPage = () => {
 
   const statCardShell =
     'flex h-[3.75rem] w-full min-w-0 flex-col !rounded-md border border-slate-200/90 bg-white !p-0 !shadow-sm transition-shadow hover:!scale-100 hover:!shadow-md sm:h-[5rem] sm:!rounded-lg dark:border-slate-700 dark:bg-slate-900';
-
-  const statCardShellCollege =
-    'flex h-[4.25rem] w-full min-w-0 flex-col !rounded-md border border-slate-200/90 bg-white !p-0 !shadow-sm transition-shadow hover:!scale-100 hover:!shadow-md sm:h-[6.5rem] sm:!rounded-lg dark:border-slate-700 dark:bg-slate-900';
-
-  const statCardSelectedClass =
-    '!ring-2 !ring-blue-500 !border-blue-400 dark:!ring-blue-400 dark:!border-blue-500';
 
   const statCardInner =
     'flex h-full min-w-0 flex-col justify-center px-1.5 py-1.5 sm:px-2 sm:py-2 md:px-2.5 md:py-2.5';
@@ -1066,7 +1001,7 @@ const CompletedAdmissionsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Statistics Cards — Total + colleges inline; click college → courses below */}
+      {/* Statistics Cards — Total + all courses; hover a course card to see its college */}
       <div className="space-y-3">
         {statsLoading || collegesLoading ? (
           <div className={statCardsGridClass}>
@@ -1080,77 +1015,47 @@ const CompletedAdmissionsPage = () => {
         ) : courseStatsForCards.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">No course admissions in this date range.</p>
         ) : (
-          <>
-            <div className={statCardsGridClass}>
-              <Card
-                noPadding
-                onClick={() => setSelectedStatsCollegeId(null)}
-                className={`${statCardShell} border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50/95 to-white dark:from-blue-950/40 dark:to-slate-900 ${
-                  selectedStatsCollegeId === null ? statCardSelectedClass : ''
-                }`}
-              >
-                <div className={statCardInner} title="All colleges combined">
-                  <p className="truncate text-[10px] font-bold uppercase tracking-wide text-blue-800 sm:text-xs md:text-sm dark:text-blue-200">
-                    Total
-                  </p>
-                  {renderStatCounts(totalAdmissionsCount, totalCancelledCount)}
-                </div>
-              </Card>
-              {courseStatsByCollege.map((group) => (
-                <Card
-                  key={group.collegeId}
-                  noPadding
-                  onClick={() =>
-                    setSelectedStatsCollegeId((prev) =>
-                      prev === group.collegeId ? null : group.collegeId
-                    )
-                  }
-                  className={`${statCardShellCollege} ${
-                    selectedStatsCollegeId === group.collegeId ? statCardSelectedClass : ''
-                  }`}
-                >
-                  <div className={statCardInner} title={group.collegeName}>
-                    <StatCardTwoLineLabel
-                      label={group.collegeName}
-                      className="text-slate-700 dark:text-slate-200"
-                    />
-                    {renderStatCounts(group.totalAdmissions, group.totalCancelled)}
+          <div className={statCardsGridClass}>
+            <Card
+              noPadding
+              className={`${statCardShell} border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50/95 to-white dark:from-blue-950/40 dark:to-slate-900`}
+            >
+              <div className={statCardInner} title="All colleges combined">
+                <p className="truncate text-[10px] font-bold uppercase tracking-wide text-blue-800 sm:text-xs md:text-sm dark:text-blue-200">
+                  Total
+                </p>
+                {renderStatCounts(totalAdmissionsCount, totalCancelledCount)}
+              </div>
+            </Card>
+            {courseStatsForCards.map((s) => {
+              const key = `${s.courseId || s.courseName || 'unknown'}-${String(s.lateralTrack ?? 0)}`;
+              const active = Number(s.totalAdmissions) || 0;
+              const cancelled = Number(s.totalCancelled) || 0;
+              const label = resolveStatCourseLabel(s);
+              const collegeName = resolveStatCollegeName(s);
+              return (
+                <Card key={key} noPadding className={`${statCardShell} group`}>
+                  <div
+                    className={statCardInner}
+                    title={`${label} · ${collegeName}`}
+                  >
+                    <div className="relative min-h-[1.75rem] shrink-0 sm:min-h-[2.4rem]">
+                      <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-700 transition-opacity duration-150 sm:text-xs md:text-sm group-hover:opacity-0 dark:text-slate-200">
+                        {label}
+                      </p>
+                      <div className="pointer-events-none absolute inset-0 flex flex-col justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                        <StatCardTwoLineLabel
+                          label={collegeName}
+                          className="text-slate-500 dark:text-slate-400"
+                        />
+                      </div>
+                    </div>
+                    {renderStatCounts(active, cancelled)}
                   </div>
                 </Card>
-              ))}
-            </div>
-            {selectedCollegeStatsGroup && selectedCollegeStatsGroup.courses.length > 0 ? (
-              <div className="space-y-2">
-                <div className="text-slate-500 dark:text-slate-400">
-                  <StatCardTwoLineLabel
-                    label={selectedCollegeStatsGroup.collegeName}
-                    className="text-slate-500 dark:text-slate-400"
-                  />
-                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Courses
-                  </p>
-                </div>
-                <div className={statCardsGridClass}>
-                  {selectedCollegeStatsGroup.courses.map((s) => {
-                    const key = `${selectedCollegeStatsGroup.collegeId}-${s.courseId || s.courseName || 'unknown'}-${String(s.lateralTrack ?? 0)}`;
-                    const active = Number(s.totalAdmissions) || 0;
-                    const cancelled = Number(s.totalCancelled) || 0;
-                    const label = resolveStatCourseLabel(s);
-                    return (
-                      <Card key={key} noPadding className={statCardShell}>
-                        <div className={statCardInner} title={label}>
-                          <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-700 sm:text-xs md:text-sm dark:text-slate-200">
-                            {label}
-                          </p>
-                          {renderStatCounts(active, cancelled)}
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-          </>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -1289,7 +1194,6 @@ const CompletedAdmissionsPage = () => {
                   setCollegeFilter(next);
                   setCourseFilter('');
                   setBranchFilter('');
-                  setSelectedStatsCollegeId(next || null);
                   setPage(1);
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
@@ -1478,10 +1382,32 @@ const CompletedAdmissionsPage = () => {
                       <td colSpan={ABSTRACT_COLUMN_COUNT} className="py-20 text-center text-slate-500">No data available for the selected filters.</td>
                     </tr>
                   ) : (
-                    stats.flatMap((c: any) => 
-                      c.branches.map((b: any) => ({
+                    stats.flatMap((c: any) => {
+                      const branchRows =
+                        Array.isArray(c.branches) && c.branches.length > 0
+                          ? c.branches
+                          : [
+                              {
+                                branchId: '',
+                                branchName: '—',
+                                cqIntake: null,
+                                mqIntake: null,
+                                cqAdmitted: 0,
+                                cqCancelled: 0,
+                                mqAdmitted: 0,
+                                mqCancelled: 0,
+                                spotAdmitted: 0,
+                                spotCancelled: 0,
+                                meritYes: 0,
+                                meritNo: 0,
+                                totalAdmissions: Number(c.totalAdmissions) || 0,
+                                totalCancelled: Number(c.totalCancelled) || 0,
+                              },
+                            ];
+                      return branchRows.map((b: any) => ({
                         courseId: c.courseId,
                         courseName: c.courseName,
+                        lateralTrack: c.lateralTrack ?? b.lateralTrack,
                         branchId: b.branchId,
                         branchName: b.branchName,
                         cqIntake: b.cqIntake,
@@ -1496,15 +1422,20 @@ const CompletedAdmissionsPage = () => {
                         meritNo: b.meritNo,
                         totalAdmissions: b.totalAdmissions,
                         totalCancelled: b.totalCancelled,
-                      }))
-                    ).map((row: any, idx: number) => (
+                      }));
+                    })
+                    .map((row: any, idx: number) => (
                       <tr
                         key={`${row.courseId || row.courseName}-${row.branchId || row.branchName}-${String(row.lateralTrack ?? 0)}-${idx}`}
                         className="group transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
                       >
                         <td className={`${abstractTdClass} text-left`}>
                           <span className="text-xs font-bold text-slate-900 sm:text-sm dark:text-slate-100">
-                            {getCourseName(row.courseId) || row.courseName || 'Unknown Course'}
+                            {resolveStatCourseLabel({
+                              courseId: row.courseId,
+                              courseName: row.courseName,
+                              lateralTrack: row.lateralTrack,
+                            })}
                           </span>
                         </td>
                         <td className={`${abstractTdClass} text-left`}>
