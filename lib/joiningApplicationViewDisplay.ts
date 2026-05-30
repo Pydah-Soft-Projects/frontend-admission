@@ -9,9 +9,10 @@ import type { Admission, Joining } from '@/types';
 type LeadLike = {
   dynamicFields?: Record<string, unknown>;
   dynamic_fields?: Record<string, unknown>;
+  reference1?: string;
 };
 
-/** Reference 1 (Excel / CRM) — lead_data.reference1, admission.referenceName, or lead dynamic_fields. */
+/** Reference 1 — admission/joining lead_data, or lead dynamic_fields.reference1. */
 export function resolveJoiningReference1(
   admission?: Admission | null,
   joining?: Joining | null,
@@ -26,9 +27,10 @@ export function resolveJoiningReference1(
   const leadAny = lead as Record<string, unknown> | undefined;
   const dyn = leadAny?.dynamicFields ?? leadAny?.dynamic_fields;
   if (dyn && typeof dyn === 'object') {
-    return String((dyn as Record<string, unknown>).reference1 ?? '').trim();
+    const fromDyn = String((dyn as Record<string, unknown>).reference1 ?? '').trim();
+    if (fromDyn) return fromDyn;
   }
-  return '';
+  return String(leadAny?.reference1 ?? '').trim();
 }
 
 const COURSE_QUOTA_REGISTRATION_KEYS = new Set(
