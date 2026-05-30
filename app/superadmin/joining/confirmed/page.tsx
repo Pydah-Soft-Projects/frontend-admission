@@ -176,7 +176,12 @@ const ConfirmedLeadsPage = () => {
                       {lead.assignedTo && typeof lead.assignedTo === 'object' ? (
                         <div>
                           <div>{lead.assignedTo.name || '—'}</div>
-                          <div className="text-xs text-slate-500">{lead.assignedTo.department || '—'}</div>
+                          <div className="text-xs text-slate-500">
+                            {lead.assignedTo.roleName ||
+                              lead.assignedTo.department ||
+                              lead.assignedTo.designation ||
+                              '—'}
+                          </div>
                         </div>
                       ) : (
                         '—'
