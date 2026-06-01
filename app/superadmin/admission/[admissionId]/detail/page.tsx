@@ -160,6 +160,7 @@ export default function AdmissionDetailPage() {
       const response = await admissionAPI.getById(admissionId as string);
       return response;
     },
+    staleTime: 60_000,
   });
 
   const admission = data?.data?.admission as Admission | undefined;
@@ -224,6 +225,19 @@ export default function AdmissionDetailPage() {
     return null;
   }, [admission]);
 
+  const hasRegistrationOnAdmission = Boolean(
+    admission?.registrationFormData &&
+      Object.keys(admission.registrationFormData).length > 0
+  );
+  const hasReferenceOnAdmission = Boolean(
+    admission?.referenceName ||
+      String(
+        (admission?.leadData as Record<string, unknown> | undefined)?.reference1 ?? ''
+      ).trim()
+  );
+  const needsJoiningFallback =
+    !!admission?.joiningId && (!hasRegistrationOnAdmission || !hasReferenceOnAdmission);
+
   const { data: transactionsData } = useQuery({
     queryKey: ['transactions', admission?._id],
     enabled: !!admission?._id,
@@ -254,7 +268,7 @@ export default function AdmissionDetailPage() {
 
   const { data: joiningForRegistrationData } = useQuery({
     queryKey: ['joining', 'admission-detail', admission?.joiningId],
-    enabled: !!admission?.joiningId,
+    enabled: needsJoiningFallback,
     queryFn: async () => {
       if (!admission?.joiningId) return null;
       try {
@@ -710,11 +724,19 @@ export default function AdmissionDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Gender</p>
+                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">
+                    Preferred mobile
+                  </p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1">
-                    {admission.studentInfo?.gender || '—'}
+                    {admission.studentInfo?.preferredMobileNumber || '—'}
                   </p>
                 </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Gender</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1">
+                  {admission.studentInfo?.gender || '—'}
+                </p>
               </div>
             </div>
             <div className="space-y-3">

@@ -222,6 +222,7 @@ const CompletedAdmissionsPage = () => {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AdmissionStatusFilter>('active');
   const [collegeFilter, setCollegeFilter] = useState<string>('');
   const [courseFilter, setCourseFilter] = useState<string>('');
@@ -243,6 +244,13 @@ const CompletedAdmissionsPage = () => {
   const [referenceEditValue, setReferenceEditValue] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 350);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  const listTabsActive = activeTab === 'detailed' || activeTab === 'student-info';
+
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
   const { colleges, isLoading: collegesLoading } = useInstitutions();
 
@@ -256,6 +264,7 @@ const CompletedAdmissionsPage = () => {
       });
       return response.data || response;
     },
+    staleTime: 120_000,
   });
   const courses = Array.isArray(coursesData) ? coursesData : (coursesData as any)?.data || [];
 
@@ -276,6 +285,7 @@ const CompletedAdmissionsPage = () => {
       return response.data || response;
     },
     enabled: !!courseFilter,
+    staleTime: 120_000,
   });
   const branches = Array.isArray(branchesData) ? branchesData : (branchesData as any)?.data || [];
 
@@ -325,6 +335,7 @@ const CompletedAdmissionsPage = () => {
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
       }),
+    staleTime: 120_000,
   });
 
   const stats: AdmissionCourseStat[] = statsData?.stats || [];
@@ -470,12 +481,14 @@ const CompletedAdmissionsPage = () => {
     queryKey: ['admissions', 'stats', 'by-reference', pivotReportParams],
     queryFn: async () => admissionAPI.getStatsByReference(pivotReportParams),
     enabled: activeTab === 'reference-list',
+    staleTime: 120_000,
   });
 
   const { data: dateWiseStatsData, isLoading: dateWiseStatsLoading } = useQuery({
     queryKey: ['admissions', 'stats', 'by-date', pivotReportParams],
     queryFn: async () => admissionAPI.getStatsByDate(pivotReportParams),
     enabled: activeTab === 'date-wise',
+    staleTime: 120_000,
   });
 
   const referenceCourses = (referenceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
@@ -489,23 +502,24 @@ const CompletedAdmissionsPage = () => {
       'admissions',
       page,
       limit,
-      searchTerm,
+      debouncedSearchTerm,
       statusFilter,
       collegeFilter,
       courseFilter,
       branchFilter,
       dateRange,
     ],
-    [page, limit, searchTerm, statusFilter, collegeFilter, courseFilter, branchFilter, dateRange]
+    [page, limit, debouncedSearchTerm, statusFilter, collegeFilter, courseFilter, branchFilter, dateRange]
   );
 
   const { data, isLoading, isFetching } = useQuery<AdmissionListResponse>({
     queryKey,
+    enabled: listTabsActive,
     queryFn: async () => {
       const response = await admissionAPI.list({
         page,
         limit,
-        search: searchTerm || undefined,
+        search: debouncedSearchTerm || undefined,
         status: statusFilter === 'all' ? undefined : statusFilter,
         collegeId: collegeFilter || undefined,
         courseId: courseFilter || undefined,
@@ -518,6 +532,7 @@ const CompletedAdmissionsPage = () => {
       return response.data || response;
     },
     placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
   });
 
   const admissions = data?.admissions ?? [];
