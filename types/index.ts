@@ -661,6 +661,8 @@ export interface Admission {
   leadData?: any; // Snapshot of lead data stored in admission
   /** Extra answers from Form Builder fields (copied from joining lead_data._joiningRegistrationExtras). */
   registrationFormData?: Record<string, unknown>;
+  /** Per-head fee overrides (from lead_data._joiningStudentFeeDetails when exposed on detail API). */
+  studentFeeDetails?: JoiningStudentFeeDetails;
   status: 'active' | 'withdrawn' | 'Admission Cancelled';
   admissionDate: string;
   courseInfo: JoiningCourseInfo;

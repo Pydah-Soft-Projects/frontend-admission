@@ -361,6 +361,8 @@ type Props = {
     onPhoneChange: (value: string) => void;
     preferredMobileNumber?: string;
     onPreferredMobileChange?: (value: string) => void;
+    /** Merged student/father/mother numbers for the preferred-mobile dropdown (includes lead snapshot). */
+    dropdownStudentPhone?: string;
     fatherPhone?: string;
     motherPhone?: string;
     aadhaarNumber: string;
@@ -773,7 +775,7 @@ export function JoiningDynamicRegistrationFields({
             <PreferredMobileNumberSelect
               value={studentContactFields.preferredMobileNumber}
               onChange={studentContactFields.onPreferredMobileChange}
-              studentPhone={studentContactFields.phone}
+              studentPhone={studentContactFields.dropdownStudentPhone ?? studentContactFields.phone}
               fatherPhone={studentContactFields.fatherPhone}
               motherPhone={studentContactFields.motherPhone}
               disabled={studentContactFields.contactFieldsDisabled}

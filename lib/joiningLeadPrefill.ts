@@ -4,6 +4,8 @@ export type LeadLike = {
   phone?: string;
   fatherPhone?: string;
   motherPhone?: string;
+  /** Second parent contact on the lead (often mother) when `motherPhone` is empty. */
+  alternateMobile?: string;
   gender?: string;
   address?: string;
   village?: string;
@@ -70,12 +72,22 @@ export function mergeLeadIntoJoiningFormState<T extends JoiningFormStateLike>(
   if (isBlank(father.phone) && !isBlank(lead.fatherPhone)) {
     const digits = toLeadPhoneDigits(lead.fatherPhone);
     if (digits) father.phone = digits;
+  } else if (!isBlank(father.phone) && !isBlank(si.phone) && !isBlank(lead.fatherPhone)) {
+    const fp = toLeadPhoneDigits(father.phone);
+    const sp = toLeadPhoneDigits(si.phone);
+    const lfp = toLeadPhoneDigits(lead.fatherPhone);
+    if (fp && sp && lfp && fp === sp && lfp !== sp) {
+      father.phone = lfp;
+    }
   }
 
   const mother = { ...state.parents.mother };
-  if (isBlank(mother.phone) && !isBlank(lead.motherPhone)) {
-    const digits = toLeadPhoneDigits(lead.motherPhone);
-    if (digits) mother.phone = digits;
+  if (isBlank(mother.phone)) {
+    const motherSource = !isBlank(lead.motherPhone) ? lead.motherPhone : lead.alternateMobile;
+    if (!isBlank(motherSource)) {
+      const digits = toLeadPhoneDigits(motherSource);
+      if (digits) mother.phone = digits;
+    }
   }
 
   const comm = { ...state.address.communication };

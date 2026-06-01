@@ -45,6 +45,7 @@ import {
 } from '@/lib/certificateChecklistEntry';
 import { coerceJoiningRegistrationField } from '@/lib/joiningRegistrationFieldCoerce';
 import { mergeLeadIntoJoiningFormState, type LeadLike } from '@/lib/joiningLeadPrefill';
+import { resolvePreferredMobileSourcePhones, suggestDefaultPreferredMobileDigits } from '@/lib/joiningPreferredMobile';
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import {
   computeScholarshipRegistrationPatches,
@@ -529,11 +530,11 @@ const parseAdmissionFromApiBody = (body: unknown): Admission | null => {
       return d.admission as Admission;
     }
     if (typeof d._id === 'string' && d._id.length === 36) {
-      return d as Admission;
+      return d as unknown as Admission;
     }
   }
   if (typeof root._id === 'string' && root._id.length === 36) {
-    return root as Admission;
+    return root as unknown as Admission;
   }
   return null;
 };
@@ -593,6 +594,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const canWritePayments = !isPublicEdit && paymentsPerm.canWrite;
 
   const [formState, setFormState] = useState<JoiningFormState>(buildInitialState());
+  const preferredMobileAutoFilledRef = useRef(false);
   const [status, setStatus] = useState<JoiningStatus>('draft');
   const [applicationWizardStep, setApplicationWizardStep] = useState<AdmissionWorkflowStep>(1);
   const useJoiningPageWizard = !isPublicEdit;
@@ -3674,6 +3676,52 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   ]);
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
   const isAdmissionEditable = canEditApprovedAdmission && status === 'approved';
+  /** Student / father / mother numbers for the preferred-mobile dropdown (form + lead snapshot). */
+  const preferredMobileSources = useMemo(
+    () =>
+      resolvePreferredMobileSourcePhones({
+        studentPhone: formState.studentInfo.phone,
+        fatherPhone: formState.parents.father.phone,
+        motherPhone: formState.parents.mother.phone,
+        leadPhone: lead?.phone,
+        leadFatherPhone: lead?.fatherPhone,
+        leadMotherPhone: lead?.motherPhone,
+        leadAlternateMobile: lead?.alternateMobile,
+      }),
+    [
+      formState.studentInfo.phone,
+      formState.parents.father.phone,
+      formState.parents.mother.phone,
+      lead?.phone,
+      lead?.fatherPhone,
+      lead?.motherPhone,
+      lead?.alternateMobile,
+    ]
+  );
+
+  useEffect(() => {
+    preferredMobileAutoFilledRef.current = false;
+  }, [joiningRecord?._id, admissionRecord?._id]);
+
+  /** When preferred mobile is empty, default to parent number if it differs from student. */
+  useEffect(() => {
+    if (preferredMobileAutoFilledRef.current) return;
+    const current = String(formState.studentInfo.preferredMobileNumber || '')
+      .replace(/\D/g, '')
+      .slice(-10);
+    if (current.length === 10) {
+      preferredMobileAutoFilledRef.current = true;
+      return;
+    }
+    const suggested = suggestDefaultPreferredMobileDigits(preferredMobileSources);
+    if (suggested.length !== 10) return;
+    preferredMobileAutoFilledRef.current = true;
+    setFormState((prev) => ({
+      ...prev,
+      studentInfo: { ...prev.studentInfo, preferredMobileNumber: suggested },
+    }));
+  }, [preferredMobileSources, formState.studentInfo.preferredMobileNumber]);
+
   /** After approval: admin sees summary, payments, and fee table on this joining page; cert/fees live on admission. */
   const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
   const admissionNumberDisplay =
@@ -4691,8 +4739,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           preferredMobileNumber: formState.studentInfo.preferredMobileNumber || '',
                           onPreferredMobileChange: (value) =>
                             handleStudentInfoChange('preferredMobileNumber', value),
-                          fatherPhone: formState.parents.father.phone,
-                          motherPhone: formState.parents.mother.phone,
+                          dropdownStudentPhone: preferredMobileSources.studentPhone,
+                          fatherPhone: preferredMobileSources.fatherPhone,
+                          motherPhone: preferredMobileSources.motherPhone,
                           aadhaarNumber: formState.studentInfo.aadhaarNumber || '',
                           onAadhaarChange: (value) => handleStudentInfoChange('aadhaarNumber', value),
                           showAadhaar: showStudentAadhaar,
@@ -4724,9 +4773,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   <PreferredMobileNumberSelect
                     value={formState.studentInfo.preferredMobileNumber}
                     onChange={(value) => handleStudentInfoChange('preferredMobileNumber', value)}
-                    studentPhone={formState.studentInfo.phone}
-                    fatherPhone={formState.parents.father.phone}
-                    motherPhone={formState.parents.mother.phone}
+                    studentPhone={preferredMobileSources.studentPhone}
+                    fatherPhone={preferredMobileSources.fatherPhone}
+                    motherPhone={preferredMobileSources.motherPhone}
                     disabled={!canWriteJoining && !isAdmissionEditable}
                   />
                   <div>
@@ -4760,9 +4809,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   <PreferredMobileNumberSelect
                     value={formState.studentInfo.preferredMobileNumber}
                     onChange={(value) => handleStudentInfoChange('preferredMobileNumber', value)}
-                    studentPhone={formState.studentInfo.phone}
-                    fatherPhone={formState.parents.father.phone}
-                    motherPhone={formState.parents.mother.phone}
+                    studentPhone={preferredMobileSources.studentPhone}
+                    fatherPhone={preferredMobileSources.fatherPhone}
+                    motherPhone={preferredMobileSources.motherPhone}
                     disabled={!canWriteJoining && !isAdmissionEditable}
                   />
                 </div>
