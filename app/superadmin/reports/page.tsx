@@ -4605,7 +4605,7 @@ export default function ReportsPage() {
                                        if (isQueued) {
                                          setQueuedVisitLeads(prev => prev.filter(q => q.lead._id !== lead._id));
                                        } else {
-                                         setQueuedVisitLeads(prev => [...prev, { lead, status: lead.visitStatus || 'Assigned' }]);
+                                        setQueuedVisitLeads(prev => [...prev, { lead, status: lead.visitStatus || '' }]);
                                        }
                                      }}
                                      className={cn(
@@ -4678,7 +4678,7 @@ export default function ReportsPage() {
                                     setQueuedVisitLeads(prev => prev.map(q => q.lead._id === item.lead._id ? { ...q, status: e.target.value } : q));
                                   }}
                                 >
-                                  {['Assigned', 'Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Wrong Data', 'Confirmed'].map(status => (
+                                  {['Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Wrong Data', 'Confirmed'].map(status => (
                                     <option key={status} value={status}>{status}</option>
                                   ))}
                                 </select>
@@ -4690,12 +4690,17 @@ export default function ReportsPage() {
                             className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold h-12 mt-2"
                             onClick={async () => {
                               try {
+                                if (queuedVisitLeads.some((i) => !i.status || String(i.status).trim() === '')) {
+                                  showToast.error('Please select a Visit Outcome for every queued lead.');
+                                  return;
+                                }
                                 showToast.loading(`Saving ${queuedVisitLeads.length} outcomes...`);
                                 const promises = queuedVisitLeads.map(item => 
                                   leadAPI.addActivity(item.lead._id, {
                                     newStatus: item.status,
                                     statusChannel: 'visit_status',
                                     type: 'status_change',
+                                    visitDate: selectedVisitDate,
                                     comment: `Visit outcome recorded by Super Admin on behalf of ${users.find(u => u._id === filters.userId)?.name} for date: ${format(new Date(selectedVisitDate + 'T12:00:00'), 'MMM d, yyyy')}`
                                   })
                                 );

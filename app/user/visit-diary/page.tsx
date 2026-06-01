@@ -113,7 +113,6 @@ export default function VisitDiaryPage() {
   }, [historyAnalytics]);
 
   const visitStatusOptions = [
-    'Assigned',
     'Interested',
     'Not Interested',
     'Scheduled Revisit',
@@ -124,9 +123,13 @@ export default function VisitDiaryPage() {
   const batchSaveMutation = useMutation({
     mutationFn: async () => {
       if (queuedLeads.length === 0) return;
+      if (queuedLeads.some((i) => !i.status || String(i.status).trim() === '')) {
+        throw new Error('Please select a Visit Outcome for every queued lead.');
+      }
       const promises = queuedLeads.map(item => 
         leadAPI.addActivity(item.lead._id, {
           newStatus: item.status,
+          statusChannel: 'visit_status',
           type: 'status_change',
           visitDate: selectedDate,
           comment: `Visit outcome recorded via Visit Diary for date: ${format(new Date(selectedDate + 'T12:00:00'), 'MMM d, yyyy')}`
@@ -152,7 +155,7 @@ export default function VisitDiaryPage() {
     setQueuedLeads(prev => {
       const exists = prev.find(item => item.lead._id === lead._id);
       if (exists) return prev.filter(item => item.lead._id !== lead._id);
-      return [...prev, { lead, status: lead.visitStatus || 'Assigned' }];
+      return [...prev, { lead, status: lead.visitStatus || '' }];
     });
   };
 
