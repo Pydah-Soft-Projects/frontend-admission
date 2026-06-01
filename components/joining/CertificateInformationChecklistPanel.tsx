@@ -59,23 +59,6 @@ export function CertificateInformationChecklistBlock({
           </span>
         </p>
       )}
-      <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-        From <span className="font-mono">student_database.settings</span> (
-        <span className="font-mono">certificate_config</span>) for the program level selected in Course &amp; Quota.{' '}
-        {variant === 'post-admission-step' ? (
-          <>
-            Status is saved with the admission record when you use <span className="font-semibold">Update Admission</span>
-            .
-          </>
-        ) : variant === 'admission-step-two' ? (
-          <>
-            Status is saved on the joining record when you use{' '}
-            <span className="font-semibold">Save certificate &amp; fee lines</span> below.
-          </>
-        ) : (
-          <>Status is saved with your joining draft when you save or submit this form.</>
-        )}
-      </p>
       {!programLevelTrimmed ? (
         <p className="mt-4 text-sm text-amber-700 dark:text-amber-300">
           Select a program level in Course &amp; Quota on the joining workspace to load this checklist.

@@ -296,11 +296,6 @@ export function AdmissionStepTwoPanel({
           <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
             Certificate checklist &amp; fee lines
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-            Program rules come from <span className="font-mono">student_database.settings</span> (
-            <span className="font-mono">certificate_config</span>) for the program level on the joining
-            record. Per-head fee overrides are stored on the joining and mirrored to this admission snapshot.
-          </p>
         </div>
         <Button
           type="button"

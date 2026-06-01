@@ -78,7 +78,17 @@ type AbstractIntakeEditRow = {
 type AdmissionStatsPivotCourse = {
   courseId: string;
   courseName: string;
+  /** 0 = regular B.Tech; 1 = B.Tech lateral entry (separate pivot column). */
+  lateralTrack?: number;
+  /** Counts map key (`courseId::lateralTrack`); falls back when API omits it. */
+  pivotKey?: string;
 };
+
+const admissionPivotCountsKey = (c: AdmissionStatsPivotCourse) =>
+  c.pivotKey ?? `${c.courseId}::${c.lateralTrack ?? 0}`;
+
+const admissionPivotColumnReactKey = (c: AdmissionStatsPivotCourse) =>
+  `${admissionPivotCountsKey(c)}-${c.courseName}`;
 
 const formatAbstractIntake = (value: number | null | undefined) =>
   value === null || value === undefined ? '—' : String(value);
@@ -377,6 +387,14 @@ const CompletedAdmissionsPage = () => {
       courseId: row.courseId,
       courseName: row.courseName,
       lateralTrack: row.lateralTrack,
+      getCourseName,
+    });
+
+  const resolvePivotCourseLabel = (c: AdmissionStatsPivotCourse) =>
+    resolveAdmissionStatCourseLabel({
+      courseId: c.courseId.split('|')[0] || c.courseId,
+      courseName: c.courseName,
+      lateralTrack: c.lateralTrack,
       getCourseName,
     });
 
@@ -1812,11 +1830,11 @@ const CompletedAdmissionsPage = () => {
                   </th>
                   {referenceCourses.map((c) => (
                     <th
-                      key={c.courseId}
-                      title={c.courseName}
+                      key={admissionPivotColumnReactKey(c)}
+                      title={resolvePivotCourseLabel(c)}
                       className={`max-w-[100px] text-center sm:max-w-[160px] ${pivotThClass}`}
                     >
-                      <span className="line-clamp-2">{c.courseName}</span>
+                      <span className="line-clamp-2">{resolvePivotCourseLabel(c)}</span>
                     </th>
                   ))}
                   <th className={`${pivotThClass} text-center text-slate-600 dark:text-slate-300`}>
@@ -1849,7 +1867,7 @@ const CompletedAdmissionsPage = () => {
                     const rowTotal =
                       Number(row.total) ||
                       referenceCourses.reduce(
-                        (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
+                        (acc, c) => acc + (Number(row.counts?.[admissionPivotCountsKey(c)]) || 0),
                         0
                       );
                     return (
@@ -1864,8 +1882,11 @@ const CompletedAdmissionsPage = () => {
                           {row.name}
                         </td>
                         {referenceCourses.map((c) => (
-                          <td key={c.courseId} className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}>
-                            {Number(row.counts?.[c.courseId]) || 0}
+                          <td
+                            key={admissionPivotColumnReactKey(c)}
+                            className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}
+                          >
+                            {Number(row.counts?.[admissionPivotCountsKey(c)]) || 0}
                           </td>
                         ))}
                         <td className={`${pivotTdClass} font-bold text-slate-900 dark:text-slate-100`}>
@@ -1896,11 +1917,11 @@ const CompletedAdmissionsPage = () => {
                   </th>
                   {dateWiseCourses.map((c) => (
                     <th
-                      key={c.courseId}
-                      title={c.courseName}
+                      key={admissionPivotColumnReactKey(c)}
+                      title={resolvePivotCourseLabel(c)}
                       className={`max-w-[100px] text-center sm:max-w-[160px] ${pivotThClass}`}
                     >
-                      <span className="line-clamp-2">{c.courseName}</span>
+                      <span className="line-clamp-2">{resolvePivotCourseLabel(c)}</span>
                     </th>
                   ))}
                   <th className={`${pivotThClass} text-center text-slate-600 dark:text-slate-300`}>
@@ -1933,7 +1954,7 @@ const CompletedAdmissionsPage = () => {
                     const rowTotal =
                       Number(row.total) ||
                       dateWiseCourses.reduce(
-                        (acc, c) => acc + (Number(row.counts?.[c.courseId]) || 0),
+                        (acc, c) => acc + (Number(row.counts?.[admissionPivotCountsKey(c)]) || 0),
                         0
                       );
                     let displayDate = row.date;
@@ -1955,8 +1976,11 @@ const CompletedAdmissionsPage = () => {
                           {displayDate}
                         </td>
                         {dateWiseCourses.map((c) => (
-                          <td key={c.courseId} className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}>
-                            {Number(row.counts?.[c.courseId]) || 0}
+                          <td
+                            key={admissionPivotColumnReactKey(c)}
+                            className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}
+                          >
+                            {Number(row.counts?.[admissionPivotCountsKey(c)]) || 0}
                           </td>
                         ))}
                         <td className={`${pivotTdClass} font-bold text-slate-900 dark:text-slate-100`}>

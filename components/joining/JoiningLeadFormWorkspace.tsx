@@ -5366,15 +5366,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
                       Certificate checklist &amp; fee lines
                     </h2>
-                    <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-                      Program certificate rules from student database settings. Record admission fee payments directly
-                      on this step — enter amount and reference ID in the payments section below.
-                    </p>
-                    <p className="mt-2 hidden max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-                      Program certificate rules from student database settings. Admission fees below come from{' '}
-                      <span className="font-medium">Payments → Fee Configuration</span> (per course &amp; branch), not
-                      the Fee Management database.
-                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {!isPublicEdit && programLevelTrimmed ? (
