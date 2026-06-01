@@ -67,6 +67,12 @@ const maskAadhaar = (value?: string) => {
 
 const ADMISSION_CANCELLED_STATUS = 'Admission Cancelled';
 
+const MEDIUM_OPTIONS: Array<{ value: 'english' | 'telugu' | 'other'; label: string }> = [
+  { value: 'english', label: 'English' },
+  { value: 'telugu', label: 'Telugu' },
+  { value: 'other', label: 'Others' },
+];
+
 type AdmissionCancellationDetails = {
   reason?: string;
   approvedBy?: string;
@@ -76,6 +82,9 @@ type AdmissionCancellationDetails = {
 type AdmissionLeadData = Record<string, unknown> & {
   enquiryNumber?: string;
   academicYear?: number | string;
+  source?: string;
+  createdAt?: string;
+  updatedAt?: string;
   _admissionCancellation?: AdmissionCancellationDetails;
 };
 
@@ -244,10 +253,8 @@ export default function AdmissionDetailPage() {
   }, [transactionsData]);
 
   const { data: joiningForRegistrationData } = useQuery({
-    queryKey: ['joining', 'registration-form-data', admission?.joiningId],
-    enabled:
-      !!admission?.joiningId &&
-      (!admission?.registrationFormData || Object.keys(admission.registrationFormData).length === 0),
+    queryKey: ['joining', 'admission-detail', admission?.joiningId],
+    enabled: !!admission?.joiningId,
     queryFn: async () => {
       if (!admission?.joiningId) return null;
       try {
@@ -258,6 +265,15 @@ export default function AdmissionDetailPage() {
       }
     },
   });
+
+  const joiningForReference = joiningForRegistrationData?.data?.joining;
+  const leadForReference =
+    (joiningForRegistrationData?.data?.lead as AdmissionLeadData | undefined) || lead;
+
+  const resolvedReference1 = useMemo(
+    () => resolveJoiningReference1(admission, joiningForReference, leadForReference),
+    [admission, joiningForReference, leadForReference]
+  );
 
   const joiningStatus =
     (joiningForRegistrationData?.data?.joining?.status as string | undefined) ?? 'approved';
@@ -671,7 +687,7 @@ export default function AdmissionDetailPage() {
             </div>
             <AdmissionReferenceEditor
               admissionId={String(admission._id)}
-              initialReference1={resolveJoiningReference1(admission)}
+              initialReference1={resolvedReference1}
               canEdit={canEditReference && !isAdmissionCancelled}
             />
           </div>
@@ -997,16 +1013,16 @@ export default function AdmissionDetailPage() {
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Medium of Education</h3>
                 <div className="flex flex-wrap gap-2">
-                  {['English', 'Telugu', 'Others'].map((medium) => (
+                  {MEDIUM_OPTIONS.map(({ value, label }) => (
                     <span
-                      key={medium}
+                      key={value}
                       className={`px-3 py-1 rounded text-sm font-medium ${
-                        admission.qualifications.mediums?.includes(medium.toLowerCase())
+                        admission.qualifications.mediums?.includes(value)
                           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200'
                           : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                       }`}
                     >
-                      {medium}
+                      {label}
                     </span>
                   ))}
                 </div>
