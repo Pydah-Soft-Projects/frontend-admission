@@ -1729,8 +1729,8 @@ export default function LeadsPage() {
                   onChange={(e) => handleStatusChange(e.target.value)}
                 >
                   <option value="">Keep Current Status</option>
-                  <option value="interested">Interested</option>
-                  <option value="not interested">Not Interested</option>
+                  <option value="Interested">Interested</option>
+                  <option value="Not Interested">Not Interested</option>
                   <option value="Wrong Data">Wrong Data</option>
                   <option value="partial">Partial</option>
                   <option value="Confirmed">Confirmed</option>

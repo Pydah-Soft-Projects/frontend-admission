@@ -86,7 +86,7 @@ export default function ManagerLeadDetailPage() {
   // Status options (lead pipeline stage – only these allowed for status update)
   const statusOptions = [
     'Interested',
-    'Not interested',
+    'Not Interested',
     'Confirmed',
     'CET Applied',
     'Other cet applied',
@@ -2130,7 +2130,7 @@ export default function ManagerLeadDetailPage() {
                   <option value="busy">Busy</option>
                   <option value="voicemail">Voicemail</option>
                   <option value="interested">Interested</option>
-                  <option value="not_interested">Not Interested</option>
+                  <option value="Not Interested">Not Interested</option>
                 </select>
               </div>
               <div>
