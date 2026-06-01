@@ -93,7 +93,7 @@ export default function LeadDetailPage() {
   // Status options (lead pipeline stage – only these allowed for status update)
   const statusOptions = [
     'Interested',
-    'Not interested',
+    'Not Interested',
     'Wrong Data',
     'Confirmed',
     'CET Applied',
@@ -2365,8 +2365,8 @@ export default function LeadDetailPage() {
                   <option value="answered">Answered</option>
                   <option value="busy">Busy</option>
                   <option value="voicemail">Voicemail</option>
-                  <option value="interested">Interested</option>
-                  <option value="not_interested">Not Interested</option>
+                  <option value="Interested">Interested</option>
+                  <option value="Not Interested">Not Interested</option>
                 </select>
               </div>
               <div>
