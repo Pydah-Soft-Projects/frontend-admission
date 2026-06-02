@@ -24,7 +24,6 @@ import {
   Search, 
   ChevronDown, 
   History, 
-  MapPin, 
   Phone,
   FileText
 } from 'lucide-react';
@@ -174,25 +173,25 @@ export default function VisitDiaryPage() {
           <button
             onClick={() => setActiveTab('record')}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all",
+              "flex-1 flex items-center justify-center gap-1.5 py-2 text-xs sm:gap-2 sm:py-2.5 sm:text-sm font-bold rounded-lg transition-all",
               activeTab === 'record' 
-                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
+                ? "bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm" 
                 : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             )}
           >
-            <Search className="w-4 h-4" />
+            <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Record Visit
           </button>
           <button
             onClick={() => setActiveTab('history')}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all",
+              "flex-1 flex items-center justify-center gap-1.5 py-2 text-xs sm:gap-2 sm:py-2.5 sm:text-sm font-bold rounded-lg transition-all",
               activeTab === 'history' 
-                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
+                ? "bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm" 
                 : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             )}
           >
-            <History className="w-4 h-4" />
+            <History className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             History
           </button>
         </div>
@@ -209,7 +208,7 @@ export default function VisitDiaryPage() {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full h-10 sm:h-11 rounded-xl focus:ring-blue-500 border-slate-200 text-sm"
+              className="w-full h-10 sm:h-11 rounded-xl focus:ring-orange-500 border-slate-200 text-sm"
             />
           </Card>
 
@@ -224,7 +223,7 @@ export default function VisitDiaryPage() {
                 placeholder="Name, phone or enquiry..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full h-10 sm:h-11 pl-10 rounded-xl focus:ring-blue-500 border-slate-200 text-sm"
+                className="w-full h-10 sm:h-11 pl-10 rounded-xl focus:ring-orange-500 border-slate-200 text-sm"
               />
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
                 <Search className="w-4 h-4" />
@@ -245,7 +244,7 @@ export default function VisitDiaryPage() {
                       onClick={() => handleToggleLead(lead)}
                       className={cn(
                         "w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3",
-                        isQueued ? "border-blue-500 bg-blue-50 dark:bg-blue-900/10 shadow-sm" : "border-slate-100 dark:border-slate-800"
+                        isQueued ? "border-orange-500 bg-orange-50 dark:bg-orange-900/10 shadow-sm" : "border-slate-100 dark:border-slate-800"
                       )}
                     >
                       <div className="min-w-0">
@@ -254,7 +253,7 @@ export default function VisitDiaryPage() {
                       </div>
                       <div className={cn(
                         "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
-                        isQueued ? "bg-blue-500 border-blue-500 text-white" : "border-slate-200 dark:border-slate-700"
+                        isQueued ? "bg-orange-500 border-orange-500 text-white" : "border-slate-200 dark:border-slate-700"
                       )}>
                         {isQueued && <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>}
                       </div>
@@ -269,9 +268,9 @@ export default function VisitDiaryPage() {
 
           {/* Queue Section */}
           {queuedLeads.length > 0 && (
-            <Card className="p-4 shadow-xl border-blue-200 dark:border-blue-900/30 bg-blue-50/20 dark:bg-blue-900/5 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex items-center justify-between mb-4 border-b border-blue-100 dark:border-blue-900/20 pb-2">
-                <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
+            <Card className="p-4 shadow-xl border-orange-200 dark:border-orange-900/30 bg-orange-50/20 dark:bg-orange-900/5 animate-in slide-in-from-bottom-4 duration-300">
+              <div className="flex items-center justify-between mb-4 border-b border-orange-100 dark:border-orange-900/20 pb-2">
+                <h3 className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest">
                   Visit Queue ({queuedLeads.length})
                 </h3>
                 <button onClick={() => setQueuedLeads([])} className="text-[10px] text-slate-400 underline">Clear</button>
@@ -293,7 +292,7 @@ export default function VisitDiaryPage() {
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                     <select
-                      className="w-full h-10 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-xs px-2 focus:ring-1 focus:ring-blue-500 border-none"
+                      className="w-full h-10 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-xs px-2 focus:ring-1 focus:ring-orange-500 border-none"
                       value={item.status || ''}
                       onChange={(e) => updateQueuedStatus(item.lead._id, e.target.value)}
                     >
@@ -311,7 +310,7 @@ export default function VisitDiaryPage() {
               <Button 
                 onClick={() => batchSaveMutation.mutate()}
                 disabled={batchSaveMutation.isPending}
-                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-lg shadow-blue-600/30 text-base"
+                className="w-full h-14 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold shadow-lg shadow-orange-600/30 text-base"
               >
                 {batchSaveMutation.isPending ? 'Saving...' : `Save ${queuedLeads.length} Visit Outcomes`}
               </Button>
@@ -332,7 +331,7 @@ export default function VisitDiaryPage() {
           {/* History Filters */}
           <Card className="rounded-none sm:rounded-xl border-x-0 sm:border-x p-3 sm:p-4 shadow-sm border-slate-200 dark:border-slate-800">
             <div className="flex flex-col gap-3">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 sm:px-1">
+              <label className="hidden sm:block text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 sm:px-1">
                 History Range
               </label>
               <div className="grid grid-cols-2 gap-2 px-3 sm:px-0">
@@ -342,7 +341,7 @@ export default function VisitDiaryPage() {
                     type="date"
                     value={historyStartDate}
                     onChange={(e) => setHistoryStartDate(e.target.value)}
-                    className="h-9 sm:h-10 rounded-xl border-slate-200 text-xs focus:ring-blue-500"
+                    className="h-9 sm:h-10 rounded-xl border-slate-200 text-xs focus:ring-orange-500"
                   />
                 </div>
                 <div className="space-y-1">
@@ -351,7 +350,7 @@ export default function VisitDiaryPage() {
                     type="date"
                     value={historyEndDate}
                     onChange={(e) => setHistoryEndDate(e.target.value)}
-                    className="h-9 sm:h-10 rounded-xl border-slate-200 text-xs focus:ring-blue-500"
+                    className="h-9 sm:h-10 rounded-xl border-slate-200 text-xs focus:ring-orange-500"
                   />
                 </div>
               </div>
@@ -383,20 +382,17 @@ export default function VisitDiaryPage() {
                       >
                         <div className="flex items-center gap-3">
                           <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0">
-                            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+                            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
-                              {format(new Date(day.date + 'T12:00:00'), 'EEEE')}
-                            </p>
-                            <p className="text-[10px] sm:text-[11px] text-slate-500">
                               {format(new Date(day.date + 'T12:00:00'), 'dd MMM yyyy')}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 sm:gap-4">
                           <div className="sm:hidden">
-                             <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                             <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
                                {day.details?.length || 0} Visits
                              </span>
                           </div>
@@ -433,21 +429,13 @@ export default function VisitDiaryPage() {
                                   <span className="text-[10px] text-slate-500 flex items-center gap-1">
                                     <Phone className="w-2.5 h-2.5" />
                                     {lead.phone}
-                                  </span>
-                                  <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                                    <MapPin className="w-2.5 h-2.5" />
-                                    {lead.village}
+                                    <span className="ml-2 text-slate-400">•</span>
+                                    <span className="font-semibold text-slate-600 dark:text-slate-300">
+                                      {lead.visitStatus}
+                                    </span>
                                   </span>
                                 </div>
                               </div>
-                              <span className={cn(
-                                "text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0",
-                                lead.visitStatus === 'Interested' ? "text-emerald-600 bg-emerald-50" :
-                                lead.visitStatus === 'Not Interested' ? "text-red-600 bg-red-50" :
-                                "text-slate-500 bg-slate-50"
-                              )}>
-                                {lead.visitStatus}
-                              </span>
                             </div>
                           ))}
                         </div>
