@@ -14,6 +14,11 @@ import { showToast } from '@/lib/toast';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { cn } from '@/lib/utils';
+import {
+  VISIT_DIARY_OUTCOME_OPTIONS_PRO,
+  initialVisitDiaryQueueStatus,
+  isValidVisitDiaryOutcome,
+} from '@/lib/visitDiaryOutcomes';
 import { 
   Calendar, 
   Search, 
@@ -112,18 +117,12 @@ export default function VisitDiaryPage() {
     return proUser?.visitDiaryUpdates || [];
   }, [historyAnalytics]);
 
-  const visitStatusOptions = [
-    'Interested',
-    'Not Interested',
-    'Scheduled Revisit',
-    'Wrong Data',
-    'Confirmed',
-  ];
+  const visitStatusOptions = [...VISIT_DIARY_OUTCOME_OPTIONS_PRO];
 
   const batchSaveMutation = useMutation({
     mutationFn: async () => {
       if (queuedLeads.length === 0) return;
-      if (queuedLeads.some((i) => !i.status || String(i.status).trim() === '')) {
+      if (queuedLeads.some((i) => !isValidVisitDiaryOutcome(i.status, visitStatusOptions))) {
         throw new Error('Please select a Visit Outcome for every queued lead.');
       }
       const promises = queuedLeads.map(item => 
@@ -155,7 +154,7 @@ export default function VisitDiaryPage() {
     setQueuedLeads(prev => {
       const exists = prev.find(item => item.lead._id === lead._id);
       if (exists) return prev.filter(item => item.lead._id !== lead._id);
-      return [...prev, { lead, status: lead.visitStatus || '' }];
+      return [...prev, { lead, status: initialVisitDiaryQueueStatus(lead.visitStatus, visitStatusOptions) }];
     });
   };
 
@@ -295,9 +294,12 @@ export default function VisitDiaryPage() {
                     </button>
                     <select
                       className="w-full h-10 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-xs px-2 focus:ring-1 focus:ring-blue-500 border-none"
-                      value={item.status}
+                      value={item.status || ''}
                       onChange={(e) => updateQueuedStatus(item.lead._id, e.target.value)}
                     >
+                      <option value="" disabled>
+                        Select visit outcome…
+                      </option>
                       {visitStatusOptions.map(status => (
                         <option key={status} value={status}>{status}</option>
                       ))}

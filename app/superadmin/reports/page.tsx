@@ -16,6 +16,11 @@ import { Skeleton, ReportDashboardSkeleton, LeadsAbstractSkeleton } from '@/comp
 import { cn, formatSecondsToMMSS } from '@/lib/utils';
 import { showToast } from '@/lib/toast';
 import {
+  VISIT_DIARY_OUTCOME_OPTIONS_ADMIN,
+  initialVisitDiaryQueueStatus,
+  isValidVisitDiaryOutcome,
+} from '@/lib/visitDiaryOutcomes';
+import {
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -4605,7 +4610,16 @@ export default function ReportsPage() {
                                        if (isQueued) {
                                          setQueuedVisitLeads(prev => prev.filter(q => q.lead._id !== lead._id));
                                        } else {
-                                        setQueuedVisitLeads(prev => [...prev, { lead, status: lead.visitStatus || '' }]);
+                                        setQueuedVisitLeads(prev => [
+                                          ...prev,
+                                          {
+                                            lead,
+                                            status: initialVisitDiaryQueueStatus(
+                                              lead.visitStatus,
+                                              VISIT_DIARY_OUTCOME_OPTIONS_ADMIN
+                                            ),
+                                          },
+                                        ]);
                                        }
                                      }}
                                      className={cn(
@@ -4673,12 +4687,15 @@ export default function ReportsPage() {
                                 </div>
                                 <select
                                   className="w-full h-8 rounded bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold px-2 focus:ring-1 focus:ring-orange-500 border-none"
-                                  value={item.status}
+                                  value={item.status || ''}
                                   onChange={(e) => {
                                     setQueuedVisitLeads(prev => prev.map(q => q.lead._id === item.lead._id ? { ...q, status: e.target.value } : q));
                                   }}
                                 >
-                                  {['Interested', 'Not Interested', 'Not Available', 'Scheduled Revisit', 'Wrong Data', 'Confirmed'].map(status => (
+                                  <option value="" disabled>
+                                    Select visit outcome…
+                                  </option>
+                                  {VISIT_DIARY_OUTCOME_OPTIONS_ADMIN.map(status => (
                                     <option key={status} value={status}>{status}</option>
                                   ))}
                                 </select>
@@ -4690,7 +4707,11 @@ export default function ReportsPage() {
                             className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold h-12 mt-2"
                             onClick={async () => {
                               try {
-                                if (queuedVisitLeads.some((i) => !i.status || String(i.status).trim() === '')) {
+                                if (
+                                  queuedVisitLeads.some(
+                                    (i) => !isValidVisitDiaryOutcome(i.status, VISIT_DIARY_OUTCOME_OPTIONS_ADMIN)
+                                  )
+                                ) {
                                   showToast.error('Please select a Visit Outcome for every queued lead.');
                                   return;
                                 }
