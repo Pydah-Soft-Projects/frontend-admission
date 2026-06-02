@@ -53,3 +53,29 @@ export function managerCurrentOutcomePrefill(lead: {
   if (visit && visit.toLowerCase() !== 'assigned' && options.has(visit)) return visit;
   return '';
 }
+
+/**
+ * True when saving the selected outcome should run (channel change or pipeline still stale).
+ * e.g. call_status = Not Interested but lead_status still Interested.
+ */
+export function managerShouldApplyStatusUpdate(
+  lead: { leadStatus?: string | null; callStatus?: string | null; visitStatus?: string | null },
+  newStatus: string
+): boolean {
+  const outcome = String(newStatus ?? '').trim();
+  if (!outcome) return false;
+
+  const channel = resolveManagerStatusChannel(outcome);
+  const currentChannel =
+    channel === 'visit_status'
+      ? String(lead.visitStatus ?? '').trim()
+      : String(lead.callStatus ?? '').trim();
+
+  if (outcome !== currentChannel) return true;
+
+  const pipeline = String(lead.leadStatus ?? '').trim();
+  if (!pipeline) return true;
+
+  // Channel already set; still update if merged pipeline does not match the outcome label.
+  return pipeline !== outcome;
+}

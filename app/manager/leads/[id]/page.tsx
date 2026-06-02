@@ -23,6 +23,7 @@ import { showToast } from '@/lib/toast';
 import {
   getManagerStatusUpdateOptions,
   managerCurrentOutcomePrefill,
+  managerShouldApplyStatusUpdate,
   resolveManagerStatusChannel,
 } from '@/lib/leadChannelStatus';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
@@ -777,23 +778,16 @@ export default function ManagerLeadDetailPage() {
   };
 
   const handleStatusUpdate = () => {
-    const statusChannel = newStatus ? resolveManagerStatusChannel(newStatus) : undefined;
-    const currentChannelValue =
-      statusChannel === 'visit_status'
-        ? lead?.visitStatus
-        : statusChannel === 'call_status'
-          ? lead?.callStatus
-          : lead?.leadStatus;
+    const shouldApplyStatus = newStatus && lead && managerShouldApplyStatusUpdate(lead, newStatus);
 
-    if (!newStatus || newStatus === currentChannelValue) {
-      if (!statusComment.trim()) {
-        showToast.error('Please select a new status or add a comment');
-        return;
-      }
+    if (!shouldApplyStatus && !statusComment.trim()) {
+      showToast.error('Please select a new status or add a comment');
+      return;
     }
+
     statusUpdateMutation.mutate({
-      newStatus: newStatus && newStatus !== currentChannelValue ? newStatus : undefined,
-      statusChannel: newStatus ? statusChannel : undefined,
+      newStatus: shouldApplyStatus ? newStatus : undefined,
+      statusChannel: shouldApplyStatus ? resolveManagerStatusChannel(newStatus) : undefined,
       comment: statusComment.trim() || undefined,
     });
   };
