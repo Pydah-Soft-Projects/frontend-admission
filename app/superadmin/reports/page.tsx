@@ -278,7 +278,9 @@ export default function ReportsPage() {
     queryKey: ['users'],
     queryFn: async () => {
       try {
-        const response = await userAPI.getAll();
+        // `GET /users` can be very heavy; for Reports we only need an assignable roster
+        // (enough to populate user dropdowns + org labels).
+        const response = await userAPI.getAssignable();
         if (Array.isArray(response)) return response;
         if (response?.data && Array.isArray(response.data)) return response.data;
         return [];
@@ -287,6 +289,8 @@ export default function ReportsPage() {
         return [];
       }
     },
+    staleTime: 600_000,
+    gcTime: 900_000,
   });
 
   const users = useMemo(() => {
