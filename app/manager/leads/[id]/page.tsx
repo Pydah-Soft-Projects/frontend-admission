@@ -20,7 +20,11 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
-import { getManagerStatusUpdateOptions } from '@/lib/leadChannelStatus';
+import {
+  getManagerStatusUpdateOptions,
+  managerCurrentOutcomePrefill,
+  resolveManagerStatusChannel,
+} from '@/lib/leadChannelStatus';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useLocations } from '@/lib/useLocations';
 
@@ -576,8 +580,12 @@ export default function ManagerLeadDetailPage() {
   });
 
   const statusUpdateMutation = useMutation({
-    mutationFn: async (data: { newStatus?: string; comment?: string }) => {
-      return await leadAPI.addActivity(leadId, data);
+    mutationFn: async (data: {
+      newStatus?: string;
+      comment?: string;
+      statusChannel?: 'call_status' | 'visit_status';
+    }) => {
+      return await leadAPI.addActivity(leadId, { ...data, type: 'status_change' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
@@ -769,14 +777,23 @@ export default function ManagerLeadDetailPage() {
   };
 
   const handleStatusUpdate = () => {
-    if (!newStatus || newStatus === lead?.leadStatus) {
+    const statusChannel = newStatus ? resolveManagerStatusChannel(newStatus) : undefined;
+    const currentChannelValue =
+      statusChannel === 'visit_status'
+        ? lead?.visitStatus
+        : statusChannel === 'call_status'
+          ? lead?.callStatus
+          : lead?.leadStatus;
+
+    if (!newStatus || newStatus === currentChannelValue) {
       if (!statusComment.trim()) {
         showToast.error('Please select a new status or add a comment');
         return;
       }
     }
     statusUpdateMutation.mutate({
-      newStatus: newStatus && newStatus !== lead?.leadStatus ? newStatus : undefined,
+      newStatus: newStatus && newStatus !== currentChannelValue ? newStatus : undefined,
+      statusChannel: newStatus ? statusChannel : undefined,
       comment: statusComment.trim() || undefined,
     });
   };
@@ -1591,7 +1608,7 @@ export default function ManagerLeadDetailPage() {
               {/* Update Status */}
               <button
                 onClick={() => {
-                  setNewStatus(lead.leadStatus || '');
+                  setNewStatus(managerCurrentOutcomePrefill(lead));
                   setStatusComment('');
                   setShowStatusModal(true);
                 }}

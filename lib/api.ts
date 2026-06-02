@@ -451,6 +451,8 @@ export const leadAPI = {
       newStatus?: string;
       newQuota?: string;
       type?: 'comment' | 'status_change' | 'quota_change';
+      /** call_status | visit_status | lead_status — managers should send call_status or visit_status */
+      statusChannel?: 'call_status' | 'visit_status' | 'lead_status';
       /** YYYY-MM-DD: the visit date selected by the PRO. Stored in activity metadata so diary history groups by this date, not the server's NOW(). */
       visitDate?: string;
     },
