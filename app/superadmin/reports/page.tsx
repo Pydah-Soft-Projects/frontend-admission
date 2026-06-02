@@ -605,12 +605,15 @@ export default function ReportsPage() {
   }, [visitDiaryAnalytics, users]);
 
   const performanceTableUsers = useMemo(
-    () => (Array.isArray(performanceUserAnalyticsData?.users) ? performanceUserAnalyticsData.users : []) as any[],
+    () =>
+      (Array.isArray(performanceUserAnalyticsData?.users) ? performanceUserAnalyticsData.users : []).filter(
+        (u: any) => u?.isActive !== false
+      ) as any[],
     [performanceUserAnalyticsData?.users]
   );
 
   const performanceFilterOptionsEffective = useMemo(() => {
-    const rows = [...users, ...performanceTableUsers];
+    const rows = [...users, ...performanceTableUsers].filter((u: any) => u?.isActive !== false);
     const divisions = Array.from(new Set(rows.map((u: any) => u?.division).filter((d: any) => d && d !== '-'))).sort();
     const departments = Array.from(new Set(rows.map((u: any) => u?.department).filter((d: any) => d && d !== '-'))).sort();
     const groups = Array.from(new Set(rows.map((u: any) => u?.group).filter((g: any) => g && g !== '-'))).sort();
@@ -1071,6 +1074,7 @@ export default function ReportsPage() {
       academicYear: filters.academicYear != null ? filters.academicYear : undefined,
       currentPortfolioOnly: true as const,
       includeAssignmentDetails: false,
+      bypassCache: true as const,
       perfSearch: performanceSearch.trim() || undefined,
       perfRole: performanceRole || undefined,
       perfDivision: performanceDivision || undefined,
