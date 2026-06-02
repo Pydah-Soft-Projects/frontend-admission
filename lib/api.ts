@@ -685,6 +685,8 @@ export const leadAPI = {
     /** Filter employees by HRMS / hydrated division (same as user.division). */
     perfDivision?: string;
     perfRole?: string;
+    /** Print: only return matching user list (no heavy analytics). */
+    printUsersOnly?: boolean;
     /** Skip server in-memory analytics cache (use after bulk DB fixes e.g. call_status scripts). */
     bypassCache?: boolean;
     /** Heavy reports path skips when true — communications user-leads uses this for a fast roster + lead counts only. */
@@ -718,6 +720,7 @@ export const leadAPI = {
     if (params?.perfGroup != null && params.perfGroup !== '') queryParams.append('perfGroup', params.perfGroup);
     if (params?.perfDivision != null && params.perfDivision !== '') queryParams.append('perfDivision', params.perfDivision);
     if (params?.perfRole != null && params.perfRole !== '') queryParams.append('perfRole', params.perfRole);
+    if (params?.printUsersOnly) queryParams.append('printUsersOnly', 'true');
     if (params?.bypassCache) queryParams.append('bypassCache', 'true');
     if (params?.rosterOnly) queryParams.append('rosterOnly', 'true');
     if (params?.leadStatus) queryParams.append('leadStatus', params.leadStatus);

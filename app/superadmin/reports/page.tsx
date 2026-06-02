@@ -20,6 +20,7 @@ import {
   initialVisitDiaryQueueStatus,
   isValidVisitDiaryOutcome,
 } from '@/lib/visitDiaryOutcomes';
+import type { Lead } from '@/types';
 import {
   ResponsiveContainer,
   BarChart,
@@ -1045,7 +1046,6 @@ export default function ReportsPage() {
       return;
     }
     isPrintingPerformanceRef.current = true;
-    setPerformancePrintOverlay('Loading all matching users for printâ€¦');
 
     const escapeHtml = (s: unknown) =>
       String(s ?? '')
@@ -1054,20 +1054,41 @@ export default function ReportsPage() {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
+    const portfolioFetchParams = {
+      academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+      currentPortfolioOnly: true as const,
+      includeAssignmentDetails: false,
+      perfSearch: performanceSearch.trim() || undefined,
+      perfRole: performanceRole || undefined,
+      perfDivision: performanceDivision || undefined,
+      perfDepartment: performanceDepartment || undefined,
+      studentGroup: performanceStudentGroup || undefined,
+    };
+
     let rowsToPrint: any[] = [];
+    let liveTotal = totalMatching;
     try {
-      const full = await leadAPI.getUserAnalytics({
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-        academicYear: filters.academicYear != null ? filters.academicYear : undefined,
-        includeAssignmentDetails: false,
-        perfSearch: performanceSearch.trim() || undefined,
-        perfRole: performanceRole || undefined,
-        perfDivision: performanceDivision || undefined,
-        perfDepartment: performanceDepartment || undefined,
-        studentGroup: performanceStudentGroup || undefined,
+      const LIMIT = 100;
+      setPerformancePrintOverlay(`Loading users for print (0 of ${liveTotal})`);
+      const first = await leadAPI.getUserAnalytics({
+        ...portfolioFetchParams,
+        page: 1,
+        limit: LIMIT,
       });
-      rowsToPrint = Array.isArray(full?.users) ? full.users : [];
+      const firstUsers = Array.isArray(first?.users) ? first.users : [];
+      rowsToPrint = [...firstUsers];
+      liveTotal = Number(first?.pagination?.total ?? liveTotal);
+      const pages = Number(first?.pagination?.pages ?? 1);
+      for (let p = 2; p <= pages; p += 1) {
+        setPerformancePrintOverlay(`Loading users for print (${rowsToPrint.length} of ${liveTotal})`);
+        const next = await leadAPI.getUserAnalytics({
+          ...portfolioFetchParams,
+          page: p,
+          limit: LIMIT,
+        });
+        const nextUsers = Array.isArray(next?.users) ? next.users : [];
+        rowsToPrint.push(...nextUsers);
+      }
     } catch (e) {
       console.error(e);
       setPerformancePrintOverlay(null);
@@ -1083,371 +1104,85 @@ export default function ReportsPage() {
       return;
     }
 
-    setPerformancePrintOverlay('Preparing detailed report for printâ€¦');
-
-    const userIds = rowsToPrint.map((u: any) => u.userId || u.id).filter(Boolean);
-    if (!userIds.length) {
-      setPerformancePrintOverlay(null);
-      isPrintingPerformanceRef.current = false;
-      showToast.error('No users to print.');
-      return;
-    }
-
-    let detailsMap: Record<string, any> = {};
-    try {
-      const data = await leadAPI.getUserAnalytics({
-        startDate: filters.startDate,
-        endDate: filters.endDate,
-        academicYear: filters.academicYear != null ? filters.academicYear : undefined,
-        userId: userIds.join(','),
-        includeAssignmentDetails: true,
-        // Apply filters to ensure detailed assignments match what was seen in the table
-        perfSearch: performanceSearch.trim() || undefined,
-        perfRole: performanceRole || undefined,
-        perfDivision: performanceDivision || undefined,
-        perfDepartment: performanceDepartment || undefined,
-        studentGroup: performanceStudentGroup || undefined,
-      });
-      const usersArr = Array.isArray(data?.users) ? data.users : [];
-      usersArr.forEach((u: any) => {
-        const uid = u.id || u.userId;
-        if (uid) detailsMap[uid] = u;
-      });
-    } catch (e) {
-      console.error(e);
-      setPerformancePrintOverlay(null);
-      showToast.error('Could not load assignment details for printing.');
-      isPrintingPerformanceRef.current = false;
-      return;
-    }
-
-    setPerformancePrintOverlay('Building print layoutâ€¦');
+    setPerformancePrintOverlay('Building print layout…');
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => resolve());
     });
 
+    const roleFilter = performanceRole.trim();
+    const printColumns =
+      roleFilter === 'PRO'
+        ? [...PRO_VISIT_STATUS_COLUMNS]
+        : roleFilter === 'Student Counselor'
+          ? [...COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED]
+          : (() => {
+              const ordered = new Set<string>();
+              rowsToPrint.forEach((u: any) => {
+                getPortfolioStatusColumnsForRole(u.roleName).forEach((c) => ordered.add(c));
+              });
+              return ordered.size > 0 ? Array.from(ordered) : [...performancePortfolioColumns];
+            })();
+
     const generatedAt = new Date().toLocaleString();
-    const sections = rowsToPrint.map((user: any) => {
-      const uid = user.userId || user.id;
-      const detailUser = detailsMap[uid];
-      const fullUser = users.find((x: any) => x._id === uid || x.id === uid);
-      const rows = Array.isArray(detailUser?.assignmentsByDate) ? detailUser.assignmentsByDate : [];
-      const userName = escapeHtml(user.name || user.userName || 'Unknown');
-      const roleRaw = user.roleName || detailUser?.roleName || fullUser?.roleName || '';
-      const roleKey = String(roleRaw).trim();
-      const roleName = escapeHtml(roleKey || 'â€”');
-      const statusLabel = user.isActive ? 'Active' : 'Inactive';
-      const printMode = getPerformanceExpandedMode(user.roleName, fullUser?.roleName, detailUser?.roleName);
-      const printColSpan = printMode === 'pro' ? 13 : 12;
-      const headerStatusPro = `${PRO_VISIT_STATUS_COLUMNS.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
-      const headerStatusPipeline = `<th>Assigned</th><th>Interested</th><th>Not Interested</th><th>Wrong Data</th><th>Call Back</th><th>Confirmed</th>`;
-
-      if (printMode === 'counsellor') {
-        // CALCULATE TRUE CUMULATIVE SUMS FOR FOOTER (matches user expectation of "adding up")
-        const sumRowsTotalAllotted = rows.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
-        const sumRowsBalance = rows.reduce((s: number, day: any) => s + Number(getCounsellorAssignmentBalanceForDay(day)), 0);
-        const sumRowsReclaimed = rows.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
-        const sumRowsManual = rows.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
-        const sumRowsMoved = rows.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
-        const totalRowsUnattended = sumRowsReclaimed + sumRowsManual + sumRowsMoved;
-        
-        const sumRowsStatusMap: Record<string, number> = {};
-        COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.forEach(col => {
-          sumRowsStatusMap[col] = rows.reduce((s: number, day: any) => s + Number(getCounsellorCallStatusCountForDisplay(day, col)), 0);
-        });
-
-        const allottedFooterCells = COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map(
-          (c) => `<td>${sumRowsStatusMap[c]}</td>`
-        ).join('');
-
-        const footerRowCounsellor = `
-          <tr style="font-weight:700;background:#f1f5f9;">
-            <td colspan="4">Cumulative Total (Sum of rows)</td>
-            <td>${sumRowsTotalAllotted}</td>
-            ${allottedFooterCells}
-            <td>${sumRowsBalance}</td>
-            <td>${totalRowsUnattended}${totalRowsUnattended > 0 ? ` <span style="font-size:7.5px; opacity:0.8;">(${sumRowsReclaimed}R, ${sumRowsManual}M, ${sumRowsMoved}T)</span>` : ''}</td>
-          </tr>`;
-
-        const headerStatusCounsellor = `${COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>Balance</th>`;
-        const printColSpanCounsellor = counsellorExpandedAssignmentColSpan;
-        const rowHtmlCounsellor = rows.length
-          ? rows.map((day: any) => {
-              const targetDateEntries = Object.entries(day.targetDateCounts || {})
-                .sort((a: any, b: any) => String(a[0]).localeCompare(String(b[0])));
-              const targetDateText = targetDateEntries.length
-                ? targetDateEntries
-                    .map(([dt, count]) => `${format(new Date(String(dt)), 'dd MMM yyyy')} (${Number(count) || 0})`)
-                    .join(', ')
-                : 'â€”';
-              const statusCells =
-                COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED.map((c) => `<td>${getCounsellorCallStatusCountForDisplay(day, c)}</td>`).join('') +
-                `<td>${getCounsellorAssignmentBalanceForDay(day)}</td>`;
-              return `
-              <tr>
-                <td>${escapeHtml(day.date ? format(new Date(day.date), 'dd MMM yyyy') : 'Unknown')}</td>
-                <td>${escapeHtml(targetDateText)}</td>
-                <td>${escapeHtml(formatAssignedStudentGroups(day))}</td>
-                <td>${escapeHtml(formatAssignedMandals(day))}</td>
-                <td>${Number(day?.totalAssigned || 0)}</td>
-                ${statusCells}
-                <td>${Number(day?.reclaimedCount || 0)}</td>
-              </tr>
-            `;
-            }).join('')
-          : `<tr><td colspan="${printColSpanCounsellor}">No date-wise assignment history found.</td></tr>`;
-
-
-        const mergedPrintUser = { ...user, ...(detailUser || {}) };
-        const mainRowBalance = getPerformanceBalanceDisplay(mergedPrintUser);
-        const mainRowLeads = getPerformanceTotalLeadsDisplay(mergedPrintUser);
-        const mainRowCalls = mergedPrintUser.calls?.total ?? 0;
-        
-        // Ensure Interested includes CET Applied for Counselors in the Summary Table
-        const rawInterested = Number(mergedPrintUser.interested || 0);
-        const rawCetApplied = roleKey === 'Student Counselor' 
-          ? Number(mergedPrintUser.statusBreakdown?.['CET Applied'] || mergedPrintUser.statusBreakdown?.['cet applied'] || 0)
-          : 0;
-        const mainRowInterested = roleKey === 'Student Counselor' ? (rawInterested + rawCetApplied) : rawInterested;
-
-        const mainRowVisited = roleKey === 'Student Counselor' ? (mergedPrintUser.visitedCumulative ?? 0) : 'â€”';
-        const mainRowConfirmed = mergedPrintUser.convertedLeads ?? 0;
-        const mainRowAdmitted = mergedPrintUser.admittedLeads ?? mergedPrintUser.statusBreakdown?.Admitted ?? mergedPrintUser.statusBreakdown?.admitted ?? 0;
-
-        const summaryTableHtml = `
-          <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;background:#f8fafc;border:1px solid #e2e8f0;">
-            <thead>
-              <tr style="background:#f1f5f9;color:#0f172a;text-align:center;">
-                <th style="padding:4px;border:1px solid #334155;">Total Leads</th>
-                <th style="padding:4px;border:1px solid #334155;">Calls/Visits Done</th>
-                <th style="padding:4px;border:1px solid #334155;">Balance</th>
-                <th style="padding:4px;border:1px solid #334155;">Interested Leads</th>
-                <th style="padding:4px;border:1px solid #334155;">Visited</th>
-                <th style="padding:4px;border:1px solid #334155;">Confirmed</th>
-                <th style="padding:4px;border:1px solid #334155;">Admitted</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style="text-align:center;font-weight:700;color:#1e293b;">
-                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowLeads}</td>
-                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowCalls}</td>
-                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowBalance}</td>
-                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowInterested}</td>
-                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowVisited}</td>
-                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowConfirmed}</td>
-                <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowAdmitted}</td>
-              </tr>
-            </tbody>
-          </table>
-        `;
-
-        return `
-        <section style="margin-bottom:10px; break-inside: avoid;">
-          <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> Â· ${statusLabel}</h3>
-          ${summaryTableHtml}
-          <p style="margin:0 0 4px 0;font-size:8px;color:#475569;">Student Counselor â€” Assignment history by date buckets. Main table summary counts shown above.</p>
-          <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
-            <thead>
-              <tr>
-                <th>Allotted Date</th>
-                <th>Target Date</th>
-                <th>Student Group Assigned</th>
-                <th>Mandal Assigned</th>
-                <th>Total Allotted</th>
-                ${headerStatusCounsellor}
-                <th>Unattended (batch)</th>
-              </tr>
-            </thead>
-            <tbody>${rowHtmlCounsellor}</tbody>
-            ${footerRowCounsellor ? `<tfoot>${footerRowCounsellor}</tfoot>` : ''}
-          </table>
-        </section>
-      `;
-      }
-
-      const theadStatusRow = printMode === 'pro' ? headerStatusPro : headerStatusPipeline;
-
-      const rowHtml = rows.length
-        ? rows.map((day: any) => {
-            const targetDateEntries = Object.entries(day.targetDateCounts || {})
-              .sort((a: any, b: any) => String(a[0]).localeCompare(String(b[0])));
-            const targetDateText = targetDateEntries.length
-              ? targetDateEntries.map(([dt, count]) => `${format(new Date(String(dt)), 'dd MMM yyyy')} (${Number(count) || 0})`).join(', ')
-              : 'â€”';
-            let statusCells = '';
-            if (printMode === 'pro') {
-              statusCells =
-                PRO_VISIT_STATUS_COLUMNS.map((c) => `<td>${getProVisitStatusCountForDisplay(day, c)}</td>`).join('') +
-                `<td>${getProAssignmentBalanceForDay(day)}</td>`;
-            } else {
-              statusCells = `<td>${getLeadStatusCount(day, 'Assigned')}</td>
-                <td>${getLeadStatusCount(day, 'Interested')}</td>
-                <td>${getLeadStatusCount(day, 'Not Interested')}</td>
-                <td>${getLeadStatusCount(day, 'Wrong Data')}</td>
-                <td>${getLeadStatusCount(day, 'Call Back')}</td>
-                <td>${getLeadStatusCount(day, 'Confirmed')}</td>`;
-            }
-            return `
-              <tr>
-                <td>${escapeHtml(day.date ? format(new Date(day.date), 'dd MMM yyyy') : 'Unknown')}</td>
-                <td>${escapeHtml(targetDateText)}</td>
-                <td>${escapeHtml(formatAssignedStudentGroups(day))}</td>
-                <td>${escapeHtml(formatAssignedMandals(day))}</td>
-                <td>${Number(day?.totalAssigned || 0)}</td>
-                ${statusCells}
-                <td>${Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)}${ (Number(day?.reclaimedCount || 0) + Number(day?.manualUnassignedCount || 0) + Number(day?.movedToOtherUserCount || 0)) > 0 ? ` <span style="font-size:7px;">(${day.reclaimedCount || 0}R, ${day.manualUnassignedCount || 0}M, ${day.movedToOtherUserCount || 0}T)</span>` : ''}</td>
-              </tr>
-            `;
-          }).join('')
-        : `<tr><td colspan="${printColSpan}">No date-wise assignment history found.</td></tr>`;
-
-      // CALCULATE TRUE CUMULATIVE SUMS FOR FOOTER (PRO / Pipeline)
-      const sumRowsTotalAllottedOther = rows.reduce((s: number, day: any) => s + Number(day.totalAssigned || 0), 0);
-      const sumRowsReclaimedOther = rows.reduce((s: number, day: any) => s + Number(day.reclaimedCount || 0), 0);
-      const sumRowsManualOther = rows.reduce((s: number, day: any) => s + Number(day.manualUnassignedCount || 0), 0);
-      const sumRowsMovedOther = rows.reduce((s: number, day: any) => s + Number(day.movedToOtherUserCount || 0), 0);
-      const totalRowsUnattendedOther = sumRowsReclaimedOther + sumRowsManualOther + sumRowsMovedOther;
-      
-      let footerRowPro = '';
-      if (printMode === 'pro') {
-        const sumRowsBalancePro = rows.reduce((s: number, day: any) => s + Number(getProAssignmentBalanceForDay(day)), 0);
-        const sumRowsStatusMapPro: Record<string, number> = {};
-        PRO_VISIT_STATUS_COLUMNS.forEach(col => {
-          sumRowsStatusMapPro[col] = rows.reduce((s: number, day: any) => s + Number(getProVisitStatusCountForDisplay(day, col)), 0);
-        });
-
-        const visitCells = PRO_VISIT_STATUS_COLUMNS.map(
-          (c) => `<td>${sumRowsStatusMapPro[c]}</td>`
-        ).join('');
-
-        footerRowPro = `<tfoot><tr style="font-weight:700;background:#f1f5f9;">
-          <td colspan="4">Cumulative Total (Sum of rows)</td>
-          <td>${sumRowsTotalAllottedOther}</td>
-          ${visitCells}
-          <td>${sumRowsBalancePro}</td>
-          <td>${totalRowsUnattendedOther}${totalRowsUnattendedOther > 0 ? ` <span style="font-size:7.5px; opacity:0.8;">(${sumRowsReclaimedOther}R, ${sumRowsManualOther}M, ${sumRowsMovedOther}T)</span>` : ''}</td>
-        </tr></tfoot>`;
-      } else {
-        // Pipeline mode footer
-        const sumAssigned = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Assigned')), 0);
-        const sumInterested = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Interested')), 0);
-        const sumNotInterested = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Not Interested')), 0);
-        const sumWrongData = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Wrong Data')), 0);
-        const sumCallBack = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Call Back')), 0);
-        const sumConfirmed = rows.reduce((s: number, day: any) => s + Number(getLeadStatusCount(day, 'Confirmed')), 0);
-
-        footerRowPro = `<tfoot><tr style="font-weight:700;background:#f1f5f9;">
-          <td colspan="4">Cumulative Total (Sum of rows)</td>
-          <td>${sumRowsTotalAllottedOther}</td>
-          <td>${sumAssigned}</td>
-          <td>${sumInterested}</td>
-          <td>${sumNotInterested}</td>
-          <td>${sumWrongData}</td>
-          <td>${sumCallBack}</td>
-          <td>${sumConfirmed}</td>
-          <td>${totalRowsUnattendedOther}${totalRowsUnattendedOther > 0 ? ` <span style="font-size:7.5px; opacity:0.8;">(${sumRowsReclaimedOther}R, ${sumRowsManualOther}M, ${sumRowsMovedOther}T)</span>` : ''}</td>
-        </tr></tfoot>`;
-      }
-
-      const mergedPrintUserOther = { ...user, ...(detailUser || {}) };
-      const printMainBalanceOther = getPerformanceBalanceDisplay(mergedPrintUserOther);
-      const mainRowLeadsOther = getPerformanceTotalLeadsDisplay(mergedPrintUserOther);
-      const mainRowCallsOther = mergedPrintUserOther.calls?.total ?? 0;
-      
-      // Ensure Interested includes CET Applied for Pipeline roles
-      const rawInterestedOther = Number(mergedPrintUserOther.interested || 0);
-      const rawCetAppliedOther = Number(mergedPrintUserOther.statusBreakdown?.['CET Applied'] || mergedPrintUserOther.statusBreakdown?.['cet applied'] || 0);
-      const mainRowInterestedOther = (rawInterestedOther + rawCetAppliedOther);
-
-      const mainRowVisitedOther = roleKey === 'PRO' ? (mergedPrintUserOther.visitedCumulative ?? 0) : 'â€”';
-      const mainRowConfirmedOther = mergedPrintUserOther.convertedLeads ?? 0;
-      const mainRowAdmittedOther = mergedPrintUserOther.admittedLeads ?? mergedPrintUserOther.statusBreakdown?.Admitted ?? mergedPrintUserOther.statusBreakdown?.admitted ?? 0;
-
-      const summaryTableOtherHtml = `
-        <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px;background:#f8fafc;border:1px solid #e2e8f0;">
-          <thead>
-            <tr style="background:#f1f5f9;color:#0f172a;text-align:center;">
-              <th style="padding:4px;border:1px solid #334155;">Total Leads</th>
-              <th style="padding:4px;border:1px solid #334155;">Calls/Visits Done</th>
-              <th style="padding:4px;border:1px solid #334155;">Balance</th>
-              <th style="padding:4px;border:1px solid #334155;">Interested Leads</th>
-              <th style="padding:4px;border:1px solid #334155;">Visited</th>
-              <th style="padding:4px;border:1px solid #334155;">Confirmed</th>
-              <th style="padding:4px;border:1px solid #334155;">Admitted</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style="text-align:center;font-weight:700;color:#1e293b;">
-              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowLeadsOther}</td>
-              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowCallsOther}</td>
-              <td style="padding:4px;border:1px solid #e2e8f0;">${printMainBalanceOther}</td>
-              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowInterestedOther}</td>
-              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowVisitedOther}</td>
-              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowConfirmedOther}</td>
-              <td style="padding:4px;border:1px solid #e2e8f0;">${mainRowAdmittedOther}</td>
-            </tr>
-          </tbody>
-        </table>
-      `;
-
-      return `
-        <section style="margin-bottom:10px; break-inside: avoid;">
-          <h3 style="margin:0 0 3px 0;font-size:10px;font-weight:700;">${userName} <span style="font-weight:600;color:#334155;">(${roleName})</span> Â· ${statusLabel}</h3>
-          ${summaryTableOtherHtml}
-          ${
-            printMode === 'pro'
-              ? `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">PRO â€” Assignment history by date buckets. Main table summary counts shown above.</p>`
-              : `<p style="margin:0 0-4px 0;font-size:8px;color:#475569;">Pipeline Summary â€” Main table summary counts shown above.</p>`
-          }
-          <table style="width:100%;border-collapse:collapse;font-size:8.5px;line-height:1.25;">
-            <thead>
-              <tr>
-                <th>Allotted Date</th>
-                <th>Target Date</th>
-                <th>Student Group Assigned</th>
-                <th>Mandal Assigned</th>
-                <th>Total Allotted</th>
-                ${theadStatusRow}
-                <th>Unattended (batch)</th>
-              </tr>
-            </thead>
-            <tbody>${rowHtml}</tbody>
-            ${footerRowPro}
-          </table>
-        </section>
-      `;
-    }).join('');
+    const headerCells = printColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+    const tableRows = rowsToPrint
+      .map((u: any) => {
+        const uid = u.userId || u.id;
+        const fu = users.find((x: any) => x._id === uid || x.id === uid);
+        const { totalLeads, counts } = buildPortfolioStatusBreakdown(u, fu);
+        const name = escapeHtml(u.name || u.userName || 'Unknown');
+        const dept = escapeHtml(u.department || fu?.department || '—');
+        const designation = escapeHtml(u.designation || fu?.designation || '—');
+        const group = escapeHtml(u.group || fu?.group || '—');
+        const statusBadge = u.isActive ? 'Active' : 'Inactive';
+        const total = Number(totalLeads || 0).toLocaleString();
+        const cells = printColumns
+          .map((c) => `<td style="text-align:right;">${Number(counts[c] ?? 0).toLocaleString()}</td>`)
+          .join('');
+        return `<tr>
+          <td>
+            <div style="font-weight:600;">${name}</div>
+            <div style="font-size:9px;color:#64748b;">${statusBadge} · ${dept} | ${designation} | ${group}</div>
+          </td>
+          <td style="text-align:right;font-weight:600;">${total}</td>
+          ${cells}
+        </tr>`;
+      })
+      .join('');
 
     const fullHtml = `
-      <!doctype html>
       <html>
         <head>
-          <title>User Performance Detailed Report</title>
+          <title>Print: User Performance Summary</title>
           <style>
-            body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; padding: 6px 8px; font-size: 9px; }
-            h1 { margin: 0 0 4px 0; font-size: 13px; line-height: 1.2; }
-            p.meta { margin: 0 0 6px 0; font-size: 8px; color: #475569; }
-            table, th, td { border: 1px solid #cbd5e1; }
-            th, td { padding: 3px 4px; text-align: left; vertical-align: top; }
-            th { background: #f1f5f9; font-weight: 600; font-size: 8px; }
-            td { font-size: 8.5px; }
-            @media print {
-              body { padding: 4px 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              h1 { font-size: 12px; }
-            }
+            body { font-family: Arial, sans-serif; padding: 16px; }
+            h1 { font-size: 16px; margin: 0 0 8px 0; }
+            .meta { color: #64748b; font-size: 11px; margin-bottom: 12px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th, td { border: 1px solid #e2e8f0; padding: 6px; vertical-align: top; }
+            th { background: #f8fafc; text-align: left; }
           </style>
         </head>
         <body>
-          <h1>User Performance Detailed Report</h1>
-          <p class="meta">Generated: ${escapeHtml(generatedAt)}</p>
-          ${sections}
+          <h1>User Performance Summary</h1>
+          <div class="meta">Generated at: ${escapeHtml(generatedAt)} · Current portfolio snapshot (${rowsToPrint.length} users)</div>
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th style="text-align:right;">Total Portfolio</th>
+                ${headerCells}
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
         </body>
       </html>
     `;
 
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
-    iframe.title = 'Print: User performance detailed report';
+    iframe.title = 'Print: User performance summary';
     iframe.style.cssText =
       'position:fixed;left:0;top:0;width:0;height:0;border:0;margin:0;padding:0;opacity:0;pointer-events:none;visibility:hidden;';
     document.body.appendChild(iframe);
@@ -2909,8 +2644,11 @@ export default function ReportsPage() {
                       style: CALL_REPORT_CARD_STYLES[3],
                     },
                     {
-                      label: 'Users on this page',
-                      value: performanceSummary.usersCovered,
+                      label: 'Users (filtered)',
+                      value:
+                        performanceUserAnalyticsData?.pagination?.total ??
+                        performanceSummaryTotals?.userCount ??
+                        performanceSummary.usersCovered,
                       style: CALL_REPORT_CARD_STYLES[4],
                     },
                   ].map((item, i) => (
@@ -3268,23 +3006,9 @@ export default function ReportsPage() {
                             {performanceTableUsers.length} on this page)
                           </p>
                           <div className="flex flex-wrap items-center gap-2">
-                            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                              Rows per page
-                              <select
-                                value={performanceLimit}
-                                onChange={(e) => {
-                                  setPerformanceLimit(Number(e.target.value));
-                                  setPerformancePage(1);
-                                }}
-                                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
-                              >
-                                {[10, 25, 50, 100].map((n) => (
-                                  <option key={n} value={n}>
-                                    {n}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
+                            <span className="rounded-md bg-white px-2.5 py-1 text-xs font-medium tabular-nums text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-600">
+                              {performanceUserAnalyticsData.pagination.total} users total
+                            </span>
                             <Button
                               variant="outline"
                               size="sm"
@@ -4228,7 +3952,7 @@ export default function ReportsPage() {
                                     <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{day.details?.length || 0} Leads</span>
                                     {isExpanded && hasChanges && (
                                       <Button 
-                                        size="xs" 
+                                        size="sm" 
                                         className="h-7 px-3 bg-orange-500 hover:bg-orange-600 text-white border-0"
                                         onClick={async (e) => {
                                           e.stopPropagation();
@@ -4347,8 +4071,8 @@ export default function ReportsPage() {
                                                 <td className="px-4 py-2 text-right">
                                                   {edit && (
                                                     <Button 
-                                                      size="xs" 
-                                                      variant="ghost" 
+                                                      size="sm" 
+                                                      variant="light" 
                                                       className="h-6 w-6 p-0 text-slate-400 hover:text-red-500"
                                                       onClick={() => {
                                                         const next = { ...visitEdits };
@@ -4518,8 +4242,8 @@ export default function ReportsPage() {
                                   </td>
                                   <td className="px-6 py-4 text-right">
                                     <Button
-                                      size="xs"
-                                      variant="ghost"
+                                      size="sm"
+                                      variant="light"
                                       className="h-8 w-8 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"
                                       onClick={async () => {
                                         if (!confirm('Are you sure you want to remove this leave record?')) return;
