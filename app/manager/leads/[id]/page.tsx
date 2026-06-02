@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
+import { getManagerStatusUpdateOptions } from '@/lib/leadChannelStatus';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useLocations } from '@/lib/useLocations';
 
@@ -83,15 +84,8 @@ export default function ManagerLeadDetailPage() {
     languageFilter: 'all' as string,
   });
 
-  // Status options (lead pipeline stage – only these allowed for status update)
-  const statusOptions = [
-    'Interested',
-    'Not Interested',
-    'Confirmed',
-    'CET Applied',
-    'Other cet applied',
-    'Admitted only',
-  ];
+  /** Call + visit channel outcomes only (maps to merged lead_status on save). */
+  const statusOptions = useMemo(() => getManagerStatusUpdateOptions(), []);
 
   const isManager = user?.isManager === true;
 
@@ -1843,11 +1837,23 @@ export default function ManagerLeadDetailPage() {
             <h2 className="text-xl font-semibold mb-4">Update Status</h2>
             <div className="space-y-4">
               <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Pipeline: <span className="font-semibold text-gray-900">{lead.leadStatus || 'New'}</span>
+                  {lead.callStatus ? (
+                    <>
+                      {' '}
+                      · Call: <span className="font-semibold text-gray-900">{lead.callStatus}</span>
+                    </>
+                  ) : null}
+                  {lead.visitStatus ? (
+                    <>
+                      {' '}
+                      · Visit: <span className="font-semibold text-gray-900">{lead.visitStatus}</span>
+                    </>
+                  ) : null}
+                </p>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Current Status: <span className="font-semibold">{lead.leadStatus || 'New'}</span>
-                </label>
-                <label className="block text-sm font-medium text-gray-700 mb-1 mt-3">
-                  New Status
+                  New outcome (call / visit mapped status)
                 </label>
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
