@@ -609,6 +609,15 @@ export default function ReportsPage() {
     [performanceUserAnalyticsData?.users]
   );
 
+  const performanceFilterOptionsEffective = useMemo(() => {
+    const rows = [...users, ...performanceTableUsers];
+    const divisions = Array.from(new Set(rows.map((u: any) => u?.division).filter((d: any) => d && d !== '-'))).sort();
+    const departments = Array.from(new Set(rows.map((u: any) => u?.department).filter((d: any) => d && d !== '-'))).sort();
+    const groups = Array.from(new Set(rows.map((u: any) => u?.group).filter((g: any) => g && g !== '-'))).sort();
+    const roles = Array.from(new Set(rows.map((u: any) => u?.roleName).filter((r: any) => r && r !== '-'))).sort();
+    return { divisions, departments, groups, roles };
+  }, [users, performanceTableUsers]);
+
   useEffect(() => {
     setPerformancePage(1);
   }, [
@@ -1128,6 +1137,13 @@ export default function ReportsPage() {
             })();
 
     const generatedAt = new Date().toLocaleString();
+    const filtersApplied: string[] = [];
+    if (filters.academicYear != null) filtersApplied.push(`AY ${filters.academicYear}`);
+    if (performanceRole.trim()) filtersApplied.push(`Role: ${performanceRole.trim()}`);
+    if (performanceDivision.trim()) filtersApplied.push(`Division: ${performanceDivision.trim()}`);
+    if (performanceDepartment.trim()) filtersApplied.push(`Department: ${performanceDepartment.trim()}`);
+    if (performanceStudentGroup.trim()) filtersApplied.push(`Student Group: ${performanceStudentGroup.trim()}`);
+    if (performanceSearch.trim()) filtersApplied.push(`Search: ${performanceSearch.trim()}`);
     const headerCells = printColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
     const tableRows = rowsToPrint
       .map((u: any) => {
@@ -1170,6 +1186,7 @@ export default function ReportsPage() {
         <body>
           <h1>User Performance Summary</h1>
           <div class="meta">Generated at: ${escapeHtml(generatedAt)} · Current portfolio snapshot (${rowsToPrint.length} users)</div>
+          <div class="meta">Filters: ${escapeHtml(filtersApplied.length ? filtersApplied.join(' · ') : 'None')}</div>
           <table>
             <thead>
               <tr>
@@ -2277,7 +2294,7 @@ export default function ReportsPage() {
                     className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                   >
                     <option value="">All divisions</option>
-                    {performanceFilterOptions.divisions.map((d) => (
+                    {performanceFilterOptionsEffective.divisions.map((d) => (
                       <option key={`daily-div-${d}`} value={d}>{d}</option>
                     ))}
                   </select>
@@ -2293,7 +2310,7 @@ export default function ReportsPage() {
                     className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                   >
                     <option value="">All departments</option>
-                    {performanceFilterOptions.departments.map((d) => (
+                    {performanceFilterOptionsEffective.departments.map((d) => (
                       <option key={`daily-dept-${d}`} value={d}>{d}</option>
                     ))}
                   </select>
@@ -2495,7 +2512,7 @@ export default function ReportsPage() {
                     className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                   >
                     <option value="">All divisions</option>
-                    {performanceFilterOptions.divisions.map((d) => (
+                    {performanceFilterOptionsEffective.divisions.map((d) => (
                       <option key={`perf-div-${d}`} value={d}>{d}</option>
                     ))}
                   </select>
@@ -2511,7 +2528,7 @@ export default function ReportsPage() {
                     className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                   >
                     <option value="">All departments</option>
-                    {performanceFilterOptions.departments.map((d) => (
+                    {performanceFilterOptionsEffective.departments.map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
@@ -2937,7 +2954,30 @@ export default function ReportsPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
-                          {performanceTableUsers.map((user: any, rowIdx: number) => {
+                          {isFetchingPerformanceUserList ? (
+                            Array.from({ length: Math.min(10, performanceLimit || 10) }).map((_, i) => (
+                              <tr
+                                key={`perf-skel-${i}`}
+                                className={i % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30'}
+                              >
+                                <td className="w-52 px-6 py-4">
+                                  <Skeleton className="h-4 w-40" />
+                                  <div className="mt-2">
+                                    <Skeleton className="h-3 w-48" />
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4">
+                                  <Skeleton className="h-4 w-16" />
+                                </td>
+                                {performancePortfolioColumns.map((col) => (
+                                  <td key={`perf-skel-${i}-${col}`} className="px-3 py-4">
+                                    <Skeleton className="h-4 w-12" />
+                                  </td>
+                                ))}
+                              </tr>
+                            ))
+                          ) : (
+                            performanceTableUsers.map((user: any, rowIdx: number) => {
                             const fu = users.find((fu: any) => fu._id === user.userId || fu.name === (user.name || user.userName));
                             const baseRowBg = rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30';
                             const userLabel = user.name || user.userName;
@@ -2977,7 +3017,8 @@ export default function ReportsPage() {
                                 ))}
                               </tr>
                             );
-                          })}
+                          })
+                          )}
                         </tbody>
                         <tfoot>
                           <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
