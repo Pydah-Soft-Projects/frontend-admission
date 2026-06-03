@@ -1270,10 +1270,15 @@ export default function ReportsPage() {
   const renderMandalBreakdownHtml = (
     mandalRows: PerformanceMandalBreakdownRow[],
     roleName: unknown,
-    escapeHtmlFn: (s: unknown) => string
+    escapeHtmlFn: (s: unknown) => string,
+    detailTitle?: string
   ) => {
     if (!mandalRows.length) return '';
     const statusColumns = getPortfolioStatusColumnsForRole(roleName);
+    const mandalColCount = 3 + statusColumns.length;
+    const titleRow = detailTitle
+      ? `<tr class="mandal-title-row"><th colspan="${mandalColCount}" style="text-align:left;font-weight:600;background:#f8fafc;border-bottom:none;">${escapeHtmlFn(detailTitle)}</th></tr>`
+      : '';
     const statusHeader = statusColumns.map((c) => `<th style="text-align:right;">${escapeHtmlFn(c)}</th>`).join('');
     const bodyRows = mandalRows
       .map((mandalRow) => {
@@ -1295,11 +1300,12 @@ export default function ReportsPage() {
       .join('');
     return `<table class="mandal-table">
       <thead>
+        ${titleRow}
         <tr>
-          <th>Mandal</th>
-          <th style="text-align:right;">Total</th>
+          <th>Mandal name</th>
+          <th style="text-align:right;">Leads in mandal</th>
           ${statusHeader}
-          <th>Student groups</th>
+          <th>Student groups in mandal</th>
         </tr>
       </thead>
       <tbody>${bodyRows}</tbody>
@@ -1413,35 +1419,63 @@ export default function ReportsPage() {
     if (performanceDepartment.trim()) filtersApplied.push(`Department: ${performanceDepartment.trim()}`);
     if (performanceStudentGroup.trim()) filtersApplied.push(`Student Group: ${performanceStudentGroup.trim()}`);
     if (performanceSearch.trim()) filtersApplied.push(`Search: ${performanceSearch.trim()}`);
-    const headerCells = printColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
-    const printColSpan = 2 + printColumns.length;
-    const tableRows = rowsToPrint
-      .map((u: any) => {
-        const uid = u.userId || u.id;
-        const fu = users.find((x: any) => x._id === uid || x.id === uid);
-        const { totalLeads, counts } = buildPortfolioStatusBreakdown(u, fu);
-        const name = escapeHtml(u.name || u.userName || 'Unknown');
-        const total = Number(totalLeads || 0).toLocaleString();
-        const cells = printColumns
-          .map((c) => `<td style="text-align:right;">${Number(counts[c] ?? 0).toLocaleString()}</td>`)
-          .join('');
-        const mainRow = `<tr>
+    const portfolioSummaryThead = `
+              <tr>
+                <th>User name</th>
+                <th style="text-align:right;">Total portfolio leads</th>
+                ${printColumns.map((c) => `<th style="text-align:right;">${escapeHtml(c)}</th>`).join('')}
+              </tr>`;
+
+    const buildPortfolioSummaryRow = (u: any) => {
+      const uid = u.userId || u.id;
+      const fu = users.find((x: any) => x._id === uid || x.id === uid);
+      const { totalLeads, counts } = buildPortfolioStatusBreakdown(u, fu);
+      const name = escapeHtml(u.name || u.userName || 'Unknown');
+      const total = Number(totalLeads || 0).toLocaleString();
+      const cells = printColumns
+        .map((c) => `<td style="text-align:right;">${Number(counts[c] ?? 0).toLocaleString()}</td>`)
+        .join('');
+      return `<tr>
           <td style="font-weight:600;">${name}</td>
           <td style="text-align:right;font-weight:600;">${total}</td>
           ${cells}
         </tr>`;
-        if (!includeMandalDetails) return mainRow;
-        const mandalRows = getMandalBreakdownFromUser(u);
-        const mandalSection = renderMandalBreakdownHtml(mandalRows, u.roleName || fu?.roleName, escapeHtml);
-        if (!mandalSection) return mainRow;
-        return `${mainRow}<tr class="mandal-detail-row"><td colspan="${printColSpan}">
-          <div class="user-mandal-block">
-            <div class="user-mandal-label">Mandal breakdown — ${name}</div>
-            ${mandalSection}
-          </div>
-        </td></tr>`;
-      })
-      .join('');
+    };
+
+    const summaryTableHtml = `<table class="summary-print-table">
+            <thead>${portfolioSummaryThead}</thead>
+            <tbody>${rowsToPrint.map((u: any) => buildPortfolioSummaryRow(u)).join('')}</tbody>
+          </table>`;
+
+    const mandalDetailsHtml = includeMandalDetails
+      ? (() => {
+          const userMandalBlocks = rowsToPrint
+            .map((u: any) => {
+              const uid = u.userId || u.id;
+              const fu = users.find((x: any) => x._id === uid || x.id === uid);
+              const name = escapeHtml(u.name || u.userName || 'Unknown');
+              const mandalRows = getMandalBreakdownFromUser(u);
+              const mandalSection = renderMandalBreakdownHtml(
+                mandalRows,
+                u.roleName || fu?.roleName,
+                escapeHtml,
+                `${name} — mandal breakdown`
+              );
+              if (!mandalSection) return '';
+              return `<div class="print-mandal-user">${mandalSection}</div>`;
+            })
+            .filter(Boolean)
+            .join('');
+          if (!userMandalBlocks) return '';
+          return `<div class="print-mandal-section">
+            <p class="print-section-label">Mandal breakdown (detail)</p>
+            <p class="print-section-note">Continues below portfolio summary. Column headers repeat on each printed page.</p>
+            ${userMandalBlocks}
+          </div>`;
+        })()
+      : '';
+
+    const printBodyHtml = `${summaryTableHtml}${mandalDetailsHtml}`;
 
     const fullHtml = `
       <html>
@@ -1454,28 +1488,58 @@ export default function ReportsPage() {
             table { width: 100%; border-collapse: collapse; font-size: 11px; }
             th, td { border: 1px solid #e2e8f0; padding: 6px; vertical-align: top; }
             th { background: #f8fafc; text-align: left; }
-            .mandal-detail-row td { background: #f8fafc; padding: 8px 6px 10px 6px; }
-            .user-mandal-block { margin: 4px 0 8px 0; }
-            .user-mandal-label { font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 6px; }
-            .mandal-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 4px; }
+            .summary-print-table thead, .mandal-table thead {
+              display: table-header-group;
+            }
+            .summary-print-table tbody, .mandal-table tbody {
+              display: table-row-group;
+            }
+            .summary-print-table {
+              margin-bottom: 12px;
+            }
+            .print-mandal-section {
+              margin-top: 8px;
+              padding-top: 8px;
+              border-top: 2px solid #cbd5e1;
+            }
+            .print-section-label {
+              margin: 0 0 4px 0;
+              font-size: 12px;
+              font-weight: 700;
+              color: #0f172a;
+            }
+            .print-section-note {
+              margin: 0 0 10px 0;
+              font-size: 10px;
+              color: #64748b;
+            }
+            .print-mandal-user {
+              margin-bottom: 10px;
+            }
+            .mandal-table .mandal-title-row th {
+              font-size: 10px;
+              color: #475569;
+              padding-bottom: 2px;
+            }
+            .mandal-table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 10px;
+              margin-bottom: 6px;
+            }
             .mandal-table th, .mandal-table td { border: 1px solid #e2e8f0; padding: 4px 6px; vertical-align: top; }
             .mandal-table th { background: #f1f5f9; text-align: left; }
+            @media print {
+              .summary-print-table thead { display: table-header-group; }
+              .mandal-table thead { display: table-header-group; }
+            }
           </style>
         </head>
         <body>
           <h1>User Performance Summary</h1>
           <div class="meta">Generated at: ${escapeHtml(generatedAt)} · Current portfolio snapshot (${rowsToPrint.length} users)${includeMandalDetails ? ' · Includes mandal breakdown' : ''}</div>
           <div class="meta">Filters: ${escapeHtml(filtersApplied.length ? filtersApplied.join(' · ') : 'None')}</div>
-          <table>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th style="text-align:right;">Total Portfolio</th>
-                ${headerCells}
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
+          ${printBodyHtml}
         </body>
       </html>
     `;
