@@ -687,6 +687,10 @@ export const leadAPI = {
     perfRole?: string;
     /** Print: only return matching user list (no heavy analytics). */
     printUsersOnly?: boolean;
+    /** User Performance print: allow larger page size and lighter portfolio SQL. */
+    printPortfolioReport?: boolean;
+    /** Skip cohort summary totals SQL (print / export rows only). */
+    skipCohortSummary?: boolean;
     /** Skip server in-memory analytics cache (use after bulk DB fixes e.g. call_status scripts). */
     bypassCache?: boolean;
     /** Heavy reports path skips when true — communications user-leads uses this for a fast roster + lead counts only. */
@@ -721,6 +725,8 @@ export const leadAPI = {
     if (params?.perfDivision != null && params.perfDivision !== '') queryParams.append('perfDivision', params.perfDivision);
     if (params?.perfRole != null && params.perfRole !== '') queryParams.append('perfRole', params.perfRole);
     if (params?.printUsersOnly) queryParams.append('printUsersOnly', 'true');
+    if (params?.printPortfolioReport) queryParams.append('printPortfolioReport', 'true');
+    if (params?.skipCohortSummary) queryParams.append('skipCohortSummary', 'true');
     if (params?.bypassCache) queryParams.append('bypassCache', 'true');
     if (params?.rosterOnly) queryParams.append('rosterOnly', 'true');
     if (params?.leadStatus) queryParams.append('leadStatus', params.leadStatus);

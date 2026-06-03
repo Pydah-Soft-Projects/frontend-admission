@@ -149,6 +149,22 @@ export default function ReportsPage() {
   const [callSubTab, setCallSubTab] = useState<'daily' | 'performance'>('daily');
   const [visitSubTab, setVisitSubTab] = useState<'record' | 'history' | 'edit' | 'leave'>('history');
   const [expandedDailyUsers, setExpandedDailyUsers] = useState<Set<string>>(new Set());
+  const [expandedPerformanceUsers, setExpandedPerformanceUsers] = useState<Set<string>>(new Set());
+  const [performanceStudentGroupByUser, setPerformanceStudentGroupByUser] = useState<
+    Record<string, Record<string, number>>
+  >({});
+  type PerformanceMandalBreakdownRow = {
+    mandal: string;
+    total: number;
+    studentGroups: Record<string, number>;
+    statusCounts?: Record<string, number>;
+  };
+  const [performanceMandalByUser, setPerformanceMandalByUser] = useState<
+    Record<string, PerformanceMandalBreakdownRow[]>
+  >({});
+  const [performanceStudentGroupLoading, setPerformanceStudentGroupLoading] = useState<Set<string>>(
+    new Set()
+  );
   const [performanceSearch, setPerformanceSearch] = useState('');
   const [visitSearch, setVisitSearch] = useState('');
   const [expandedVisitDiaryRows, setExpandedVisitDiaryRows] = useState<Set<string>>(new Set());
@@ -520,6 +536,7 @@ export default function ReportsPage() {
     data: performanceUserAnalyticsData,
     isLoading: isLoadingPerformanceUserList,
     isFetching: isFetchingPerformanceUserList,
+    isPlaceholderData: isPerformanceListPlaceholder,
     error: performanceUserListError,
   } = useQuery({
     queryKey: [
@@ -554,6 +571,13 @@ export default function ReportsPage() {
     staleTime: 600_000,
     placeholderData: keepPreviousData,
   });
+
+  /** True on first load or while refetching after filter/page change (placeholder still shows prior rows). */
+  const performanceListLoading =
+    isLoadingPerformanceUserList ||
+    (isFetchingPerformanceUserList && isPerformanceListPlaceholder);
+
+  const performanceTableSkeletonRowCount = Math.min(10, performanceLimit || 10);
 
   const { data: visitDiaryAnalytics, isLoading: isLoadingVisitDiaryAnalytics } = useQuery({
     queryKey: ['userAnalyticsVisitDiary', filters.startDate, filters.endDate, filters.userId],
@@ -633,6 +657,21 @@ export default function ReportsPage() {
     performanceDepartment,
     performanceStudentGroup,
     performanceLimit,
+  ]);
+
+  useEffect(() => {
+    setExpandedPerformanceUsers(new Set());
+    setPerformanceStudentGroupByUser({});
+    setPerformanceMandalByUser({});
+    setPerformanceStudentGroupLoading(new Set());
+  }, [
+    performancePage,
+    filters.academicYear,
+    performanceSearch,
+    performanceRole,
+    performanceDivision,
+    performanceDepartment,
+    performanceStudentGroup,
   ]);
 
   /** Warm first page before opening Performance (paginated â€” smaller cohort SQL). */
@@ -1007,6 +1046,174 @@ export default function ReportsPage() {
     return { totalLeads, counts, columns, statusLabel: isPro ? 'Visit Status' : isCounsellor ? 'Call Status' : 'Lead Status' };
   };
 
+  /** Role-based status counts from a raw breakdown object (e.g. per-mandal statusCounts). */
+  const foldStatusBreakdownForRole = (
+    rawBreakdown: Record<string, unknown> | undefined,
+    roleName: unknown
+  ): Record<string, number> => {
+    const breakdown = rawBreakdown || {};
+    const roleKey = String(roleName || '').toLowerCase();
+    const isPro = roleKey === 'pro' || (roleKey.includes('pro') && !roleKey.includes('counsel'));
+    const isCounsellor = roleKey.includes('counselor') || roleKey.includes('counsellor');
+    const allowedStatuses = isPro
+      ? (PRO_VISIT_STATUS_COLUMNS as unknown as string[])
+      : isCounsellor
+        ? (COUNSELLOR_CALL_STATUS_COLUMNS_EXPANDED as unknown as string[])
+        : (['Assigned', 'Interested', 'Not Interested', 'Wrong Data', 'Call Back', 'Confirmed'] as string[]);
+
+    const counts: Record<string, number> = {};
+    allowedStatuses.forEach((s) => {
+      counts[s] = 0;
+    });
+
+    Object.entries(breakdown).forEach(([status, count]) => {
+      let targetStatus = status;
+      if (isCounsellor && status.toLowerCase() === 'not answered') {
+        targetStatus = 'Call Back';
+      }
+      const match = allowedStatuses.find((s) => s.toLowerCase() === targetStatus.toLowerCase());
+      if (match) {
+        counts[match] += Number(count);
+      } else if (
+        allowedStatuses.length === 0 &&
+        targetStatus.toLowerCase() !== 'not set' &&
+        targetStatus.toLowerCase() !== 'unknown' &&
+        Number(count) > 0
+      ) {
+        counts[targetStatus] = (counts[targetStatus] || 0) + Number(count);
+      }
+    });
+
+    return counts;
+  };
+
+  const getStudentGroupBreakdownFromUser = (user: any): Record<string, number> => {
+    const raw = user?.studentGroupBreakdown ?? user?.student_group_breakdown;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const out: Record<string, number> = {};
+      Object.entries(raw).forEach(([k, v]) => {
+        const n = Number(v);
+        if (n > 0) out[String(k)] = n;
+      });
+      return out;
+    }
+    if (Array.isArray(raw)) {
+      const out: Record<string, number> = {};
+      raw.forEach((item: { group?: string; count?: number }) => {
+        const g = String(item?.group ?? '').trim();
+        const n = Number(item?.count) || 0;
+        if (g && n > 0) out[g] = n;
+      });
+      return out;
+    }
+    return {};
+  };
+
+  const getMandalBreakdownFromUser = (user: any): PerformanceMandalBreakdownRow[] => {
+    const raw = user?.mandalBreakdown ?? user?.mandal_breakdown;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((row: any) => ({
+        mandal: String(row?.mandal ?? 'Unknown').trim() || 'Unknown',
+        total: Number(row?.total) || 0,
+        studentGroups:
+          row?.studentGroups && typeof row.studentGroups === 'object' && !Array.isArray(row.studentGroups)
+            ? Object.fromEntries(
+                Object.entries(row.studentGroups).map(([k, v]) => [String(k), Number(v) || 0])
+              )
+            : {},
+        statusCounts:
+          row?.statusCounts && typeof row.statusCounts === 'object' && !Array.isArray(row.statusCounts)
+            ? Object.fromEntries(
+                Object.entries(row.statusCounts).map(([k, v]) => [String(k), Number(v) || 0])
+              )
+            : {},
+      }))
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total || a.mandal.localeCompare(b.mandal));
+  };
+
+  const sortStudentGroupBreakdownEntries = (breakdown: Record<string, number> | undefined) => {
+    const entries = Object.entries(breakdown || {})
+      .map(([group, count]) => ({ group, count: Number(count) || 0 }))
+      .filter((e) => e.count > 0);
+    const preferredOrder = callReportStudentGroupOptions;
+    const orderIndex = new Map(preferredOrder.map((g, i) => [g, i]));
+    return entries.sort((a, b) => {
+      const ai = orderIndex.has(a.group) ? orderIndex.get(a.group)! : 999;
+      const bi = orderIndex.has(b.group) ? orderIndex.get(b.group)! : 999;
+      if (ai !== bi) return ai - bi;
+      return b.count - a.count || a.group.localeCompare(b.group);
+    });
+  };
+
+  const loadPerformanceExpandDetails = useCallback(
+    async (userId: string, userKey: string) => {
+      if (!userId) return;
+
+      setPerformanceStudentGroupLoading((prev) => {
+        const next = new Set(prev);
+        next.add(userKey);
+        return next;
+      });
+      try {
+        const resp = await leadAPI.getUserAnalytics({
+          academicYear: filters.academicYear != null ? filters.academicYear : undefined,
+          currentPortfolioOnly: true,
+          includeAssignmentDetails: false,
+          userId: String(userId),
+          perfRole: performanceRole || undefined,
+          studentGroup: performanceStudentGroup || undefined,
+        });
+        const row = Array.isArray(resp?.users) ? resp.users[0] : null;
+        const breakdown = row ? getStudentGroupBreakdownFromUser(row) : {};
+        const mandalRows = row ? getMandalBreakdownFromUser(row) : [];
+        setPerformanceStudentGroupByUser((prev) => ({ ...prev, [userKey]: breakdown }));
+        setPerformanceMandalByUser((prev) => ({ ...prev, [userKey]: mandalRows }));
+      } catch (err) {
+        console.error('Failed to load portfolio breakdown', err);
+        showToast.error('Could not load portfolio breakdown for this user.');
+      } finally {
+        setPerformanceStudentGroupLoading((prev) => {
+          const next = new Set(prev);
+          next.delete(userKey);
+          return next;
+        });
+      }
+    },
+    [filters.academicYear, performanceRole, performanceStudentGroup]
+  );
+
+  useEffect(() => {
+    if (!performanceTableUsers.length) return;
+    setPerformanceStudentGroupByUser((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      performanceTableUsers.forEach((u: any) => {
+        const key = String(u.userId || u.id || '');
+        if (!key) return;
+        const fromRow = getStudentGroupBreakdownFromUser(u);
+        if (!Object.keys(fromRow).length) return;
+        next[key] = { ...fromRow, ...(next[key] || {}) };
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+    setPerformanceMandalByUser((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      performanceTableUsers.forEach((u: any) => {
+        const key = String(u.userId || u.id || '');
+        if (!key) return;
+        const fromRow = getMandalBreakdownFromUser(u);
+        if (!fromRow.length) return;
+        next[key] = fromRow;
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [performanceTableUsers]);
+
   const performancePortfolioColumns = useMemo((): string[] => {
     const r = performanceRole.trim();
     if (r === 'PRO') return [...PRO_VISIT_STATUS_COLUMNS];
@@ -1054,6 +1261,51 @@ export default function ReportsPage() {
     return entries.map((x) => `${x.mandal} (${x.count})`).join(', ');
   };
 
+  const formatMandalStudentGroupsText = (studentGroups: Record<string, number> | undefined) => {
+    const entries = sortStudentGroupBreakdownEntries(studentGroups);
+    if (!entries.length) return '—';
+    return entries.map(({ group, count }) => `${group} (${count.toLocaleString()})`).join(', ');
+  };
+
+  const renderMandalBreakdownHtml = (
+    mandalRows: PerformanceMandalBreakdownRow[],
+    roleName: unknown,
+    escapeHtmlFn: (s: unknown) => string
+  ) => {
+    if (!mandalRows.length) return '';
+    const statusColumns = getPortfolioStatusColumnsForRole(roleName);
+    const statusHeader = statusColumns.map((c) => `<th style="text-align:right;">${escapeHtmlFn(c)}</th>`).join('');
+    const bodyRows = mandalRows
+      .map((mandalRow) => {
+        const statusCounts = foldStatusBreakdownForRole(mandalRow.statusCounts, roleName);
+        const statusCells = statusColumns
+          .map(
+            (c) =>
+              `<td style="text-align:right;">${Number(statusCounts[c] ?? 0).toLocaleString()}</td>`
+          )
+          .join('');
+        const sgText = escapeHtmlFn(formatMandalStudentGroupsText(mandalRow.studentGroups));
+        return `<tr>
+          <td style="font-weight:600;">${escapeHtmlFn(mandalRow.mandal)}</td>
+          <td style="text-align:right;font-weight:600;">${mandalRow.total.toLocaleString()}</td>
+          ${statusCells}
+          <td>${sgText}</td>
+        </tr>`;
+      })
+      .join('');
+    return `<table class="mandal-table">
+      <thead>
+        <tr>
+          <th>Mandal</th>
+          <th style="text-align:right;">Total</th>
+          ${statusHeader}
+          <th>Student groups</th>
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>`;
+  };
+
   const handlePrintPerformanceDetails = async () => {
     if (isPrintingPerformanceRef.current) return;
     const totalMatching = performanceUserAnalyticsData?.pagination?.total ?? performanceTableUsers.length;
@@ -1061,6 +1313,11 @@ export default function ReportsPage() {
       showToast.error('No performance rows match the current filters.');
       return;
     }
+
+    const includeMandalDetails = window.confirm(
+      'Include mandal-wise breakdown in the print?\n\n• OK = Yes (mandal cards with student groups and status counts per role)\n• Cancel = No (main summary table only)'
+    );
+
     isPrintingPerformanceRef.current = true;
 
     const escapeHtml = (s: unknown) =>
@@ -1074,7 +1331,8 @@ export default function ReportsPage() {
       academicYear: filters.academicYear != null ? filters.academicYear : undefined,
       currentPortfolioOnly: true as const,
       includeAssignmentDetails: false,
-      bypassCache: true as const,
+      printPortfolioReport: true as const,
+      skipCohortSummary: true as const,
       perfSearch: performanceSearch.trim() || undefined,
       perfRole: performanceRole || undefined,
       perfDivision: performanceDivision || undefined,
@@ -1085,26 +1343,33 @@ export default function ReportsPage() {
     let rowsToPrint: any[] = [];
     let liveTotal = totalMatching;
     try {
-      const LIMIT = 100;
+      const PRINT_PAGE_LIMIT = 500;
       setPerformancePrintOverlay(`Loading users for print (0 of ${liveTotal})`);
       const first = await leadAPI.getUserAnalytics({
         ...portfolioFetchParams,
         page: 1,
-        limit: LIMIT,
+        limit: PRINT_PAGE_LIMIT,
       });
       const firstUsers = Array.isArray(first?.users) ? first.users : [];
       rowsToPrint = [...firstUsers];
       liveTotal = Number(first?.pagination?.total ?? liveTotal);
       const pages = Number(first?.pagination?.pages ?? 1);
-      for (let p = 2; p <= pages; p += 1) {
-        setPerformancePrintOverlay(`Loading users for print (${rowsToPrint.length} of ${liveTotal})`);
-        const next = await leadAPI.getUserAnalytics({
-          ...portfolioFetchParams,
-          page: p,
-          limit: LIMIT,
+      if (pages > 1) {
+        const remainingPages = Array.from({ length: pages - 1 }, (_, i) => i + 2);
+        const pageResults = await Promise.all(
+          remainingPages.map((p) =>
+            leadAPI.getUserAnalytics({
+              ...portfolioFetchParams,
+              page: p,
+              limit: PRINT_PAGE_LIMIT,
+            })
+          )
+        );
+        pageResults.forEach((next) => {
+          const nextUsers = Array.isArray(next?.users) ? next.users : [];
+          rowsToPrint.push(...nextUsers);
         });
-        const nextUsers = Array.isArray(next?.users) ? next.users : [];
-        rowsToPrint.push(...nextUsers);
+        setPerformancePrintOverlay(`Loading users for print (${rowsToPrint.length} of ${liveTotal})`);
       }
     } catch (e) {
       console.error(e);
@@ -1149,28 +1414,32 @@ export default function ReportsPage() {
     if (performanceStudentGroup.trim()) filtersApplied.push(`Student Group: ${performanceStudentGroup.trim()}`);
     if (performanceSearch.trim()) filtersApplied.push(`Search: ${performanceSearch.trim()}`);
     const headerCells = printColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+    const printColSpan = 2 + printColumns.length;
     const tableRows = rowsToPrint
       .map((u: any) => {
         const uid = u.userId || u.id;
         const fu = users.find((x: any) => x._id === uid || x.id === uid);
         const { totalLeads, counts } = buildPortfolioStatusBreakdown(u, fu);
         const name = escapeHtml(u.name || u.userName || 'Unknown');
-        const dept = escapeHtml(u.department || fu?.department || '—');
-        const designation = escapeHtml(u.designation || fu?.designation || '—');
-        const group = escapeHtml(u.group || fu?.group || '—');
-        const statusBadge = u.isActive ? 'Active' : 'Inactive';
         const total = Number(totalLeads || 0).toLocaleString();
         const cells = printColumns
           .map((c) => `<td style="text-align:right;">${Number(counts[c] ?? 0).toLocaleString()}</td>`)
           .join('');
-        return `<tr>
-          <td>
-            <div style="font-weight:600;">${name}</div>
-            <div style="font-size:9px;color:#64748b;">${statusBadge} · ${dept} | ${designation} | ${group}</div>
-          </td>
+        const mainRow = `<tr>
+          <td style="font-weight:600;">${name}</td>
           <td style="text-align:right;font-weight:600;">${total}</td>
           ${cells}
         </tr>`;
+        if (!includeMandalDetails) return mainRow;
+        const mandalRows = getMandalBreakdownFromUser(u);
+        const mandalSection = renderMandalBreakdownHtml(mandalRows, u.roleName || fu?.roleName, escapeHtml);
+        if (!mandalSection) return mainRow;
+        return `${mainRow}<tr class="mandal-detail-row"><td colspan="${printColSpan}">
+          <div class="user-mandal-block">
+            <div class="user-mandal-label">Mandal breakdown — ${name}</div>
+            ${mandalSection}
+          </div>
+        </td></tr>`;
       })
       .join('');
 
@@ -1185,11 +1454,17 @@ export default function ReportsPage() {
             table { width: 100%; border-collapse: collapse; font-size: 11px; }
             th, td { border: 1px solid #e2e8f0; padding: 6px; vertical-align: top; }
             th { background: #f8fafc; text-align: left; }
+            .mandal-detail-row td { background: #f8fafc; padding: 8px 6px 10px 6px; }
+            .user-mandal-block { margin: 4px 0 8px 0; }
+            .user-mandal-label { font-size: 10px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+            .mandal-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 4px; }
+            .mandal-table th, .mandal-table td { border: 1px solid #e2e8f0; padding: 4px 6px; vertical-align: top; }
+            .mandal-table th { background: #f1f5f9; text-align: left; }
           </style>
         </head>
         <body>
           <h1>User Performance Summary</h1>
-          <div class="meta">Generated at: ${escapeHtml(generatedAt)} · Current portfolio snapshot (${rowsToPrint.length} users)</div>
+          <div class="meta">Generated at: ${escapeHtml(generatedAt)} · Current portfolio snapshot (${rowsToPrint.length} users)${includeMandalDetails ? ' · Includes mandal breakdown' : ''}</div>
           <div class="meta">Filters: ${escapeHtml(filtersApplied.length ? filtersApplied.join(' · ') : 'None')}</div>
           <table>
             <thead>
@@ -2630,7 +2905,7 @@ export default function ReportsPage() {
                     ))}
                   </div>
                 )
-              ) : isLoadingPerformanceUserList ? (
+              ) : performanceListLoading ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Skeleton key={`calls-stats-skeleton-${i}`} className="h-20 rounded-xl" />
@@ -2914,31 +3189,29 @@ export default function ReportsPage() {
 
               {/* User Performance Summary Sub-Tab */}
               {callSubTab === 'performance' && (
-                isLoadingPerformanceUserList && !performanceUserAnalyticsData ? (
+                performanceListLoading && !performanceUserAnalyticsData ? (
                   <Card className="p-10">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
                       <p className="text-sm text-slate-500 dark:text-slate-400">Loading portfolio summary...</p>
                     </div>
                   </Card>
-                ) : performanceTableUsers.length > 0 ? (
+                ) : performanceListLoading || performanceTableUsers.length > 0 ? (
                   <div className="space-y-4">
-                    {isFetchingPerformanceUserList && performanceUserAnalyticsData && (
-                      <p className="text-xs text-orange-600 dark:text-orange-400">Updating portfolio dataâ€¦</p>
-                    )}
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Current portfolio snapshot â€” lead counts by status for each user&apos;s assigned leads
+                      Current portfolio snapshot — lead counts by status for each user&apos;s assigned leads
                       {performanceRole.trim() === 'Student Counselor'
                         ? ' (call_status)'
                         : performanceRole.trim() === 'PRO'
                           ? ' (visit_status)'
                           : ''}
-                      .
+                      . Click a row (chevron) to see portfolio by student group and by mandal (with student groups per mandal).
                     </p>
                     <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
                       <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                         <thead>
                           <tr className="bg-slate-50 dark:bg-slate-800/50">
+                            <th className="w-8 px-2 py-3" aria-label="Expand row" />
                             <th className="w-52 px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">User</th>
                             <th
                               className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 whitespace-nowrap"
@@ -2958,12 +3231,15 @@ export default function ReportsPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800/50">
-                          {isFetchingPerformanceUserList ? (
-                            Array.from({ length: Math.min(10, performanceLimit || 10) }).map((_, i) => (
+                          {performanceListLoading ? (
+                            Array.from({ length: performanceTableSkeletonRowCount }).map((_, i) => (
                               <tr
                                 key={`perf-skel-${i}`}
                                 className={i % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30'}
                               >
+                                <td className="w-8 px-2 py-4">
+                                  <Skeleton className="h-4 w-4" />
+                                </td>
                                 <td className="w-52 px-6 py-4">
                                   <Skeleton className="h-4 w-40" />
                                   <div className="mt-2">
@@ -2986,46 +3262,235 @@ export default function ReportsPage() {
                             const baseRowBg = rowIdx % 2 === 0 ? 'bg-[#ffffff] dark:bg-[#1e293b]/50' : 'bg-[#f8fafc]/80 dark:bg-[#334155]/30';
                             const userLabel = user.name || user.userName;
                             const portfolioRow = buildPortfolioStatusBreakdown(user, fu);
+                            const userKey = String(user.userId || user.id || rowIdx);
+                            const isExpanded = expandedPerformanceUsers.has(userKey);
+                            const isSgLoading = performanceStudentGroupLoading.has(userKey);
+                            const studentGroupBreakdown = {
+                              ...getStudentGroupBreakdownFromUser(user),
+                              ...(performanceStudentGroupByUser[userKey] || {}),
+                            };
+                            const studentGroupEntries = sortStudentGroupBreakdownEntries(studentGroupBreakdown);
+                            const mandalBreakdownRows =
+                              performanceMandalByUser[userKey]?.length
+                                ? performanceMandalByUser[userKey]
+                                : getMandalBreakdownFromUser(user);
+                            const hasStudentGroupData = studentGroupEntries.length > 0;
+                            const hasMandalData = mandalBreakdownRows.length > 0;
+                            const mandalMissingStatusData =
+                              hasMandalData &&
+                              mandalBreakdownRows.some(
+                                (m) => !m.statusCounts || Object.keys(m.statusCounts).length === 0
+                              );
+                            const canExpand = portfolioRow.totalLeads > 0;
+                            const colSpan = 2 + performancePortfolioColumns.length;
+
+                            const toggleExpand = () => {
+                              if (!canExpand) return;
+                              const willExpand = !expandedPerformanceUsers.has(userKey);
+                              setExpandedPerformanceUsers((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(userKey)) next.delete(userKey);
+                                else next.add(userKey);
+                                return next;
+                              });
+                              if (
+                                willExpand &&
+                                (!hasStudentGroupData || !hasMandalData || mandalMissingStatusData) &&
+                                !isSgLoading
+                              ) {
+                                void loadPerformanceExpandDetails(String(user.userId || user.id), userKey);
+                              }
+                            };
 
                             return (
-                              <tr key={user.userId} className={`${baseRowBg} hover:bg-slate-100 dark:hover:bg-slate-700/50`}>
-                                <td className="w-52 px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className="truncate">{userLabel}</span>
-                                      <span
-                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                          user.isActive
-                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
-                                            : 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300'
-                                        }`}
+                              <Fragment key={userKey}>
+                                <tr
+                                  className={cn(
+                                    baseRowBg,
+                                    'hover:bg-slate-100 dark:hover:bg-slate-700/50',
+                                    canExpand && 'cursor-pointer'
+                                  )}
+                                  onClick={canExpand ? toggleExpand : undefined}
+                                >
+                                  <td className="w-8 px-2 py-4 align-top">
+                                    {canExpand ? (
+                                      <button
+                                        type="button"
+                                        className="rounded p-0.5 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/30"
+                                        aria-expanded={isExpanded}
+                                        aria-label={isExpanded ? 'Collapse portfolio breakdown' : 'Expand portfolio breakdown'}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleExpand();
+                                        }}
                                       >
-                                        {user.isActive ? 'Active' : 'Inactive'}
-                                      </span>
-                                    </div>
-                                    <div className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
-                                      {(user.department || fu?.department || 'â€”')} | {(user.designation || fu?.designation || 'â€”')} | {(user.group || fu?.group || 'â€”')}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-orange-700 dark:text-orange-300 tabular-nums">
-                                  {portfolioRow.totalLeads.toLocaleString()}
-                                </td>
-                                {performancePortfolioColumns.map((col) => (
-                                  <td
-                                    key={`${user.userId}-${col}`}
-                                    className="whitespace-nowrap px-3 py-4 text-sm text-slate-900 dark:text-slate-100 tabular-nums"
-                                  >
-                                    {Number(portfolioRow.counts[col] ?? 0).toLocaleString()}
+                                        <ChevronDown
+                                          className={cn(
+                                            'h-4 w-4 transition-transform',
+                                            isExpanded ? 'rotate-0' : '-rotate-90'
+                                          )}
+                                        />
+                                      </button>
+                                    ) : (
+                                      <span className="inline-block w-4" aria-hidden />
+                                    )}
                                   </td>
-                                ))}
-                              </tr>
+                                  <td className="w-52 px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="truncate">{userLabel}</span>
+                                        <span
+                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                            user.isActive
+                                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+                                              : 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300'
+                                          }`}
+                                        >
+                                          {user.isActive ? 'Active' : 'Inactive'}
+                                        </span>
+                                      </div>
+                                      <div className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
+                                        {(user.department || fu?.department || '—')} | {(user.designation || fu?.designation || '—')} | {(user.group || fu?.group || '—')}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-orange-700 dark:text-orange-300 tabular-nums">
+                                    {portfolioRow.totalLeads.toLocaleString()}
+                                  </td>
+                                  {performancePortfolioColumns.map((col) => (
+                                    <td
+                                      key={`${user.userId}-${col}`}
+                                      className="whitespace-nowrap px-3 py-4 text-sm text-slate-900 dark:text-slate-100 tabular-nums"
+                                    >
+                                      {Number(portfolioRow.counts[col] ?? 0).toLocaleString()}
+                                    </td>
+                                  ))}
+                                </tr>
+                                {isExpanded && canExpand && (
+                                  <tr className={cn(baseRowBg, 'border-t border-slate-100 dark:border-slate-700/80')}>
+                                    <td colSpan={colSpan} className="px-4 pb-4 pt-0">
+                                      <div className="ml-6 space-y-3">
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-600 dark:bg-slate-900/50">
+                                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                            Portfolio by student group
+                                          </p>
+                                          {isSgLoading ? (
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Loading breakdown…</p>
+                                          ) : studentGroupEntries.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                              {studentGroupEntries.map(({ group, count }) => (
+                                                <div
+                                                  key={`${userKey}-sg-${group}`}
+                                                  className="inline-flex min-w-[7rem] items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"
+                                                >
+                                                  <span className="font-medium text-slate-800 dark:text-slate-100">{group}</span>
+                                                  <span className="tabular-nums font-semibold text-orange-700 dark:text-orange-300">
+                                                    {count.toLocaleString()}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                              No student group breakdown available.
+                                            </p>
+                                          )}
+                                        </div>
+
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-600 dark:bg-slate-900/50">
+                                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                            Portfolio by mandal
+                                          </p>
+                                          {isSgLoading ? (
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Loading breakdown…</p>
+                                          ) : mandalBreakdownRows.length > 0 ? (
+                                            (() => {
+                                              const mandalStatusColumns = getPortfolioStatusColumnsForRole(
+                                                user.roleName || fu?.roleName
+                                              );
+                                              return (
+                                                <div className="overflow-x-auto rounded-md border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
+                                                  <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-slate-700">
+                                                    <thead>
+                                                      <tr className="bg-slate-100/90 dark:bg-slate-800/80">
+                                                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">
+                                                          Mandal
+                                                        </th>
+                                                        <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                                          Total
+                                                        </th>
+                                                        {mandalStatusColumns.map((col) => (
+                                                          <th
+                                                            key={`${userKey}-mandal-th-${col}`}
+                                                            className="px-2 py-2 text-right font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                                                          >
+                                                            {col}
+                                                          </th>
+                                                        ))}
+                                                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-300 min-w-[10rem]">
+                                                          Student groups
+                                                        </th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                                      {mandalBreakdownRows.map((mandalRow, mIdx) => {
+                                                        const mandalStatusCounts = foldStatusBreakdownForRole(
+                                                          mandalRow.statusCounts,
+                                                          user.roleName || fu?.roleName
+                                                        );
+                                                        return (
+                                                          <tr
+                                                            key={`${userKey}-mandal-${mandalRow.mandal}`}
+                                                            className={
+                                                              mIdx % 2 === 0
+                                                                ? 'bg-white dark:bg-slate-800/50'
+                                                                : 'bg-slate-50/80 dark:bg-slate-800/30'
+                                                            }
+                                                          >
+                                                            <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
+                                                              {mandalRow.mandal}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-right font-semibold tabular-nums text-orange-700 dark:text-orange-300">
+                                                              {mandalRow.total.toLocaleString()}
+                                                            </td>
+                                                            {mandalStatusColumns.map((col) => (
+                                                              <td
+                                                                key={`${userKey}-${mandalRow.mandal}-st-${col}`}
+                                                                className="px-2 py-2 text-right tabular-nums text-slate-900 dark:text-slate-100"
+                                                              >
+                                                                {Number(mandalStatusCounts[col] ?? 0).toLocaleString()}
+                                                              </td>
+                                                            ))}
+                                                            <td className="px-3 py-2 text-slate-700 dark:text-slate-300 leading-snug">
+                                                              {formatMandalStudentGroupsText(mandalRow.studentGroups)}
+                                                            </td>
+                                                          </tr>
+                                                        );
+                                                      })}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              );
+                                            })()
+                                          ) : (
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                              No mandal breakdown available.
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
                             );
                           })
                           )}
                         </tbody>
+                        {!performanceListLoading ? (
                         <tfoot>
                           <tr className="border-t-2 border-slate-300 bg-slate-100/95 dark:border-slate-600 dark:bg-slate-800/90">
+                            <td className="w-8 px-2 py-3" />
                             <td className="px-6 py-3 text-xs font-semibold text-slate-900 dark:text-slate-100">
                               Page total
                             </td>
@@ -3042,9 +3507,11 @@ export default function ReportsPage() {
                             ))}
                           </tr>
                         </tfoot>
+                        ) : null}
                       </table>
                     </div>
-                    {performanceUserAnalyticsData?.pagination &&
+                    {!performanceListLoading &&
+                      performanceUserAnalyticsData?.pagination &&
                       performanceUserAnalyticsData.pagination.total > 0 && (
                         <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between">
                           <p className="text-xs text-slate-600 dark:text-slate-400">
@@ -3082,6 +3549,13 @@ export default function ReportsPage() {
                           </div>
                         </div>
                       )}
+                    {performanceListLoading ? (
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                          <Skeleton key={`perf-bottom-skel-${i}`} className="h-20 rounded-lg" />
+                        ))}
+                      </div>
+                    ) : (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                       <Card className="p-4 bg-slate-50/50 dark:bg-slate-800/30">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Users (This Page)</p>
@@ -3102,6 +3576,8 @@ export default function ReportsPage() {
                         <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{performanceSummary.totalInterested.toLocaleString()}</p>
                       </Card>
                     </div>
+                    )}
+                    {!performanceListLoading ? (
                     <Card className="p-4 border-slate-200 dark:border-slate-700">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Portfolio Ranking (This Page)</h4>
@@ -3136,6 +3612,7 @@ export default function ReportsPage() {
                         </table>
                       </div>
                     </Card>
+                    ) : null}
                   </div>
                 ) : (
                   <Card className="p-8 text-center">
