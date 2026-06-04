@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { auth } from '@/lib/auth';
 import { leadAPI, communicationAPI, userAPI, visitorAPI } from '@/lib/api';
 import {
@@ -64,6 +65,8 @@ export default function UserLeadDetailPage() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [statusComment, setStatusComment] = useState('');
+  /** PRO visit outcome date (YYYY-MM-DD) — stored as activity metadata.visitDate for Visit Diary. */
+  const [visitStatusDate, setVisitStatusDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
 
   // Comment modal state
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -921,22 +924,71 @@ export default function UserLeadDetailPage() {
   });
 
   const statusUpdateMutation = useMutation({
-    mutationFn: async (data: { newStatus?: string; comment?: string }) => {
-      return await leadAPI.addActivity(leadId, data);
+    mutationFn: async (data: {
+      newStatus?: string;
+      comment?: string;
+      statusChannel?: 'call_status' | 'visit_status';
+      visitDate?: string;
+    }) => {
+      return await leadAPI.addActivity(leadId, { ...data, type: 'status_change' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['lead', leadId, 'activityLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['visit-history'] });
+      queryClient.invalidateQueries({ queryKey: ['visit-history-range'] });
       setShowStatusModal(false);
       setNewStatus('');
       setStatusComment('');
+      setVisitStatusDate(format(new Date(), 'yyyy-MM-dd'));
       showToast.success('Status updated successfully!');
     },
     onError: (error: any) => {
       showToast.error(error.response?.data?.message || 'Failed to update status');
     },
   });
+
+  const openStatusModal = useCallback(() => {
+    if (!lead || !user) return;
+    const cur = getCurrentChannelStatus(lead);
+    const normalized =
+      user.roleName === 'Student Counselor' && cur && cur.toLowerCase() === 'not answered'
+        ? 'Call Back'
+        : cur;
+    setNewStatus(normalized);
+    setStatusComment('');
+    if (user.roleName === 'PRO') {
+      setVisitStatusDate(format(new Date(), 'yyyy-MM-dd'));
+    }
+    setShowStatusModal(true);
+  }, [lead, user, getCurrentChannelStatus]);
+
+  const handleStatusUpdate = () => {
+    const cur = getCurrentChannelStatus(lead);
+    const statusChanging = !!(newStatus && newStatus !== cur);
+    if (!statusChanging) {
+      if (!statusComment.trim()) {
+        showToast.error('Please select a new status or add a comment');
+        return;
+      }
+    }
+    const isProVisitUpdate = user?.roleName === 'PRO' && statusChanging;
+    if (isProVisitUpdate && !visitStatusDate.trim()) {
+      showToast.error('Please select the visit date');
+      return;
+    }
+    statusUpdateMutation.mutate({
+      newStatus: statusChanging ? newStatus : undefined,
+      comment: statusComment.trim() || undefined,
+      ...(isProVisitUpdate
+        ? {
+            statusChannel: 'visit_status' as const,
+            visitDate: visitStatusDate.trim(),
+          }
+        : {}),
+    });
+  };
 
   // Comment mutation - MUST be before early returns
   const commentMutation = useMutation({
@@ -987,9 +1039,7 @@ export default function UserLeadDetailPage() {
             startAutoCallTimer();
           }
         } else {
-          setNewStatus(getCurrentChannelStatus(lead));
-          setStatusComment('');
-          setShowStatusModal(true);
+          openStatusModal();
         }
       }
     },
@@ -1203,20 +1253,6 @@ export default function UserLeadDetailPage() {
       return;
     }
     assignMutation.mutate(selectedUserId);
-  };
-
-  const handleStatusUpdate = () => {
-    const cur = getCurrentChannelStatus(lead);
-    if (!newStatus || newStatus === cur) {
-      if (!statusComment.trim()) {
-        showToast.error('Please select a new status or add a comment');
-        return;
-      }
-    }
-    statusUpdateMutation.mutate({
-      newStatus: newStatus && newStatus !== cur ? newStatus : undefined,
-      comment: statusComment.trim() || undefined,
-    });
   };
 
   const formatDate = (dateString: string) => {
@@ -1488,16 +1524,7 @@ export default function UserLeadDetailPage() {
 
             <button
               type="button"
-              onClick={() => {
-                const cur = getCurrentChannelStatus(lead);
-                const normalized =
-                  user.roleName === 'Student Counselor' && cur && cur.toLowerCase() === 'not answered'
-                    ? 'Call Back'
-                    : cur;
-                setNewStatus(normalized);
-                setStatusComment('');
-                setShowStatusModal(true);
-              }}
+              onClick={openStatusModal}
               className="flex items-center justify-center size-10 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white shadow-sm"
               aria-label={`Update ${statusButtonLabel}`}
             >
@@ -1781,16 +1808,7 @@ export default function UserLeadDetailPage() {
               )}
               <button
                 type="button"
-                onClick={() => {
-                  const cur = getCurrentChannelStatus(lead);
-                  const normalized =
-                    user.roleName === 'Student Counselor' && cur && cur.toLowerCase() === 'not answered'
-                      ? 'Call Back'
-                      : cur;
-                  setNewStatus(normalized);
-                  setStatusComment('');
-                  setShowStatusModal(true);
-                }}
+                onClick={openStatusModal}
                 className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-orange-900/20 dark:border-orange-800 dark:hover:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs sm:text-sm font-medium"
               >
                 <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2460,6 +2478,22 @@ export default function UserLeadDetailPage() {
                     ))}
                   </select>
                 </div>
+                {user.roleName === 'PRO' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Visit date
+                    </label>
+                    <p className="text-xs text-gray-500 mb-1.5">
+                      Used for Visit Diary history and visit count (same day = one visit per lead).
+                    </p>
+                    <Input
+                      type="date"
+                      value={visitStatusDate}
+                      onChange={(e) => setVisitStatusDate(e.target.value)}
+                      className="w-full h-10 rounded-lg focus:ring-orange-500"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Remarks (Optional)
@@ -2485,6 +2519,7 @@ export default function UserLeadDetailPage() {
                       setShowStatusModal(false);
                       setNewStatus('');
                       setStatusComment('');
+                      setVisitStatusDate(format(new Date(), 'yyyy-MM-dd'));
                     }}
                   >
                     Cancel
