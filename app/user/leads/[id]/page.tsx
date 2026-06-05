@@ -105,7 +105,7 @@ export default function UserLeadDetailPage() {
 
   // Visitor Code State
   const [showVisitorCodeModal, setShowVisitorCodeModal] = useState(false);
-  const [generatedVisitorCode, setGeneratedVisitorCode] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [visitorCodeSendResult, setVisitorCodeSendResult] = useState<{ resent?: boolean } | null>(null);
 
   // Call start time tracker
   const callStartTime = useRef<number | null>(null);
@@ -1229,9 +1229,13 @@ export default function UserLeadDetailPage() {
     mutationFn: (id: string) => visitorAPI.generateCode(id),
     onSuccess: (response) => {
       if (response.success) {
-        setGeneratedVisitorCode(response.data);
+        setVisitorCodeSendResult({ resent: response.data?.resent });
         setShowVisitorCodeModal(true);
-        showToast.success('Visitor code generated and sent to lead!');
+        showToast.success(
+          response.data?.resent
+            ? 'Same visitor code resent to the lead!'
+            : 'Visitor code generated and sent to lead!'
+        );
       } else {
         showToast.error(response.message || 'Failed to generate code');
       }
@@ -3419,7 +3423,9 @@ export default function UserLeadDetailPage() {
       <Dialog open={showVisitorCodeModal} onOpenChange={setShowVisitorCodeModal}>
         <DialogContent className="max-w-md w-full p-6 bg-white dark:bg-slate-900 border-t-4 border-t-indigo-600">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-center">Visitor Code Generated</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-center">
+              {visitorCodeSendResult?.resent ? 'Visitor Code Resent' : 'Visitor Code Sent'}
+            </DialogTitle>
           </DialogHeader>
           <div className="py-8 flex flex-col items-center">
             <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-6">
@@ -3428,16 +3434,13 @@ export default function UserLeadDetailPage() {
               </svg>
             </div>
             <p className="text-base text-slate-700 dark:text-slate-300 text-center px-4 font-medium">
-              Visitor code has been generated and sent to the lead's mobile number via SMS.
+              {visitorCodeSendResult?.resent
+                ? 'The visitor code was resent to the lead via SMS.'
+                : 'Visitor code has been sent to the lead\'s mobile number via SMS.'}
             </p>
             <p className="text-sm text-slate-500 text-center px-4 mt-2">
               The lead can use this code for verification when they visit the campus.
             </p>
-            {generatedVisitorCode?.expiresAt && (
-              <p className="text-xs text-slate-400 mt-2">
-                Expires on: {new Date(generatedVisitorCode.expiresAt).toLocaleString()}
-              </p>
-            )}
           </div>
           <div className="flex justify-center">
             <Button
