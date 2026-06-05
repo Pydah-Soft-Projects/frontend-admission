@@ -1420,6 +1420,28 @@ export const admissionAPI = {
     const response = await api.get(`/admissions/stats/by-reference${query ? `?${query}` : ''}`);
     return response.data?.data || response.data;
   },
+  getStatsBySource: async (params?: {
+    startDate?: string;
+    endDate?: string;
+    collegeId?: string;
+    courseId?: string;
+    branchId?: string;
+    courseName?: string;
+    branchName?: string;
+    status?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/stats/by-source${query ? `?${query}` : ''}`);
+    return response.data?.data || response.data;
+  },
   getStatsByDate: async (params?: {
     startDate?: string;
     endDate?: string;

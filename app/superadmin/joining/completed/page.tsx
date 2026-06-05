@@ -25,7 +25,7 @@ import {
   resolveAdmissionStatCourseLabel,
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
-import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X } from 'lucide-react';
+import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone } from 'lucide-react';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -74,7 +74,7 @@ type AbstractIntakeEditRow = {
   mqIntake: number | null;
 };
 
-/** Course column metadata from admissions pivot APIs (`/stats/by-reference`, `/stats/by-date`). */
+/** Course column metadata from admissions pivot APIs (`/stats/by-reference`, `/stats/by-source`, `/stats/by-date`). */
 type AdmissionStatsPivotCourse = {
   courseId: string;
   courseName: string;
@@ -175,6 +175,13 @@ const formatReservationEws = (reservation?: Admission['reservation']) => {
   return 'No';
 };
 
+/** Merit Yes/No from joining/admission qualifications. */
+const formatQualificationMerit = (qualifications?: { merit?: boolean | null }) => {
+  if (qualifications?.merit === true) return 'Yes';
+  if (qualifications?.merit === false) return 'No';
+  return '—';
+};
+
 /** Reference 1 from admission list row (lead_data.reference1 or list API referenceName). */
 const resolveAdmissionReference1 = (record: Admission) => {
   const anyRecord = record as unknown as Record<string, unknown>;
@@ -227,7 +234,7 @@ const CompletedAdmissionsPage = () => {
   const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<
-    'abstract' | 'detailed' | 'student-info' | 'reference-list' | 'date-wise'
+    'abstract' | 'detailed' | 'student-info' | 'reference-list' | 'source-list' | 'date-wise'
   >('abstract');
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -502,6 +509,13 @@ const CompletedAdmissionsPage = () => {
     staleTime: 120_000,
   });
 
+  const { data: sourceStatsData, isLoading: sourceStatsLoading } = useQuery({
+    queryKey: ['admissions', 'stats', 'by-source', pivotReportParams],
+    queryFn: async () => admissionAPI.getStatsBySource(pivotReportParams),
+    enabled: activeTab === 'source-list',
+    staleTime: 120_000,
+  });
+
   const { data: dateWiseStatsData, isLoading: dateWiseStatsLoading } = useQuery({
     queryKey: ['admissions', 'stats', 'by-date', pivotReportParams],
     queryFn: async () => admissionAPI.getStatsByDate(pivotReportParams),
@@ -511,6 +525,8 @@ const CompletedAdmissionsPage = () => {
 
   const referenceCourses = (referenceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
   const referenceRows = referenceStatsData?.rows ?? [];
+  const sourceCourses = (sourceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
+  const sourceRows = sourceStatsData?.rows ?? [];
   const dateWiseCourses = (dateWiseStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
   const dateWiseRows = dateWiseStatsData?.rows ?? [];
 
@@ -927,6 +943,12 @@ const CompletedAdmissionsPage = () => {
                   </p>
                 </div>
                 <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {formatQualificationMerit(studentInfoViewRecord.qualifications)}
+                  </p>
+                </div>
+                <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paid</p>
                   <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
                     {new Intl.NumberFormat('en-IN', {
@@ -1141,6 +1163,17 @@ const CompletedAdmissionsPage = () => {
               >
                 <UserCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <span className="whitespace-nowrap">Reference</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('source-list')}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
+                  activeTab === 'source-list'
+                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                <Megaphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="whitespace-nowrap">Source</span>
               </button>
               <button
                 onClick={() => setActiveTab('date-wise')}
@@ -1693,6 +1726,7 @@ const CompletedAdmissionsPage = () => {
                   <th className={`${tableThClass} text-center`}>Quota</th>
                   <th className={`${tableThClass} text-center hidden lg:table-cell`}>Caste</th>
                   <th className={`${tableThClass} text-center hidden lg:table-cell`}>EWS</th>
+                  <th className={`${tableThClass} text-center hidden lg:table-cell`}>Merit</th>
                   <th className={`${tableThClass} text-center hidden xl:table-cell`}>Certificates</th>
                   <th className={`${tableThClass} text-right`}>Paid</th>
                   <th className={`${tableThClass} text-right hidden md:table-cell`}>Source</th>
@@ -1702,14 +1736,14 @@ const CompletedAdmissionsPage = () => {
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
                 {isLoading || isFetching ? (
                   <tr>
-                    <td colSpan={12} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                    <td colSpan={13} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-400 border-t-transparent sm:h-12 sm:w-12" />
                       <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400 sm:mt-4">Loading admissions…</p>
                     </td>
                   </tr>
                 ) : isEmpty ? (
                   <tr>
-                    <td colSpan={12} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                    <td colSpan={13} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
                     </td>
                   </tr>
@@ -1756,6 +1790,24 @@ const CompletedAdmissionsPage = () => {
                               }`}
                             >
                               {ewsLabel}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
+                        {(() => {
+                          const meritLabel = formatQualificationMerit(record.qualifications);
+                          return (
+                            <span
+                              className={`text-[10px] font-semibold sm:text-xs ${
+                                meritLabel === 'Yes'
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : meritLabel === 'No'
+                                    ? 'text-slate-600 dark:text-slate-400'
+                                    : 'text-slate-500 dark:text-slate-500'
+                              }`}
+                            >
+                              {meritLabel}
                             </span>
                           );
                         })()}
@@ -1882,6 +1934,98 @@ const CompletedAdmissionsPage = () => {
                           {row.name}
                         </td>
                         {referenceCourses.map((c) => (
+                          <td
+                            key={admissionPivotColumnReactKey(c)}
+                            className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}
+                          >
+                            {Number(row.counts?.[admissionPivotCountsKey(c)]) || 0}
+                          </td>
+                        ))}
+                        <td className={`${pivotTdClass} font-bold text-slate-900 dark:text-slate-100`}>
+                          {rowTotal}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : activeTab === 'source-list' ? (
+        <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
+          <div className="bg-slate-50 px-3 py-3 sm:px-6 sm:py-4 dark:bg-slate-800/50">
+            <h3 className="text-sm font-semibold text-slate-900 sm:text-base dark:text-slate-100">Source list</h3>
+            <p className="mt-1 text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">
+              Admissions grouped by lead source (CRM lead, admission lead_data, bulk upload, joining form
+              link, or manual form), broken down by course. Uses the course, branch, status, and admission
+              date filters above.
+            </p>
+          </div>
+          <div className="-mx-1 overflow-x-auto sm:mx-0">
+            <table className="min-w-[480px] w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead>
+                <tr className="bg-white dark:bg-slate-900">
+                  <th className={`sticky left-0 z-10 bg-white ${pivotThClass} dark:bg-slate-900`}>
+                    S. No.
+                  </th>
+                  <th className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotThClass} dark:bg-slate-900`}>
+                    Source
+                  </th>
+                  {sourceCourses.map((c) => (
+                    <th
+                      key={admissionPivotColumnReactKey(c)}
+                      title={resolvePivotCourseLabel(c)}
+                      className={`max-w-[100px] text-center sm:max-w-[160px] ${pivotThClass}`}
+                    >
+                      <span className="line-clamp-2">{resolvePivotCourseLabel(c)}</span>
+                    </th>
+                  ))}
+                  <th className={`${pivotThClass} text-center text-slate-600 dark:text-slate-300`}>
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
+                {sourceStatsLoading ? (
+                  <tr>
+                    <td
+                      colSpan={Math.max(3 + sourceCourses.length, 3)}
+                      className="py-16 text-center text-slate-500"
+                    >
+                      <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400">Loading source stats…</p>
+                    </td>
+                  </tr>
+                ) : sourceRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={Math.max(3 + sourceCourses.length, 3)}
+                      className="py-16 text-center text-slate-500"
+                    >
+                      No data for the selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  sourceRows.map((row: any, idx: number) => {
+                    const rowTotal =
+                      Number(row.total) ||
+                      sourceCourses.reduce(
+                        (acc, c) => acc + (Number(row.counts?.[admissionPivotCountsKey(c)]) || 0),
+                        0
+                      );
+                    return (
+                      <tr
+                        key={row.sourceKey ?? `src-${idx}`}
+                        className="transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                      >
+                        <td className={`sticky left-0 z-10 bg-white ${pivotTdClass} font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-300`}>
+                          {idx + 1}
+                        </td>
+                        <td className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotTdClass} font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100`}>
+                          {row.name}
+                        </td>
+                        {sourceCourses.map((c) => (
                           <td
                             key={admissionPivotColumnReactKey(c)}
                             className={`${pivotTdClass} text-blue-600 dark:text-blue-400`}
