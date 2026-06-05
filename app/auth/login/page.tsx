@@ -136,6 +136,11 @@ function LoginPageContent() {
         return;
       }
 
+
+
+
+
+      
       // Set auth data
       auth.setAuth(token, user);
 
