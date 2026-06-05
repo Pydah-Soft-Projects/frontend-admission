@@ -32,6 +32,11 @@ import {
 /** Fields with rank below this render above the previous-college / APAAR / contact row. */
 const JOINING_PREVIOUS_COLLEGE_CONTACT_ROW_RANK = 80;
 
+const JOINING_FORM_CONTROL_CLASS =
+  'w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500';
+
+const JOINING_FORM_LABEL_CLASS = 'mb-0.5 block text-xs font-medium text-gray-700 dark:text-slate-200';
+
 export { isApaarIdField } from '@/lib/joiningRegistrationFieldLayout';
 
 export type RegistrationFormField = {
@@ -221,6 +226,7 @@ type PortraitSlotProps = {
   onChange: (fieldName: string, value: unknown) => void;
   photoBaseSlug: string;
   subjectDisplayName: string;
+  disabled?: boolean;
 };
 
 function RegistrationPortraitSlot({
@@ -233,6 +239,7 @@ function RegistrationPortraitSlot({
   onChange,
   photoBaseSlug,
   subjectDisplayName,
+  disabled = false,
 }: PortraitSlotProps) {
   const fileLabel = String(value || '').trim();
   const hasPreview = isImageDataUrl(value);
@@ -290,40 +297,42 @@ function RegistrationPortraitSlot({
           Saved as <span className="font-mono font-medium text-slate-800 dark:text-slate-200">{lastSavedFilename}</span>
         </p>
       ) : null}
-      <div className="mt-3 flex w-full flex-col gap-2">
-        <JoiningCameraCaptureButton
-          aria-label={`Take ${label} with camera — ${subjectDisplayName}`}
-          buttonClassName="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
-          onCapture={(file) =>
-            readImageFileToFormValue(file, fieldName, onChange, {
-              photoBaseSlug,
-              fieldLabel: fieldLabelForFile,
-              fieldName,
-              source: 'camera',
-              onSuccessMeta: ({ fileName }) => setLastSavedFilename(fileName),
-            })
-          }
-        >
-          <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {fileLabel ? 'Retake (camera)' : 'Take photo'}
-        </JoiningCameraCaptureButton>
-        <input
-          id={galleryInputId}
-          name={inputNameGal}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          aria-label={`Upload ${label} from gallery — ${subjectDisplayName}`}
-          onChange={pick('gallery')}
-        />
-        <label
-          htmlFor={galleryInputId}
-          className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:focus:ring-offset-slate-900"
-        >
-          <ImagePlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {fileLabel ? 'Change (gallery)' : 'Upload'}
-        </label>
-      </div>
+      {disabled ? null : (
+        <div className="mt-3 flex w-full flex-col gap-2">
+          <JoiningCameraCaptureButton
+            aria-label={`Take ${label} with camera — ${subjectDisplayName}`}
+            buttonClassName="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
+            onCapture={(file) =>
+              readImageFileToFormValue(file, fieldName, onChange, {
+                photoBaseSlug,
+                fieldLabel: fieldLabelForFile,
+                fieldName,
+                source: 'camera',
+                onSuccessMeta: ({ fileName }) => setLastSavedFilename(fileName),
+              })
+            }
+          >
+            <Camera className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {fileLabel ? 'Retake (camera)' : 'Take photo'}
+          </JoiningCameraCaptureButton>
+          <input
+            id={galleryInputId}
+            name={inputNameGal}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            aria-label={`Upload ${label} from gallery — ${subjectDisplayName}`}
+            onChange={pick('gallery')}
+          />
+          <label
+            htmlFor={galleryInputId}
+            className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:focus:ring-offset-slate-900"
+          >
+            <ImagePlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {fileLabel ? 'Change (gallery)' : 'Upload'}
+          </label>
+        </div>
+      )}
     </div>
   );
 }
@@ -373,7 +382,106 @@ type Props = {
   };
   /** Current academic year / semester are shown beside Course & Quota on the joining page. */
   omitIntakeYearSemesterFromGrid?: boolean;
+  /** When true, student/parent portrait uploads render only via `JoiningApplicantPhotosSection`. */
+  hideInlinePortraits?: boolean;
 };
+
+type PortraitKeys = {
+  studentKey: string;
+  fatherKey: string;
+  motherKey: string;
+  studentLabel: string;
+  fatherLabel: string;
+  motherLabel: string;
+};
+
+function resolvePortraitKeys(fields: RegistrationFormField[]): PortraitKeys {
+  const student = fields.find((f) => isJoiningStudentPortraitUploadField(f));
+  const father = fields.find((f) => isJoiningFatherPortraitFileField(f));
+  const mother = fields.find((f) => isJoiningMotherPortraitFileField(f));
+  return {
+    studentKey: student?.fieldName || 'student_photo',
+    fatherKey: father?.fieldName || 'father_photo',
+    motherKey: mother?.fieldName || 'mother_photo',
+    studentLabel: (student?.fieldLabel || '').trim() || 'Student photo',
+    fatherLabel: (father?.fieldLabel || '').trim() || 'Father photo',
+    motherLabel: (mother?.fieldLabel || '').trim() || 'Mother photo',
+  };
+}
+
+type JoiningApplicantPhotosSectionProps = {
+  fields: RegistrationFormField[];
+  getValue: (fieldName: string) => string | boolean;
+  onChange: (fieldName: string, value: unknown) => void;
+  photoUploadContext?: {
+    baseSlug: string;
+    displayName: string;
+  };
+  disabled?: boolean;
+};
+
+/** Always-visible student / father / mother photo row for the joining edit form. */
+export function JoiningApplicantPhotosSection({
+  fields,
+  getValue,
+  onChange,
+  photoUploadContext,
+  disabled = false,
+}: JoiningApplicantPhotosSectionProps) {
+  const keys = useMemo(() => resolvePortraitKeys(fields), [fields]);
+  const photoBaseSlug = useMemo(
+    () => slugifyForFileName(photoUploadContext?.baseSlug ?? ''),
+    [photoUploadContext?.baseSlug]
+  );
+  const subjectDisplayName = useMemo(() => {
+    const d = String(photoUploadContext?.displayName || '').trim();
+    return d || 'Student';
+  }, [photoUploadContext?.displayName]);
+
+  return (
+    <div className="rounded-lg border border-dashed border-blue-300 bg-gradient-to-br from-blue-50/90 to-indigo-50/60 p-3 shadow-sm dark:border-blue-600/70 dark:from-slate-900/80 dark:to-slate-900/40">
+      <p className="text-xs font-semibold text-gray-900 dark:text-slate-100">Student &amp; parent photos</p>
+      <p className="mt-0.5 text-[11px] text-gray-600 dark:text-slate-400">
+        Optional passport-style images. Use <strong>Take photo</strong> (camera) or <strong>Upload</strong> (gallery).
+      </p>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+        <RegistrationPortraitSlot
+          label={keys.studentLabel}
+          helpText="Student — camera or gallery."
+          fieldName={keys.studentKey}
+          fieldLabelForFile={keys.studentLabel}
+          value={getValue(keys.studentKey)}
+          onChange={onChange}
+          photoBaseSlug={photoBaseSlug}
+          subjectDisplayName={subjectDisplayName}
+          disabled={disabled}
+        />
+        <RegistrationPortraitSlot
+          label={keys.fatherLabel}
+          helpText="Father — camera or gallery."
+          fieldName={keys.fatherKey}
+          fieldLabelForFile={keys.fatherLabel}
+          value={getValue(keys.fatherKey)}
+          onChange={onChange}
+          photoBaseSlug={photoBaseSlug}
+          subjectDisplayName={subjectDisplayName}
+          disabled={disabled}
+        />
+        <RegistrationPortraitSlot
+          label={keys.motherLabel}
+          helpText="Mother — camera or gallery."
+          fieldName={keys.motherKey}
+          fieldLabelForFile={keys.motherLabel}
+          value={getValue(keys.motherKey)}
+          onChange={onChange}
+          photoBaseSlug={photoBaseSlug}
+          subjectDisplayName={subjectDisplayName}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function JoiningDynamicRegistrationFields({
   formTitle,
@@ -390,6 +498,7 @@ export function JoiningDynamicRegistrationFields({
   photoUploadContext,
   studentContactFields,
   omitIntakeYearSemesterFromGrid = false,
+  hideInlinePortraits = false,
 }: Props) {
   const { stateNames, districtNames, mandalNames } = useLocations({
     stateName: selectedState || undefined,
@@ -547,6 +656,18 @@ export function JoiningDynamicRegistrationFields({
   /** When we render the combined student + parent portrait row, skip standalone father/mother file fields. */
   const portraitSiblingSkip = useMemo(() => {
     const skip = new Set<string>();
+    const portraitKeys = resolvePortraitKeys(sorted);
+    if (hideInlinePortraits) {
+      skip.add(portraitKeys.studentKey);
+      skip.add(portraitKeys.fatherKey);
+      skip.add(portraitKeys.motherKey);
+      for (const f of sorted) {
+        if (f.fieldType === 'file' && isRegistrationPortraitField(f) && f.fieldName) {
+          skip.add(f.fieldName);
+        }
+      }
+      return skip;
+    }
     const hasStudentSlot = sorted.some(
       (f) => f.fieldType === 'file' && isJoiningStudentPortraitUploadField(f)
     );
@@ -557,7 +678,7 @@ export function JoiningDynamicRegistrationFields({
       }
     }
     return skip;
-  }, [sorted]);
+  }, [sorted, hideInlinePortraits]);
 
   // Batch year dropdown setup — same window as the Fee Structure section so both surfaces
   // stay aligned. The user can still pick any year inside the ±3 window; values outside
@@ -600,10 +721,10 @@ export function JoiningDynamicRegistrationFields({
       const datalistId = `joining-reg-${field.fieldName}-list`;
       return (
         <>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+          <label className={JOINING_FORM_LABEL_CLASS}>
             {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
           </label>
-          <Input
+          <Input compact
             value={String(fieldValue)}
             onChange={(e) => onChange(field.fieldName, e.target.value)}
             list={datalistId}
@@ -629,13 +750,13 @@ export function JoiningDynamicRegistrationFields({
       const dropdownOptions = normalizeFieldOptions(field.options);
       return (
         <>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+          <label className={JOINING_FORM_LABEL_CLASS}>
             {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
           </label>
           <select
             value={String(fieldValue)}
             onChange={(e) => onChange(field.fieldName, e.target.value)}
-            className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+            className={JOINING_FORM_CONTROL_CLASS}
           >
             <option value="">Select {field.fieldLabel}</option>
             {dropdownOptions.map((option) => (
@@ -660,7 +781,7 @@ export function JoiningDynamicRegistrationFields({
               : 'text';
 
     return (
-      <Input
+      <Input compact
         label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
         name={field.fieldName}
         type={inputType as 'text' | 'email' | 'tel' | 'number' | 'date'}
@@ -681,13 +802,13 @@ export function JoiningDynamicRegistrationFields({
       const dropdownOptions = normalizeFieldOptions(field.options);
       return (
         <>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+          <label className={JOINING_FORM_LABEL_CLASS}>
             {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
           </label>
           <select
             value={String(fieldValue)}
             onChange={(e) => onChange(field.fieldName, e.target.value)}
-            className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+            className={JOINING_FORM_CONTROL_CLASS}
           >
             <option value="">Select {field.fieldLabel}</option>
             {dropdownOptions.map((option) => (
@@ -704,7 +825,7 @@ export function JoiningDynamicRegistrationFields({
       const radioOptions = normalizeFieldOptions(field.options);
       return (
         <>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+          <label className={JOINING_FORM_LABEL_CLASS}>
             {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
           </label>
           <div className="flex flex-wrap gap-3">
@@ -730,7 +851,7 @@ export function JoiningDynamicRegistrationFields({
     }
 
     return (
-      <Input
+      <Input compact
         label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
         name={field.fieldName}
         value={String(fieldValue)}
@@ -759,7 +880,7 @@ export function JoiningDynamicRegistrationFields({
         <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="min-w-0">{renderApaarFieldControl(apaarField)}</div>
           <div className="min-w-0">
-            <Input
+            <Input compact
               label="Student mobile number"
               type="tel"
               inputMode="numeric"
@@ -782,7 +903,7 @@ export function JoiningDynamicRegistrationFields({
             />
           ) : null}
           <div className="min-w-0">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+            <label className={JOINING_FORM_LABEL_CLASS}>
               Aadhaar Number
             </label>
             <div className="flex gap-2">
@@ -791,7 +912,7 @@ export function JoiningDynamicRegistrationFields({
                 value={studentContactFields.aadhaarNumber}
                 onChange={(e) => studentContactFields.onAadhaarChange(e.target.value)}
                 placeholder="12-digit Aadhaar number"
-                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                className={JOINING_FORM_CONTROL_CLASS}
                 maxLength={14}
               />
               <Button type="button" variant="secondary" onClick={studentContactFields.onToggleShowAadhaar}>
@@ -801,12 +922,12 @@ export function JoiningDynamicRegistrationFields({
           </div>
         </div>
       ) : null}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {gridRenderSequence.map((item) => {
           if (item.kind === 'student-mobile' && studentContactFields) {
             return (
               <div key="joining-student-mobile" className="min-w-0">
-                <Input
+                <Input compact
                   label="Student mobile number"
                   type="tel"
                   inputMode="numeric"
@@ -825,7 +946,7 @@ export function JoiningDynamicRegistrationFields({
           if (item.kind === 'student-aadhaar' && studentContactFields) {
             return (
               <div key="joining-student-aadhaar" className="min-w-0">
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   Aadhaar Number
                 </label>
                 <div className="flex gap-2">
@@ -834,7 +955,7 @@ export function JoiningDynamicRegistrationFields({
                     value={studentContactFields.aadhaarNumber}
                     onChange={(e) => studentContactFields.onAadhaarChange(e.target.value)}
                     placeholder="12-digit Aadhaar number"
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                    className={JOINING_FORM_CONTROL_CLASS}
                     maxLength={14}
                   />
                   <Button
@@ -862,7 +983,7 @@ export function JoiningDynamicRegistrationFields({
             return null;
           }
           const isRemarkField = remarkFieldNames.has(field.fieldName);
-          const gridItemClass = isRemarkField ? 'md:col-span-3' : undefined;
+          const gridItemClass = isRemarkField ? 'sm:col-span-2 lg:col-span-3' : undefined;
           const rawVal = getValue(field.fieldName);
           const fieldValue =
             rawVal === undefined || rawVal === null ? '' : field.fieldType === 'checkbox' ? rawVal : String(rawVal);
@@ -876,8 +997,8 @@ export function JoiningDynamicRegistrationFields({
             const v = String(fieldValue || '').trim() || 'Unverified';
             const isVerified = v.toLowerCase() === 'verified';
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-3">
-                <div className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+              <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
+                <div className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -915,14 +1036,14 @@ export function JoiningDynamicRegistrationFields({
               (isMandalField(field) && (!selectedState || !selectedDistrict));
             return (
               <div key={field._id || field.fieldName} className={gridItemClass}>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 <select
                   value={String(fieldValue)}
                   onChange={(e) => onChange(field.fieldName, e.target.value)}
                   disabled={disabled}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800"
+                  className={JOINING_FORM_CONTROL_CLASS}
                 >
                   <option value="">
                     {isDistrictField(field) && !selectedState
@@ -956,13 +1077,13 @@ export function JoiningDynamicRegistrationFields({
                 : batchBaseYears;
             return (
               <div key={field._id || field.fieldName} className={gridItemClass}>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 <select
                   value={displayValue}
                   onChange={(e) => onChange(field.fieldName, e.target.value)}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  className={JOINING_FORM_CONTROL_CLASS}
                 >
                   {yearOptions.map((year) => (
                     <option key={year} value={String(year)}>
@@ -971,10 +1092,6 @@ export function JoiningDynamicRegistrationFields({
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  {field.helpText ||
-                    'Admission batch (academic year). Defaults to the current year; pick any year in the ±3 window.'}
-                </p>
               </div>
             );
           }
@@ -985,7 +1102,7 @@ export function JoiningDynamicRegistrationFields({
             const datalistId = `joining-reg-${field.fieldName}-list`;
             return (
               <div key={field._id || field.fieldName} className={gridItemClass}>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 {!hasSelectedGroup ? (
@@ -993,7 +1110,7 @@ export function JoiningDynamicRegistrationFields({
                     Select a student group to choose an institution.
                   </p>
                 ) : null}
-                <Input
+                <Input compact
                   value={String(fieldValue)}
                   onChange={(e) => onChange(field.fieldName, e.target.value)}
                   list={datalistId}
@@ -1029,7 +1146,7 @@ export function JoiningDynamicRegistrationFields({
               (isFixedAcademicYearField(field) || isFixedSemesterField(field)) && !btechYearPick;
             return (
               <div key={field._id || field.fieldName} className={gridItemClass}>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 <select
@@ -1044,7 +1161,7 @@ export function JoiningDynamicRegistrationFields({
                   }
                   onChange={(e) => onChange(field.fieldName, e.target.value)}
                   disabled={forceDisabled}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800"
+                  className={JOINING_FORM_CONTROL_CLASS}
                 >
                   <option value="">Select {field.fieldLabel}</option>
                   {dropdownOptions.map((option) => (
@@ -1078,10 +1195,10 @@ export function JoiningDynamicRegistrationFields({
               joiningStudentProfileFieldRank(field) >= 40 &&
               joiningStudentProfileFieldRank(field) < JOINING_PREVIOUS_COLLEGE_CONTACT_ROW_RANK
                 ? gridItemClass
-                : 'md:col-span-3';
+                : 'sm:col-span-2 lg:col-span-3';
             return (
               <div key={field._id || field.fieldName} className={radioSpanClass}>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 <div className="mt-2 space-y-2">
@@ -1106,7 +1223,7 @@ export function JoiningDynamicRegistrationFields({
           if (field.fieldType === 'checkbox') {
             const checked = fieldValue === true || fieldValue === 'true';
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-3">
+              <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
                 <label className="flex cursor-pointer items-center gap-2">
                   <input
                     type="checkbox"
@@ -1124,8 +1241,8 @@ export function JoiningDynamicRegistrationFields({
 
           if (field.fieldType === 'textarea') {
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-3">
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+              <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 <textarea
@@ -1133,7 +1250,7 @@ export function JoiningDynamicRegistrationFields({
                   onChange={(e) => onChange(field.fieldName, e.target.value)}
                   placeholder={field.placeholder || ''}
                   rows={4}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-gray-800 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  className={JOINING_FORM_CONTROL_CLASS}
                 />
               </div>
             );
@@ -1148,12 +1265,12 @@ export function JoiningDynamicRegistrationFields({
             const motherLabel = (motherField?.fieldLabel || '').trim() || 'Mother photo';
 
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-3">
-                <div className="rounded-2xl border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50/90 to-indigo-50/60 p-6 shadow-sm dark:border-blue-600/70 dark:from-slate-900/80 dark:to-slate-900/40">
-                  <p className="mb-1 text-center text-sm font-semibold text-gray-900 dark:text-slate-100 sm:text-left">
+              <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
+                <div className="rounded-lg border border-dashed border-blue-300 bg-gradient-to-br from-blue-50/90 to-indigo-50/60 p-3 shadow-sm dark:border-blue-600/70 dark:from-slate-900/80 dark:to-slate-900/40">
+                  <p className="mb-0.5 text-center text-xs font-semibold text-gray-900 dark:text-slate-100 sm:text-left">
                     Applicant & parent photos
                   </p>
-                  <p className="mb-4 text-center text-xs text-gray-600 dark:text-slate-400 sm:text-left">
+                  <p className="mb-3 text-center text-[11px] text-gray-600 dark:text-slate-400 sm:text-left">
                     Student, father, and mother photos are all optional. <strong>Take photo</strong> opens the live
                     camera — choose <strong>Front</strong> or <strong>Rear</strong> for any photo. <strong>Upload</strong>{' '}
                     picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
@@ -1212,8 +1329,8 @@ export function JoiningDynamicRegistrationFields({
               });
             };
             return (
-              <div key={field._id || field.fieldName} className="md:col-span-3">
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+              <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
+                <label className={JOINING_FORM_LABEL_CLASS}>
                   {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
                 </label>
                 <p className="mb-2 text-xs text-gray-500 dark:text-slate-400">
@@ -1274,7 +1391,7 @@ export function JoiningDynamicRegistrationFields({
 
           return (
             <div key={field._id || field.fieldName} className={gridItemClass}>
-              <Input
+              <Input compact
                 label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
                 name={field.fieldName}
                 type={inputType as 'text' | 'email' | 'tel' | 'number' | 'date'}

@@ -5,6 +5,8 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   icon?: React.ReactNode;
+  /** Smaller padding and label — for dense forms (e.g. joining edit). */
+  compact?: boolean;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -13,16 +15,20 @@ export const Input: React.FC<InputProps> = ({
   className,
   id,
   icon,
+  compact = false,
   ...props
 }) => {
   const inputId = id || `input-${props.name}`;
 
   return (
-    <div className="w-full space-y-1.5">
+    <div className={cn('w-full', compact ? 'space-y-1' : 'space-y-1.5')}>
       {label && (
         <label
           htmlFor={inputId}
-          className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1"
+          className={cn(
+            'block font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1',
+            compact ? 'text-[10px]' : 'text-xs'
+          )}
         >
           {label}
         </label>
@@ -31,7 +37,8 @@ export const Input: React.FC<InputProps> = ({
         <input
           id={inputId}
           className={cn(
-            'w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900',
+            'w-full rounded-lg border border-slate-200 bg-slate-50/50 text-slate-900',
+            compact ? 'px-3 py-2 text-xs' : 'px-4 py-3 rounded-xl',
             'placeholder:text-slate-400',
             'focus:outline-none focus:bg-white focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/10',
             'transition-all duration-200',

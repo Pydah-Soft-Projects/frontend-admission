@@ -16,7 +16,10 @@ import {
   courseAPI,
 } from '@/lib/api';
 import { joiningPublicApi } from '@/lib/joiningPublicApi';
-import { JoiningDynamicRegistrationFields } from '@/components/joining/JoiningDynamicRegistrationFields';
+import {
+  JoiningApplicantPhotosSection,
+  JoiningDynamicRegistrationFields,
+} from '@/components/joining/JoiningDynamicRegistrationFields';
 import { PreferredMobileNumberSelect } from '@/components/joining/PreferredMobileNumberSelect';
 import {
   isApaarIdField,
@@ -109,7 +112,6 @@ import {
 } from '@/components/joining/PrintablePaymentReceipt';
 import { PrintableCertificateChecklist } from '@/components/joining/PrintableCertificateChecklist';
 import {
-  AdmissionWorkflowOverview,
   AdmissionWorkflowStepBanner,
   AdmissionWorkflowStepButtons,
   WorkflowNextStepButton,
@@ -118,8 +120,11 @@ import {
   scrollToWorkflowAnchor,
   type AdmissionWorkflowStep,
 } from '@/components/admission/AdmissionWorkflowSteps';
+import { ApplicationInfoCard } from '@/components/admission/ApplicationInfoCard';
+import { JoiningStepOneShell } from '@/components/joining/JoiningStepOneShell';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
+import { BookOpen, FileText, GraduationCap, MapPin, User, UserPlus, Users } from 'lucide-react';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -157,9 +162,25 @@ const parsePaymentTransactionsResponse = (response: unknown): PaymentTransaction
   return [];
 };
 
-/** Radio/checkbox pills in Course & Quota — same padding as adjacent selects/inputs (px-4 py-3). */
+/** Compact radio/checkbox pills aligned with joining form controls. */
 const JOINING_FORM_CHOICE_PILL_CLASS =
-  'inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus-within:border-blue-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100';
+  'inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus-within:border-blue-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100';
+
+/** Shared compact select/input styling on the joining edit form. */
+const JOINING_FORM_CONTROL_CLASS =
+  'w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500';
+
+const JOINING_FORM_LABEL_CLASS = 'mb-0.5 block text-xs font-medium text-gray-700 dark:text-slate-200';
+
+/** Compact toolbar buttons — match form control text size. */
+const JOINING_ACTION_BTN_CLASS = 'h-8 min-h-8 px-3 py-1 text-xs font-medium';
+
+/** Responsive 3-column form grid for joining Step 1. */
+const JOINING_FORM_GRID_CLASS =
+  'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:items-start lg:gap-x-3 lg:gap-y-3';
+
+/** Documents checklist — wider cells so labels and status pills do not overlap. */
+const JOINING_DOCUMENTS_GRID_CLASS = 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:gap-2';
 
 /** Keys used for college on Course & Quota — must survive registration re-sync when course changes. */
 const COLLEGE_REGISTRATION_EXTRA_KEYS = [
@@ -340,11 +361,11 @@ function RelativeAddressRow({
         <button className="text-sm text-red-500" onClick={() => removeRelative(index)}>Remove</button>
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <Input label="Name" value={relative.name || ''} onChange={(e) => updateRelative(index, 'name', e.target.value)} />
-        <Input label="Relationship" value={relative.relationship || ''} onChange={(e) => updateRelative(index, 'relationship', e.target.value)} />
-        <Input label="Door / Street" value={relative.doorOrStreet || ''} onChange={(e) => updateRelative(index, 'doorOrStreet', e.target.value.toUpperCase())} />
-        <Input label="Landmark" value={relative.landmark || ''} onChange={(e) => updateRelative(index, 'landmark', e.target.value.toUpperCase())} />
-        <Input label="Village / City" value={relative.villageOrCity || ''} onChange={(e) => updateRelative(index, 'villageOrCity', e.target.value.toUpperCase())} />
+        <Input compact label="Name" value={relative.name || ''} onChange={(e) => updateRelative(index, 'name', e.target.value)} />
+        <Input compact label="Relationship" value={relative.relationship || ''} onChange={(e) => updateRelative(index, 'relationship', e.target.value)} />
+        <Input compact label="Door / Street" value={relative.doorOrStreet || ''} onChange={(e) => updateRelative(index, 'doorOrStreet', e.target.value.toUpperCase())} />
+        <Input compact label="Landmark" value={relative.landmark || ''} onChange={(e) => updateRelative(index, 'landmark', e.target.value.toUpperCase())} />
+        <Input compact label="Village / City" value={relative.villageOrCity || ''} onChange={(e) => updateRelative(index, 'villageOrCity', e.target.value.toUpperCase())} />
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State</label>
           <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" value={relative.state || ''} onChange={(e) => updateRelative(index, 'state', e.target.value)}>
@@ -366,7 +387,7 @@ function RelativeAddressRow({
             {mandalNames.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
-        <Input label="PIN Code" value={relative.pinCode || ''} onChange={(e) => updateRelative(index, 'pinCode', e.target.value)} maxLength={6} />
+        <Input compact label="PIN Code" value={relative.pinCode || ''} onChange={(e) => updateRelative(index, 'pinCode', e.target.value)} maxLength={6} />
       </div>
     </div>
   );
@@ -1804,8 +1825,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     ]
   );
 
+  const admissionNumberDisplay =
+    meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
+
   const courseQuotaIntakeFields = useMemo(() => {
-    if (!registrationIntakeYearField && !registrationIntakeSemesterField) return null;
+    if (!registrationIntakeYearField && !registrationIntakeSemesterField && !admissionNumberDisplay) {
+      return null;
+    }
     const btechYearPick =
       joiningRegistrationCourseContext.isBtech &&
       (joiningRegistrationCourseContext.btechYearOptions?.length ?? 0) > 0;
@@ -1813,14 +1839,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     const fixedSem = joiningRegistrationCourseContext.isBtech
       ? btechRegistrationSemester
       : joiningRegistrationCourseContext.standardSemester;
-    const selectClass =
-      'w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800';
+    const selectClass = JOINING_FORM_CONTROL_CLASS;
 
     return (
       <>
         {registrationIntakeYearField ? (
           <div className="min-w-0">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+            <label className={JOINING_FORM_LABEL_CLASS}>
               {registrationIntakeYearField.fieldLabel}
               {registrationIntakeYearField.isRequired ? (
                 <span className="text-red-500">*</span>
@@ -1868,7 +1893,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         ) : null}
         {registrationIntakeSemesterField ? (
           <div className="min-w-0">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+            <label className={JOINING_FORM_LABEL_CLASS}>
               {registrationIntakeSemesterField.fieldLabel}
               {registrationIntakeSemesterField.isRequired ? (
                 <span className="text-red-500">*</span>
@@ -1892,11 +1917,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             </p>
           </div>
         ) : null}
+        {admissionNumberDisplay ? (
+          <div className="min-w-0">
+            <label className={JOINING_FORM_LABEL_CLASS}>Admission Number</label>
+            <div
+              className={cn(
+                JOINING_FORM_CONTROL_CLASS,
+                'border-emerald-200 bg-emerald-50 font-bold tracking-wide text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200'
+              )}
+            >
+              {admissionNumberDisplay}
+            </div>
+          </div>
+        ) : null}
       </>
     );
   }, [
     registrationIntakeYearField,
     registrationIntakeSemesterField,
+    admissionNumberDisplay,
     joiningRegistrationCourseContext.isBtech,
     joiningRegistrationCourseContext.btechYearOptions,
     joiningRegistrationCourseContext.fixed.year,
@@ -2296,31 +2335,41 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     const workflowAdmissionId = admissionRecord?._id;
 
     setHeaderContent(
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Joining &amp; Admission Workspace
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {lead.name}{' '}
-            {lead.enquiryNumber ? `· Enquiry #${lead.enquiryNumber}` : ''}
+      <div className="flex w-full min-w-0 flex-col gap-1.5">
+        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
+          Joining &amp; Admission Workspace
+        </h1>
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:flex-nowrap">
+          <p className="min-w-0 truncate text-sm text-slate-500 dark:text-slate-400">
+            {lead.name}
+            {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
           </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <AdmissionWorkflowStepButtons
-            activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 3 : 1}
-            surface="joining-edit"
-            joiningId={workflowJoiningId}
-            admissionId={workflowAdmissionId}
-            joiningStatus={status}
-            onJoiningWizardStepSelect={useWizard ? handleJoiningWizardStepSelect : undefined}
-          />
-          <Button variant="outline" onClick={() => router.push('/superadmin/joining')}>
-            Back to Joining Desk
-          </Button>
-          <Button variant="secondary" onClick={() => router.push(`/superadmin/leads/${lead._id}`)}>
-            View Lead
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <AdmissionWorkflowStepButtons
+              activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 3 : 1}
+              surface="joining-edit"
+              joiningId={workflowJoiningId}
+              admissionId={workflowAdmissionId}
+              joiningStatus={status}
+              onJoiningWizardStepSelect={useWizard ? handleJoiningWizardStepSelect : undefined}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              onClick={() => router.push('/superadmin/joining')}
+            >
+              Back to Joining Desk
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
+            >
+              View Lead
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -3724,8 +3773,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   /** After approval: admin sees summary, payments, and fee table on this joining page; cert/fees live on admission. */
   const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
-  const admissionNumberDisplay =
-    meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
+
+  const joiningPhotoUploadContext = useMemo(
+    () => ({
+      baseSlug:
+        formState.studentInfo.name ||
+        (typeof lead?.name === 'string' ? lead.name : '') ||
+        (typeof lead?.enquiryNumber === 'string' ? String(lead.enquiryNumber) : ''),
+      displayName:
+        String(formState.studentInfo.name || lead?.name || lead?.enquiryNumber || 'Student').trim() ||
+        'Student',
+    }),
+    [formState.studentInfo.name, lead]
+  );
+
+  const showJoiningRegistrationEditor =
+    canWriteJoining || isAdmissionEditable || isPublicEdit;
 
   const courseBranchSubtitle = useMemo(() => {
     if (status === 'approved') {
@@ -3933,6 +3996,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           {canSaveJoiningDraft && (
             <Button
               variant="secondary"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
               disabled={isSaving}
               onClick={() => {
                 if (!canWriteJoining) {
@@ -3948,7 +4013,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           {status === 'draft' && (
             <Button
               variant="primary"
-              className={isPublicEdit ? 'w-full sm:w-auto' : undefined}
+              size="sm"
+              className={cn(JOINING_ACTION_BTN_CLASS, isPublicEdit ? 'w-full sm:w-auto' : undefined)}
               disabled={
                 !canSubmit || isSubmitting || (!isPublicEdit && !hasManagedCourseAndBranch)
               }
@@ -3972,6 +4038,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           {canApprove && (
             <Button
               variant="primary"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
               disabled={isApproving || !hasManagedCourseAndBranch}
               onClick={() => {
                 if (!canWriteJoining) {
@@ -3993,6 +4061,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           {isAdmissionEditable && (
             <Button
               variant="primary"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
               disabled={
                 isUpdatingAdmission ||
                 isBusy ||
@@ -4012,11 +4082,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     return (
       <WorkflowStickyActionBar
         id={`joining-wizard-step-${panelStep}-actions`}
-        stepLabel={
-          panelStep === 1
-            ? 'Step 1 — Online application (sections 1–5)'
-            : 'Step 2 — Admission fee workflow'
-        }
         hint={panelStep === 1 ? stepOneCourseHint : undefined}
         className={stickyClass}
       >
@@ -4028,6 +4093,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         {panelStep === 2 && canWriteJoining && !isPublicEdit ? (
           <Button
             variant="secondary"
+            size="sm"
+            className={JOINING_ACTION_BTN_CLASS}
             disabled={saveStepTwoMutation.isPending}
             onClick={() => saveStepTwoMutation.mutate()}
           >
@@ -4045,35 +4112,101 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     );
   };
 
+  const joiningStepHeaderActions = (
+    <>
+      {!isPublicEdit && publicLinkRouteKey ? (
+        <Link href={`/superadmin/joining/${publicLinkRouteKey}/detail`}>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn('group inline-flex items-center gap-1.5', JOINING_ACTION_BTN_CLASS)}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            View Details
+          </Button>
+        </Link>
+      ) : null}
+      {status === 'draft' && canWriteJoining && !isPublicEdit ? (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setIsEditModalOpen(true)}
+          className={cn('group inline-flex items-center gap-1.5', JOINING_ACTION_BTN_CLASS)}
+        >
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Edit Form
+        </Button>
+      ) : null}
+      {status === 'draft' && canWriteJoining && !isPublicEdit && (isNewJoining || !!publicLinkRouteKey) ? (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={publicLinkBusy}
+          onClick={() => void handleCopyPublicLink()}
+          className={cn('inline-flex items-center gap-1.5', JOINING_ACTION_BTN_CLASS)}
+        >
+          {publicLinkBusy ? 'Preparing link…' : 'Copy public link (5 min)'}
+        </Button>
+      ) : null}
+      {isAdmissionEditable ? (
+        <>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={
+              isUpdatingAdmission ||
+              isBusy ||
+              !canWriteJoining ||
+              !hasManagedCourseAndBranch ||
+              !admissionRecord?._id
+            }
+            onClick={handleSaveAdmissionRecord}
+            className={cn('group inline-flex items-center gap-1.5', JOINING_ACTION_BTN_CLASS)}
+            title={
+              !admissionRecord?._id
+                ? 'Waiting for admission record to load…'
+                : hasManagedCourseAndBranch
+                  ? undefined
+                  : 'Select college, quota, managed course, and managed branch in Course & Quota before saving.'
+            }
+          >
+            {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
+            <svg
+              className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className={JOINING_ACTION_BTN_CLASS}
+            onClick={() => router.push('/superadmin/joining')}
+          >
+            Joining List
+          </Button>
+        </>
+      ) : null}
+    </>
+  );
+
   return (
     <div
-      className={`w-full space-y-8 px-3 pb-20 pt-4 sm:space-y-10 sm:px-6 sm:pb-16 sm:pt-6 lg:px-8 ${
-        isPublicEdit ? 'mx-auto max-w-2xl' : ''
+      className={`w-full space-y-4 pb-20 pt-1 sm:space-y-5 sm:pb-16 sm:pt-2 ${
+        isPublicEdit ? 'mx-auto max-w-2xl px-3 sm:px-4' : 'px-0'
       }`}
     >
-      {isPublicEdit ? (
-        <>
-          <AdmissionWorkflowStepBanner step={applicationWizardStep} />
-          {usePublicWizard ? (
-            <AdmissionWorkflowOverview
-              activeStep={applicationWizardStep}
-              surface="joining-public"
-              joiningId={publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId}
-              joiningStatus={status}
-              onJoiningWizardStepSelect={handleJoiningWizardStepSelect}
-            />
-          ) : null}
-        </>
-      ) : (
-        <AdmissionWorkflowOverview
-          activeStep={useWizard ? applicationWizardStep : showAdminPostAdmissionStep3 ? 3 : 1}
-          surface="joining-edit"
-          joiningId={publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId}
-          admissionId={admissionRecord?._id}
-          joiningStatus={status}
-          onJoiningWizardStepSelect={useJoiningPageWizard ? handleJoiningWizardStepSelect : undefined}
-        />
-      )}
+      {isPublicEdit && usePublicWizard ? (
+        <AdmissionWorkflowStepBanner step={applicationWizardStep} />
+      ) : null}
       {!isPublicEdit && status === 'pending_approval' && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           <p className="font-semibold">Awaiting approval (Step 1)</p>
@@ -4100,15 +4233,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           <strong>{new Date(publicExpiresAt).toLocaleString()}</strong> (5 minutes from when it was created).
         </div>
       )}
-      <div className="rounded-3xl border border-white/60 bg-white/95 p-4 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none sm:p-6">
-        <div
-          className={cn(
-            'flex flex-col gap-6 lg:flex-row lg:items-start',
-            hideJoiningStepOneRedundantIntro ? 'lg:justify-end' : 'lg:justify-between'
-          )}
-        >
-          {!hideJoiningStepOneRedundantIntro ? (
-          <div className="space-y-3">
+      <div className="rounded-xl border border-white/60 bg-white/95 p-1 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none sm:p-1.5">
+        {!hideJoiningStepOneRedundantIntro ? (
+        <div className="mb-3 space-y-3">
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-semibold ${statusBadgeClass}`}>
                 <span className="inline-block h-2 w-2 rounded-full bg-current opacity-75" />
@@ -4157,86 +4284,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 {!isNewJoining && lead?.district && <span>· {lead.district}</span>}
               </div>
             </div>
-          </div>
-          ) : null}
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-            {!isPublicEdit && publicLinkRouteKey && (
-              <Link href={`/superadmin/joining/${publicLinkRouteKey}/detail`}>
-                <Button variant="outline" className="group inline-flex items-center gap-2">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  View Details
-                </Button>
-              </Link>
-            )}
-            {status === 'draft' && canWriteJoining && !isPublicEdit && (
-              <Button
-                variant="primary"
-                onClick={() => setIsEditModalOpen(true)}
-                className="group inline-flex items-center gap-2"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit Form
-              </Button>
-            )}
-            {status === 'draft' && canWriteJoining && !isPublicEdit && (isNewJoining || !!publicLinkRouteKey) && (
-              <Button
-                variant="outline"
-                disabled={publicLinkBusy}
-                onClick={() => void handleCopyPublicLink()}
-                className="inline-flex items-center gap-2"
-              >
-                {publicLinkBusy ? 'Preparing link…' : 'Copy public link (5 min)'}
-              </Button>
-            )}
-            {status === 'draft' && canWriteJoining && !isPublicEdit && !isNewJoining && !publicLinkRouteKey && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 sm:w-full sm:pl-0">
-                Open a confirmed lead/joining record to create a public link.
-              </p>
-            )}
-            {isAdmissionEditable ? (
-              <>
-                <Button
-                  variant="primary"
-                  disabled={
-                    isUpdatingAdmission ||
-                    isBusy ||
-                    !canWriteJoining ||
-                    !hasManagedCourseAndBranch ||
-                    !admissionRecord?._id
-                  }
-                  onClick={handleSaveAdmissionRecord}
-                  className="group inline-flex items-center gap-2"
-                  title={
-                    !admissionRecord?._id
-                      ? 'Waiting for admission record to load…'
-                      : hasManagedCourseAndBranch
-                        ? undefined
-                        : 'Select college, quota, managed course, and managed branch in Course & Quota before saving.'
-                  }
-                >
-                  {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
-                  <svg
-                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </Button>
-                <Button variant="outline" onClick={() => router.push('/superadmin/joining')}>
-                  Joining List
-                </Button>
-              </>
-            ) : null}
-          </div>
         </div>
+        ) : null}
 
         {isBusy ? (
           <div className="rounded-2xl border border-white/60 bg-white/90 p-12 text-center shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
@@ -4246,23 +4295,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             </p>
           </div>
         ) : (
-          <div id="joining-step-one" className="scroll-mt-24 space-y-10">
+          <div id="joining-step-one" className="scroll-mt-24">
             <div
               id="joining-wizard-step-1"
-              className={cn(
-                'space-y-10',
-                useWizard && applicationWizardStep !== 1 && 'hidden'
-              )}
+              className={cn(useWizard && applicationWizardStep !== 1 && 'hidden')}
             >
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+            <JoiningStepOneShell headerActions={joiningStepHeaderActions}>
+              <ApplicationInfoCard
+                title="Course, quota & qualifications"
+                icon={<GraduationCap className="h-4 w-4" aria-hidden />}
+                description="College, program, reservation, and academic intake"
+              >
               {!hideJoiningStepOneRedundantIntro ? (
                 <>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    1. Student Information
-                  </h2>
-                  <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Course &amp; quota
-                  </h3>
                   {(() => {
                     const interestedFromLead = String(lead?.courseInterested || '').trim();
                     const resolvedCourseName = selectedCourseSetting?.course?.name || '';
@@ -4325,12 +4370,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     return (
                     <div
                       className={cn(
-                        'grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-x-6 md:gap-y-5',
-                        hideJoiningStepOneRedundantIntro ? 'mt-0' : 'mt-6'
+                        JOINING_FORM_GRID_CLASS,
+                        hideJoiningStepOneRedundantIntro ? 'mt-0' : 'mt-3'
                       )}
                     >
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           Program level
                           <span className="ml-1 text-rose-600">*</span>
                         </label>
@@ -4338,7 +4383,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           value={currentLevel}
                           onChange={(event) => handleProgramLevelChange(event.target.value)}
                           disabled={!hasLevelOptions}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                          className={JOINING_FORM_CONTROL_CLASS}
                         >
                           <option value="">
                             {hasLevelOptions ? 'Select program level' : 'No levels configured in secondary DB'}
@@ -4355,14 +4400,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         </select>
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           Quota
                           <span className="ml-1 text-rose-600">*</span>
                         </label>
                         <select
                           value={formState.courseInfo.quota || ''}
                           onChange={(event) => handleCourseFieldChange('quota', event.target.value)}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                          className={JOINING_FORM_CONTROL_CLASS}
                         >
                           <option value="">Select quota</option>
                           {quotaSelectOptions.map((option) => (
@@ -4373,14 +4418,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         </select>
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           College
                           <span className="ml-1 text-rose-600">*</span>
                         </label>
                         <select
                           value={selectedCollegeId}
                           onChange={(event) => handleCollegeSelect(event.target.value)}
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                          className={JOINING_FORM_CONTROL_CLASS}
                         >
                           <option value="">Select college</option>
                           {colleges.map((item) => (
@@ -4391,7 +4436,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         </select>
                       </div>
                       {!programLevelTrimmed ? (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 lg:col-span-3">
                           <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                             Select a program level to load courses for that level.
                           </p>
@@ -4399,14 +4444,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       ) : filteredCourseSettings.length > 0 ? (
                         <>
                           <div className="min-w-0">
-                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                            <label className={JOINING_FORM_LABEL_CLASS}>
                               Course
                               <span className="ml-1 text-rose-600">*</span>
                             </label>
                             <select
                               value={formState.courseInfo.courseId || ''}
                               onChange={(event) => handleManagedCourseSelect(event.target.value)}
-                              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                              className={JOINING_FORM_CONTROL_CLASS}
                             >
                               <option value="">Choose a course</option>
                               {filteredCourseSettings.map((item) => (
@@ -4418,7 +4463,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                             </select>
                           </div>
                           <div className="min-w-0">
-                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                            <label className={JOINING_FORM_LABEL_CLASS}>
                               Branch
                               <span className="ml-1 text-rose-600">*</span>
                             </label>
@@ -4426,7 +4471,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                               value={formState.courseInfo.branchId || ''}
                               onChange={(event) => handleManagedBranchSelect(event.target.value)}
                               disabled={!formState.courseInfo.courseId}
-                              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                              className={JOINING_FORM_CONTROL_CLASS}
                             >
                               <option value="">
                                 {formState.courseInfo.courseId ? 'Choose a branch' : 'Select a course first'}
@@ -4454,7 +4499,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                             </select>
                           </div>
                           <div className="min-w-0">
-                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                            <label className={JOINING_FORM_LABEL_CLASS}>
                               General Reservation Category<span className="text-red-500">*</span>
                             </label>
                             <select
@@ -4464,7 +4509,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                                   event.target.value as JoiningReservation['general']
                                 )
                               }
-                              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                              className={JOINING_FORM_CONTROL_CLASS}
                             >
                               <option value="oc">OC</option>
                               <option value="ews">EWS</option>
@@ -4480,7 +4525,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           {courseQuotaIntakeFields}
                         </>
                       ) : programLevelTrimmed ? (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 md:col-span-2">
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30 lg:col-span-3">
                           <p className="text-sm text-amber-800 dark:text-amber-200">
                             {selectedCollegeId.trim()
                               ? 'No courses for this level at the selected college.'
@@ -4488,15 +4533,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           </p>
                         </div>
                       ) : null}
-                      {admissionNumberDisplay ? (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-900/40 dark:text-emerald-200 md:col-span-2">
-                          Admission Number
-                          <div className="mt-1 text-lg font-bold tracking-wide">{admissionNumberDisplay}</div>
-                        </div>
-                      ) : null}
                       {filteredCourseSettings.length === 0 ? (
                         <div className="min-w-0">
-                          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                          <label className={JOINING_FORM_LABEL_CLASS}>
                             General Reservation Category<span className="text-red-500">*</span>
                           </label>
                           <select
@@ -4506,7 +4545,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                                 event.target.value as JoiningReservation['general']
                               )
                             }
-                            className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                            className={JOINING_FORM_CONTROL_CLASS}
                           >
                             <option value="oc">OC</option>
                             <option value="ews">EWS</option>
@@ -4522,7 +4561,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       ) : null}
                       {filteredCourseSettings.length === 0 ? courseQuotaIntakeFields : null}
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           EWS (Economically Weaker Section)<span className="text-red-500">*</span>
                         </label>
                         <div className="flex flex-wrap gap-3">
@@ -4549,12 +4588,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         </div>
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           Other Reservations
                         </label>
                         <div className="flex items-start gap-2">
                           <div className="min-w-0 flex-1">
-                            <Input
+                            <Input compact
                               value={otherReservationInput}
                               onChange={(event) => setOtherReservationInput(event.target.value)}
                               placeholder="Add NCC, Sports, PH, etc."
@@ -4590,7 +4629,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         ) : null}
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           Qualified examinations
                         </label>
                         <div className="flex flex-wrap gap-3">
@@ -4612,7 +4651,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         </div>
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           Medium of Instruction
                         </label>
                         <div className="flex flex-wrap gap-3">
@@ -4634,7 +4673,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         {Array.isArray(formState.qualifications.mediums) &&
                           formState.qualifications.mediums.includes('other') && (
                             <div className="mt-3">
-                              <Input
+                              <Input compact
                                 placeholder="Specify medium"
                                 value={formState.qualifications.otherMediumLabel || ''}
                                 onChange={(event) => handleMediumOtherLabelChange(event.target.value)}
@@ -4643,7 +4682,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           )}
                       </div>
                       <div className="min-w-0">
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           Merit
                         </label>
                         <div className="flex flex-wrap gap-3">
@@ -4677,22 +4716,34 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           disabled
                           showAddUserButton={false}
                         />
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          {status === 'approved'
-                            ? 'Admission confirmed — edit reference on Completed Admissions or the admission detail page.'
-                            : 'Read-only during joining. Set at intake or change after admission is confirmed.'}
-                        </p>
                       </div>
                     </div>
                     );
                   })()}
                 </>
               ) : null}
-              <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Student profile
-              </h3>
-              {status === 'draft' ? (
-                <div className="mt-4">
+              </ApplicationInfoCard>
+              <ApplicationInfoCard
+                title="Student & parent photos"
+                icon={<User className="h-4 w-4" aria-hidden />}
+                description="Upload or update student, father, and mother photos"
+              >
+                <JoiningApplicantPhotosSection
+                  fields={joiningRegistrationDisplayFieldsCoerced}
+                  getValue={getRegistrationFieldValue}
+                  onChange={handleRegistrationFieldChange}
+                  photoUploadContext={joiningPhotoUploadContext}
+                  disabled={!canWriteJoining && !isAdmissionEditable}
+                />
+              </ApplicationInfoCard>
+
+              <ApplicationInfoCard
+                title="Student profile"
+                icon={<User className="h-4 w-4" aria-hidden />}
+                description="Registration fields and contact details"
+              >
+              {showJoiningRegistrationEditor ? (
+                <div>
                   {registrationFormsError ? (
                     <p className="text-sm text-red-600 dark:text-red-400">
                       Could not load registration form.
@@ -4706,58 +4757,46 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ) : isLoadingRegistrationForm ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
                   ) : registrationFormFieldsAllFilteredOut ? null : regHasDyn ? (
-                    <div className="mt-4">
-                      <JoiningDynamicRegistrationFields
-                        formTitle={registrationFormDefinition?.name || undefined}
-                        formDescription={registrationFormDefinition?.description}
-                        fields={joiningRegistrationDisplayFieldsCoerced}
-                        getValue={getRegistrationFieldValue}
-                        onChange={handleRegistrationFieldChange}
-                        selectedState={registrationLocationState}
-                        selectedDistrict={registrationLocationDistrict}
-                        fixedRegistrationAcademicYear={joiningRegistrationCourseContext.fixed.year}
-                        fixedRegistrationSemester={
-                          joiningRegistrationCourseContext.isBtech
-                            ? btechRegistrationSemester
-                            : joiningRegistrationCourseContext.standardSemester
-                        }
-                        isBtechJoining={joiningRegistrationCourseContext.isBtech}
-                        btechYearOptions={joiningRegistrationCourseContext.btechYearOptions}
-                        photoUploadContext={{
-                          baseSlug:
-                            formState.studentInfo.name ||
-                            (typeof lead?.name === 'string' ? lead.name : '') ||
-                            (typeof lead?.enquiryNumber === 'string' ? String(lead.enquiryNumber) : ''),
-                          displayName:
-                            String(
-                              formState.studentInfo.name || lead?.name || lead?.enquiryNumber || 'Student'
-                            ).trim() || 'Student',
-                        }}
-                        studentContactFields={{
-                          phone: formState.studentInfo.phone || '',
-                          onPhoneChange: (value) => handleStudentInfoChange('phone', value),
-                          preferredMobileNumber: formState.studentInfo.preferredMobileNumber || '',
-                          onPreferredMobileChange: (value) =>
-                            handleStudentInfoChange('preferredMobileNumber', value),
-                          dropdownStudentPhone: preferredMobileSources.studentPhone,
-                          fatherPhone: preferredMobileSources.fatherPhone,
-                          motherPhone: preferredMobileSources.motherPhone,
-                          aadhaarNumber: formState.studentInfo.aadhaarNumber || '',
-                          onAadhaarChange: (value) => handleStudentInfoChange('aadhaarNumber', value),
-                          showAadhaar: showStudentAadhaar,
-                          onToggleShowAadhaar: () => setShowStudentAadhaar((prev) => !prev),
-                          contactFieldsDisabled: !canWriteJoining && !isAdmissionEditable,
-                        }}
-                        omitIntakeYearSemesterFromGrid
-                      />
-                    </div>
+                    <JoiningDynamicRegistrationFields
+                      fields={joiningRegistrationDisplayFieldsCoerced}
+                      getValue={getRegistrationFieldValue}
+                      onChange={handleRegistrationFieldChange}
+                      selectedState={registrationLocationState}
+                      selectedDistrict={registrationLocationDistrict}
+                      fixedRegistrationAcademicYear={joiningRegistrationCourseContext.fixed.year}
+                      fixedRegistrationSemester={
+                        joiningRegistrationCourseContext.isBtech
+                          ? btechRegistrationSemester
+                          : joiningRegistrationCourseContext.standardSemester
+                      }
+                      isBtechJoining={joiningRegistrationCourseContext.isBtech}
+                      btechYearOptions={joiningRegistrationCourseContext.btechYearOptions}
+                      photoUploadContext={joiningPhotoUploadContext}
+                      studentContactFields={{
+                        phone: formState.studentInfo.phone || '',
+                        onPhoneChange: (value) => handleStudentInfoChange('phone', value),
+                        preferredMobileNumber: formState.studentInfo.preferredMobileNumber || '',
+                        onPreferredMobileChange: (value) =>
+                          handleStudentInfoChange('preferredMobileNumber', value),
+                        dropdownStudentPhone: preferredMobileSources.studentPhone,
+                        fatherPhone: preferredMobileSources.fatherPhone,
+                        motherPhone: preferredMobileSources.motherPhone,
+                        aadhaarNumber: formState.studentInfo.aadhaarNumber || '',
+                        onAadhaarChange: (value) => handleStudentInfoChange('aadhaarNumber', value),
+                        showAadhaar: showStudentAadhaar,
+                        onToggleShowAadhaar: () => setShowStudentAadhaar((prev) => !prev),
+                        contactFieldsDisabled: !canWriteJoining && !isAdmissionEditable,
+                      }}
+                      omitIntakeYearSemesterFromGrid
+                      hideInlinePortraits
+                    />
                   ) : null}
                 </div>
               ) : null}
               {!showStudentContactBesidePreviousCollege ? (
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <div className={cn('mt-4', JOINING_FORM_GRID_CLASS)}>
                   <div>
-                    <Input
+                    <Input compact
                       label="Student mobile number"
                       type="tel"
                       inputMode="numeric"
@@ -4779,7 +4818,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     disabled={!canWriteJoining && !isAdmissionEditable}
                   />
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                    <label className={JOINING_FORM_LABEL_CLASS}>
                       Aadhaar Number
                     </label>
                     <div className="flex gap-2">
@@ -4790,7 +4829,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           handleStudentInfoChange('aadhaarNumber', event.target.value)
                         }
                         placeholder="12-digit Aadhaar number"
-                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                        className={JOINING_FORM_CONTROL_CLASS}
                         maxLength={14}
                       />
                       <Button
@@ -4818,10 +4857,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               ) : null}
               {!regHasDyn &&
               (!hideJoiningStudentName || !hideJoiningStudentGender || !hideJoiningDateOfBirth) ? (
-                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                <div className="mt-2 grid gap-3 md:grid-cols-3">
                   {!hideJoiningStudentName ? (
                     <div>
-                      <Input
+                      <Input compact
                         label="Student Name"
                         value={formState.studentInfo.name}
                         onChange={(event) => handleStudentInfoChange('name', event.target.value)}
@@ -4830,7 +4869,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ) : null}
                   {!hideJoiningDateOfBirth ? (
                     <div>
-                      <Input
+                      <Input compact
                         label="Date of Birth"
                         value={formState.studentInfo.dateOfBirth || ''}
                         onChange={(event) =>
@@ -4842,13 +4881,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ) : null}
                   {!hideJoiningStudentGender ? (
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      <label className={JOINING_FORM_LABEL_CLASS}>
                         Gender
                       </label>
                       <select
                         value={formState.studentInfo.gender || ''}
                         onChange={(event) => handleStudentInfoChange('gender', event.target.value)}
-                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                        className={JOINING_FORM_CONTROL_CLASS}
                       >
                         <option value="">Select</option>
                         <option value="Male">Male</option>
@@ -4859,27 +4898,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   ) : null}
                 </div>
               ) : null}
-            </section>
+              </ApplicationInfoCard>
 
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                2. Parents Details
-              </h2>
-              <div className="mt-6 grid gap-6 md:grid-cols-2">
+              <ApplicationInfoCard
+                title="Parents details"
+                icon={<Users className="h-4 w-4" aria-hidden />}
+              >
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <div>
-                  <h3 className="text-md font-semibold text-gray-800 dark:text-slate-200">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">
                     Father Information
                   </h3>
-                  <div className="mt-4 space-y-3">
+                  <div className="mt-2 space-y-2">
                     <div>
-                      <Input
+                      <Input compact
                         label="Father Name"
                         value={formState.parents.father.name || ''}
                         onChange={(event) => handleParentChange('father', 'name', event.target.value)}
                       />
                     </div>
                     <div>
-                      <Input
+                      <Input compact
                         label="Father Mobile Number"
                         type="tel"
                         inputMode="numeric"
@@ -4897,7 +4936,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      <label className={JOINING_FORM_LABEL_CLASS}>
                         Father Aadhaar Number
                       </label>
                       <div className="flex gap-2">
@@ -4908,7 +4947,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                             handleParentChange('father', 'aadhaarNumber', event.target.value)
                           }
                           placeholder="12-digit Aadhaar number"
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                          className={JOINING_FORM_CONTROL_CLASS}
                           maxLength={14}
                         />
                         <Button
@@ -4923,13 +4962,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-md font-semibold text-gray-800 dark:text-slate-200">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">
                     Mother Information
                   </h3>
-                  <div className="mt-4 space-y-3">
+                  <div className="mt-2 space-y-2">
                     {!hideJoiningMotherName ? (
                     <div>
-                      <Input
+                      <Input compact
                         label="Mother Name"
                         value={formState.parents.mother.name || ''}
                         onChange={(event) => handleParentChange('mother', 'name', event.target.value)}
@@ -4937,7 +4976,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     </div>
                     ) : null}
                     <div>
-                      <Input
+                      <Input compact
                         label="Mother Mobile Number"
                         type="tel"
                         inputMode="numeric"
@@ -4955,7 +4994,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                      <label className={JOINING_FORM_LABEL_CLASS}>
                         Mother Aadhaar Number
                       </label>
                       <div className="flex gap-2">
@@ -4966,7 +5005,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                             handleParentChange('mother', 'aadhaarNumber', event.target.value)
                           }
                           placeholder="12-digit Aadhaar number"
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70"
+                          className={JOINING_FORM_CONTROL_CLASS}
                           maxLength={14}
                         />
                         <Button
@@ -4981,18 +5020,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 </div>
               </div>
-            </section>
+              </ApplicationInfoCard>
 
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                3. Address Details
-              </h2>
-              <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <ApplicationInfoCard
+                title="Address details"
+                icon={<MapPin className="h-4 w-4" aria-hidden />}
+                description="Communication address and optional relative contacts"
+              >
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Communication address
               </h3>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className={cn('mt-2', JOINING_FORM_GRID_CLASS)}>
                 {!hideJoiningDoor ? (
-                <Input
+                <Input compact
                   label="Door No / Street Name"
                   value={formState.address.communication.doorOrStreet || ''}
                   onChange={(event) =>
@@ -5001,7 +5041,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 />
                 ) : null}
                 {!hideJoiningLandmark ? (
-                <Input
+                <Input compact
                   label="Landmark"
                   value={formState.address.communication.landmark || ''}
                   onChange={(event) =>
@@ -5010,7 +5050,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 />
                 ) : null}
                 {!hideJoiningVillage ? (
-                <Input
+                <Input compact
                   label="Village / Town / City"
                   value={formState.address.communication.villageOrCity || ''}
                   onChange={(event) =>
@@ -5064,7 +5104,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 </div>
                 ) : null}
                 {!hideJoiningPin ? (
-                <Input
+                <Input compact
                   label="PIN Code"
                   value={formState.address.communication.pinCode || ''}
                   onChange={(event) =>
@@ -5074,7 +5114,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 />
                 ) : null}
               </div>
-              <div className="mt-8 flex items-center justify-between border-t border-slate-200/80 pt-6 dark:border-slate-700">
+              <div className="mt-4 flex items-center justify-between border-t border-slate-200/80 pt-3 dark:border-slate-700">
                 <div>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Relatives / friends (optional)
@@ -5101,20 +5141,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   />
                 ))}
               </div>
-            </section>
+              </ApplicationInfoCard>
 
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    4. Education History
-                  </h2>
-                </div>
+              <ApplicationInfoCard
+                title="Education history"
+                icon={<BookOpen className="h-4 w-4" aria-hidden />}
+                description="SSC, Inter/Diploma, UG, and other qualifications"
+              >
+              <div className="mb-4 flex items-center justify-end">
                 <Button type="button" variant="secondary" onClick={addEducationHistory}>
                   Add Entry
                 </Button>
               </div>
-              <div className="mt-6 space-y-6">
+              <div className="space-y-3">
                 {formState.educationHistory.length === 0 && (
                   <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
                     No education history added. Include SSC, Inter/Diploma, UG, and others if
@@ -5124,19 +5163,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 {formState.educationHistory.map((entry, index) => (
                   <div
                     key={`edu-${index}`}
-                    className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
+                    className="rounded-lg border border-gray-200 p-3 shadow-sm dark:border-slate-700"
                   >
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                      <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">
                         Entry #{index + 1}
                       </h3>
                       <button className="text-sm text-red-500" onClick={() => removeEducationHistory(index)}>
                         Remove
                       </button>
                     </div>
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className={cn('mt-2', JOINING_FORM_GRID_CLASS)}>
                       <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
                           Level
                         </label>
                         <select
@@ -5144,7 +5183,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           onChange={(event) =>
                             updateEducationHistory(index, 'level', event.target.value)
                           }
-                          className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                          className={JOINING_FORM_CONTROL_CLASS}
                         >
                           <option value="ssc">SSC</option>
                           <option value="inter_diploma">Inter / Diploma</option>
@@ -5153,7 +5192,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                         </select>
                       </div>
                       {entry.level === 'other' && (
-                        <Input
+                        <Input compact
                           label="Specify Level"
                           value={entry.otherLevelLabel || ''}
                           onChange={(event) =>
@@ -5161,48 +5200,48 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           }
                         />
                       )}
-                      <Input
+                      <Input compact
                         label="Course / Branch"
                         value={entry.courseOrBranch || ''}
                         onChange={(event) =>
                           updateEducationHistory(index, 'courseOrBranch', event.target.value)
                         }
                       />
-                      <Input
+                      <Input compact
                         label="Year of Passing"
                         value={entry.yearOfPassing || ''}
                         onChange={(event) => handleYearOfPassingChange(index, event.target.value)}
                         inputMode="numeric"
                         maxLength={4}
                       />
-                      <Input
+                      <Input compact
                         label="School / College Name"
                         value={entry.institutionName || ''}
                         onChange={(event) =>
                           updateEducationHistory(index, 'institutionName', event.target.value)
                         }
                       />
-                      <Input
+                      <Input compact
                         label="School / College Address"
                         value={entry.institutionAddress || ''}
                         onChange={(event) =>
                           updateEducationHistory(index, 'institutionAddress', event.target.value)
                         }
                       />
-                      <Input
+                      <Input compact
                         label="Hall Ticket Number"
                         value={entry.hallTicketNumber || ''}
                         onChange={(event) =>
                           updateEducationHistory(index, 'hallTicketNumber', event.target.value)
                         }
                       />
-                      <Input
+                      <Input compact
                         label="Total Marks / Grade / %"
                         value={entry.totalMarksOrGrade || ''}
                         onChange={(event) => handleTotalMarksChange(index, event.target.value)}
                         inputMode="decimal"
                       />
-                      <Input
+                      <Input compact
                         label="CET Rank (Optional)"
                         value={entry.cetRank || ''}
                         onChange={(event) =>
@@ -5213,20 +5252,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 ))}
               </div>
-            </section>
+              </ApplicationInfoCard>
 
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    5. Siblings (Optional)
-                  </h2>
-                </div>
+              <ApplicationInfoCard
+                title="Siblings (optional)"
+                icon={<UserPlus className="h-4 w-4" aria-hidden />}
+              >
+              <div className="mb-4 flex items-center justify-end">
                 <Button type="button" variant="secondary" onClick={addSibling}>
                   Add Sibling
                 </Button>
               </div>
-              <div className="mt-6 space-y-6">
+              <div className="space-y-3">
                 {formState.siblings.length === 0 && (
                   <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
                     No siblings recorded.
@@ -5235,35 +5272,35 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 {formState.siblings.map((sibling, index) => (
                   <div
                     key={`sibling-${index}`}
-                    className="rounded-xl border border-gray-200 p-4 shadow-sm dark:border-slate-700"
+                    className="rounded-lg border border-gray-200 p-3 shadow-sm dark:border-slate-700"
                   >
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                      <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">
                         Sibling #{index + 1}
                       </h3>
                       <button className="text-sm text-red-500" onClick={() => removeSibling(index)}>
                         Remove
                       </button>
                     </div>
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      <Input
+                    <div className={cn('mt-2', JOINING_FORM_GRID_CLASS)}>
+                      <Input compact
                         label="Name"
                         value={sibling.name || ''}
                         onChange={(event) => updateSibling(index, 'name', event.target.value)}
                       />
-                      <Input
+                      <Input compact
                         label="Relation"
                         value={sibling.relation || ''}
                         onChange={(event) => updateSibling(index, 'relation', event.target.value)}
                       />
-                      <Input
+                      <Input compact
                         label="Studying Standard"
                         value={sibling.studyingStandard || ''}
                         onChange={(event) =>
                           updateSibling(index, 'studyingStandard', event.target.value)
                         }
                       />
-                      <Input
+                      <Input compact
                         label="College / School Name"
                         value={sibling.institutionName || ''}
                         onChange={(event) =>
@@ -5274,15 +5311,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </div>
                 ))}
               </div>
-            </section>
+              </ApplicationInfoCard>
 
-            <section className="rounded-2xl border border-white/60 bg-white/95 p-6 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+              <ApplicationInfoCard
+                title="Documents checklist"
+                icon={<FileText className="h-4 w-4" aria-hidden />}
+              >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                    6. Documents Checklist
-                  </h2>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
                     Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
                     Certificate are tracked under{' '}
                     <span className="font-medium">Certificate information checklist</span>
@@ -5306,7 +5343,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   className="shrink-0"
                 />
               </div>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className={cn('mt-2', JOINING_DOCUMENTS_GRID_CLASS)}>
                 {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
                   .filter(([key]) =>
                     isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota)
@@ -5314,14 +5351,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   .map(([key, label]) => (
                     <div
                       key={key}
-                      className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 shadow-sm dark:border-slate-700"
+                      className="flex min-w-0 flex-col gap-2 rounded-lg border border-gray-200 px-3 py-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-700"
                     >
-                      <p className="text-sm font-medium text-gray-800 dark:text-slate-200">{label}</p>
-                      <div className="flex gap-3">
+                      <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-gray-800 dark:text-slate-200">
+                        {label}
+                      </p>
+                      <div className="flex shrink-0 flex-wrap gap-2">
                         {documentStatusOptions.map((statusOption) => (
                           <label
                             key={`${key}-${statusOption}`}
-                            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold uppercase transition ${
                               (formState.documents[key] || 'pending') === statusOption
                                 ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
                                 : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
@@ -5343,7 +5382,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     </div>
                   ))}
               </div>
-            </section>
+              </ApplicationInfoCard>
+
+            </JoiningStepOneShell>
 
             {renderWizardStepFooter(1)}
             </div>

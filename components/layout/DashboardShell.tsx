@@ -202,6 +202,13 @@ function isSuperadminLeadDetailPath(pathname: string): boolean {
   return !['assign', 'individual', 'group-update', 'upload'].includes(segment);
 }
 
+/** `/superadmin/joining/:leadId` edit workspace — not list sub-routes or detail. */
+function isJoiningWorkspaceEditPath(pathname: string): boolean {
+  const m = pathname.match(/^\/superadmin\/joining\/([^/]+)$/);
+  if (!m) return false;
+  return !['confirmed', 'completed', 'in-progress'].includes(m[1]);
+}
+
 interface DashboardShellProps {
   children: React.ReactNode;
   navItems: DashboardNavItem[];
@@ -236,6 +243,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const [mobileTopBar, setMobileTopBarState] = useState<MobileTopBarOptions | null>(null);
 
   const isSuperadminLeadDetail = isSuperadminLeadDetailPath(pathname);
+  const isJoiningWorkspaceEdit = isJoiningWorkspaceEditPath(pathname);
 
   // Pages where we want minimal top spacing (compact header)
   const isCompactPage =
@@ -776,13 +784,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               ) : (
                 <header
                   className={cn(
-                    'flex-shrink-0 px-4 z-10',
-                    isCompactPage ? 'pt-2 pb-0' : (isReducedSpacingPage ? 'pt-6 pb-0' : 'pt-6 pb-4'),
-                    'sm:px-6 lg:px-8',
+                    'flex-shrink-0 z-10',
+                    isJoiningWorkspaceEdit ? 'px-2 pt-2 pb-0 sm:px-3 lg:px-3' : 'px-4 sm:px-6 lg:px-8',
+                    !isJoiningWorkspaceEdit && (isCompactPage ? 'pt-2 pb-0' : (isReducedSpacingPage ? 'pt-6 pb-0' : 'pt-6 pb-4')),
                     useMobileBottomNav && 'hidden'
                   )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-5 lg:px-6 transition-all duration-300">
+                  <div
+                    className={cn(
+                      'flex flex-wrap items-center justify-between gap-4 transition-all duration-300',
+                      isJoiningWorkspaceEdit ? 'px-1 py-2 sm:px-2 lg:px-2' : 'px-4 py-3 sm:px-5 lg:px-6'
+                    )}
+                  >
                     {/* Left Section: Mobile Menu, Back Icon, Header Content */}
                     <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
                       <button
@@ -830,9 +843,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               <main
                 className={cn(
                   'relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden',
-                  isCompactPage
-                    ? 'p-3 sm:px-6 sm:pt-2 lg:px-8 lg:pt-4'
-                    : (isReducedSpacingPage ? 'p-3 sm:p-6 lg:px-8 lg:pb-8 lg:pt-2' : 'p-3 sm:p-6 lg:p-8'),
+                  isJoiningWorkspaceEdit
+                    ? 'px-1 py-2 sm:px-2 sm:pt-2 lg:px-2 lg:pt-3'
+                    : isCompactPage
+                      ? 'p-3 sm:px-6 sm:pt-2 lg:px-8 lg:pt-4'
+                      : (isReducedSpacingPage ? 'p-3 sm:p-6 lg:px-8 lg:pb-8 lg:pt-2' : 'p-3 sm:p-6 lg:p-8'),
                   useMobileBottomNav && 'pb-20 pt-[calc(2.75rem+env(safe-area-inset-top))] lg:pt-6 lg:pb-8'
                 )}
               >

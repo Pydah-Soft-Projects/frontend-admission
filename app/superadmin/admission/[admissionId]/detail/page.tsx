@@ -27,7 +27,6 @@ import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDispl
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import { AdmissionStepTwoPanel } from '@/components/admission/AdmissionStepTwoPanel';
 import {
-  AdmissionWorkflowOverview,
   AdmissionWorkflowStepButtons,
   WorkflowNextStepButton,
   WorkflowStickyActionBar,
@@ -472,17 +471,6 @@ export default function AdmissionDetailPage() {
           <p className="mt-2 text-lg font-bold text-gray-700">—</p>
         </div>
       </div>
-
-      {admission.joiningId ? (
-        <AdmissionWorkflowOverview
-          activeStep={2}
-          surface="admission-detail"
-          joiningId={admission.joiningId}
-          admissionId={admission._id}
-          joiningStatus={joiningStatus}
-          isAdmissionCancelled={isAdmissionCancelled}
-        />
-      ) : null}
 
       <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
         <DialogContent className="w-[95vw] max-w-lg">

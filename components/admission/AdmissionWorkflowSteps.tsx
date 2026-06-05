@@ -423,7 +423,7 @@ export function WorkflowStickyActionBar({
     <div
       id={id}
       className={cn(
-        'sticky bottom-0 z-10 -mx-2 rounded-2xl border border-white/60 bg-white/95 px-4 py-4 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none sm:mx-0 sm:px-6',
+        'sticky bottom-0 z-10 -mx-1 rounded-xl border border-white/60 bg-white/95 px-3 py-3 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none sm:mx-0 sm:px-4',
         className
       )}
     >
