@@ -7,6 +7,7 @@ import { joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
 import { AddJoiningFormModal } from '@/components/joining/AddJoiningFormModal';
+import { SELF_REGISTRATION_SOURCE } from '@/lib/joiningSelfRegistration';
 import { JoiningListResponse, Joining } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -85,6 +86,7 @@ const JoiningPipelinePage = () => {
         search: debouncedSearch || undefined,
         status: statusValue,
         requireEnquiry: true,
+        excludeSource: SELF_REGISTRATION_SOURCE,
       });
       return response;
     },
@@ -532,6 +534,7 @@ const JoiningPipelinePage = () => {
         open={isAddJoiningModalOpen}
         onClose={() => setIsAddJoiningModalOpen(false)}
       />
+
     </div>
   );
 };

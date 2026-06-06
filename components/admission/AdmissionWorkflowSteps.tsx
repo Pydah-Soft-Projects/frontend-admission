@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 
-export type AdmissionWorkflowStep = 1 | 2 | 3;
+export type AdmissionWorkflowStep = 1 | 2 | 3 | 4;
 
 export const ADMISSION_WORKFLOW_STEPS = [
   {
@@ -31,10 +31,20 @@ export const ADMISSION_WORKFLOW_STEPS = [
   {
     step: 3 as AdmissionWorkflowStep,
     label: 'Step 3',
+    title: 'Bus & hostel',
+    description:
+      'Choose bus transport (route, boarding stage, and fare from the Transport database) or hostel accommodation.',
+    scrollId: 'joining-wizard-step-3',
+    admissionScrollId: 'joining-wizard-step-3',
+    tone: 'amber' as const,
+  },
+  {
+    step: 4 as AdmissionWorkflowStep,
+    label: 'Step 4',
     title: 'Fee configuration & payments',
     description:
       'Fee heads from the Fee Management database, payment collection, and final submit.',
-    scrollId: 'joining-wizard-step-3',
+    scrollId: 'joining-wizard-step-4',
     admissionScrollId: 'joining-post-admission-payments',
     tone: 'emerald' as const,
   },
@@ -58,6 +68,8 @@ const toneRing: Record<(typeof ADMISSION_WORKFLOW_STEPS)[number]['tone'], string
   blue: 'border-blue-200 bg-blue-50/90 text-blue-950 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100',
   indigo:
     'border-indigo-200 bg-indigo-50/90 text-indigo-950 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-100',
+  amber:
+    'border-amber-200 bg-amber-50/90 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100',
   emerald:
     'border-emerald-200 bg-emerald-50/90 text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100',
 };
@@ -95,13 +107,25 @@ export function resolveWorkflowNextTarget(
     if (surface === 'admission-detail' && joiningId) {
       return {
         type: 'href',
+        href: `/superadmin/joining/${joiningId}#joining-wizard-step-3`,
+      };
+    }
+    if (surface === 'joining-edit' && joiningId) {
+      return { type: 'scroll', id: 'joining-wizard-step-3' };
+    }
+    return { type: 'scroll', id: 'joining-wizard-step-3' };
+  }
+  if (fromStep === 3) {
+    if (surface === 'admission-detail' && joiningId) {
+      return {
+        type: 'href',
         href: `/superadmin/joining/${joiningId}#joining-post-admission-payments`,
       };
     }
     if (surface === 'joining-edit' && joiningId) {
       return { type: 'scroll', id: 'joining-post-admission-payments' };
     }
-    return { type: 'scroll', id: 'joining-wizard-step-3' };
+    return { type: 'scroll', id: 'joining-wizard-step-4' };
   }
   return null;
 }
@@ -117,7 +141,7 @@ function isStep2Available(
   return joiningStatus === 'approved';
 }
 
-function isStep3Available(
+function isPostApprovalStepAvailable(
   joiningStatus?: string,
   joiningId?: string | null,
   isAdmissionCancelled?: boolean
@@ -151,26 +175,46 @@ function resolveExternalHref(
     return `/superadmin/admission/${admissionId}/detail#admission-step-two`;
   }
   if (step === 3 && surface === 'admission-detail' && joiningId) {
+    return `/superadmin/joining/${joiningId}#joining-wizard-step-3`;
+  }
+  if (step === 4 && surface === 'admission-detail' && joiningId) {
     return `/superadmin/joining/${joiningId}#joining-post-admission-payments`;
   }
   return null;
+}
+
+function isJoiningWizardStepUnlocked(step: AdmissionWorkflowStep, props: AdmissionWorkflowStepsProps): boolean {
+  const { joiningStatus, joiningId, admissionId, isAdmissionCancelled, surface, onJoiningWizardStepSelect } =
+    props;
+
+  if (!onJoiningWizardStepSelect) return true;
+  if (surface === 'joining-public') return true;
+  if (step === 1) return true;
+
+  if (step === 2) {
+    if (isAdmissionCancelled) return false;
+    if (!joiningId) return false;
+    return joiningStatus === 'approved';
+  }
+
+  return isPostApprovalStepAvailable(joiningStatus, joiningId, isAdmissionCancelled);
 }
 
 function isStepEnabled(step: AdmissionWorkflowStep, props: AdmissionWorkflowStepsProps): boolean {
   const { joiningStatus, joiningId, admissionId, isAdmissionCancelled, surface, onJoiningWizardStepSelect } =
     props;
   if (isAdmissionCancelled) return false;
-  if (onJoiningWizardStepSelect && (surface === 'joining-edit' || surface === 'joining-public')) {
-    return true;
-  }
   if (step === 1) {
     if (surface === 'admission-detail') return Boolean(joiningId) && !isAdmissionCancelled;
     return true;
   }
+  if (onJoiningWizardStepSelect && (surface === 'joining-edit' || surface === 'joining-public')) {
+    return isJoiningWizardStepUnlocked(step, props);
+  }
   if (step === 2) {
     return isStep2Available(joiningStatus, joiningId, admissionId, isAdmissionCancelled);
   }
-  return isStep3Available(joiningStatus, joiningId, isAdmissionCancelled);
+  return isPostApprovalStepAvailable(joiningStatus, joiningId, isAdmissionCancelled);
 }
 
 function stepDisabledTitle(step: AdmissionWorkflowStep, props: AdmissionWorkflowStepsProps): string {
@@ -183,7 +227,12 @@ function stepDisabledTitle(step: AdmissionWorkflowStep, props: AdmissionWorkflow
     return 'Open certificate checklist and fee lines on the admission record';
   }
   if (!joiningId) return 'No joining record linked';
-  if (joiningStatus !== 'approved') return 'Step 3 unlocks after the joining is approved';
+  if (joiningStatus !== 'approved') {
+    return step === 3
+      ? 'Step 3 unlocks after the joining is approved'
+      : 'Step 4 unlocks after the joining is approved';
+  }
+  if (step === 3) return 'Open bus route and hostel selection on the joining workspace';
   return 'Open verification summary and payments on the joining workspace';
 }
 
@@ -302,7 +351,7 @@ export function AdmissionWorkflowOverview({
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Admissions workflow
       </p>
-      <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+      <ol className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {ADMISSION_WORKFLOW_STEPS.map((meta) => {
           const stepProps = {
             activeStep,
@@ -458,7 +507,7 @@ export function WorkflowPreviousStepButton({
   );
 }
 
-/** Primary navigation control at the bottom of Steps 1 and 2. */
+/** Primary navigation control at the bottom of Steps 1–3. */
 export function WorkflowNextStepButton({
   fromStep,
   surface,
@@ -466,14 +515,18 @@ export function WorkflowNextStepButton({
   admissionId,
   onWizardAdvance,
   className,
+  disabled = false,
+  disabledTitle,
 }: {
-  fromStep: 1 | 2;
+  fromStep: 1 | 2 | 3;
   surface: AdmissionWorkflowSurface;
   joiningId?: string | null;
   admissionId?: string | null;
   /** When the joining form uses an in-page wizard, advance to the next wizard panel. */
   onWizardAdvance?: () => void;
   className?: string;
+  disabled?: boolean;
+  disabledTitle?: string;
 }) {
   const wizardScrollId =
     onWizardAdvance && (surface === 'joining-edit' || surface === 'joining-public')
@@ -508,7 +561,8 @@ export function WorkflowNextStepButton({
       size="sm"
       className={cn('gap-2', className)}
       onClick={handleClick}
-      disabled={!target && !onWizardAdvance}
+      disabled={disabled || (!target && !onWizardAdvance)}
+      title={disabled ? disabledTitle : undefined}
     >
       Next Step
       <span aria-hidden>→</span>

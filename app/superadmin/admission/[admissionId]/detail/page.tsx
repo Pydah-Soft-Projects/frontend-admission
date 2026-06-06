@@ -25,6 +25,10 @@ import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
+import {
+  PrintableAdmitCard,
+  pickStudentPortraitForAdmitCard,
+} from '@/components/joining/PrintableAdmitCard';
 import { AdmissionStepTwoPanel } from '@/components/admission/AdmissionStepTwoPanel';
 import {
   AdmissionWorkflowStepButtons,
@@ -300,6 +304,27 @@ export default function AdmissionDetailPage() {
             | undefined) || {});
     return cleanRegistrationFieldEntries(registrationFieldSource);
   }, [admission?.registrationFormData, joiningForRegistrationData]);
+
+  const admitCardPrintStudent = useMemo(() => {
+    if (!admission) return null;
+    const courseName =
+      resolveJoiningOrAdmissionCourseLabel(admission, getCourseName) ||
+      admission.courseInfo?.course ||
+      '—';
+    const branchName =
+      getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || '—';
+    return {
+      courseId: String(admission.courseInfo?.courseId ?? '').trim(),
+      studentName: admission.studentInfo?.name || lead?.name || '—',
+      admissionNumber: admission.admissionNumber,
+      program: courseName,
+      branch: branchName,
+      studentPhone: admission.studentInfo?.phone || lead?.phone || '—',
+      fatherPhone: admission.parents?.father?.phone || lead?.fatherPhone || '—',
+      studentPhotoSrc: pickStudentPortraitForAdmitCard(admission),
+      collegeName: getCollegeNameForCourse(admission.courseInfo?.courseId) || undefined,
+    };
+  }, [admission, lead, getCourseName, getBranchName, getCollegeNameForCourse]);
 
   useEffect(() => {
     setHeaderContent(
@@ -1195,6 +1220,13 @@ export default function AdmissionDetailPage() {
         stepLabel="Step 1 actions"
         className="border-blue-200/80 dark:border-blue-900/50"
       >
+        {admitCardPrintStudent?.courseId ? (
+          <PrintableAdmitCard
+            courseId={admitCardPrintStudent.courseId}
+            student={admitCardPrintStudent}
+            printButtonLabel="Print admit card"
+          />
+        ) : null}
         <WorkflowNextStepButton
           fromStep={1}
           surface="admission-detail"

@@ -960,9 +960,22 @@ const CompletedAdmissionsPage = () => {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference</p>
-                  <p className="mt-0.5 text-slate-700 dark:text-slate-300">
-                    {resolveAdmissionReference1(studentInfoViewRecord) || '—'}
-                  </p>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <p className="text-slate-700 dark:text-slate-300">
+                      {resolveAdmissionReference1(studentInfoViewRecord) || '—'}
+                    </p>
+                    {canEditReference &&
+                    studentInfoViewRecord.status !== ADMISSION_CANCELLED_STATUS ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                        title="Edit reference"
+                        onClick={() => openReferenceEditor(studentInfoViewRecord)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
@@ -977,6 +990,19 @@ const CompletedAdmissionsPage = () => {
             <Button type="button" variant="outline" onClick={() => setStudentInfoViewRecord(null)}>
               Close
             </Button>
+            {canEditReference &&
+            studentInfoViewRecord &&
+            studentInfoViewRecord.status !== ADMISSION_CANCELLED_STATUS ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 sm:w-auto"
+                onClick={() => openReferenceEditor(studentInfoViewRecord)}
+              >
+                <Pencil className="h-4 w-4" />
+                Edit reference
+              </Button>
+            ) : null}
             {canEditAdmission && studentInfoViewRecord?.joiningId ? (
               <Link href={`/superadmin/joining/${studentInfoViewRecord.joiningId}`} className="w-full sm:w-auto">
                 <Button type="button" className="w-full gap-2 sm:w-auto">
@@ -1731,19 +1757,20 @@ const CompletedAdmissionsPage = () => {
                   <th className={`${tableThClass} text-right`}>Paid</th>
                   <th className={`${tableThClass} text-right hidden md:table-cell`}>Source</th>
                   <th className={`${tableThClass} text-right hidden lg:table-cell`}>Reference</th>
+                  <th className={`${tableThClass} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
                 {isLoading || isFetching ? (
                   <tr>
-                    <td colSpan={13} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                    <td colSpan={14} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-400 border-t-transparent sm:h-12 sm:w-12" />
                       <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400 sm:mt-4">Loading admissions…</p>
                     </td>
                   </tr>
                 ) : isEmpty ? (
                   <tr>
-                    <td colSpan={13} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                    <td colSpan={14} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
                     </td>
                   </tr>
@@ -1839,7 +1866,40 @@ const CompletedAdmissionsPage = () => {
                         {resolveAdmissionSource(record) || '—'}
                       </td>
                       <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 lg:table-cell dark:text-slate-400`}>
-                        {resolveAdmissionReference1(record) || '—'}
+                        <div className="flex items-center justify-end gap-1">
+                          <span>{resolveAdmissionReference1(record) || '—'}</span>
+                          {canEditReference && record.status !== ADMISSION_CANCELLED_STATUS ? (
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                              title="Edit reference"
+                              onClick={() => openReferenceEditor(record)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className={`${tableTdClass} text-right`}>
+                        <div className="flex flex-wrap justify-end gap-1 sm:gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setStudentInfoViewRecord(record)}
+                          >
+                            View
+                          </Button>
+                          {canEditReference && record.status !== ADMISSION_CANCELLED_STATUS ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openReferenceEditor(record)}
+                              title="Edit Reference 1 on admission, joining, and lead"
+                            >
+                              Ref
+                            </Button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))

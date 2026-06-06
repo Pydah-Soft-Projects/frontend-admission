@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect';
 import {
   joiningAPI,
+  feeRequestAPI,
   admissionAPI,
   paymentAPI,
   paymentSettingsAPI,
@@ -50,6 +51,11 @@ import { coerceJoiningRegistrationField } from '@/lib/joiningRegistrationFieldCo
 import { mergeLeadIntoJoiningFormState, type LeadLike } from '@/lib/joiningLeadPrefill';
 import { resolvePreferredMobileSourcePhones, suggestDefaultPreferredMobileDigits } from '@/lib/joiningPreferredMobile';
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
+import { SELF_REGISTRATION_SOURCE } from '@/lib/joiningSelfRegistration';
+import {
+  applyAccommodationFeesToStudentFeeDetails,
+  buildAccommodationInjectedRows,
+} from '@/lib/joiningBusFeeSync';
 import {
   computeScholarshipRegistrationPatches,
   scholarshipIntentForCourseQuota,
@@ -88,6 +94,7 @@ import {
   JoiningSibling,
   JoiningStatus,
   JoiningStudentFeeDetails,
+  JoiningTransportDetails,
   Admission,
   Branch,
   PaymentSummary,
@@ -112,6 +119,10 @@ import {
 } from '@/components/joining/PrintablePaymentReceipt';
 import { PrintableCertificateChecklist } from '@/components/joining/PrintableCertificateChecklist';
 import {
+  PrintableAdmitCard,
+  buildAdmitCardStudentFromForm,
+} from '@/components/joining/PrintableAdmitCard';
+import {
   AdmissionWorkflowStepBanner,
   AdmissionWorkflowStepButtons,
   WorkflowNextStepButton,
@@ -120,6 +131,10 @@ import {
   scrollToWorkflowAnchor,
   type AdmissionWorkflowStep,
 } from '@/components/admission/AdmissionWorkflowSteps';
+import {
+  AdmissionStepThreeBusHostelPanel,
+  parseJoiningTransportDetails,
+} from '@/components/admission/AdmissionStepThreeBusHostelPanel';
 import { ApplicationInfoCard } from '@/components/admission/ApplicationInfoCard';
 import { JoiningStepOneShell } from '@/components/joining/JoiningStepOneShell';
 import { useLocations } from '@/lib/useLocations';
@@ -606,7 +621,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const effectiveAdminLeadId = (adminLeadId ?? routeLeadFromParams) as string | undefined;
 
   const joiningPerm = useModulePermission('joining');
-  const { canEditAdmission } = useJoiningDeskPermissions();
+  const { canEditAdmission, canApproveFeeRequest, canEditReference } = useJoiningDeskPermissions();
   const paymentsPerm = useModulePermission('payments');
   const canAccessJoiningModule = isPublicEdit || joiningPerm.hasAccess;
   const canWriteJoining = isPublicEdit || joiningPerm.canWrite;
@@ -624,16 +639,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   /** Status/enquiry/student summary and course headings duplicate the workflow strip on Step 1. */
   const hideJoiningStepOneRedundantIntro = useWizard && applicationWizardStep === 1;
 
-  const advanceApplicationWizard = useCallback((step: AdmissionWorkflowStep) => {
-    setApplicationWizardStep(step);
-    requestAnimationFrame(() => scrollToWorkflowAnchor(`joining-wizard-step-${step}`));
-  }, []);
-
-  const handleJoiningWizardStepSelect = useCallback(
-    (step: AdmissionWorkflowStep) => advanceApplicationWizard(step),
-    [advanceApplicationWizard]
-  );
-
   const [meta, setMeta] = useState<{
     updatedAt?: string;
     submittedAt?: string;
@@ -642,6 +647,28 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   }>({});
   const [admissionRecord, setAdmissionRecord] = useState<Admission | null>(null);
   const [hasAppliedAdmissionSnapshot, setHasAppliedAdmissionSnapshot] = useState(false);
+
+  const advanceApplicationWizard = useCallback(
+    (step: AdmissionWorkflowStep) => {
+      if (!isPublicEdit && step >= 2 && status !== 'approved') {
+        showToast.error(
+          status === 'pending_approval'
+            ? 'Approve the joining form on Step 1 before continuing.'
+            : 'Submit and approve the joining form on Step 1 before continuing.'
+        );
+        return;
+      }
+      setApplicationWizardStep(step);
+      requestAnimationFrame(() => scrollToWorkflowAnchor(`joining-wizard-step-${step}`));
+    },
+    [isPublicEdit, status]
+  );
+
+  const handleJoiningWizardStepSelect = useCallback(
+    (step: AdmissionWorkflowStep) => advanceApplicationWizard(step),
+    [advanceApplicationWizard]
+  );
+
   const [otherReservationInput, setOtherReservationInput] = useState('');
   const [showStudentAadhaar, setShowStudentAadhaar] = useState(false);
   const [showFatherAadhaar, setShowFatherAadhaar] = useState(false);
@@ -656,6 +683,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   );
   /** Per–fee-head student amounts/notes; persisted in joinings.lead_data._joiningStudentFeeDetails on Save Draft. */
   const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({ lines: [] });
+  const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({
+    accommodationType: 'bus',
+  });
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [openPaymentMode, setOpenPaymentMode] = useState<'cash' | 'online' | null>(null);
@@ -720,22 +750,41 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const leadId = routeKey;
   const isNewJoining = !isPublicEdit && leadId === 'new';
+  const isSelfRegistrationPublic = useMemo(() => {
+    if (!isPublicEdit) return false;
+    const bootstrap = publicBootstrapQuery.data?.data as
+      | { routeKey?: string; selfRegistration?: boolean }
+      | undefined;
+    if (bootstrap?.selfRegistration) return true;
+    return bootstrap?.routeKey === 'self-registration';
+  }, [isPublicEdit, publicBootstrapQuery.data]);
 
   const joiningRecord = data?.data?.joining as Joining | undefined;
   // Use leadData from joining instead of populated lead
   /** Prefer populated `lead` from API (includes address, academicYear, studentGroup); fall back to snapshot in `leadData`. */
   const lead = (data?.data?.lead as any) || (joiningRecord?.leadData as any);
 
+  const isSelfRegistrationRecord = useMemo(() => {
+    if (isSelfRegistrationPublic) return true;
+    const src = String(lead?.source ?? joiningRecord?.leadData?.source ?? '').trim();
+    if (src === SELF_REGISTRATION_SOURCE) return true;
+    const dyn = lead?.dynamicFields ?? lead?.dynamic_fields;
+    if (dyn && typeof dyn === 'object') {
+      return String((dyn as Record<string, unknown>).createdFrom ?? '').trim() === 'self_registration';
+    }
+    return false;
+  }, [isSelfRegistrationPublic, lead, joiningRecord?.leadData]);
+
   /** Joining id (after first save) or CRM lead/joining URL segment — never `new`. Used for detail link + public invite API. */
   const publicLinkRouteKey = useMemo(() => {
     if (joiningRecord?._id) return String(joiningRecord._id);
-    if (leadId && leadId !== 'new') return String(leadId);
+    if (leadId && leadId !== 'new' && leadId !== 'self-registration') return String(leadId);
     return '';
   }, [joiningRecord?._id, leadId]);
 
   useEffect(() => {
     setApplicationWizardStep(1);
-  }, [leadId, joiningRecord?._id, status]);
+  }, [leadId, joiningRecord?._id]);
 
   const { data: registrationFormsResponse, isError: registrationFormsError } = useQuery({
     queryKey: ['registration-form', 'student-db', 'forms', 'joining'],
@@ -943,6 +992,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     }
   }, [joiningRecord?._id, joiningRecord?.updatedAt]);
 
+  useEffect(() => {
+    if (!joiningRecord?._id) return;
+    const saved =
+      joiningRecord.registrationFormData &&
+      typeof joiningRecord.registrationFormData === 'object'
+        ? (joiningRecord.registrationFormData as Record<string, unknown>).transport_details
+        : undefined;
+    setTransportDetails(parseJoiningTransportDetails(saved));
+  }, [joiningRecord?._id, joiningRecord?.updatedAt, joiningRecord?.registrationFormData]);
+
   const registrationLocationState = useMemo(
     () =>
       formState.address.communication.state ||
@@ -1085,6 +1144,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     const match = colleges.find((c) => c.name === byName);
     return match?.id || '';
   }, [registrationExtras, colleges]);
+
+  const selectedCollegeName = useMemo(() => {
+    const byId = colleges.find((c) => c.id === selectedCollegeId)?.name;
+    if (byId?.trim()) return byId.trim();
+    return (
+      (registrationExtras.school_or_college_name as string) ||
+      (registrationExtras.college as string) ||
+      ''
+    ).trim();
+  }, [colleges, selectedCollegeId, registrationExtras]);
 
   const handleCollegeSelect = useCallback(
     (collegeId: string) => {
@@ -2312,6 +2381,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     [transactionsResponse]
   );
 
+  /** Steps 2–4 unlock once the joining is approved (admission number generated). */
+  const canProceedFromWizardStep1 = isPublicEdit || status === 'approved';
+
   useEffect(() => {
     if (isPublicEdit) {
       return () => clearHeaderContent();
@@ -2346,7 +2418,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           </p>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <AdmissionWorkflowStepButtons
-              activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 3 : 1}
+              activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 4 : 1}
               surface="joining-edit"
               joiningId={workflowJoiningId}
               admissionId={workflowAdmissionId}
@@ -2582,6 +2654,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           stripJoiningRedundantRegistrationExtras({
             ...(record.registrationFormData as Record<string, unknown>),
           })
+        );
+        setTransportDetails(
+          parseJoiningTransportDetails(
+            (record.registrationFormData as Record<string, unknown>).transport_details
+          )
         );
       }
 
@@ -3404,6 +3481,53 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     });
   };
 
+  const programTotalYears = useMemo(() => {
+    const totalYears = resolveTotalYearsFromCourseSettings(
+      courseSettings,
+      formState.courseInfo.courseId,
+      formState.courseInfo.branchId
+    );
+    return totalYears && totalYears > 0 ? totalYears : 4;
+  }, [courseSettings, formState.courseInfo.courseId, formState.courseInfo.branchId]);
+
+  const feeConfigurationBatch = useMemo(() => {
+    const fromDetails = studentFeeDetails.batch != null ? String(studentFeeDetails.batch).trim() : '';
+    if (fromDetails) return fromDetails;
+    const fromLead = (lead as { academicYear?: number | string } | undefined)?.academicYear;
+    if (fromLead != null && String(fromLead).trim() !== '') return String(fromLead).trim();
+    return String(new Date().getFullYear());
+  }, [studentFeeDetails.batch, lead]);
+
+  const accommodationInjectedRows = useMemo(
+    () =>
+      buildAccommodationInjectedRows(transportDetails, {
+        totalYears: programTotalYears,
+        batch: feeConfigurationBatch,
+        course: formState.courseInfo.course || '',
+        branch: formState.courseInfo.branch || '',
+        quota: formState.courseInfo.quota,
+      }),
+    [
+      transportDetails,
+      programTotalYears,
+      feeConfigurationBatch,
+      formState.courseInfo.course,
+      formState.courseInfo.branch,
+      formState.courseInfo.quota,
+    ]
+  );
+
+  useEffect(() => {
+    setStudentFeeDetails((prev) =>
+      applyAccommodationFeesToStudentFeeDetails(
+        prev,
+        transportDetails,
+        programTotalYears,
+        feeConfigurationBatch
+      )
+    );
+  }, [transportDetails, programTotalYears, feeConfigurationBatch]);
+
   const payloadForSave = useMemo(() => {
     // Ensure course and branch names are stored when IDs are present
     const courseInfo = { ...formState.courseInfo };
@@ -3453,19 +3577,32 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       educationHistory: formState.educationHistory,
       siblings: formState.siblings,
       documents: formState.documents,
+      ...(!isSelfRegistrationRecord ? { reference1: reference1.trim() } : {}),
       ...(isApprovedAdmission
-        ? {}
+        ? {
+            registrationFormData: {
+              transport_details: transportDetails,
+            },
+            studentFeeDetails: {
+              batch: studentFeeDetails.batch || feeConfigurationBatch,
+              lines: studentFeeDetails.lines || [],
+            },
+          }
         : {
             registrationFormData: (() => {
               const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
+              const withTransport = {
+                ...stripped,
+                transport_details: transportDetails,
+              };
               if (derivedCertificationStatus !== null) {
                 return {
-                  ...stripped,
+                  ...withTransport,
                   certification_status: derivedCertificationStatus,
                   certificates_status: derivedCertificationStatus,
                 };
               }
-              return stripped;
+              return withTransport;
             })(),
             ...(!isPublicEdit
               ? {
@@ -3484,8 +3621,23 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     derivedCertificationStatus,
     isPublicEdit,
     studentFeeDetails,
+    transportDetails,
     status,
+    feeConfigurationBatch,
+    reference1,
+    isSelfRegistrationRecord,
   ]);
+
+  const stepOneNextBlockedHint = useMemo(() => {
+    if (isPublicEdit) return undefined;
+    if (status === 'draft') {
+      return 'Submit and approve the joining form on Step 1 before continuing.';
+    }
+    if (status === 'pending_approval') {
+      return 'Approve the joining form on Step 1 before continuing.';
+    }
+    return undefined;
+  }, [isPublicEdit, status]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -3604,8 +3756,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       const joiningData = payload?.data?.joining || payload?.joining;
       const generatedAdmissionNumber =
         payload?.data?.admissionNumber || payload?.admissionNumber || null;
+      const admissionId =
+        payload?.data?.admissionId || payload?.admissionId || null;
 
       showToast.success('Joining form approved');
+
+      if (isSelfRegistrationRecord && admissionId) {
+        void queryClient.invalidateQueries({ queryKey: ['self-registration'] });
+        router.push(`/superadmin/admission/${admissionId}/detail`);
+        return;
+      }
 
       if (joiningData) {
         setStatus((joiningData.status as JoiningStatus) || 'approved');
@@ -3659,7 +3819,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       }
       return admissionAPI.updateByLeadId(resolvedLeadId, payload);
     },
-    onSuccess: async (response) => {
+    onSuccess: async (response, variables) => {
       showToast.success('Admission record updated');
 
       const fromResponse = parseAdmissionFromApiBody(response);
@@ -3725,6 +3885,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   ]);
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
   const isAdmissionEditable = canEditApprovedAdmission && status === 'approved';
+  const canEditReferenceField =
+    !isSelfRegistrationRecord &&
+    !isPublicEdit &&
+    (status === 'approved' ? canEditReference && isAdmissionEditable : canWriteJoining);
   /** Student / father / mother numbers for the preferred-mobile dropdown (form + lead snapshot). */
   const preferredMobileSources = useMemo(
     () =>
@@ -3771,8 +3935,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     }));
   }, [preferredMobileSources, formState.studentInfo.preferredMobileNumber]);
 
-  /** After approval: admin sees summary, payments, and fee table on this joining page; cert/fees live on admission. */
+  /** After approval: admin sees bus/hostel (Step 3) and fee desk (Step 4) on this joining page. */
   const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
+  const showAdminPostAdmissionStep4 = showAdminPostAdmissionStep3;
 
   const joiningPhotoUploadContext = useMemo(
     () => ({
@@ -3839,7 +4004,51 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       isAdditionalFeeMode,
     ]
   );
+  const admitCardPrintStudent = useMemo(
+    () =>
+      buildAdmitCardStudentFromForm({
+        formState,
+        lead,
+        admissionNumber: admissionNumberDisplay || meta.admissionNumber,
+        collegeName: selectedCollegeName,
+        registrationFormData: registrationExtras as Record<string, unknown>,
+        application: joiningRecord ?? admissionRecord ?? undefined,
+      }),
+    [
+      formState,
+      lead,
+      admissionNumberDisplay,
+      meta.admissionNumber,
+      selectedCollegeName,
+      registrationExtras,
+      joiningRecord,
+      admissionRecord,
+    ]
+  );
   const isBusy = isLoading || (isAdmissionEditable && isLoadingAdmission && !admissionRecord);
+
+  const hasRevisedFeeLines = useMemo(
+    () =>
+      (studentFeeDetails.lines || []).some(
+        (line) =>
+          line.amount !== undefined &&
+          line.amount !== null &&
+          Number.isFinite(Number(line.amount))
+      ),
+    [studentFeeDetails.lines]
+  );
+
+  const pendingFeeRequestQuery = useQuery({
+    queryKey: ['fee-request-pending', joiningRecord?._id],
+    queryFn: async () => {
+      if (!joiningRecord?._id) return null;
+      const res = await feeRequestAPI.getPendingForJoining(joiningRecord._id);
+      return (res?.data ?? null) as import('@/types').FeeRequest | null;
+    },
+    enabled: Boolean(joiningRecord?._id) && status === 'approved' && !isPublicEdit,
+    staleTime: 15_000,
+  });
+  const pendingFeeRequest = pendingFeeRequestQuery.data;
 
   const handleSaveAdmissionRecord = () => {
     if (!canEditApprovedAdmission) {
@@ -3928,6 +4137,63 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const workflowSurface = isPublicEdit ? 'joining-public' : 'joining-edit';
   const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
 
+  const saveStepFourMutation = useMutation({
+    mutationFn: async () => {
+      if (!workflowJoiningId) {
+        throw new Error('Save the joining form first');
+      }
+      return joiningAPI.patchStepTwo(workflowJoiningId, {
+        registrationFormData: {
+          transport_details: transportDetails,
+        },
+        studentFeeDetails: {
+          batch: studentFeeDetails.batch || feeConfigurationBatch,
+          lines: studentFeeDetails.lines || [],
+        },
+      });
+    },
+    onSuccess: async () => {
+      showToast.success(
+        'Fee configuration saved — fee portal, bus, and hostel systems updated where applicable'
+      );
+      await refetch();
+      if (admissionRecord?._id) {
+        await queryClient.invalidateQueries({ queryKey: ['admission', admissionRecord._id] });
+      }
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      showToast.error(error.response?.data?.message || 'Failed to save fee configuration');
+    },
+  });
+
+  const submitFeeRequestMutation = useMutation({
+    mutationFn: async () => {
+      if (!joiningRecord?._id) {
+        throw new Error('Save the joining form first');
+      }
+      return feeRequestAPI.submit({
+        joiningId: joiningRecord._id,
+        registrationFormData: {
+          transport_details: transportDetails,
+        },
+        studentFeeDetails: {
+          batch: studentFeeDetails.batch || feeConfigurationBatch,
+          lines: studentFeeDetails.lines || [],
+        },
+      });
+    },
+    onSuccess: async () => {
+      showToast.success(
+        'Revised fee request submitted for approval — it will appear under Joining Desk → Fee Requests'
+      );
+      await refetch();
+      await pendingFeeRequestQuery.refetch();
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      showToast.error(error.response?.data?.message || 'Failed to submit fee request');
+    },
+  });
+
   const saveStepTwoMutation = useMutation({
     mutationFn: async () => {
       if (!workflowJoiningId) {
@@ -3983,81 +4249,64 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       return (
         <WorkflowStickyActionBar
           id="joining-wizard-step-3-actions"
-          stepLabel="Step 3 — Fee configuration & submit"
-          hint={
-            status === 'approved'
-              ? 'Collect payments against fee heads from the Fee Management database. Save admission updates before leaving.'
-              : stepOneCourseHint ||
-                'Review configured fee heads, then save or submit the application for approval.'
-          }
+          stepLabel="Step 3 — Bus & hostel"
+          hint="Select bus route/stage or hostel category/room — fees are added automatically to Step 4."
           className={stickyClass}
         >
           <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(2)} />
-          {canSaveJoiningDraft && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
-              disabled={isSaving}
-              onClick={() => {
-                if (!canWriteJoining) {
-                  showToast.error('You have read-only access to the joining desk');
-                  return;
-                }
-                saveDraftMutation.mutate();
-              }}
-            >
-              {isSaving ? 'Saving…' : 'Save Draft'}
-            </Button>
-          )}
-          {status === 'draft' && (
-            <Button
-              variant="primary"
-              size="sm"
-              className={cn(JOINING_ACTION_BTN_CLASS, isPublicEdit ? 'w-full sm:w-auto' : undefined)}
-              disabled={
-                !canSubmit || isSubmitting || (!isPublicEdit && !hasManagedCourseAndBranch)
-              }
-              onClick={() => {
-                if (!canWriteJoining) {
-                  showToast.error('You have read-only access to the joining desk');
-                  return;
-                }
-                if (!isPublicEdit && !hasManagedCourseAndBranch) {
-                  showToast.error(
-                    'Select college, quota, managed course, and managed branch before submitting for approval.'
-                  );
-                  return;
-                }
-                submitMutation.mutate();
-              }}
-            >
-              {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
-            </Button>
-          )}
-          {canApprove && (
-            <Button
-              variant="primary"
-              size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
-              disabled={isApproving || !hasManagedCourseAndBranch}
-              onClick={() => {
-                if (!canWriteJoining) {
-                  showToast.error('You have read-only access to the joining desk');
-                  return;
-                }
-                if (!hasManagedCourseAndBranch) {
-                  showToast.error(
-                    'Select college, quota, managed course, and managed branch before approving.'
-                  );
-                  return;
-                }
-                approveMutation.mutate();
-              }}
-            >
-              {isApproving ? 'Approving…' : 'Approve'}
-            </Button>
-          )}
+          <WorkflowNextStepButton
+            fromStep={3}
+            surface={workflowSurface}
+            joiningId={workflowJoiningId}
+            admissionId={admissionRecord?._id}
+            onWizardAdvance={() => advanceApplicationWizard(4)}
+          />
+        </WorkflowStickyActionBar>
+      );
+    }
+
+    if (panelStep === 4) {
+      return (
+        <WorkflowStickyActionBar
+          id="joining-wizard-step-4-actions"
+          stepLabel="Step 4 — Fee configuration & payments"
+          hint={
+            status === 'approved'
+              ? hasRevisedFeeLines
+                ? 'Revised fees require approval before syncing to the fee portal. Submit the fee request when ready.'
+                : 'Unchanged fees save directly to the fee portal, bus, and hostel systems.'
+              : 'Review configured fee heads and save certificate or fee line updates on Step 2 before collecting payments.'
+          }
+          className={stickyClass}
+        >
+          <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(3)} />
+          {status === 'approved' && canWriteJoining && canEditAdmission ? (
+            pendingFeeRequest ? (
+              <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                Fee request pending approval
+              </span>
+            ) : hasRevisedFeeLines ? (
+              <Button
+                variant="primary"
+                size="sm"
+                className={JOINING_ACTION_BTN_CLASS}
+                disabled={submitFeeRequestMutation.isPending || isBusy}
+                onClick={() => submitFeeRequestMutation.mutate()}
+              >
+                {submitFeeRequestMutation.isPending ? 'Submitting…' : 'Submit fee request for approval'}
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className={JOINING_ACTION_BTN_CLASS}
+                disabled={saveStepFourMutation.isPending || isBusy}
+                onClick={() => saveStepFourMutation.mutate()}
+              >
+                {saveStepFourMutation.isPending ? 'Saving…' : 'Save fee configuration'}
+              </Button>
+            )
+          ) : null}
           {isAdmissionEditable && (
             <Button
               variant="primary"
@@ -4081,8 +4330,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
     return (
       <WorkflowStickyActionBar
-        id={`joining-wizard-step-${panelStep}-actions`}
-        hint={panelStep === 1 ? stepOneCourseHint : undefined}
+        id={panelStep === 1 ? 'joining-step-one-actions' : `joining-wizard-step-${panelStep}-actions`}
+        stepLabel={panelStep === 1 ? 'Step 1 actions' : undefined}
+        hint={
+          panelStep === 1
+            ? stepOneCourseHint || stepOneNextBlockedHint
+            : undefined
+        }
         className={stickyClass}
       >
         {panelStep > 1 ? (
@@ -4090,7 +4344,104 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             onClick={() => advanceApplicationWizard((panelStep - 1) as AdmissionWorkflowStep)}
           />
         ) : null}
-        {panelStep === 2 && canWriteJoining && !isPublicEdit ? (
+        {panelStep === 1 ? (
+          <PrintableAdmitCard
+            courseId={admitCardPrintStudent.courseId}
+            student={admitCardPrintStudent}
+            printButtonLabel="Print admit card"
+            className={JOINING_ACTION_BTN_CLASS}
+            disabled={!hasManagedCourseAndBranch}
+            disabledTitle="Select college, course, and branch before printing the admit card"
+          />
+        ) : null}
+        {panelStep === 1 && canSaveJoiningDraft ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className={JOINING_ACTION_BTN_CLASS}
+            disabled={isSaving}
+            onClick={() => {
+              if (!canWriteJoining) {
+                showToast.error('You have read-only access to the joining desk');
+                return;
+              }
+              saveDraftMutation.mutate();
+            }}
+          >
+            {isSaving ? 'Saving…' : 'Save Draft'}
+          </Button>
+        ) : null}
+        {panelStep === 1 && status === 'draft' ? (
+          <Button
+            variant="primary"
+            size="sm"
+            className={cn(JOINING_ACTION_BTN_CLASS, isPublicEdit ? 'w-full sm:w-auto' : undefined)}
+            disabled={!canSubmit || isSubmitting || (!isPublicEdit && !hasManagedCourseAndBranch)}
+            onClick={() => {
+              if (!canWriteJoining) {
+                showToast.error('You have read-only access to the joining desk');
+                return;
+              }
+              if (!isPublicEdit && !hasManagedCourseAndBranch) {
+                showToast.error(
+                  'Select college, quota, managed course, and managed branch before submitting for approval.'
+                );
+                return;
+              }
+              submitMutation.mutate();
+            }}
+          >
+            {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
+          </Button>
+        ) : null}
+        {panelStep === 1 && isAdmissionEditable ? (
+          <Button
+            variant="primary"
+            size="sm"
+            className={JOINING_ACTION_BTN_CLASS}
+            disabled={
+              isUpdatingAdmission ||
+              isBusy ||
+              !canWriteJoining ||
+              !hasManagedCourseAndBranch ||
+              !admissionRecord?._id
+            }
+            onClick={handleSaveAdmissionRecord}
+            title={
+              !admissionRecord?._id
+                ? 'Waiting for admission record to load…'
+                : hasManagedCourseAndBranch
+                  ? undefined
+                  : 'Select college, quota, managed course, and managed branch in Course & Quota before saving.'
+            }
+          >
+            {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
+          </Button>
+        ) : null}
+        {panelStep === 1 && canApprove ? (
+          <Button
+            variant="primary"
+            size="sm"
+            className={JOINING_ACTION_BTN_CLASS}
+            disabled={isApproving || !hasManagedCourseAndBranch}
+            onClick={() => {
+              if (!canWriteJoining) {
+                showToast.error('You have read-only access to the joining desk');
+                return;
+              }
+              if (!hasManagedCourseAndBranch) {
+                showToast.error(
+                  'Select college, quota, managed course, and managed branch before approving.'
+                );
+                return;
+              }
+              approveMutation.mutate();
+            }}
+          >
+            {isApproving ? 'Approving…' : 'Approve'}
+          </Button>
+        ) : null}
+        {panelStep === 2 && canWriteJoining && !isPublicEdit && status !== 'approved' ? (
           <Button
             variant="secondary"
             size="sm"
@@ -4107,6 +4458,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           joiningId={workflowJoiningId}
           admissionId={admissionRecord?._id}
           onWizardAdvance={() => advanceApplicationWizard((panelStep + 1) as AdmissionWorkflowStep)}
+          disabled={panelStep === 1 && !canProceedFromWizardStep1}
+          disabledTitle={stepOneNextBlockedHint}
         />
       </WorkflowStickyActionBar>
     );
@@ -4216,11 +4569,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             <button
               type="button"
               className="font-semibold text-amber-900 underline underline-offset-2 dark:text-amber-100"
-              onClick={() =>
-                scrollToWorkflowAnchor(
-                  useWizard ? 'joining-wizard-step-3' : 'joining-step-one-actions'
-                )
-              }
+              onClick={() => scrollToWorkflowAnchor('joining-step-one-actions')}
             >
               Jump to actions
             </button>
@@ -4708,15 +5057,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                           </label>
                         </div>
                       </div>
-                      <div className="min-w-0">
-                        <ReferenceUserSelect
-                          label="Reference"
-                          value={reference1}
-                          onChange={setReference1}
-                          disabled
-                          showAddUserButton={false}
-                        />
-                      </div>
+                      {!isSelfRegistrationRecord ? (
+                        <div className="min-w-0">
+                          <ReferenceUserSelect
+                            label="Reference"
+                            value={reference1}
+                            onChange={setReference1}
+                            disabled={!canEditReferenceField || isUpdatingAdmission || isSaving}
+                            showAddUserButton={canEditReferenceField && !isUpdatingAdmission && !isSaving}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                     );
                   })()}
@@ -5501,7 +5852,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   />
                 ) : !isPublicEdit && !joiningRecord?._id ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                    Save the joining form with <span className="font-semibold">Save Draft</span> on Step 1 or Step 3
+                    Save the joining form with <span className="font-semibold">Save Draft</span> on Step 1 or Step 4
                     first — then you can record cash and online payments here.
                   </p>
                 ) : !isPublicEdit && !canAccessPaymentsModule ? (
@@ -5521,14 +5872,35 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 useWizard && applicationWizardStep !== 3 && 'hidden'
               )}
             >
-            {(useWizard ? applicationWizardStep === 3 : showAdminPostAdmissionStep3) ? (
+              {(useWizard ? applicationWizardStep === 3 : showAdminPostAdmissionStep3) ? (
+                <>
+                  <AdmissionStepThreeBusHostelPanel
+                    value={transportDetails}
+                    onChange={canWriteJoining ? setTransportDetails : undefined}
+                    disabled={!canWriteJoining}
+                    courseName={formState.courseInfo.course}
+                    programTotalYears={programTotalYears}
+                  />
+                  {renderWizardStepFooter(3)}
+                </>
+              ) : null}
+            </div>
+
+            <div
+              id="joining-wizard-step-4"
+              className={cn(
+                'space-y-10',
+                useWizard && applicationWizardStep !== 4 && 'hidden'
+              )}
+            >
+            {(useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4) ? (
               <section
                 id="joining-post-admission-payments"
                 className="space-y-8 rounded-2xl border-2 border-emerald-200/80 bg-gradient-to-b from-emerald-50/40 to-white/95 p-6 shadow-lg shadow-emerald-100/30 backdrop-blur dark:border-emerald-900/50 dark:from-emerald-950/20 dark:to-slate-900/70 dark:shadow-none"
               >
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                    Step 3 — Fee configuration &amp; payments
+                    Step 4 — Fee configuration &amp; payments
                   </p>
                   <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
                     {status === 'approved' ? 'Post-admission desk' : 'Fee preview & submit'}
@@ -5555,160 +5927,54 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                   </p>
                 </div>
 
-                {status === 'approved' ? (
-                <div className="rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Recorded application summary
-                  </h3>
-                  <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                    <div>
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Program &amp; quota
-                      </dt>
-                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
-                        {(formState.courseInfo.programLevel || '—') +
-                          ' · ' +
-                          (formState.courseInfo.quota || '—') +
-                          ' · ' +
-                          (formState.courseInfo.course || '—') +
-                          (formState.courseInfo.branch ? ` · ${formState.courseInfo.branch}` : '')}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Student
-                      </dt>
-                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
-                        {(formState.studentInfo.name || (lead as Lead | undefined)?.name || '—') +
-                          (formState.studentInfo.phone ? ` · ${formState.studentInfo.phone}` : '')}
-                        {(formState.studentInfo.gender || formState.studentInfo.dateOfBirth) &&
-                          ` · ${[formState.studentInfo.gender, formState.studentInfo.dateOfBirth].filter(Boolean).join(' · ')}`}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Parents
-                      </dt>
-                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
-                        Father: {formState.parents.father.name || '—'} ({formState.parents.father.phone || '—'})
-                        <br />
-                        Mother: {formState.parents.mother.name || '—'} ({formState.parents.mother.phone || '—'})
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Reservation
-                      </dt>
-                      <dd className="mt-0.5 uppercase text-slate-800 dark:text-slate-200">
-                        {String(formState.reservation.general || '—').toUpperCase()}
-                        {formState.reservation.isEws ? ' · EWS: Yes' : ' · EWS: No'}
-                        {(formState.reservation.other || []).length > 0
-                          ? ` · Other: ${(formState.reservation.other || []).join(', ')}`
-                          : ''}
-                      </dd>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Communication address
-                      </dt>
-                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
-                        {[
-                          formState.address.communication.doorOrStreet,
-                          formState.address.communication.landmark,
-                          formState.address.communication.villageOrCity,
-                          formState.address.communication.mandal,
-                          formState.address.communication.district,
-                          formState.address.communication.state,
-                          formState.address.communication.pinCode,
-                        ]
-                          .filter((p) => p && String(p).trim())
-                          .join(', ') || '—'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Qualifications
-                      </dt>
-                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
-                        {[
-                          formState.qualifications.ssc && 'SSC',
-                          formState.qualifications.interOrDiploma && 'Inter/Diploma',
-                          formState.qualifications.ug && 'UG',
-                        ]
-                          .filter(Boolean)
-                          .join(', ') || '—'}
-                        {formState.qualifications.merit === true ? ' · Merit: Yes' : ' · Merit: No'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Education history
-                      </dt>
-                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
-                        {formState.educationHistory.length}{' '}
-                        {formState.educationHistory.length === 1 ? 'entry' : 'entries'}
-                        {formState.educationHistory[0]?.institutionName
-                          ? ` · Latest: ${formState.educationHistory[0].institutionName}`
-                          : ''}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Siblings
-                      </dt>
-                      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
-                        {formState.siblings.length} recorded
-                      </dd>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Document checklist (paper files)
-                      </dt>
-                      <dd className="mt-0.5 flex flex-wrap gap-2 text-slate-800 dark:text-slate-200">
-                        {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
-                          .filter(([key]) =>
-                            isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota)
-                          )
-                          .map(([key, label]) => (
-                            <span
-                              key={key}
-                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                (formState.documents[key] || 'pending') === 'received'
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
-                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                              }`}
-                            >
-                              {label}: {(formState.documents[key] || 'pending') === 'received' ? 'Received' : 'Pending'}
-                            </span>
-                          ))}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-                ) : null}
-
               <FeeStructureSection
                 course={formState.courseInfo.course}
                 branch={formState.courseInfo.branch}
                 quota={formState.courseInfo.quota}
                 batch={
                   (lead as { academicYear?: number | string } | undefined)?.academicYear ??
-                  null
+                  feeConfigurationBatch
                 }
                 title="Fee configuration (Fee Management database)"
                 description={
                   status === 'approved'
-                    ? 'Read-only fee configuration from the Fee Management database. Record payments on Step 2.'
-                    : 'Preview of fee heads that will apply once course, branch, and quota are set in Step 1. Payments unlock after approval.'
+                    ? 'Actual fees from Fee Management plus bus/hostel rows from Step 3. Revised fees are pushed to the fee portal on save; bus/hostel selections sync to their databases.'
+                    : 'Preview configured fee heads. Bus or hostel fees from Step 3 appear here for each program year.'
                 }
                 onSelectFeeHead={undefined}
                 activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
                 canUseCashfree={canUseCashfree}
-                feeDetailsEditable={false}
+                feeDetailsEditable={canWriteJoining && status === 'approved'}
+                showActualAndRevisedFees
                 studentFeeDetails={studentFeeDetails}
+                onStudentFeeDetailsChange={
+                  canWriteJoining && status === 'approved' ? setStudentFeeDetails : undefined
+                }
+                injectedFeeRows={accommodationInjectedRows}
               />
 
-              {renderWizardStepFooter(3)}
+              {status === 'approved' && pendingFeeRequest ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                  A revised fee request was submitted on{' '}
+                  {pendingFeeRequest.submittedAt
+                    ? new Date(pendingFeeRequest.submittedAt).toLocaleString('en-IN')
+                    : '—'}
+                  . It is awaiting approval on the{' '}
+                  {canApproveFeeRequest ? (
+                    <Link
+                      href="/superadmin/joining/fee-requests"
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      Fee Requests
+                    </Link>
+                  ) : (
+                    <span className="font-semibold">Fee Requests</span>
+                  )}{' '}
+                  desk. Fee portal sync runs after approval.
+                </div>
+              ) : null}
+
+              {renderWizardStepFooter(4)}
             </section>
             ) : null}
             </div>

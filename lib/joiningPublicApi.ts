@@ -11,6 +11,7 @@ export type JoiningPublicBootstrapData = {
   registrationForms: unknown[];
   registrationForm: unknown | null;
   certificateGuidance: unknown | null;
+  selfRegistration?: boolean;
 };
 
 async function parseJsonResponse(res: Response) {

@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Search, UserPlus, X } from 'lucide-react';
+import { ChevronDown, Pencil, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { admissionAPI, userAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { QuickAddReferenceUserDialog } from '@/components/admission/QuickAddReferenceUserDialog';
+import {
+  ReferenceNameManageDialog,
+  type ReferenceNameManageMode,
+} from '@/components/admission/ReferenceNameManageDialog';
 import type { User } from '@/types';
 
 export const REFERENCE_NAMES_QUERY_KEY = ['admissions', 'reference-names'] as const;
@@ -19,6 +23,8 @@ type ReferenceUserSelectProps = {
   className?: string;
   /** Show a button to enter a custom reference name (not a portal account). */
   showAddUserButton?: boolean;
+  /** Show edit/remove on saved reference rows (defaults to showAddUserButton). */
+  showManageSavedReferences?: boolean;
 };
 
 const normalizeName = (s: string) => s.trim().toLowerCase();
@@ -31,11 +37,18 @@ export function ReferenceUserSelect({
   disabled = false,
   className = '',
   showAddUserButton = false,
+  showManageSavedReferences,
 }: ReferenceUserSelectProps) {
+  const canManageSaved = showManageSavedReferences ?? showAddUserButton;
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [addUserOpen, setAddUserOpen] = useState(false);
+  const [manageDialog, setManageDialog] = useState<{
+    mode: ReferenceNameManageMode;
+    name: string;
+    localOnly: boolean;
+  } | null>(null);
   /** Names added via Add before the record is saved to the server. */
   const [pendingCustomNames, setPendingCustomNames] = useState<string[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -54,6 +67,13 @@ export function ReferenceUserSelect({
     queryFn: () => admissionAPI.listReferenceNames(),
     staleTime: 60 * 1000,
   });
+
+  const savedNameKeys = useMemo(
+    () => new Set(savedReferenceNames.map((n) => normalizeName(String(n)))),
+    [savedReferenceNames]
+  );
+
+  const isManaging = Boolean(manageDialog);
 
   const users = useMemo(() => {
     const list = (Array.isArray(usersData) ? usersData : (usersData as { data?: User[] })?.data ?? []) as User[];
@@ -150,6 +170,42 @@ export function ReferenceUserSelect({
     invalidateReferenceNames();
   };
 
+  const openManageDialog = (mode: ReferenceNameManageMode, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const localOnly = !savedNameKeys.has(normalizeName(trimmed));
+    setManageDialog({ mode, name: trimmed, localOnly });
+  };
+
+  const handleManageRenamed = (oldName: string, newName: string) => {
+    const oldTrim = oldName.trim();
+    const newTrim = newName.trim();
+    if (!oldTrim || !newTrim) return;
+    setPendingCustomNames((prev) =>
+      prev.map((n) => (normalizeName(n) === normalizeName(oldTrim) ? newTrim : n))
+    );
+    if (normalizeName(value) === normalizeName(oldTrim)) {
+      onChange(newTrim);
+    }
+    void queryClient.invalidateQueries({ queryKey: [...REFERENCE_NAMES_QUERY_KEY] });
+    void queryClient.invalidateQueries({ queryKey: ['admissions'] });
+  };
+
+  const handleManageRemoved = (name: string, clearedRecords: boolean) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setPendingCustomNames((prev) =>
+      prev.filter((n) => normalizeName(n) !== normalizeName(trimmed))
+    );
+    if (normalizeName(value) === normalizeName(trimmed) || clearedRecords) {
+      onChange('');
+    }
+    void queryClient.invalidateQueries({ queryKey: [...REFERENCE_NAMES_QUERY_KEY] });
+    if (clearedRecords) {
+      void queryClient.invalidateQueries({ queryKey: ['admissions'] });
+    }
+  };
+
   const isLoading = usersLoading || refsLoading;
   const hasCustomSection = filteredCustomReferences.length > 0;
   const hasStaffSection = filteredUsers.length > 0;
@@ -169,8 +225,8 @@ export function ReferenceUserSelect({
         <button
           id={id}
           type="button"
-          disabled={disabled}
-          onClick={() => !disabled && setOpen((o) => !o)}
+          disabled={disabled || isManaging}
+          onClick={() => !disabled && !isManaging && setOpen((o) => !o)}
           className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-left text-sm shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
           aria-haspopup="listbox"
           aria-expanded={open}
@@ -210,6 +266,7 @@ export function ReferenceUserSelect({
             variant="outline"
             className="shrink-0 gap-1.5 whitespace-nowrap px-3"
             title="Add a reference name"
+            disabled={isManaging}
             onClick={() => setAddUserOpen(true)}
           >
             <UserPlus className="h-4 w-4" aria-hidden />
@@ -260,21 +317,49 @@ export function ReferenceUserSelect({
                       {filteredCustomReferences.map((name) => {
                         const selected = normalizeName(name) === normalizeName(trimmedValue);
                         return (
-                          <li key={`ref-${name}`}>
+                          <li key={`ref-${name}`} className="flex items-stretch">
                             <button
                               type="button"
-                              className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                              className={`min-w-0 flex-1 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${
                                 selected
                                   ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                                   : 'text-slate-800 dark:text-slate-100'
                               }`}
                               onClick={() => pick(name)}
                             >
-                              <span className="block font-medium">{name}</span>
+                              <span className="block truncate font-medium">{name}</span>
                               <span className="block text-xs text-slate-500 dark:text-slate-400">
                                 Used on previous admissions
                               </span>
                             </button>
+                            {canManageSaved && !disabled ? (
+                              <div className="flex shrink-0 items-center gap-0.5 border-l border-slate-100 px-1 dark:border-slate-800">
+                                <button
+                                  type="button"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                                  title="Edit reference name"
+                                  disabled={isManaging}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openManageDialog('rename', name);
+                                  }}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                                  title="Remove from list"
+                                  disabled={isManaging}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openManageDialog('remove', name);
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : null}
                           </li>
                         );
                       })}
@@ -325,6 +410,16 @@ export function ReferenceUserSelect({
         open={addUserOpen}
         onClose={() => setAddUserOpen(false)}
         onCreated={handleReferenceAdded}
+      />
+
+      <ReferenceNameManageDialog
+        open={Boolean(manageDialog)}
+        mode={manageDialog?.mode ?? 'rename'}
+        referenceName={manageDialog?.name ?? ''}
+        localOnly={manageDialog?.localOnly ?? false}
+        onClose={() => setManageDialog(null)}
+        onRenamed={handleManageRenamed}
+        onRemoved={handleManageRemoved}
       />
     </div>
   );

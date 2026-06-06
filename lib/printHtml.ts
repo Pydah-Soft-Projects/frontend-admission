@@ -14,7 +14,13 @@ export function escapePrintHtml(text: string): string {
 }
 
 /** Open a hidden iframe, write HTML, and trigger the browser print dialog. */
-export function printHtmlDocument(html: string, title: string, onClose?: () => void): void {
+export function printHtmlDocument(
+  html: string,
+  title: string,
+  onClose?: () => void,
+  options?: { deferPrintMs?: number }
+): void {
+  const deferPrintMs = options?.deferPrintMs ?? 300;
   if (typeof document === 'undefined') return;
   const iframe = document.createElement('iframe');
   iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;overflow:hidden;');
@@ -51,5 +57,5 @@ export function printHtmlDocument(html: string, title: string, onClose?: () => v
   iframeDoc.close();
   setTimeout(() => {
     if (!printTriggered) triggerPrint();
-  }, 300);
+  }, deferPrintMs);
 }

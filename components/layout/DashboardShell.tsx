@@ -21,6 +21,8 @@ import {
   JOINING_PERMISSION_KEY,
   resolveJoiningEditAdmission,
   resolveJoiningEditReference,
+  resolveSubmitFeeRequest,
+  resolveApproveFeeRequest,
 } from '@/lib/joiningPermissions';
 import { NotificationBell } from '../NotificationBell';
 import { MobileBottomNav, flattenNavItemsForMobile } from './MobileBottomNav';
@@ -145,6 +147,8 @@ type PermissionContextValue = {
   canWrite: (moduleKey: string) => boolean;
   canJoiningEditReference: () => boolean;
   canJoiningEditAdmission: () => boolean;
+  canSubmitFeeRequest: () => boolean;
+  canApproveFeeRequest: () => boolean;
 };
 
 const PermissionContext = createContext<PermissionContextValue | null>(null);
@@ -173,6 +177,8 @@ export const useJoiningDeskPermissions = () => {
     ...base,
     canEditReference: false,
     canEditAdmission: false,
+    canSubmitFeeRequest: false,
+    canApproveFeeRequest: false,
   };
   if (!ctx) {
     return denyEdits;
@@ -181,6 +187,8 @@ export const useJoiningDeskPermissions = () => {
     ...base,
     canEditReference: ctx.canJoiningEditReference(),
     canEditAdmission: ctx.canJoiningEditAdmission(),
+    canSubmitFeeRequest: ctx.canSubmitFeeRequest(),
+    canApproveFeeRequest: ctx.canApproveFeeRequest(),
   };
 };
 
@@ -191,6 +199,8 @@ export type DashboardNavItem = {
   badge?: string;
   children?: DashboardNavItem[];
   permissionKey?: string;
+  /** Hide unless the user has this joining-desk capability (in addition to module access). */
+  joiningCapability?: 'approveFeeRequest';
   hideInBottomNav?: boolean;
 };
 
@@ -206,7 +216,7 @@ function isSuperadminLeadDetailPath(pathname: string): boolean {
 function isJoiningWorkspaceEditPath(pathname: string): boolean {
   const m = pathname.match(/^\/superadmin\/joining\/([^/]+)$/);
   if (!m) return false;
-  return !['confirmed', 'completed', 'in-progress'].includes(m[1]);
+  return !['confirmed', 'completed', 'in-progress', 'self-registration'].includes(m[1]);
 }
 
 interface DashboardShellProps {
@@ -361,12 +371,26 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     [joiningPermissionEntry]
   );
 
+  const canSubmitFeeRequest = useCallback(
+    () => resolveSubmitFeeRequest(joiningPermissionEntry),
+    [joiningPermissionEntry]
+  );
+
+  const canApproveFeeRequest = useCallback(
+    () => resolveApproveFeeRequest(joiningPermissionEntry),
+    [joiningPermissionEntry]
+  );
+
   const filterNavItems = useCallback(
     (items: DashboardNavItem[]): DashboardNavItem[] =>
       items
         .map((item) => {
           const children = item.children ? filterNavItems(item.children) : [];
-          const accessible = hasAccessForKey(item.permissionKey);
+          const moduleAccessible = hasAccessForKey(item.permissionKey);
+          const joiningCapabilityOk =
+            !item.joiningCapability ||
+            (item.joiningCapability === 'approveFeeRequest' ? canApproveFeeRequest() : true);
+          const accessible = moduleAccessible && joiningCapabilityOk;
 
           if (!accessible && children.length === 0) {
             return null;
@@ -378,7 +402,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           };
         })
         .filter(Boolean) as DashboardNavItem[],
-    [hasAccessForKey]
+    [hasAccessForKey, canApproveFeeRequest, canSubmitFeeRequest]
   );
 
   const filteredNavItems = useMemo(() => filterNavItems(navItems), [filterNavItems, navItems]);
@@ -714,8 +738,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       canWrite: canWriteForKey,
       canJoiningEditReference,
       canJoiningEditAdmission,
+      canSubmitFeeRequest,
+      canApproveFeeRequest,
     }),
-    [normalizedPermissions, hasAccessForKey, canWriteForKey, canJoiningEditReference, canJoiningEditAdmission]
+    [
+      normalizedPermissions,
+      hasAccessForKey,
+      canWriteForKey,
+      canJoiningEditReference,
+      canJoiningEditAdmission,
+      canSubmitFeeRequest,
+      canApproveFeeRequest,
+    ]
   );
 
   return (

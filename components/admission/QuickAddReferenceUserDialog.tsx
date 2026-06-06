@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
@@ -9,10 +9,26 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: (referenceName: string) => void;
+  /** When set, dialog edits an existing saved reference name. */
+  initialName?: string;
+  onRenamed?: (oldName: string, newName: string) => void;
 };
 
-export function QuickAddReferenceUserDialog({ open, onClose, onCreated }: Props) {
+export function QuickAddReferenceUserDialog({
+  open,
+  onClose,
+  onCreated,
+  initialName = '',
+  onRenamed,
+}: Props) {
+  const isEditMode = Boolean(initialName.trim());
   const [name, setName] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setName(initialName.trim());
+    }
+  }, [open, initialName]);
 
   const reset = () => setName('');
 
@@ -22,7 +38,14 @@ export function QuickAddReferenceUserDialog({ open, onClose, onCreated }: Props)
       showToast.error('Reference name is required');
       return;
     }
-    onCreated(trimmedName);
+    if (isEditMode) {
+      const oldName = initialName.trim();
+      if (oldName && onRenamed) {
+        onRenamed(oldName, trimmedName);
+      }
+    } else {
+      onCreated(trimmedName);
+    }
     reset();
     onClose();
   };
@@ -34,9 +57,13 @@ export function QuickAddReferenceUserDialog({ open, onClose, onCreated }: Props)
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Add reference</h3>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {isEditMode ? 'Edit reference' : 'Add reference'}
+            </h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Enter the reference person&apos;s name. This is stored as Reference 1 only — not a portal login.
+              {isEditMode
+                ? 'Rename this saved reference on all admissions, joinings, and CRM leads that use it.'
+                : "Enter the reference person's name. This is stored as Reference 1 only — not a portal login."}
             </p>
           </div>
           <Button
@@ -77,7 +104,7 @@ export function QuickAddReferenceUserDialog({ open, onClose, onCreated }: Props)
             Cancel
           </Button>
           <Button type="button" variant="primary" onClick={handleSubmit}>
-            Add
+            {isEditMode ? 'Save' : 'Add'}
           </Button>
         </div>
       </div>

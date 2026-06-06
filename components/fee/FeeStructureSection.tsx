@@ -127,6 +127,10 @@ export type FeeStructureSectionProps = {
   /** Current saved / in-progress overrides keyed by fee structure row id (`_id`). */
   studentFeeDetails?: JoiningStudentFeeDetails | null;
   onStudentFeeDetailsChange?: (next: JoiningStudentFeeDetails) => void;
+  /** Extra fee rows (e.g. bus fee per year) merged into the Step 4 breakdown. */
+  injectedFeeRows?: FeeStructure[];
+  /** When true, show separate Actual Fee and Revised Fee columns (Step 4). */
+  showActualAndRevisedFees?: boolean;
 };
 
 /**
@@ -151,6 +155,8 @@ export function FeeStructureSection({
   feeDetailsEditable = false,
   studentFeeDetails,
   onStudentFeeDetailsChange,
+  injectedFeeRows,
+  showActualAndRevisedFees = false,
 }: FeeStructureSectionProps) {
   const resolvedCategory = useMemo(() => {
     return (category && category.trim()) || mapQuotaToCategory(quota);
@@ -225,23 +231,35 @@ export function FeeStructureSection({
 
   const items: FeeStructure[] = useMemo(() => {
     const payload = data?.data;
-    if (!payload) return [];
-    if (Array.isArray(payload)) return payload;
-    if (Array.isArray(payload.data)) return payload.data;
-    return [];
-  }, [data]);
+    let base: FeeStructure[] = [];
+    if (payload) {
+      if (Array.isArray(payload)) base = payload;
+      else if (Array.isArray(payload.data)) base = payload.data;
+    }
+    const injected = injectedFeeRows || [];
+    if (injected.length === 0) return base;
+    const injectedIds = new Set(injected.map((row) => String(row._id)));
+    return [...base.filter((row) => !injectedIds.has(String(row._id))), ...injected];
+  }, [data, injectedFeeRows]);
 
   const hasEditableFees = Boolean(feeDetailsEditable && onStudentFeeDetailsChange);
+  const showDualFeeColumns = showActualAndRevisedFees || hasEditableFees;
+  const hideNotesAndScholarship = showActualAndRevisedFees;
+  /** Step 4: pencil opens revised-fee panel; inline inputs only when not using dual columns. */
+  const useInlineRevisedFeeEdit = false;
   /** Pencil first: open an edit panel, then Cash/Cashfree (joining workspace). */
-  const paymentViaEditPanel = Boolean(hasEditableFees && onSelectFeeHead);
+  const paymentViaEditPanel = Boolean(hasEditableFees && onSelectFeeHead && !useInlineRevisedFeeEdit);
 
-  /** Row id (`_id`) whose fee edit + payment panel is open. */
+  /** Row id (`_id`) whose fee edit + payment panel is open (panel mode only). */
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   /** Draft values while the panel is open (committed on "Update line" or used when paying). */
   const [editDraft, setEditDraft] = useState<{ amountStr: string; remarks: string }>({
     amountStr: '',
     remarks: '',
   });
+  /** Inline revised-fee draft while a Step 4 input is focused. */
+  const [inlineEditingRowId, setInlineEditingRowId] = useState<string | null>(null);
+  const [inlineRevisedDraft, setInlineRevisedDraft] = useState('');
 
   const lineOverrideByStructureId = useMemo(() => {
     const m = new Map<string, JoiningStudentFeeLineOverride>();
@@ -322,6 +340,17 @@ export function FeeStructureSection({
     });
   };
 
+  const catalogRowAmount = useCallback((row: FeeStructure) => Number(row.amount) || 0, []);
+
+  const isRowRevised = useCallback(
+    (row: FeeStructure) => {
+      const actual = catalogRowAmount(row);
+      const revised = effectiveRowAmount(row);
+      return revised !== actual;
+    },
+    [catalogRowAmount, effectiveRowAmount]
+  );
+
   const buildSelection = useCallback(
     (row: FeeStructure, mode: FeeHeadPaymentMode, amountOverride?: number): FeeHeadSelection => ({
       feeHeadId: String(row._id),
@@ -345,6 +374,18 @@ export function FeeStructureSection({
     }),
     [effectiveRowAmount, selectedBatch, resolvedCategory]
   );
+
+  const commitInlineRevisedFee = (row: FeeStructure) => {
+    const fallback = Number(effectiveRowAmount(row)) || Number(row.amount) || 0;
+    const trimmed = inlineRevisedDraft.trim();
+    const parsed = trimmed === '' ? fallback : Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setInlineEditingRowId(null);
+      return;
+    }
+    patchStudentFeeLine(row, { amount: parsed, remarks: '' });
+    setInlineEditingRowId(null);
+  };
 
   const openEditRow = (row: FeeStructure) => {
     const sid = String(row._id);
@@ -432,9 +473,17 @@ export function FeeStructureSection({
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</p>
           {hasEditableFees ? (
             <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
-              {paymentViaEditPanel
-                ? 'Click the pencil on a row to set the student amount and notes, then use Cash or Cashfree to collect. Use Update line to save overrides without paying (included when you Save Draft).'
-                : 'Student-specific amounts and notes are saved with this joining when you Save Draft.'}
+              {useInlineRevisedFeeEdit
+                ? 'Actual Fee is from the Fee Management catalog. Edit Revised Fee inline in each row, then Save fee configuration.'
+                : hideNotesAndScholarship && hasEditableFees
+                  ? 'Click the pencil on a row to set a revised fee. Changed rows must be submitted for approval before syncing to the fee portal.'
+                  : paymentViaEditPanel
+                  ? 'Click the pencil on a row to set the student amount and notes, then use Cash or Cashfree to collect. Use Update line to save overrides without paying (included when you Save Draft).'
+                  : 'Actual Fee is the configured catalog amount. Revised Fee is the student-specific amount saved with this joining.'}
+            </p>
+          ) : showDualFeeColumns ? (
+            <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+              Actual Fee is the catalog / linked amount. Revised Fee matches Actual unless you edit and save a concession.
             </p>
           ) : null}
         </div>
@@ -523,16 +572,20 @@ export function FeeStructureSection({
                         <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           <th className="px-4 py-2">Fee Head</th>
                           <th className="px-4 py-2">Code</th>
-                          <th className="px-4 py-2 text-right">{hasEditableFees ? 'Catalog' : 'Amount'}</th>
-                          {hasEditableFees && (
-                            <>
-                              <th className="px-4 py-2 text-right">Student (INR)</th>
-                              <th className="px-4 py-2 min-w-[140px]">Notes</th>
-                            </>
+                          <th className="px-4 py-2 text-right">
+                            {showDualFeeColumns ? 'Actual Fee' : hasEditableFees ? 'Catalog' : 'Amount'}
+                          </th>
+                          {showDualFeeColumns && (
+                            <th className="px-4 py-2 text-right">Revised Fee</th>
                           )}
+                          {showDualFeeColumns && hasEditableFees && !hideNotesAndScholarship ? (
+                            <th className="px-4 py-2 min-w-[140px]">Notes</th>
+                          ) : null}
                           {hasAnyTerms && <th className="px-4 py-2">Terms</th>}
-                          <th className="px-4 py-2 text-center">Scholarship?</th>
-                          {(onSelectFeeHead || hasEditableFees) && (
+                          {!hideNotesAndScholarship && (
+                            <th className="px-4 py-2 text-center">Scholarship?</th>
+                          )}
+                          {(onSelectFeeHead || hasEditableFees) && !useInlineRevisedFeeEdit && (
                             <th className="px-4 py-2 text-right">
                               {paymentViaEditPanel
                                 ? 'Edit / pay'
@@ -551,10 +604,11 @@ export function FeeStructureSection({
                           const isEditingRow = editingRowId === sid;
                           const panelColSpan =
                             3 +
-                            (hasEditableFees ? 2 : 0) +
+                            (showDualFeeColumns ? 1 : 0) +
+                            (showDualFeeColumns && hasEditableFees && !hideNotesAndScholarship ? 1 : 0) +
                             (hasAnyTerms ? 1 : 0) +
-                            1 +
-                            (onSelectFeeHead || hasEditableFees ? 1 : 0);
+                            (!hideNotesAndScholarship ? 1 : 0) +
+                            (onSelectFeeHead || (hasEditableFees && !useInlineRevisedFeeEdit) ? 1 : 0);
                           const cashfreeTitle = canUseCashfree
                             ? 'Collect this fee head via Cashfree UPI / QR'
                             : 'Cashfree is not configured. Update Payment Settings to enable.';
@@ -589,29 +643,79 @@ export function FeeStructureSection({
                                 {row.feeHeadCode || '—'}
                               </td>
                               <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-slate-100">
-                                {hasEditableFees
-                                  ? formatCurrency(row.amount)
-                                  : formatCurrency(effectiveRowAmount(row))}
+                                {formatCurrency(catalogRowAmount(row))}
                               </td>
-                              {hasEditableFees && (
-                                <>
-                                  <td className="px-4 py-3 text-right font-semibold text-emerald-800 dark:text-emerald-200">
-                                    {formatCurrency(effectiveRowAmount(row))}
-                                  </td>
-                                  <td className="max-w-[11rem] px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
-                                    <span
-                                      className="line-clamp-2 break-words"
-                                      title={
-                                        lineOverrideByStructureId.get(String(row._id))?.remarks?.trim() ||
-                                        undefined
-                                      }
-                                    >
-                                      {lineOverrideByStructureId.get(String(row._id))?.remarks?.trim() ||
-                                        '—'}
-                                    </span>
-                                  </td>
-                                </>
+                              {showDualFeeColumns && (
+                                <td className="px-4 py-3 text-right font-semibold text-emerald-800 dark:text-emerald-200">
+                                  {useInlineRevisedFeeEdit ? (
+                                    <div className="inline-flex min-w-[7rem] flex-col items-end gap-1">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        className="w-full max-w-[9rem] rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-emerald-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 dark:border-emerald-900/50 dark:bg-slate-900/80 dark:text-emerald-100"
+                                        value={
+                                          inlineEditingRowId === sid
+                                            ? inlineRevisedDraft
+                                            : String(effectiveRowAmount(row))
+                                        }
+                                        onFocus={() => {
+                                          setInlineEditingRowId(sid);
+                                          setInlineRevisedDraft(String(effectiveRowAmount(row)));
+                                        }}
+                                        onChange={(event) => setInlineRevisedDraft(event.target.value)}
+                                        onBlur={() => commitInlineRevisedFee(row)}
+                                        onKeyDown={(event) => {
+                                          if (event.key === 'Enter') {
+                                            event.currentTarget.blur();
+                                          }
+                                          if (event.key === 'Escape') {
+                                            setInlineEditingRowId(null);
+                                            event.currentTarget.blur();
+                                          }
+                                        }}
+                                        aria-label={`Revised fee for ${row.feeHeadName || 'fee head'}`}
+                                      />
+                                      {isRowRevised(row) ? (
+                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                          Changed
+                                        </span>
+                                      ) : hasEditableFees ? (
+                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                          Unchanged
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <div className="inline-flex items-center justify-end gap-2">
+                                      <span>{formatCurrency(effectiveRowAmount(row))}</span>
+                                      {isRowRevised(row) ? (
+                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                          Changed
+                                        </span>
+                                      ) : hasEditableFees ? (
+                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                          Unchanged
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  )}
+                                </td>
                               )}
+                              {showDualFeeColumns && hasEditableFees && !hideNotesAndScholarship ? (
+                                <td className="max-w-[11rem] px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
+                                  <span
+                                    className="line-clamp-2 break-words"
+                                    title={
+                                      lineOverrideByStructureId.get(String(row._id))?.remarks?.trim() ||
+                                      undefined
+                                    }
+                                  >
+                                    {lineOverrideByStructureId.get(String(row._id))?.remarks?.trim() ||
+                                      '—'}
+                                  </span>
+                                </td>
+                              ) : null}
                               {hasAnyTerms && (
                                 <td className="px-4 py-3">
                                   {row.terms && row.terms.length > 0 ? (
@@ -638,18 +742,20 @@ export function FeeStructureSection({
                                   )}
                                 </td>
                               )}
-                              <td className="px-4 py-3 text-center">
-                                {row.isScholarshipApplicable ? (
-                                  <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
-                                    Eligible
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                    No
-                                  </span>
-                                )}
-                              </td>
-                              {(onSelectFeeHead || hasEditableFees) && (
+                              {!hideNotesAndScholarship && (
+                                <td className="px-4 py-3 text-center">
+                                  {row.isScholarshipApplicable ? (
+                                    <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
+                                      Eligible
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                      No
+                                    </span>
+                                  )}
+                                </td>
+                              )}
+                              {(onSelectFeeHead || hasEditableFees) && !useInlineRevisedFeeEdit && (
                                 <td className="px-4 py-3 text-right">
                                   {hasEditableFees ? (
                                     <button
@@ -657,7 +763,7 @@ export function FeeStructureSection({
                                       onClick={() => openEditRow(row)}
                                       className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-200"
                                       aria-label={`Edit student amount for ${row.feeHeadName || 'fee head'}`}
-                                      title="Edit amount and notes"
+                                      title="Edit revised fee"
                                     >
                                       <Pencil className="h-4 w-4" aria-hidden />
                                     </button>
@@ -723,7 +829,7 @@ export function FeeStructureSection({
                                 </td>
                               )}
                             </tr>
-                            {hasEditableFees && isEditingRow && (
+                            {hasEditableFees && isEditingRow && !useInlineRevisedFeeEdit && (
                               <tr className="border-t border-emerald-100 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/25">
                                 <td colSpan={panelColSpan} className="px-4 py-4">
                                   <div className="flex flex-col gap-4 rounded-xl border border-emerald-200 bg-white p-4 shadow-inner dark:border-emerald-900/50 dark:bg-slate-900/80">
@@ -733,7 +839,7 @@ export function FeeStructureSection({
                                           htmlFor={`fee-edit-amt-${sid}`}
                                           className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
                                         >
-                                          Student amount (INR)
+                                          Revised fee (INR)
                                         </label>
                                         <input
                                           id={`fee-edit-amt-${sid}`}
@@ -749,31 +855,33 @@ export function FeeStructureSection({
                                               amountStr: event.target.value,
                                             }))
                                           }
-                                          aria-label={`Student amount for ${row.feeHeadName || 'fee head'}`}
+                                          aria-label={`Revised fee for ${row.feeHeadName || 'fee head'}`}
                                         />
                                       </div>
-                                      <div className="min-w-[14rem] flex-[2]">
-                                        <label
-                                          htmlFor={`fee-edit-notes-${sid}`}
-                                          className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
-                                        >
-                                          Notes
-                                        </label>
-                                        <input
-                                          id={`fee-edit-notes-${sid}`}
-                                          type="text"
-                                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100"
-                                          value={editDraft.remarks}
-                                          onChange={(event) =>
-                                            setEditDraft((d) => ({
-                                              ...d,
-                                              remarks: event.target.value,
-                                            }))
-                                          }
-                                          placeholder="Concession / note"
-                                          aria-label={`Notes for ${row.feeHeadName || 'fee head'}`}
-                                        />
-                                      </div>
+                                      {!hideNotesAndScholarship ? (
+                                        <div className="min-w-[14rem] flex-[2]">
+                                          <label
+                                            htmlFor={`fee-edit-notes-${sid}`}
+                                            className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                                          >
+                                            Notes
+                                          </label>
+                                          <input
+                                            id={`fee-edit-notes-${sid}`}
+                                            type="text"
+                                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100"
+                                            value={editDraft.remarks}
+                                            onChange={(event) =>
+                                              setEditDraft((d) => ({
+                                                ...d,
+                                                remarks: event.target.value,
+                                              }))
+                                            }
+                                            placeholder="Concession / note"
+                                            aria-label={`Notes for ${row.feeHeadName || 'fee head'}`}
+                                          />
+                                        </div>
+                                      ) : null}
                                     </div>
                                     <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
                                       <button
@@ -859,9 +967,11 @@ export function FeeStructureSection({
 
             <div className="flex items-center justify-end gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
               <span className="font-semibold text-emerald-800 dark:text-emerald-100">
-                {hasEditableFees
-                  ? 'Total (student-specific amounts where set)'
-                  : 'Total course fee (all configured years)'}
+                {showDualFeeColumns
+                  ? 'Total (revised fees)'
+                  : hasEditableFees
+                    ? 'Total (student-specific amounts where set)'
+                    : 'Total course fee (all configured years)'}
               </span>
               <span className="text-lg font-bold text-emerald-900 dark:text-emerald-50">
                 {formatCurrency(grandTotal)}

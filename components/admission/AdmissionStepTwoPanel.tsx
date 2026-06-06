@@ -335,17 +335,8 @@ export function AdmissionStepTwoPanel({
         id="admission-step-two-actions"
         stepLabel="Step 2 actions"
         className="border-indigo-200/80 dark:border-indigo-900/50"
-        hint="Save certificate and fee line changes using the button above when needed, then continue to Step 3."
+        hint="Use Save certificate & fee lines above when needed, then continue to Step 3."
       >
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!canWrite || saveMutation.isPending}
-          onClick={() => saveMutation.mutate()}
-        >
-          {saveMutation.isPending ? 'Saving…' : 'Save Draft'}
-        </Button>
         <WorkflowNextStepButton
           fromStep={2}
           surface="admission-detail"

@@ -10,6 +10,8 @@ export interface ModulePermission {
   editReference?: boolean;
   /** Joining desk: edit joining / admission records (requires module write). */
   editAdmission?: boolean;
+  /** Joining desk: approve or reject fee requests on the Fee Requests page. */
+  approveFeeRequest?: boolean;
 }
 
 export interface User {
@@ -524,6 +526,109 @@ export interface JoiningStudentFeeDetails {
   lines: JoiningStudentFeeLineOverride[];
 }
 
+/** Bus / hostel selection for Step 3 (persisted in joinings.registrationFormData.transport_details). */
+export interface JoiningTransportDetails {
+  accommodationType: 'bus' | 'hostel';
+  routeId?: string;
+  routeName?: string;
+  stageId?: string;
+  stageName?: string;
+  stageFare?: number | null;
+  academicYear?: string;
+  hostelId?: string;
+  hostelName?: string;
+  hostelType?: 'boys' | 'girls' | 'other';
+  categoryId?: string;
+  categoryName?: string;
+  roomId?: string;
+  roomNumber?: string;
+  /** Legacy first-year amount; kept for backward compatibility. */
+  hostelFee?: number | null;
+  /** Per student-year hostel fees from HMS `hostelfeestructures`. */
+  hostelFeesByYear?: Array<{ studentYear: number; amount: number | null }>;
+}
+
+export interface HostelSummary {
+  _id: string;
+  name: string;
+  type: 'boys' | 'girls' | 'other';
+  description?: string;
+}
+
+export interface HostelCategorySummary {
+  _id: string;
+  name: string;
+  description?: string;
+  hostelId: string;
+}
+
+export interface HostelRoomSummary {
+  _id: string;
+  roomNumber: string;
+  bedCount: number;
+  occupiedBeds: number;
+  availableBeds: number;
+  isAvailable: boolean;
+  hostelId: string;
+  categoryId: string;
+}
+
+export interface HostelFeeSummary {
+  _id: string;
+  amount: number | null;
+  course?: string;
+  academicYear?: string;
+  studentYear?: number | null;
+  description?: string;
+}
+
+export interface HostelRoomsPayload {
+  rooms: HostelRoomSummary[];
+  /** Per-year fee rows resolved for the program duration. */
+  yearlyFees?: HostelFeeSummary[];
+  /** First-year fee (legacy). */
+  fee: HostelFeeSummary | null;
+  /** Academic year the fee rows were resolved from (may differ from selected year). */
+  resolvedAcademicYear?: string;
+  feeMatchedBy?: 'exact' | 'fallback' | 'none';
+  total: number;
+  availableCount: number;
+}
+
+export interface TransportRouteSummary {
+  _id: string;
+  routeId: string;
+  routeName: string;
+  startPoint?: string;
+  endPoint?: string;
+  totalDistance?: number | null;
+  stageCount?: number;
+}
+
+export interface TransportRouteStage {
+  _id: string;
+  stageName: string;
+  distanceFromStart?: number | null;
+  fare?: number | null;
+}
+
+export interface TransportBusSummary {
+  _id: string;
+  busNumber: string;
+  capacity?: number | null;
+  type?: string;
+  driverName?: string;
+  attendantName?: string;
+  status?: string;
+  assignedRouteId?: string;
+}
+
+export interface TransportRouteDetail extends TransportRouteSummary {
+  estimatedTime?: string;
+  stages: TransportRouteStage[];
+  buses: TransportBusSummary[];
+}
+
 export interface Joining {
   _id: string;
   leadId?: string; // Made optional to support joinings without leads
@@ -592,6 +697,55 @@ export interface JoiningListResponse {
   success?: boolean;
   message?: string;
   data: JoiningListPayload;
+}
+
+export type FeeRequestStatus = 'pending_approval' | 'approved' | 'rejected';
+
+export interface FeeRequestLine {
+  structureId: string;
+  feeHeadName?: string;
+  feeHeadCode?: string;
+  actualAmount?: number;
+  revisedAmount?: number;
+  isRevised?: boolean;
+  studentYear?: number | null;
+}
+
+export interface FeeRequest {
+  id: string;
+  joiningId: string;
+  leadId?: string | null;
+  admissionNumber?: string;
+  studentName?: string;
+  course?: string;
+  branch?: string;
+  batch?: string;
+  status: FeeRequestStatus;
+  requestLines: FeeRequestLine[];
+  accommodationType?: string | null;
+  transportDetails?: JoiningTransportDetails | null;
+  studentFeeDetails?: JoiningStudentFeeDetails | null;
+  submittedAt?: string | null;
+  submittedBy?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  rejectedAt?: string | null;
+  rejectedBy?: string | null;
+  rejectionReason?: string;
+  reviewerNote?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FeeRequestListPayload {
+  feeRequests: FeeRequest[];
+  pagination: Pagination;
+}
+
+export interface FeeRequestListResponse {
+  success?: boolean;
+  message?: string;
+  data: FeeRequestListPayload;
 }
 
 export interface OverviewAnalyticsTotals {

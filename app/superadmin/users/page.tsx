@@ -1170,7 +1170,10 @@ const UserManagementPage = () => {
                                   {joiningExtras.editReference ? 'Reference' : '—'}
                                   {joiningExtras.editReference && joiningExtras.editAdmission ? ' · ' : ''}
                                   {joiningExtras.editAdmission ? 'Admission' : ''}
-                                  {!joiningExtras.editReference && !joiningExtras.editAdmission
+                                  {joiningExtras.approveFeeRequest ? ' · Approve fees' : ''}
+                                  {!joiningExtras.editReference &&
+                                  !joiningExtras.editAdmission &&
+                                  !joiningExtras.approveFeeRequest
                                     ? 'None (view only on desk)'
                                     : ''}
                                 </p>
@@ -1182,7 +1185,7 @@ const UserManagementPage = () => {
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Use Edit User to change Joining Desk reference or admission edit options.
+                    Use Edit User to change Joining Desk reference, admission, or fee request approval.
                   </p>
                 </div>
               )}

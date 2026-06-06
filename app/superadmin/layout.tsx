@@ -43,7 +43,9 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
     permissionKey: 'joining',
     children: [
       { href: '/superadmin/joining/confirmed', label: 'Confirmed Leads', icon: ListIcon, permissionKey: 'joining' },
+      { href: '/superadmin/joining/self-registration', label: 'Self Registration', icon: TemplateIcon, permissionKey: 'joining' },
       { href: '/superadmin/joining', label: 'Joining Pipeline', icon: AcademicIcon, permissionKey: 'joining' },
+      { href: '/superadmin/joining/fee-requests', label: 'Fee Requests', icon: CurrencyIcon, permissionKey: 'joining', joiningCapability: 'approveFeeRequest' },
       { href: '/superadmin/joining/completed', label: 'Admissions', icon: AcademicIcon, permissionKey: 'joining' },
     ],
   },
@@ -88,6 +90,7 @@ const buildFullAccessPermissions = (): Record<PermissionModuleKey, ModulePermiss
             permission: 'write',
             editReference: true,
             editAdmission: true,
+            approveFeeRequest: true,
           }
         : {
             access: true,

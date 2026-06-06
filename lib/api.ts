@@ -13,6 +13,7 @@ import type {
   ImportJobStatusResponse,
   DeleteJobStatusResponse,
   LeadFilters,
+  JoiningStudentFeeDetails,
 } from '@/types';
 
 export type SmsBulkJobReportContext = {
@@ -896,6 +897,11 @@ export const courseAPI = {
     const response = await api.get(`/courses/certificate-guidance?${q.toString()}`);
     return response.data;
   },
+  /** College header, course fee QR, and admission contact for admit card print. */
+  getAdmitCardAssets: async (courseId: string) => {
+    const response = await api.get(`/courses/${courseId}/admit-card-assets`);
+    return response.data;
+  },
   /** Colleges from secondary DB (same source as courses). */
   listCollegesFromSecondary: async (params?: { showInactive?: boolean }) => {
     const queryParams = new URLSearchParams();
@@ -1256,6 +1262,20 @@ export const communicationAPI = {
   },
 };
 
+export type SelfRegistrationLinkApiResponse = {
+  data?: {
+    path: string;
+    publicUrl: string;
+    token: string;
+    permanent?: boolean;
+    expiresAt?: string | null;
+    ttlSeconds?: number | null;
+    created?: boolean;
+    configuredAt?: string;
+  };
+  message?: string;
+};
+
 // Joining API
 export const joiningAPI = {
   list: async (params?: {
@@ -1266,6 +1286,10 @@ export const joiningAPI = {
     leadStatus?: string;
     /** When true, only joinings with an enquiry on the lead or `lead_data.enquiryNumber` (joining desk). */
     requireEnquiry?: boolean;
+    /** Filter by CRM lead source (e.g. `Self Registration`). */
+    source?: string;
+    /** Omit joinings whose lead/snapshot source matches this value. */
+    excludeSource?: string;
   }) => {
     const queryParams = new URLSearchParams();
     if (params) {
@@ -1324,6 +1348,21 @@ export const joiningAPI = {
       message?: string;
     };
   },
+  /** Permanent campus self-registration QR/link (get-or-create on first load). */
+  getSelfRegistrationLink: async () => {
+    const response = await api.get('/joinings/self-registration-link');
+    return response.data as SelfRegistrationLinkApiResponse;
+  },
+  /** Idempotent alias — returns the same permanent link if already configured. */
+  createSelfRegistrationLink: async () => {
+    const response = await api.post('/joinings/self-registration-link');
+    return response.data as SelfRegistrationLinkApiResponse;
+  },
+  /** Rotates the campus QR (invalidates the previous printed code). */
+  regenerateSelfRegistrationLink: async () => {
+    const response = await api.post('/joinings/self-registration-link/regenerate');
+    return response.data as SelfRegistrationLinkApiResponse;
+  },
   createDraftAndPublicLink: async (data: {
     studentName: string;
     studentPhone: string;
@@ -1356,6 +1395,46 @@ export const joiningAPI = {
       };
       message?: string;
     };
+  },
+};
+
+export const feeRequestAPI = {
+  list: async (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: 'pending_approval' | 'approved' | 'rejected';
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') return;
+        queryParams.append(key, String(value));
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/fee-requests${query ? `?${query}` : ''}`);
+    return response.data;
+  },
+  getPendingForJoining: async (joiningId: string) => {
+    const response = await api.get(`/fee-requests/joining/${joiningId}/pending`);
+    return response.data;
+  },
+  submit: async (data: {
+    joiningId: string;
+    studentFeeDetails?: JoiningStudentFeeDetails;
+    registrationFormData?: { transport_details?: unknown };
+  }) => {
+    const response = await api.post('/fee-requests/submit', data);
+    return response.data;
+  },
+  approve: async (id: string, reviewerNote?: string) => {
+    const response = await api.post(`/fee-requests/${id}/approve`, { reviewerNote });
+    return response.data;
+  },
+  reject: async (id: string, reason?: string) => {
+    const response = await api.post(`/fee-requests/${id}/reject`, { reason });
+    return response.data;
   },
 };
 
@@ -1397,6 +1476,34 @@ export const admissionAPI = {
     const payload = response.data?.data ?? response.data;
     const names = (payload as { names?: string[] })?.names;
     return Array.isArray(names) ? names : [];
+  },
+  getReferenceNameUsage: async (name: string) => {
+    const response = await api.get('/admissions/reference-names/usage', {
+      params: { name },
+    });
+    return (response.data?.data ?? response.data) as {
+      name: string;
+      admissionsCount: number;
+      joiningsCount: number;
+      leadsCount: number;
+      admissions: Array<{
+        id: string;
+        admissionNumber: string;
+        studentName: string;
+        status: string;
+        course: string;
+        branch: string;
+      }>;
+      admissionsTruncated: boolean;
+    };
+  },
+  renameReferenceName: async (oldName: string, newName: string) => {
+    const response = await api.patch('/admissions/reference-names/rename', { oldName, newName });
+    return response.data;
+  },
+  hideReferenceName: async (name: string, clearRecords = false) => {
+    const response = await api.post('/admissions/reference-names/hide', { name, clearRecords });
+    return response.data;
   },
   getStatsByReference: async (params?: {
     startDate?: string;
@@ -1579,6 +1686,66 @@ export const feeStructureAPI = {
   },
   options: async () => {
     const response = await api.get(`/fee-structures/options`);
+    return response.data;
+  },
+};
+
+export const transportAPI = {
+  listRoutes: async () => {
+    const response = await api.get('/transport/routes');
+    return response.data;
+  },
+  getRouteDetail: async (routeId: string) => {
+    const response = await api.get(`/transport/routes/${encodeURIComponent(routeId)}`);
+    return response.data;
+  },
+};
+
+export const hostelAPI = {
+  listAcademicYears: async () => {
+    const response = await api.get('/hostel/academic-years');
+    return response.data;
+  },
+  listHostels: async () => {
+    const response = await api.get('/hostel/hostels');
+    return response.data;
+  },
+  listCategories: async (hostelId: string) => {
+    const response = await api.get(`/hostel/categories?hostelId=${encodeURIComponent(hostelId)}`);
+    return response.data;
+  },
+  listRooms: async (params: {
+    hostelId: string;
+    categoryId: string;
+    academicYear?: string;
+    course?: string;
+    totalYears?: number;
+  }) => {
+    const query = new URLSearchParams({
+      hostelId: params.hostelId,
+      categoryId: params.categoryId,
+    });
+    if (params.academicYear) query.set('academicYear', params.academicYear);
+    if (params.course) query.set('course', params.course);
+    if (params.totalYears != null) query.set('totalYears', String(params.totalYears));
+    const response = await api.get(`/hostel/rooms?${query.toString()}`);
+    return response.data;
+  },
+  getFee: async (params: {
+    hostelId: string;
+    categoryId: string;
+    academicYear: string;
+    course?: string;
+    totalYears?: number;
+  }) => {
+    const query = new URLSearchParams({
+      hostelId: params.hostelId,
+      categoryId: params.categoryId,
+      academicYear: params.academicYear,
+    });
+    if (params.course) query.set('course', params.course);
+    if (params.totalYears != null) query.set('totalYears', String(params.totalYears));
+    const response = await api.get(`/hostel/fee?${query.toString()}`);
     return response.data;
   },
 };

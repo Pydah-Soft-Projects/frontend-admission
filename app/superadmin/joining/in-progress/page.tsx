@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { joiningAPI } from '@/lib/api';
+import { SELF_REGISTRATION_SOURCE } from '@/lib/joiningSelfRegistration';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { JoiningDraftSmsModal } from '@/components/joining/JoiningDraftSmsModal';
 import { JoiningListResponse, JoiningStatus } from '@/types';
@@ -83,6 +84,7 @@ const JoiningInProgressPage = () => {
         search: searchTerm || undefined,
         status: selectedStatuses,
         requireEnquiry: true,
+        excludeSource: SELF_REGISTRATION_SOURCE,
       });
       return response.data;
     },

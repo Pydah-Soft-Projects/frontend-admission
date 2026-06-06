@@ -4,7 +4,9 @@ import type { ModulePermission } from '@/types';
 
 type JoiningModulePermissionExtrasProps = {
   moduleState: ModulePermission;
-  onChange: (patch: Partial<Pick<ModulePermission, 'editReference' | 'editAdmission'>>) => void;
+  onChange: (
+    patch: Partial<Pick<ModulePermission, 'editReference' | 'editAdmission' | 'approveFeeRequest'>>
+  ) => void;
 };
 
 export function JoiningModulePermissionExtras({ moduleState, onChange }: JoiningModulePermissionExtrasProps) {
@@ -19,6 +21,7 @@ export function JoiningModulePermissionExtras({ moduleState, onChange }: Joining
       </p>
       <p className="mb-2 text-[11px] text-slate-600 dark:text-slate-400">
         Only users with Read &amp; Write can be granted these actions. Read-only access cannot edit.
+        Revised fee requests can be submitted by any joining desk user with Read &amp; Write.
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200">
@@ -46,6 +49,20 @@ export function JoiningModulePermissionExtras({ moduleState, onChange }: Joining
             Edit admission
             <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">
               Open and edit joining / admission forms
+            </span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200 sm:col-span-2">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            checked={Boolean(moduleState.approveFeeRequest)}
+            onChange={(e) => onChange({ approveFeeRequest: e.target.checked })}
+          />
+          <span>
+            Approve fee requests
+            <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">
+              Review and approve pending revised fees on the Fee Requests desk
             </span>
           </span>
         </label>
