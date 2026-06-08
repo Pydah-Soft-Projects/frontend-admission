@@ -264,6 +264,16 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   const roleLabel = currentUser?.roleName ?? 'Super Admin';
   const userName = currentUser?.name ?? 'Super Admin';
 
+  const useMobileBottomNav = useMemo(() => {
+    if (currentUser?.roleName !== 'Sub Super Admin') return false;
+    if (!pathname) return false;
+    if (pathname === '/superadmin/leads') return true;
+    const leadSubRoutes = new Set(['upload', 'assign', 'individual', 'group-update']);
+    const match = pathname.match(/^\/superadmin\/leads\/([^/]+)$/);
+    if (match && !leadSubRoutes.has(match[1])) return true;
+    return false;
+  }, [pathname, currentUser?.roleName]);
+
   const description =
     roleLabel === 'Data Entry User'
       ? 'Create a single prospect manually and add them to the admissions workflow.'
@@ -287,6 +297,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
       roleName={roleLabel}
       userName={userName}
       permissions={permissionConfig}
+      useMobileBottomNav={useMobileBottomNav}
     >
       {children}
       {/* Floating Test Notifications Button - Only for Super Admin */}

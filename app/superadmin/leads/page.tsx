@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/auth';
 import { leadAPI, userAPI } from '@/lib/api';
@@ -12,7 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { mergeQuotaSelectOptions } from '@/lib/studentQuotaCatalog';
-import { Skeleton, TableSkeleton, CardSkeleton, LeadTableSkeleton } from '@/components/ui/Skeleton';
+import { Skeleton, CardSkeleton, LeadTableSkeleton, LeadCardSkeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 // import { exportToExcel, exportToCSV } from '@/lib/export'; // Temporarily removed for future redesign
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
@@ -39,7 +40,7 @@ const STORAGE_KEY = 'leads_management_state';
 export default function LeadsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { clearHeaderContent, setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const [user, setUser] = useState(auth.getUser());
   const pageSizeOptions = [50, 100, 200, 300];
   const defaultPageSize = 50;
@@ -301,11 +302,21 @@ export default function LeadsPage() {
   const pagination = leadsData?.pagination || { page: 1, limit: 50, total: 0, pages: 1 };
   const needsUpdateCount = leadsData?.needsUpdateCount ?? 0;
 
-  // Header content removed to reduce space; using inline header
   useEffect(() => {
     clearHeaderContent();
     return () => clearHeaderContent();
   }, [clearHeaderContent]);
+
+  const isSubSuperAdmin = user?.roleName === 'Sub Super Admin';
+
+  useEffect(() => {
+    if (!isSubSuperAdmin) {
+      clearMobileTopBar();
+      return;
+    }
+    setMobileTopBar({ title: 'Leads Management', iconKey: 'leads' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar, isSubSuperAdmin]);
 
   const handleSort = useCallback((field: string) => {
     setSortField((prevField) => {
@@ -805,9 +816,13 @@ export default function LeadsPage() {
     );
   }
 
+  const modalOverlayClass = isSubSuperAdmin
+    ? 'fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50'
+    : 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+
   return (
-    <div className="w-full space-y-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
+    <div className={isSubSuperAdmin ? 'mx-auto w-full max-w-7xl space-y-4 px-0 pb-2' : 'w-full space-y-4'}>
+      <div className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3 ${isSubSuperAdmin ? 'hidden sm:flex' : ''}`}>
         <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Leads Management</h1>
         {!isError && leadsData != null && (
           <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
@@ -817,18 +832,20 @@ export default function LeadsPage() {
       </div>
 
       <div className="mb-2">
-        {/* Search, Filters, and Action Bar - All in One Row */}
-        <div className="flex flex-wrap gap-3">
+        {/* Search, Filters, and Action Bar */}
+        <div className={isSubSuperAdmin ? 'flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3' : 'flex flex-wrap gap-3'}>
           {/* Global search: name or enquiry number only */}
-          <div className="relative flex-[2] min-w-[300px]">
+          <div className={`relative ${isSubSuperAdmin ? 'min-w-0 flex-1 sm:flex-[2] sm:min-w-[300px]' : 'flex-[2] min-w-[300px]'}`}>
             <Input
               type="text"
-              placeholder="Search by name or enquiry # (e.g. ENQ24...)"
+              placeholder={isSubSuperAdmin ? 'Name, enquiry, or mobile number…' : 'Search by name or enquiry # (e.g. ENQ24...)'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setShowSearchSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
-              className="w-full py-2 text-sm pl-10"
+              className={isSubSuperAdmin
+                ? 'h-9 w-full rounded border border-slate-200 bg-white py-1.5 px-2.5 text-sm pl-10 focus:ring-1 focus:ring-orange-500 sm:py-2 sm:text-sm'
+                : 'w-full py-2 text-sm pl-10'}
             />
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -889,33 +906,47 @@ export default function LeadsPage() {
           </div>
 
           {/* Filter Buttons */}
-          <div className="flex items-center gap-2 self-end mb-0.5">
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-1.5 h-10"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-              {showFilters ? 'Hide' : 'Show'} Filters
-            </Button>
-            {(Object.keys(filters).length > 0 || search) && (
-              <Button
-                variant="outline"
-                onClick={clearFilters}
-                className="flex items-center gap-1.5 h-10"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Clear
-              </Button>
+          <div className={`flex items-center shrink-0 self-end mb-0.5 ${isSubSuperAdmin ? 'gap-1.5' : 'gap-2'}`}>
+            {isSubSuperAdmin ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="inline-flex items-center gap-1 rounded border border-slate-200 bg-transparent px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  {showFilters ? 'Hide' : 'Filters'}
+                </button>
+                {(Object.keys(filters).length > 0 || search) && (
+                  <Button variant="outline" size="sm" onClick={clearFilters} className="!py-1.5 !px-2 !text-xs !min-h-0 h-8">
+                    Clear
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-1.5 h-10">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  {showFilters ? 'Hide' : 'Show'} Filters
+                </Button>
+                {(Object.keys(filters).length > 0 || search) && (
+                  <Button variant="outline" onClick={clearFilters} className="flex items-center gap-1.5 h-10">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Clear
+                  </Button>
+                )}
+              </>
             )}
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 self-end mb-0.5">
+          <div className={`flex items-center gap-2 self-end mb-0.5 flex-wrap ${isSubSuperAdmin ? 'hidden md:flex' : ''}`}>
             <Button
               variant="primary"
               onClick={() => router.push('/superadmin/leads/individual')}
@@ -969,13 +1000,13 @@ export default function LeadsPage() {
 
           {/* Filter Row */}
           {showFilters && (
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 pt-2 border-t border-gray-200 mt-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
+            <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:grid-cols-6 w-full">
+              <div className="flex min-w-0 flex-col gap-1 col-span-1">
+                <label className="text-[10px] font-medium text-slate-500 md:text-sm md:text-gray-700 md:dark:text-slate-200 md:mb-1">
                   State
                 </label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
+                  className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 md:px-3 md:py-2 md:text-sm md:rounded-lg md:focus:ring-2 md:focus:ring-blue-500 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
                   value={filters.state || ''}
                   onChange={(e) => handleFilterChange('state', e.target.value)}
                 >
@@ -1149,7 +1180,7 @@ export default function LeadsPage() {
                 </span>
               )}
             </p>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className={`flex items-center gap-2 flex-wrap ${isSubSuperAdmin ? 'hidden md:flex' : ''}`}>
               {pagination.total > 0 && (
                 <Button
                   variant="outline"
@@ -1353,13 +1384,102 @@ export default function LeadsPage() {
             />
           </Card>
         ) : isLoading ? (
-          <Card>
-            <div className="p-0">
-              <LeadTableSkeleton rows={10} />
-            </div>
-          </Card>
+          isSubSuperAdmin ? (
+            <>
+              <div className="grid grid-cols-1 gap-2 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 md:hidden">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <LeadCardSkeleton key={i} />
+                ))}
+              </div>
+              <Card className="hidden md:block">
+                <div className="p-0">
+                  <LeadTableSkeleton rows={10} />
+                </div>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <div className="p-0">
+                <LeadTableSkeleton rows={10} />
+              </div>
+            </Card>
+          )
         ) : (
           <>
+            {isSubSuperAdmin ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
+              {displayedLeads.map((lead: Lead) => {
+                const assignedUserName = typeof lead.assignedTo === 'object' && lead.assignedTo !== null
+                  ? lead.assignedTo.name
+                  : '—';
+                return (
+                  <article
+                    key={`mobile-lead-${lead._id}`}
+                    onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
+                    className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:shadow-md hover:border-orange-200/80 cursor-pointer dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    <div className="h-0.5 w-full bg-slate-100 group-hover:bg-orange-100 transition-colors dark:bg-slate-800" aria-hidden />
+                    <div className="relative flex flex-1 flex-col p-3">
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-400 text-white shadow-sm ring-1 ring-orange-600/20 font-semibold text-sm uppercase">
+                            {(lead.name || '?').charAt(0)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              href={`/superadmin/leads/${lead._id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="block truncate text-sm font-semibold text-slate-900 underline underline-offset-2 decoration-orange-500 hover:text-orange-600 dark:text-slate-100 dark:decoration-orange-400 dark:hover:text-orange-400"
+                            >
+                              {lead.name || '—'}
+                            </Link>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                              {lead.isNRI && (
+                                <span className="rounded bg-purple-100 px-1 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                                  NRI
+                                </span>
+                              )}
+                              {Number(lead.needsManualUpdate) > 0 && (
+                                <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-700" title="Details need manual update">
+                                  Update
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusColor(lead.leadStatus)}`}>
+                          {lead.leadStatus || 'New'}
+                        </span>
+                      </div>
+
+                      <div className="mt-1.5 ml-11 space-y-1">
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                          <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{lead.phone || '—'}</span>
+                        </div>
+                        {(lead.studentGroup || lead.mandal || lead.district || assignedUserName !== '—') && (
+                          <div className="flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="min-w-0 truncate">
+                              {[lead.studentGroup, lead.mandal, lead.district].filter(Boolean).join(', ')}
+                              {assignedUserName !== '—' && (
+                                <span className="block text-[10px] text-slate-400 dark:text-slate-500">Counsellor: {assignedUserName}</span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            ) : (
             <div className="grid gap-4 md:hidden">
               {displayedLeads.map((lead: Lead) => {
                 const assignedUserName = typeof lead.assignedTo === 'object' && lead.assignedTo !== null
@@ -1378,13 +1498,9 @@ export default function LeadsPage() {
                       <div>
                         <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">Lead name</p>
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                            {lead.name}
-                          </p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{lead.name}</p>
                           {lead.isNRI && (
-                            <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded">
-                              NRI
-                            </span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded">NRI</span>
                           )}
                         </div>
                       </div>
@@ -1399,7 +1515,6 @@ export default function LeadsPage() {
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                       />
                     </div>
-
                     <div className="mt-4 space-y-3 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-500 dark:text-slate-400">Group</span>
@@ -1442,33 +1557,15 @@ export default function LeadsPage() {
                         <span className="font-medium text-gray-900 dark:text-slate-100">{lead.visitStatus || '—'}</span>
                       </div>
                     </div>
-
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/superadmin/leads/${lead._id}`);
-                        }}
-                      >
-                        View Details
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenCommentModal(lead, e as unknown as React.MouseEvent);
-                        }}
-                      >
-                        Comment / Update Status
-                      </Button>
+                      <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); router.push(`/superadmin/leads/${lead._id}`); }}>View Details</Button>
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleOpenCommentModal(lead, e as unknown as React.MouseEvent); }}>Comment / Update Status</Button>
                     </div>
                   </Card>
                 );
               })}
             </div>
+            )}
 
             <div className="hidden md:block overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="overflow-x-auto w-full">
@@ -1712,140 +1809,182 @@ export default function LeadsPage() {
       </section>
 
       {showCommentModal && selectedLead && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Add Comment / Update Status / Quota</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                  Current Status: <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span>
-                </label>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                  Update Status
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                  value={newStatus}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                >
-                  <option value="">Keep Current Status</option>
-                  <option value="Interested">Interested</option>
-                  <option value="Not Interested">Not Interested</option>
-                  <option value="Wrong Data">Wrong Data</option>
-                  <option value="partial">Partial</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Admitted">Admitted</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                  Current Quota: <span className="font-semibold">{selectedLead.quota || 'Not Applicable'}</span>
-                </label>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                  Update Quota
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                  value={newQuota}
-                  onChange={(e) => setNewQuota(e.target.value)}
-                >
-                  {quotaOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
-                  Comment
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm min-h-[100px] dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Add a comment..."
-                />
-              </div>
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="primary"
-                  onClick={handleSaveActivity}
-                  disabled={
-                    addActivityMutation.isPending ||
-                    (!comment.trim() &&
-                      newStatus === selectedLead.leadStatus &&
-                      newQuota === (selectedLead.quota || 'Not Applicable'))
-                  }
-                >
-                  {addActivityMutation.isPending ? 'Saving...' : 'Save'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowCommentModal(false);
-                    setShowConfirmModal(false);
-                    setSelectedLead(null);
-                    setComment('');
-                    setNewStatus('');
-                    setNewQuota('Not Applicable');
-                  }}
-                  disabled={addActivityMutation.isPending}
-                >
-                  Cancel
-                </Button>
+        <div className={modalOverlayClass}>
+          {isSubSuperAdmin ? (
+            <div className="w-full max-h-[90vh] overflow-y-auto sm:max-h-none sm:overflow-visible rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 shadow-xl sm:max-w-md pt-4 pb-[env(safe-area-inset-bottom)] sm:pb-4">
+              <div className="px-4 sm:px-6 pb-4">
+                <div className="mx-auto w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden mb-4" aria-hidden />
+                <h2 className="text-xl font-semibold mb-4 text-slate-900 dark:text-slate-100">Add Comment / Update Status / Quota</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
+                      Current Status: <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span>
+                    </label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Update Status</label>
+                    <select
+                      className="w-full min-h-[44px] px-3 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-slate-900/70 dark:border-slate-700 dark:text-slate-100"
+                      value={newStatus}
+                      onChange={(e) => handleStatusChange(e.target.value)}
+                    >
+                      <option value="">Keep Current Status</option>
+                      <option value="Interested">Interested</option>
+                      <option value="Not Interested">Not Interested</option>
+                      <option value="Wrong Data">Wrong Data</option>
+                      <option value="partial">Partial</option>
+                      <option value="Confirmed">Confirmed</option>
+                      <option value="Admitted">Admitted</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
+                      Current Quota: <span className="font-semibold">{selectedLead.quota || 'Not Applicable'}</span>
+                    </label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Update Quota</label>
+                    <select
+                      className="w-full min-h-[44px] px-3 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-slate-900/70 dark:border-slate-700 dark:text-slate-100"
+                      value={newQuota}
+                      onChange={(e) => setNewQuota(e.target.value)}
+                    >
+                      {quotaOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Comment</label>
+                    <textarea
+                      className="w-full min-h-[120px] px-3 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-slate-900/70 dark:border-slate-700 dark:text-slate-100"
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="Add a comment..."
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <Button variant="primary" onClick={handleSaveActivity} disabled={addActivityMutation.isPending || (!comment.trim() && newStatus === selectedLead.leadStatus && newQuota === (selectedLead.quota || 'Not Applicable'))} className="min-h-[44px] flex-1 sm:flex-initial">
+                      {addActivityMutation.isPending ? 'Saving...' : 'Save'}
+                    </Button>
+                    <Button variant="outline" onClick={() => { setShowCommentModal(false); setShowConfirmModal(false); setSelectedLead(null); setComment(''); setNewStatus(''); setNewQuota('Not Applicable'); }} disabled={addActivityMutation.isPending} className="min-h-[44px] flex-1 sm:flex-initial">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
-          </Card>
+          ) : (
+            <Card className="max-w-md w-full">
+              <h2 className="text-xl font-semibold mb-4">Add Comment / Update Status / Quota</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
+                    Current Status: <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span>
+                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Update Status</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100" value={newStatus} onChange={(e) => handleStatusChange(e.target.value)}>
+                    <option value="">Keep Current Status</option>
+                    <option value="Interested">Interested</option>
+                    <option value="Not Interested">Not Interested</option>
+                    <option value="Wrong Data">Wrong Data</option>
+                    <option value="partial">Partial</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Admitted">Admitted</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">
+                    Current Quota: <span className="font-semibold">{selectedLead.quota || 'Not Applicable'}</span>
+                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Update Quota</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100" value={newQuota} onChange={(e) => setNewQuota(e.target.value)}>
+                    {quotaOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Comment</label>
+                  <textarea className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm min-h-[100px] dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-100" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Add a comment..." />
+                </div>
+                <div className="flex gap-2 pt-4">
+                  <Button variant="primary" onClick={handleSaveActivity} disabled={addActivityMutation.isPending || (!comment.trim() && newStatus === selectedLead.leadStatus && newQuota === (selectedLead.quota || 'Not Applicable'))}>
+                    {addActivityMutation.isPending ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setShowCommentModal(false); setShowConfirmModal(false); setSelectedLead(null); setComment(''); setNewStatus(''); setNewQuota('Not Applicable'); }} disabled={addActivityMutation.isPending}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
       {showConfirmModal && selectedLead && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Confirm Status Change</h2>
-            <div className="space-y-4">
-              <p className="text-gray-700 dark:text-slate-200">
-                Are you sure you want to change the status from{' '}
-                <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span> to{' '}
-                <span className="font-semibold">{newStatus}</span>?
-              </p>
-              {newQuota !== (selectedLead.quota || 'Not Applicable') && (
-                <p className="text-gray-700 dark:text-slate-200">
-                  Quota will also be updated from{' '}
-                  <span className="font-semibold">{selectedLead.quota || 'Not Applicable'}</span> to{' '}
-                  <span className="font-semibold">{newQuota}</span>.
-                </p>
-              )}
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="primary"
-                  onClick={handleConfirmStatusChange}
-                  disabled={addActivityMutation.isPending}
-                >
-                  {addActivityMutation.isPending ? 'Saving...' : 'Confirm'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setNewStatus(selectedLead.leadStatus || '');
-                    setNewQuota(selectedLead.quota || 'Not Applicable');
-                  }}
-                  disabled={addActivityMutation.isPending}
-                >
-                  Cancel
-                </Button>
+        <div className={modalOverlayClass}>
+          <div className={`w-full max-h-[90vh] overflow-y-auto sm:max-h-none sm:overflow-visible bg-white dark:bg-slate-900 shadow-xl sm:max-w-md ${isSubSuperAdmin ? 'rounded-t-2xl sm:rounded-2xl pt-4 pb-[env(safe-area-inset-bottom)] sm:pb-4' : 'rounded-2xl p-0'}`}>
+            {isSubSuperAdmin ? (
+              <div className="px-4 sm:px-6 pb-4">
+                <div className="mx-auto w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden mb-4" aria-hidden />
+                <h2 className="text-xl font-semibold mb-4 text-slate-900 dark:text-slate-100">Confirm Status Change</h2>
+                <div className="space-y-4">
+                  <p className="text-gray-700 dark:text-slate-200">
+                    Are you sure you want to change the status from{' '}
+                    <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span> to{' '}
+                    <span className="font-semibold">{newStatus}</span>?
+                  </p>
+                  {newQuota !== (selectedLead.quota || 'Not Applicable') && (
+                    <p className="text-gray-700 dark:text-slate-200">
+                      Quota will also be updated from{' '}
+                      <span className="font-semibold">{selectedLead.quota || 'Not Applicable'}</span> to{' '}
+                      <span className="font-semibold">{newQuota}</span>.
+                    </p>
+                  )}
+                  <div className="flex gap-3 pt-4">
+                    <Button variant="primary" onClick={handleConfirmStatusChange} disabled={addActivityMutation.isPending} className="min-h-[44px] flex-1 sm:flex-initial">
+                      {addActivityMutation.isPending ? 'Saving...' : 'Confirm'}
+                    </Button>
+                    <Button variant="outline" onClick={() => { setShowConfirmModal(false); setNewStatus(selectedLead.leadStatus || ''); setNewQuota(selectedLead.quota || 'Not Applicable'); }} disabled={addActivityMutation.isPending} className="min-h-[44px] flex-1 sm:flex-initial">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </Card>
+            ) : (
+              <Card className="max-w-md w-full border-0 shadow-none">
+                <h2 className="text-xl font-semibold mb-4">Confirm Status Change</h2>
+                <div className="space-y-4">
+                  <p className="text-gray-700 dark:text-slate-200">
+                    Are you sure you want to change the status from{' '}
+                    <span className="font-semibold">{selectedLead.leadStatus || 'New'}</span> to{' '}
+                    <span className="font-semibold">{newStatus}</span>?
+                  </p>
+                  {newQuota !== (selectedLead.quota || 'Not Applicable') && (
+                    <p className="text-gray-700 dark:text-slate-200">
+                      Quota will also be updated from{' '}
+                      <span className="font-semibold">{selectedLead.quota || 'Not Applicable'}</span> to{' '}
+                      <span className="font-semibold">{newQuota}</span>.
+                    </p>
+                  )}
+                  <div className="flex gap-2 pt-4">
+                    <Button variant="primary" onClick={handleConfirmStatusChange} disabled={addActivityMutation.isPending}>
+                      {addActivityMutation.isPending ? 'Saving...' : 'Confirm'}
+                    </Button>
+                    <Button variant="outline" onClick={() => { setShowConfirmModal(false); setNewStatus(selectedLead.leadStatus || ''); setNewQuota(selectedLead.quota || 'Not Applicable'); }} disabled={addActivityMutation.isPending}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
         </div>
       )}
 
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4 text-blue-600">Assign Selected Leads</h2>
+        <div className={modalOverlayClass}>
+          <div className="w-full max-h-[90vh] overflow-y-auto sm:max-h-none sm:overflow-visible rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 shadow-xl sm:max-w-md pt-4 pb-[env(safe-area-inset-bottom)] sm:pb-4">
+            <div className="px-4 sm:px-6 pb-4">
+              <div className="mx-auto w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden mb-4" aria-hidden />
+              <h2 className="text-xl font-semibold mb-4 text-blue-600 dark:text-blue-400">Assign Selected Leads</h2>
             <div className="space-y-4">
               <p className="text-gray-700 dark:text-slate-200">
                 Assign <span className="font-semibold">{selectedLeads.size}</span> selected lead(s) to a user or sub-admin.
@@ -1855,7 +1994,7 @@ export default function LeadsPage() {
                   Select User or Sub Admin *
                 </label>
                 <select
-                  className="w-full rounded-lg border border-gray-300 bg-white/80 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100"
+                  className="w-full min-h-[44px] rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                   value={assignSelectedUserId}
                   onChange={(e) => setAssignSelectedUserId(e.target.value)}
                 >
@@ -1878,11 +2017,12 @@ export default function LeadsPage() {
                   ))}
                 </select>
               </div>
-              <div className="flex gap-2 pt-4">
+              <div className="flex gap-3 pt-4">
                 <Button
                   variant="primary"
                   onClick={handleConfirmAssign}
                   disabled={bulkAssignMutation.isPending || !assignSelectedUserId}
+                  className="min-h-[44px] flex-1 sm:flex-initial"
                 >
                   {bulkAssignMutation.isPending ? 'Assigning…' : 'Assign Leads'}
                 </Button>
@@ -1895,19 +2035,23 @@ export default function LeadsPage() {
                     }
                   }}
                   disabled={bulkAssignMutation.isPending}
+                  className="min-h-[44px] flex-1 sm:flex-initial"
                 >
                   Cancel
                 </Button>
               </div>
             </div>
-          </Card>
+            </div>
+          </div>
         </div>
       )}
 
       {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Selected Leads</h2>
+        <div className={modalOverlayClass}>
+          <div className="w-full max-h-[90vh] overflow-y-auto sm:max-h-none sm:overflow-visible rounded-t-2xl sm:rounded-2xl bg-white dark:bg-slate-900 shadow-xl sm:max-w-md pt-4 pb-[env(safe-area-inset-bottom)] sm:pb-4">
+            <div className="px-4 sm:px-6 pb-4">
+              <div className="mx-auto w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden mb-4" aria-hidden />
+              <h2 className="text-xl font-semibold mb-4 text-red-600 dark:text-red-400">Delete Selected Leads</h2>
             <div className="space-y-4">
               <p className="text-gray-700 dark:text-slate-200">
                 Are you sure you want to delete <span className="font-semibold">{selectedLeads.size}</span> lead(s)? This action cannot be undone.
@@ -1915,12 +2059,12 @@ export default function LeadsPage() {
               <p className="text-sm text-red-600 dark:text-rose-300 font-medium">
                 ⚠️ This will also delete all activity logs associated with these leads.
               </p>
-              <div className="flex gap-2 pt-4">
+              <div className="flex gap-3 pt-4">
                 <Button
                   variant="primary"
                   onClick={handleConfirmBulkDelete}
                   disabled={bulkDeleteMutation.isPending || (deleteJobStatus?.status === 'processing' || deleteJobStatus?.status === 'queued')}
-                  className="bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700"
+                  className="min-h-[44px] flex-1 sm:flex-initial bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700"
                 >
                   {(bulkDeleteMutation.isPending || deleteJobStatus?.status === 'processing' || deleteJobStatus?.status === 'queued')
                     ? `Deleting… ${Math.min(100, Math.max(5, Math.round(bulkDeleteProgress)))}%`
@@ -1937,6 +2081,7 @@ export default function LeadsPage() {
                     }
                   }}
                   disabled={bulkDeleteMutation.isPending || (deleteJobStatus?.status === 'processing' || deleteJobStatus?.status === 'queued')}
+                  className="min-h-[44px] flex-1 sm:flex-initial"
                 >
                   Cancel
                 </Button>
@@ -1976,7 +2121,8 @@ export default function LeadsPage() {
                 </div>
               )}
             </div>
-          </Card>
+            </div>
+          </div>
         </div>
       )}
     </div>

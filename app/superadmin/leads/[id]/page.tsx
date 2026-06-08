@@ -21,6 +21,9 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import { useLocations } from '@/lib/useLocations';
+import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { LeadDetailSkeleton } from '@/components/ui/Skeleton';
+import { cn, formatSecondsToMMSS } from '@/lib/utils';
 
 // Timeline item type
 interface TimelineItem {
@@ -37,6 +40,7 @@ export default function LeadDetailPage() {
   const router = useRouter();
   const params = useParams();
   const queryClient = useQueryClient();
+  const { setMobileTopBar, clearMobileTopBar } = useDashboardHeader();
   const leadId = params?.id as string;
   const [user, setUser] = useState<User | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -47,6 +51,10 @@ export default function LeadDetailPage() {
 
   // Expandable details section
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [isStatusExpanded, setIsStatusExpanded] = useState(false);
+  const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
+  const [isCallHistoryExpanded, setIsCallHistoryExpanded] = useState(false);
 
   // Action bar modals
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -102,6 +110,7 @@ export default function LeadDetailPage() {
   ];
 
   const isSuperAdmin = user?.roleName === 'Super Admin' || user?.roleName === 'Sub Super Admin';
+  const isSubSuperAdmin = user?.roleName === 'Sub Super Admin';
   const canDeleteLead = user?.roleName === 'Super Admin';
   const isManager = user?.isManager === true;
 
@@ -124,6 +133,15 @@ export default function LeadDetailPage() {
     setUser(currentUser);
   }, [router]);
 
+  useEffect(() => {
+    if (!isSubSuperAdmin) {
+      clearMobileTopBar();
+      return;
+    }
+    setMobileTopBar({ title: 'Lead Details', iconKey: 'leads' });
+    return () => clearMobileTopBar();
+  }, [setMobileTopBar, clearMobileTopBar, isSubSuperAdmin]);
+
   // Fetch lead data
   const {
     data: leadData,
@@ -141,6 +159,13 @@ export default function LeadDetailPage() {
   });
 
   const lead = (leadData?.data || leadData) as Lead | undefined;
+
+  const openStatusModal = useCallback(() => {
+    if (!lead) return;
+    setNewStatus(lead.leadStatus || '');
+    setStatusComment('');
+    setShowStatusModal(true);
+  }, [lead]);
 
   // Fetch activity logs
   const {
@@ -724,18 +749,6 @@ export default function LeadDetailPage() {
 
   const whatsappTemplates: MessageTemplate[] = Array.isArray(whatsappTemplatesData) ? whatsappTemplatesData : (whatsappTemplatesData as any)?.templates || [];
 
-  // Fetch Media Handles/IDs for templates
-  const { data: mediaListData, isLoading: isLoadingMedia } = useQuery({
-    queryKey: ['whatsappMedia'],
-    queryFn: async () => {
-      const response = await communicationAPI.getMediaIds();
-      return response.data || response || [];
-    },
-    staleTime: 300000,
-  });
-
-  const mediaList: Array<{ _id: string; handle: string; filename?: string; type?: string }> = Array.isArray(mediaListData) ? mediaListData : (mediaListData as any)?.media || [];
-
   const availableWALanguages = useMemo(() => {
     const langs = new Set<string>();
     whatsappTemplates.forEach((t) => {
@@ -1008,7 +1021,7 @@ export default function LeadDetailPage() {
   }
 
   if (isLoading) {
-    return (
+    return isSubSuperAdmin ? <LeadDetailSkeleton /> : (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -1041,8 +1054,75 @@ export default function LeadDetailPage() {
   };
 
   return (
-    <div className="mx-auto w-full space-y-6 pb-12 pt-1 sm:pt-2">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 pb-4 dark:border-slate-800">
+    <div className={isSubSuperAdmin ? 'mx-auto w-full max-w-7xl space-y-3 sm:space-y-6 px-0 sm:px-4 pb-36 sm:pb-12 pt-3 sm:pt-2 lg:px-8' : 'mx-auto w-full space-y-6 pb-12 pt-1 sm:pt-2'}>
+      {/* Mobile-only sticky action bar — Sub Super Admin */}
+      {isSubSuperAdmin && (
+      <div
+        className="sm:hidden fixed left-0 right-0 z-20 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-700 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] px-4 py-3"
+        style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <div className="flex items-center justify-center gap-2.5 max-w-lg mx-auto">
+          <button
+            type="button"
+            onClick={() => lead && setShowCallNumberModal(true)}
+            className="flex items-center justify-center size-10 rounded-xl bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
+            aria-label="Call"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (lead) {
+                setSmsData({ selectedNumbers: contactOptions.map((o) => o.number), selectedTemplates: {}, languageFilter: 'all' });
+                setShowSmsModal(true);
+              }
+            }}
+            className="flex items-center justify-center size-10 rounded-xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white shadow-sm"
+            aria-label="SMS"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (lead) {
+                setWhatsAppData({
+                  selectedNumbers: contactOptions.map((o) => o.number),
+                  templateId: '',
+                  selectedMediaUrl: '',
+                  variables: {},
+                  languageFilter: 'all',
+                });
+                setShowWhatsAppModal(true);
+              }
+            }}
+            className="flex items-center justify-center size-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white shadow-sm"
+            aria-label="WhatsApp"
+          >
+            <svg className="size-5" fill="currentColor" viewBox="0 0 448 512">
+              <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={openStatusModal}
+            className="flex items-center justify-center size-10 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white shadow-sm"
+            aria-label="Update status"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      )}
+
+      <div className={`flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 pb-4 dark:border-slate-800 ${isSubSuperAdmin ? 'hidden sm:flex' : ''}`}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           <Link href={getLeadsPageUrl()}>
             <Button size="sm" variant="outline">
@@ -1081,12 +1161,103 @@ export default function LeadDetailPage() {
         </div>
       )}
       {/* MAIN CONTENT - 2 Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
         {/* LEFT COLUMN - Student Details & History */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-3 sm:space-y-6">
+          {/* Mobile profile card — Sub Super Admin only */}
+          {isSubSuperAdmin && !isEditing && (
+            <div className="sm:hidden relative overflow-hidden rounded-xl border-2 border-orange-400/50 shadow-lg shadow-orange-900/20">
+              <div className="absolute inset-0 bg-gradient-to-t from-orange-400 to-orange-600" aria-hidden />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-white/15" aria-hidden />
+              <div className="relative px-3 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/95 text-orange-600 shadow-md ring-2 ring-white/50 font-bold text-lg uppercase">
+                    {(lead.name || '?').charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-base font-bold text-white drop-shadow-sm flex items-center gap-2">
+                      {lead.name}
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditing(true)}
+                          className="p-1 rounded-md hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                          aria-label="Edit Lead"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
+                    </h2>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <p className="text-xs font-medium text-white/95 break-all flex items-center gap-1.5">
+                        <svg className="h-3.5 w-3.5 shrink-0 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        {lead.phone || '—'}
+                      </p>
+                      <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold bg-white/25 text-white backdrop-blur">
+                        {lead.leadStatus || 'New'}
+                      </span>
+                      {lead.isNRI && (
+                        <span className="inline-flex shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/30 text-white backdrop-blur">
+                          NRI
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {isDetailsExpanded && (
+                  <div className="mt-2 space-y-2 rounded-lg border border-white/20 bg-white/15 backdrop-blur pt-2 px-2 pb-2 text-xs text-white/95">
+                    {lead.enquiryNumber && <p>#{lead.enquiryNumber}</p>}
+                    {(lead.village || lead.mandal || lead.district) && (
+                      <p>{[lead.village, lead.mandal, lead.district].filter(Boolean).join(', ')}</p>
+                    )}
+                    {lead.studentGroup && <p>Group: {lead.studentGroup}</p>}
+                    {lead.assignedTo && (
+                      <p>Counsellor: {typeof lead.assignedTo === 'object' ? lead.assignedTo.name : '—'}</p>
+                    )}
+                    {lead.callStatus && <p>Call status: {lead.callStatus}</p>}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
+                  className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white"
+                >
+                  {isDetailsExpanded ? 'Show less' : 'More details'}
+                </button>
+                <div className="mt-3 hidden sm:flex flex-wrap gap-2 border-t border-white/20 pt-3">
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAssignModal(true);
+                        setSelectedUserId('');
+                      }}
+                      className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/30"
+                    >
+                      Assign
+                    </button>
+                  )}
+                  {canDeleteLead && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteModal(true)}
+                      className="rounded-lg bg-red-500/80 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* SECTION 1: STUDENT DETAILS */}
           <Card>
-            <h2 className="text-xl font-semibold mb-6">Student Details</h2>
+            <h2 className={`${isSubSuperAdmin ? 'hidden sm:block ' : ''}text-xl font-semibold mb-6`}>Student Details</h2>
             {isEditing ? (
               <form onSubmit={handleSave} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1214,8 +1385,8 @@ export default function LeadDetailPage() {
               </form>
             ) : (
               <div className="space-y-6">
-                {/* Badges at top - single line */}
-                <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                {/* Badges at top - desktop only (mobile uses profile card) */}
+                <div className={`${isSubSuperAdmin ? 'hidden sm:flex ' : 'flex '}items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide`}>
                   {lead.enquiryNumber && (
                     <span className="px-3 py-1.5 text-sm font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 whitespace-nowrap flex-shrink-0">
                       #{lead.enquiryNumber}
@@ -1231,8 +1402,8 @@ export default function LeadDetailPage() {
                   )}
                 </div>
 
-                {/* Main student details - larger font with gender and email */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                {/* Main student details - desktop only on mobile profile card covers this */}
+                <div className={`${isSubSuperAdmin ? 'hidden sm:grid ' : 'grid '}grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6`}>
                   <div>
                     <label className="block text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">Name</label>
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -1486,7 +1657,7 @@ export default function LeadDetailPage() {
                         </div>
                       )}
 
-                      <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                      <div className={`${isSubSuperAdmin ? 'hidden sm:flex ' : 'flex '}flex-col sm:flex-row gap-2 mt-3`}>
                         <Button
                           variant="secondary"
                           size="sm"
@@ -1539,11 +1710,37 @@ export default function LeadDetailPage() {
           </Card>
 
           {/* SECTION 2: HISTORY & REMARKS */}
-          <Card>
-            <div className="mb-6">
-              <h2 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">History & Remarks</h2>
+          <div className={isSubSuperAdmin ? 'rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden' : ''}>
+          <Card className={isSubSuperAdmin ? 'border-0 shadow-none bg-transparent p-0' : ''}>
+            {isSubSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsHistoryExpanded((prev) => !prev)}
+                className="sm:hidden w-full flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-left"
+                aria-expanded={isHistoryExpanded}
+              >
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">History & Remarks</span>
+                <svg
+                  className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200', isHistoryExpanded && 'rotate-180')}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
+            <div className={cn(isSubSuperAdmin && !isHistoryExpanded && 'hidden sm:block')}>
+            <div className={isSubSuperAdmin ? 'mb-0' : 'mb-6'}>
+              <h2 className={cn(
+                'font-medium text-gray-900 dark:text-gray-100 pb-2 border-b border-gray-200 dark:border-slate-700',
+                isSubSuperAdmin ? 'hidden sm:block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-0 px-3 py-2.5 sm:px-4 sm:py-3 sm:border-b sm:border-slate-200' : 'text-base mb-4'
+              )}>
+                History & Remarks
+              </h2>
               {/* Last Follow Up & Created On Info */}
-              <div className="flex flex-wrap gap-4 text-sm">
+              <div className={cn('flex flex-wrap gap-4', isSubSuperAdmin ? 'gap-x-3 gap-y-1 text-xs px-3 py-2 sm:px-4 sm:py-3' : 'text-sm')}>
                 {lead.lastFollowUp && (
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                     <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1572,7 +1769,7 @@ export default function LeadDetailPage() {
                   </div>
                 )}
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className={cn('flex flex-wrap gap-2', isSubSuperAdmin ? 'mt-2 px-3 sm:px-4 pb-2' : 'mt-3')}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1608,16 +1805,17 @@ export default function LeadDetailPage() {
                 )}
               </div>
             </div>
+            <div className={cn(isSubSuperAdmin && 'border-t border-slate-200 dark:border-slate-700 px-3 py-2 sm:px-4 sm:py-3')}>
             {isLoadingLogs ? (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <div className={cn('text-center', isSubSuperAdmin ? 'py-4' : 'py-8')}>
+                <div className={cn('border-2 border-t-transparent rounded-full animate-spin mx-auto', isSubSuperAdmin ? 'w-6 h-6 border-orange-500' : 'w-8 h-8 border-blue-500')}></div>
               </div>
             ) : timelineItems.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No history available</p>
+              <p className={cn('text-gray-500 text-center', isSubSuperAdmin ? 'py-3 text-xs text-slate-500 dark:text-slate-400' : 'py-8')}>No history available</p>
             ) : (
               <div className="relative">
                 {/* Timeline */}
-                <div className="space-y-6">
+                <div className={isSubSuperAdmin ? 'space-y-2' : 'space-y-6'}>
                   {timelineItems.map((item, index) => {
                     const isCall = item.type === 'call';
                     const isSms = item.type === 'sms';
@@ -1625,13 +1823,13 @@ export default function LeadDetailPage() {
                     const borderColor = isCall ? 'border-green-500' : isSms ? 'border-purple-500' : 'border-blue-500';
 
                     return (
-                      <div key={item.id} className="relative pl-6 sm:pl-8 pb-4 sm:pb-6 last:pb-0">
+                      <div key={item.id} className={cn('relative last:pb-0', isSubSuperAdmin ? 'pl-4 sm:pl-6 pb-2' : 'pl-6 sm:pl-8 pb-4 sm:pb-6')}>
                         {/* Timeline line */}
                         {index !== timelineItems.length - 1 && (
-                          <div className="absolute left-2.5 sm:left-3 top-5 sm:top-6 bottom-0 w-0.5 bg-gray-300 dark:bg-slate-700"></div>
+                          <div className={cn('absolute bottom-0 w-0.5 bg-gray-300 dark:bg-slate-700', isSubSuperAdmin ? 'left-1.5 sm:left-2.5 top-3' : 'left-2.5 sm:left-3 top-5 sm:top-6')}></div>
                         )}
                         {/* Timeline dot */}
-                        <div className={`absolute left-0 top-0.5 sm:top-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full ${dotColor} border-2 border-white shadow-md flex items-center justify-center`}>
+                        <div className={cn('absolute left-0 rounded-full border-2 border-white flex items-center justify-center', isSubSuperAdmin ? 'top-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5' : 'top-0.5 sm:top-1 w-5 h-5 sm:w-6 sm:h-6 shadow-md', dotColor)}>
                           {isCall ? (
                             <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -1645,19 +1843,19 @@ export default function LeadDetailPage() {
                           )}
                         </div>
                         {/* Content */}
-                        <div className={`rounded-lg p-4 border-l-2 ${borderColor} bg-white dark:bg-slate-900/50`}>
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h3 className="text-sm font-medium text-gray-900 dark:text-slate-100">
+                        <div className={cn('rounded-lg border-l-2', borderColor, isSubSuperAdmin ? 'rounded-md p-2 sm:p-2.5 bg-slate-50 dark:bg-slate-800/50' : 'p-4 bg-white dark:bg-slate-900/50')}>
+                          <div className="flex justify-between items-start gap-1.5 mb-0.5">
+                            <div className="min-w-0">
+                              <h3 className={cn('font-medium text-gray-900 dark:text-slate-100 truncate', isSubSuperAdmin ? 'text-xs' : 'text-sm')}>
                                 {item.title}
                               </h3>
-                              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                              <p className={cn('text-gray-500 dark:text-slate-400', isSubSuperAdmin ? 'text-[11px]' : 'text-xs mt-1')}>
                                 {formatDate(item.date)}
                               </p>
                             </div>
                             {item.performedBy && (
-                              <span className="text-xs text-gray-500 dark:text-slate-400">
-                                by {item.performedBy}
+                              <span className={cn('text-gray-500 dark:text-slate-400 shrink-0', isSubSuperAdmin ? 'text-[11px]' : 'text-xs')}>
+                                {isSubSuperAdmin ? item.performedBy : `by ${item.performedBy}`}
                               </span>
                             )}
                           </div>
@@ -1665,17 +1863,22 @@ export default function LeadDetailPage() {
                           {/* Call details */}
                           {isCall && (
                             <>
-                              <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                              <p className={cn('text-gray-700 dark:text-slate-200 whitespace-pre-wrap', isSubSuperAdmin ? 'text-xs line-clamp-3' : 'text-sm')}>
                                 {item.description}
                               </p>
-                              {item.metadata?.outcome && (
-                                <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">
-                                  Outcome: {item.metadata.outcome}
-                                </p>
-                              )}
-                              {Number(item.metadata?.duration) > 0 && (
-                                <p className="text-xs text-gray-500 dark:text-slate-400">
-                                  Duration: {item.metadata?.duration}s
+                              {(Boolean(item.metadata?.outcome && String(item.metadata.outcome).trim()) ||
+                                Number(item.metadata?.duration) > 0) && (
+                                <p className={cn('text-gray-500 dark:text-slate-400 mt-1', isSubSuperAdmin ? 'text-[11px]' : 'text-xs mt-2')}>
+                                  {item.metadata?.outcome && String(item.metadata.outcome).trim() !== '' && (
+                                    <>Outcome: {item.metadata.outcome}</>
+                                  )}
+                                  {item.metadata?.outcome &&
+                                    String(item.metadata.outcome).trim() !== '' &&
+                                    Number(item.metadata?.duration) > 0 &&
+                                    ' · '}
+                                  {Number(item.metadata?.duration) > 0 && (
+                                    <>Duration: {isSubSuperAdmin ? formatSecondsToMMSS(Number(item.metadata?.duration)) : `${item.metadata?.duration}s`}</>
+                                  )}
                                 </p>
                               )}
                             </>
@@ -1683,11 +1886,11 @@ export default function LeadDetailPage() {
 
                           {/* SMS details */}
                           {isSms && (
-                            <div className="space-y-2">
+                            <div className={isSubSuperAdmin ? 'space-y-1' : 'space-y-2'}>
                               {item.metadata?.templateName && (
-                                <div>
-                                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Template: </span>
-                                  <span className="text-xs text-gray-700 dark:text-slate-200">{item.metadata.templateName}</span>
+                                <div className={isSubSuperAdmin ? 'flex flex-wrap items-center gap-1' : undefined}>
+                                  <span className={cn('font-medium text-gray-500 dark:text-slate-400', isSubSuperAdmin ? 'text-[11px]' : 'text-xs')}>Template: </span>
+                                  <span className={cn('text-gray-700 dark:text-slate-200', isSubSuperAdmin ? 'text-[11px]' : 'text-xs')}>{item.metadata.templateName}</span>
                                   {item.metadata?.status && (
                                     <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${item.metadata.status === 'success'
                                       ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
@@ -1699,9 +1902,9 @@ export default function LeadDetailPage() {
                                 </div>
                               )}
                               {item.metadata?.messageText && (
-                                <div className="bg-white dark:bg-slate-700 rounded p-3 border border-gray-200 dark:border-slate-600">
-                                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Message:</p>
-                                  <p className="text-sm text-gray-700 dark:text-slate-200 whitespace-pre-wrap">
+                                <div className={cn('bg-white dark:bg-slate-700 rounded border border-gray-200 dark:border-slate-600', isSubSuperAdmin ? 'p-2' : 'p-3')}>
+                                  <p className={cn('text-gray-500 dark:text-slate-400 mb-0.5', isSubSuperAdmin ? 'text-[11px]' : 'text-xs mb-1')}>Message:</p>
+                                  <p className={cn('text-gray-700 dark:text-slate-200 whitespace-pre-wrap', isSubSuperAdmin ? 'text-xs line-clamp-3' : 'text-sm')}>
                                     {item.metadata.messageText}
                                   </p>
                                 </div>
@@ -1711,7 +1914,7 @@ export default function LeadDetailPage() {
 
                           {/* Other types (Status Changes handled above, this handles general updates) */}
                           {!isCall && !isSms && (
-                            <div className="text-sm text-gray-700 dark:text-slate-200">
+                            <div className={cn('text-gray-700 dark:text-slate-200', isSubSuperAdmin ? 'text-xs' : 'text-sm')}>
                               {/* If it's a field update with details */}
                               {item.type === 'field_update' && item.metadata?.fieldUpdate?.changes ? (
                                 <div className="mt-2 bg-gray-50 dark:bg-slate-800 rounded-lg p-3 border border-gray-100 dark:border-slate-700 space-y-2">
@@ -1735,7 +1938,7 @@ export default function LeadDetailPage() {
                                   ))}
                                 </div>
                               ) : (
-                                <p className="whitespace-pre-wrap">{item.description}</p>
+                                <p className={cn('whitespace-pre-wrap', isSubSuperAdmin && 'line-clamp-3')}>{item.description}</p>
                               )}
                             </div>
                           )}
@@ -1746,13 +1949,16 @@ export default function LeadDetailPage() {
                 </div>
               </div>
             )}
+            </div>
+            </div>
           </Card>
+          </div>
         </div>
 
         {/* RIGHT COLUMN - Action Bar, Metadata, Status Changes, Comments */}
-        <div className="space-y-6">
-          {/* ACTION BAR - Grid Layout with Icons */}
-          <Card>
+        <div className="space-y-3 sm:space-y-6">
+          {/* ACTION BAR - desktop only; mobile uses sticky bar */}
+          <Card className={isSubSuperAdmin ? 'hidden sm:block' : ''}>
             <h2 className="text-xl font-semibold mb-4">Actions</h2>
             <div className="grid grid-cols-2 gap-3">
               {/* Assign */}
@@ -1857,6 +2063,62 @@ export default function LeadDetailPage() {
           </Card>
 
           {/* Status Changes Timeline */}
+          {isSubSuperAdmin ? (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsStatusExpanded((prev) => !prev)}
+                className="sm:hidden w-full flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-left"
+                aria-expanded={isStatusExpanded}
+              >
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status Changes</span>
+                <svg className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200', isStatusExpanded && 'rotate-180')} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className={cn(isSubSuperAdmin && !isStatusExpanded && 'hidden sm:block')}>
+                <p className="hidden sm:block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 px-3 py-2.5 sm:px-4 sm:py-3 border-b border-slate-200 dark:border-slate-700">Status Changes</p>
+                <div className="px-3 py-2 sm:px-4 sm:py-3 border-t border-slate-200 dark:border-slate-700 sm:border-t-0">
+                  {isLoadingLogs ? (
+                    <div className="text-center py-3">
+                      <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </div>
+                  ) : statusChanges.length === 0 ? (
+                    <p className="text-gray-500 text-center py-3 text-xs">No status changes</p>
+                  ) : (
+                    <div className="space-y-0 max-h-[320px] sm:max-h-[400px] overflow-y-auto">
+                      {statusChanges.map((log: ActivityLog, index: number) => (
+                        <div key={log._id} className="relative pl-4 sm:pl-6 pb-2 sm:pb-3 last:pb-0">
+                          {index !== statusChanges.length - 1 && (
+                            <div className="absolute left-1.5 sm:left-2.5 top-3 bottom-0 w-0.5 bg-blue-200 dark:bg-blue-800"></div>
+                          )}
+                          <div className="absolute left-0 top-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center">
+                            <div className="w-1 h-1 rounded-full bg-white"></div>
+                          </div>
+                          <div className="rounded-md p-2 sm:p-2.5 border-l-2 border-blue-400 bg-blue-50/50 dark:bg-blue-900/20">
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                              <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                                {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
+                              </span>
+                              <span className="text-[11px] text-gray-500 dark:text-slate-400">{formatDate(log.createdAt)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${getStatusColor(log.oldStatus || '')}`}>{log.oldStatus || 'N/A'}</span>
+                              <span className="text-gray-400">→</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${getStatusColor(log.newStatus || '')}`}>{log.newStatus || 'N/A'}</span>
+                            </div>
+                            {log.comment && (
+                              <p className="text-[11px] text-gray-600 dark:text-slate-400 mt-1.5 italic line-clamp-2">"{log.comment}"</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
           <Card>
             <h2 className="text-xl font-semibold mb-4">Status Changes</h2>
             {isLoadingLogs ? (
@@ -1904,8 +2166,66 @@ export default function LeadDetailPage() {
               </div>
             )}
           </Card>
+          )}
 
           {/* Comments Timeline */}
+          {isSubSuperAdmin ? (
+            <div id="comments-section" className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsCommentsExpanded((prev) => !prev)}
+                className="sm:hidden w-full flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-left"
+                aria-expanded={isCommentsExpanded}
+              >
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Comments</span>
+                <svg className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200', isCommentsExpanded && 'rotate-180')} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className={cn(isSubSuperAdmin && !isCommentsExpanded && 'hidden sm:block')}>
+                <div className="hidden sm:flex justify-between items-center px-3 py-2.5 sm:px-4 sm:py-3 border-b border-slate-200 dark:border-slate-700">
+                  <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">Comments</p>
+                  <Button variant="outline" size="sm" className="text-xs px-2.5 py-1.5" onClick={() => { setCommentText(''); setShowCommentModal(true); }}>Add</Button>
+                </div>
+                <div className="px-3 py-2 sm:px-4 sm:py-3 border-t border-slate-200 dark:border-slate-700 sm:border-t-0">
+                  <div className="sm:hidden flex justify-end mb-2">
+                    <Button variant="outline" size="sm" className="text-xs px-2.5 py-1.5" onClick={() => { setCommentText(''); setShowCommentModal(true); }}>Add Comment</Button>
+                  </div>
+                  {isLoadingLogs ? (
+                    <div className="text-center py-3">
+                      <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <p className="text-gray-500 text-center py-3 text-xs">No comments</p>
+                  ) : (
+                    <div className="space-y-0 max-h-[320px] sm:max-h-[400px] overflow-y-auto">
+                      {comments.map((log: ActivityLog, index: number) => (
+                        <div key={log._id} className="relative pl-4 sm:pl-6 pb-2 sm:pb-3 last:pb-0">
+                          {index !== comments.length - 1 && (
+                            <div className="absolute left-1.5 sm:left-2.5 top-3 bottom-0 w-0.5 bg-purple-200 dark:bg-purple-800"></div>
+                          )}
+                          <div className="absolute left-0 top-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-purple-500 border-2 border-white flex items-center justify-center">
+                            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="rounded-md p-2 sm:p-2.5 border-l-2 border-purple-400 bg-purple-50/50 dark:bg-purple-900/20">
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                              <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                                {typeof log.performedBy === 'object' ? log.performedBy.name : 'Unknown'}
+                              </span>
+                              <span className="text-[11px] text-gray-500 dark:text-slate-400">{formatDate(log.createdAt)}</span>
+                            </div>
+                            <p className="text-xs text-gray-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-3 sm:line-clamp-none">{log.comment}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
           <Card>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">Comments</h2>
@@ -1958,8 +2278,79 @@ export default function LeadDetailPage() {
               </div>
             )}
           </Card>
+          )}
 
           {/* Call History Timeline */}
+          {isSubSuperAdmin ? (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsCallHistoryExpanded((prev) => !prev)}
+                className="sm:hidden w-full flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 text-left"
+                aria-expanded={isCallHistoryExpanded}
+              >
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Call History</span>
+                <svg className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200', isCallHistoryExpanded && 'rotate-180')} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className={cn(isSubSuperAdmin && !isCallHistoryExpanded && 'hidden sm:block')}>
+                <p className="hidden sm:block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 px-3 py-2.5 sm:px-4 sm:py-3 border-b border-slate-200 dark:border-slate-700">Call History</p>
+                <div className="px-3 py-2 sm:px-4 sm:py-3 border-t border-slate-200 dark:border-slate-700 sm:border-t-0">
+                  {isLoadingCommunications ? (
+                    <div className="text-center py-3">
+                      <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </div>
+                  ) : callLogs.length === 0 ? (
+                    <p className="text-gray-500 text-center py-3 text-xs">No calls yet</p>
+                  ) : (
+                    <div className="space-y-0 max-h-[320px] sm:max-h-[400px] overflow-y-auto">
+                      {callLogs.map((call, index) => {
+                        const callWithSequence = call as CommunicationRecord & { sequenceNumber: number; ordinal: string };
+                        const iconColors = getCallOutcomeIconColor(call.callOutcome);
+                        return (
+                          <div key={call._id} className="relative pl-4 sm:pl-6 pb-2 sm:pb-3 last:pb-0">
+                            {index !== callLogs.length - 1 && (
+                              <div className={`absolute left-1.5 sm:left-2.5 top-3 bottom-0 w-0.5 bg-gradient-to-b ${iconColors.line}`}></div>
+                            )}
+                            <div className={`absolute left-0 top-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full ${iconColors.iconBg} border-2 border-white flex items-center justify-center`}>
+                              <svg className="w-2 h-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                            </div>
+                            <div className={`rounded-md p-2 sm:p-2.5 border-l-2 ${iconColors.cardBorder} bg-gradient-to-r ${iconColors.cardBg} to-transparent`}>
+                              <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                                  {callWithSequence.ordinal} · {call.contactNumber}
+                                </span>
+                                <span className="text-[11px] text-gray-500 dark:text-slate-400">{formatDate(call.sentAt)}</span>
+                                {typeof call.sentBy === 'object' && call.sentBy && (
+                                  <span className="text-[11px] text-gray-500 dark:text-slate-400">· {call.sentBy.name}</span>
+                                )}
+                              </div>
+                              {call.remarks && (
+                                <p className="text-[11px] text-gray-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-2 mb-1.5">{call.remarks}</p>
+                              )}
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {call.callOutcome && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${getCallOutcomeColor(call.callOutcome)}`}>{call.callOutcome}</span>
+                                )}
+                                {Number(call.durationSeconds) > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                                    {formatSecondsToMMSS(Number(call.durationSeconds))}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
           <Card>
             <h2 className="text-xl font-semibold mb-4">Call History</h2>
             {isLoadingCommunications ? (
@@ -2023,6 +2414,7 @@ export default function LeadDetailPage() {
               </div>
             )}
           </Card>
+          )}
         </div>
       </div>
 
@@ -2743,19 +3135,56 @@ export default function LeadDetailPage() {
 
       {/* WhatsApp Modal */}
       {showWhatsAppModal && lead && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col p-0 shadow-2xl overflow-hidden">
+        <div
+          className={cn(
+            'fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4',
+            isSubSuperAdmin ? 'z-[120]' : 'z-50'
+          )}
+          onClick={() => {
+            if (!whatsAppMutation.isPending) {
+              setShowWhatsAppModal(false);
+              setWhatsAppData({ selectedNumbers: [], templateId: '', selectedMediaUrl: '', variables: {}, languageFilter: 'all' });
+            }
+          }}
+        >
+          <div className="flex min-h-full w-full items-center justify-center py-4" onClick={(e) => e.stopPropagation()}>
+          <Card noPadding={isSubSuperAdmin} className={cn(
+            'w-full flex flex-col shadow-2xl overflow-hidden',
+            isSubSuperAdmin
+              ? 'max-w-2xl max-h-[85vh] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700'
+              : 'max-w-4xl max-h-[90vh] p-0'
+          )}>
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 rounded-lg dark:bg-emerald-900/30">
-                  <svg className="w-6 h-6 text-emerald-600" fill="currentColor" viewBox="0 0 448 512">
-                    <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">WhatsApp Messaging</h2>
-                  <p className="text-sm text-gray-500">Send rich templates and media handles</p>
+            <div className={cn(
+              'flex items-center justify-between shrink-0 border-b',
+              isSubSuperAdmin
+                ? 'items-start p-3 sm:p-6 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'
+                : 'p-6 border-gray-100'
+            )}>
+              <div className={cn('flex items-center gap-3', isSubSuperAdmin && 'min-w-0')}>
+                {!isSubSuperAdmin && (
+                  <div className="p-2 bg-emerald-100 rounded-lg dark:bg-emerald-900/30">
+                    <svg className="w-6 h-6 text-emerald-600" fill="currentColor" viewBox="0 0 448 512">
+                      <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+                    </svg>
+                  </div>
+                )}
+                <div className={isSubSuperAdmin ? 'min-w-0' : undefined}>
+                  <h2 className={cn('font-bold', isSubSuperAdmin ? 'text-base sm:text-xl text-slate-900 dark:text-slate-100 flex items-center gap-2' : 'text-xl')}>
+                    {isSubSuperAdmin && (
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 shrink-0" fill="currentColor" viewBox="0 0 448 512">
+                        <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.8 69.4 27.2 106.2 27.2h.1c122.3 0 222-99.6 222-222 0-59.3-23-115.1-65.1-157.1zM223.9 445.2c-33.2 0-65.7-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-82.7 184.6-184.5 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.4-8.6-44.6-27.5-16.4-14.7-27.5-32.8-30.7-38.3-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.3 3.7-5.5 5.5-9.3 1.9-3.7.9-7-1.4-10.7-1.4-3.7-12.5-30.1-17.1-41.1-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.5 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
+                      </svg>
+                    )}
+                    {isSubSuperAdmin ? 'Send WhatsApp' : 'WhatsApp Messaging'}
+                  </h2>
+                  <p className={cn(isSubSuperAdmin ? 'text-[10px] sm:text-sm text-slate-500 dark:text-slate-400 mt-1' : 'text-sm text-gray-500')}>
+                    {isSubSuperAdmin ? (
+                      <>Send to <span className="font-semibold text-slate-700 dark:text-slate-300">{lead.name}</span></>
+                    ) : (
+                      'Send rich templates and media handles'
+                    )}
+                  </p>
                 </div>
               </div>
               <button
@@ -2764,7 +3193,10 @@ export default function LeadDetailPage() {
                   setShowWhatsAppModal(false);
                   setWhatsAppData({ selectedNumbers: [], templateId: '', selectedMediaUrl: '', variables: {}, languageFilter: 'all' });
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className={cn(
+                  'p-2 rounded-full transition-colors shrink-0',
+                  isSubSuperAdmin ? 'hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400' : 'hover:bg-gray-100'
+                )}
                 disabled={whatsAppMutation.isPending}
               >
                 <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2774,20 +3206,27 @@ export default function LeadDetailPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 p-6">
+              <div className={cn('grid grid-cols-1 gap-8', !isSubSuperAdmin && 'lg:grid-cols-12', isSubSuperAdmin ? 'p-4 sm:p-6' : 'p-6')}>
                 {/* Left: Configuration */}
-                <div className="lg:col-span-7 space-y-8">
+                <div className={cn(!isSubSuperAdmin && 'lg:col-span-7', 'space-y-6 sm:space-y-8')}>
                   {/* Recipients Section */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Recipients</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className={isSubSuperAdmin ? 'space-y-3' : 'space-y-4'}>
+                    <h3 className={cn('font-semibold uppercase tracking-wider', isSubSuperAdmin ? 'text-xs font-bold text-slate-500 dark:text-slate-400' : 'text-sm text-gray-700')}>Recipients</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                       {contactOptions.map((option) => (
                         <label
                           key={option.number}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer transition-all ${whatsAppData.selectedNumbers.includes(option.number)
-                            ? 'bg-emerald-50 border-emerald-500 text-emerald-700 ring-1 ring-emerald-500'
-                            : 'bg-white border-gray-100 hover:border-gray-200'
-                            }`}
+                          className={cn(
+                            'flex items-center gap-2 sm:gap-3 rounded-xl border-2 cursor-pointer transition-all',
+                            isSubSuperAdmin ? 'p-2 sm:p-3' : 'px-3 py-2',
+                            whatsAppData.selectedNumbers.includes(option.number)
+                              ? isSubSuperAdmin
+                                ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-950/20 shadow-sm'
+                                : 'bg-emerald-50 border-emerald-500 text-emerald-700 ring-1 ring-emerald-500'
+                              : isSubSuperAdmin
+                                ? 'bg-white border-slate-200 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700'
+                                : 'bg-white border-gray-100 hover:border-gray-200'
+                          )}
                         >
                           <input
                             type="checkbox"
@@ -2805,11 +3244,30 @@ export default function LeadDetailPage() {
                                 }));
                               }
                             }}
-                            className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                            className={cn('text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded', isSubSuperAdmin ? 'w-3 h-3 sm:w-4 sm:h-4' : 'w-4 h-4')}
                           />
-                          <div className="flex flex-col">
-                            <span className="text-sm font-bold">{option.label}</span>
-                            <span className="text-xs opacity-75">{option.number}</span>
+                          <div className={cn('flex flex-col', isSubSuperAdmin && 'flex-1 min-w-0')}>
+                            {isSubSuperAdmin ? (
+                              <>
+                                <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter truncate">{option.label}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{option.number}</p>
+                                  {((communicationStatsMap.get(option.number) as CommunicationStatsEntry & { whatsappCount?: number })?.whatsappCount || 0) > 0 && (
+                                    <div className="flex items-center gap-1 px-1 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800">
+                                      <svg className="w-2.5 h-2.5 text-emerald-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                      <span className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Verified</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-sm font-bold">{option.label}</span>
+                                <span className="text-xs opacity-75">{option.number}</span>
+                              </>
+                            )}
                           </div>
                         </label>
                       ))}
@@ -2817,9 +3275,11 @@ export default function LeadDetailPage() {
                   </div>
 
                   {/* Template Selection */}
-                  <div className="space-y-4">
+                  <div className={isSubSuperAdmin ? 'space-y-3' : 'space-y-4'}>
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Template Selection</h3>
+                      <h3 className={cn('font-semibold uppercase tracking-wider', isSubSuperAdmin ? 'text-xs font-bold text-slate-500 dark:text-slate-400' : 'text-sm text-gray-700')}>
+                        {isSubSuperAdmin ? 'Message Template' : 'Template Selection'}
+                      </h3>
                       <div className="flex items-center gap-3">
                         {whatsAppData.templateId && (
                           <button
@@ -2827,22 +3287,54 @@ export default function LeadDetailPage() {
                             onClick={() => setShowTemplateView(true)}
                             className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 uppercase underline decoration-2 underline-offset-2"
                           >
-                            View Original
+                            {isSubSuperAdmin ? 'View Template' : 'View Original'}
                           </button>
                         )}
-                        <select
-                          className="text-xs sm:text-sm border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:border-slate-700 h-8 py-0"
-                          value={whatsAppData.languageFilter}
-                          onChange={(e) => setWhatsAppData(prev => ({ ...prev, languageFilter: e.target.value, templateId: '', variables: {} }))}
-                        >
-                          <option value="all">All Languages</option>
-                          {availableWALanguages.map(lang => (
-                            <option key={lang} value={lang}>{lang.toUpperCase()}</option>
-                          ))}
-                        </select>
+                        {!isSubSuperAdmin && (
+                          <select
+                            className="text-xs sm:text-sm border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:border-slate-700 h-8 py-0"
+                            value={whatsAppData.languageFilter}
+                            onChange={(e) => setWhatsAppData(prev => ({ ...prev, languageFilter: e.target.value, templateId: '', variables: {} }))}
+                          >
+                            <option value="all">All Languages</option>
+                            {availableWALanguages.map(lang => (
+                              <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </div>
 
+                    {isSubSuperAdmin ? (
+                      <div className="space-y-2">
+                        {isWALoadingTemplates ? (
+                          <div className="py-6 flex flex-col items-center justify-center space-y-2">
+                            <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-xs text-slate-500">Loading templates...</p>
+                          </div>
+                        ) : (
+                          <select
+                            className="w-full rounded-xl border-2 border-slate-200 p-2 sm:p-3 text-xs sm:text-sm font-medium focus:border-emerald-500 focus:ring-emerald-500 dark:bg-slate-800 dark:border-slate-700"
+                            value={whatsAppData.templateId}
+                            onChange={(e) => {
+                              const tId = e.target.value;
+                              const t = whatsappTemplates.find((x) => x._id === tId);
+                              setWhatsAppData((prev) => ({
+                                ...prev,
+                                templateId: tId,
+                                selectedMediaUrl: t?.headerHandle || '',
+                                variables: t ? buildDefaultWATemplateValues(t) : {},
+                              }));
+                            }}
+                          >
+                            <option value="">Select a Template</option>
+                            {filteredWhatsAppTemplates.map((template) => (
+                              <option key={template._id} value={template._id}>{template.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                       {isWALoadingTemplates ? (
                         <div className="col-span-full py-8 flex flex-col items-center justify-center space-y-3">
@@ -2881,6 +3373,7 @@ export default function LeadDetailPage() {
                         ))
                       )}
                     </div>
+                    )}
                   </div>
 
                   {/* Variables & Media */}
@@ -2889,40 +3382,44 @@ export default function LeadDetailPage() {
                       {/* Media Handle Selection */}
                       {(() => {
                         const selectedTemplate = whatsappTemplates.find(t => t._id === whatsAppData.templateId);
-                        if (selectedTemplate && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplate.headerType)) {
+                        const headerType = selectedTemplate?.headerType;
+                        if (selectedTemplate && headerType && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType)) {
+                          const gallery = selectedTemplate.mediaGallery || [];
                           return (
-                            <div className="space-y-3">
-                              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                Media Header ({selectedTemplate.headerType})
+                            <div className={cn('space-y-2', !isSubSuperAdmin && 'space-y-3')}>
+                              <h3 className={cn(
+                                'font-semibold text-gray-700 flex items-center gap-2',
+                                isSubSuperAdmin ? 'text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400' : 'text-sm'
+                              )}>
+                                {!isSubSuperAdmin && (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                )}
+                                Header Media ({headerType})
                               </h3>
-                              {isLoadingMedia ? (
-                                <div className="animate-pulse flex space-x-4">
-                                  <div className="flex-1 space-y-4 py-1"><div className="h-4 bg-gray-200 rounded w-3/4"></div><div className="h-10 bg-gray-100 rounded"></div></div>
-                                </div>
-                              ) : (
-                                <div className="grid grid-cols-1 gap-2">
-                                  <select
-                                    className="w-full rounded-xl border-gray-300 focus:ring-emerald-500 focus:border-emerald-500"
-                                    value={whatsAppData.selectedMediaUrl}
-                                    onChange={(e) => setWhatsAppData(prev => ({ ...prev, selectedMediaUrl: e.target.value }))}
-                                  >
-                                    <option value="">Select a media file...</option>
-                                    {mediaList
-                                      .filter(m => {
-                                        if (selectedTemplate.headerType === 'IMAGE') return m.type?.includes('image');
-                                        if (selectedTemplate.headerType === 'VIDEO') return m.type?.includes('video');
-                                        if (selectedTemplate.headerType === 'DOCUMENT') return m.type?.includes('pdf') || m.type?.includes('application');
-                                        return true;
-                                      })
-                                      .map(media => (
-                                        <option key={media._id} value={media.handle}>{media.filename || media.handle}</option>
-                                      ))}
-                                  </select>
-                                </div>
-                              )}
+                              <select
+                                className={cn(
+                                  'w-full rounded-xl border-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:border-slate-700',
+                                  isSubSuperAdmin ? 'border-slate-200 p-2 sm:p-3 text-xs sm:text-sm font-medium' : 'border-gray-300'
+                                )}
+                                value={whatsAppData.selectedMediaUrl}
+                                onChange={(e) => setWhatsAppData(prev => ({ ...prev, selectedMediaUrl: e.target.value }))}
+                              >
+                                <option value="">Select Media</option>
+                                {gallery.map((media, mIdx) => {
+                                  const mObj = typeof media === 'string'
+                                    ? { name: `Media ${mIdx + 1}`, url: media }
+                                    : media;
+                                  return (
+                                    <option key={mIdx} value={mObj.url}>{mObj.name}</option>
+                                  );
+                                })}
+                                {selectedTemplate.headerHandle &&
+                                  !gallery.some((m) => (typeof m === 'string' ? m : m.url) === selectedTemplate.headerHandle) && (
+                                    <option value={selectedTemplate.headerHandle}>Default Header</option>
+                                  )}
+                              </select>
                             </div>
                           );
                         }
@@ -2984,8 +3481,8 @@ export default function LeadDetailPage() {
                   )}
                 </div>
 
-                {/* Right: Preview */}
-                <div className="lg:col-span-5">
+                {/* Right: Preview — desktop Super Admin only */}
+                <div className={cn('lg:col-span-5', isSubSuperAdmin && 'hidden')}>
                   <div className="sticky top-0">
                     <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Message Preview</h3>
                     <div className="relative rounded-3xl overflow-hidden shadow-xl border border-gray-100 aspect-[9/16] max-w-[300px] mx-auto bg-[#E5DDD5]">
@@ -3004,7 +3501,7 @@ export default function LeadDetailPage() {
                           <div className="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm relative max-w-[90%] animate-in zoom-in-95 duration-200">
                             {(() => {
                               const template = whatsappTemplates.find(t => t._id === whatsAppData.templateId);
-                              if (template && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.headerType)) {
+                              if (template?.headerType && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.headerType)) {
                                 return (
                                   <div className="mb-2 bg-gray-100 rounded-lg aspect-video flex items-center justify-center overflow-hidden border border-gray-50 relative">
                                     {template.headerType === 'IMAGE' && <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" /></svg>}
@@ -3044,16 +3541,30 @@ export default function LeadDetailPage() {
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-gray-100 bg-gray-50/50 shrink-0 flex justify-between items-center gap-4">
+            <div className={cn(
+              'shrink-0 flex gap-2 sm:gap-3 border-t',
+              isSubSuperAdmin
+                ? 'p-3 sm:p-6 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex-row items-center justify-end'
+                : 'p-6 border-gray-100 bg-gray-50/50 justify-between items-center gap-4'
+            )}>
+              {!isSubSuperAdmin && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-500">Recipients:</span>
                 <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">{whatsAppData.selectedNumbers.length} selected</span>
               </div>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setShowWhatsAppModal(false)} disabled={whatsAppMutation.isPending}>Cancel</Button>
+              )}
+              <div className={cn('flex gap-2 sm:gap-3', isSubSuperAdmin && 'w-full sm:w-auto')}>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowWhatsAppModal(false)}
+                  disabled={whatsAppMutation.isPending}
+                  className={isSubSuperAdmin ? 'flex-1 sm:flex-none text-xs sm:text-sm h-9 sm:h-10' : undefined}
+                >
+                  Cancel
+                </Button>
                 <Button
                   variant="primary"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[160px]"
+                  className={cn('bg-emerald-600 hover:bg-emerald-700 text-white', isSubSuperAdmin ? 'shadow-lg shadow-emerald-600/20 flex-1 sm:flex-none px-4 sm:px-8 text-xs sm:text-sm h-9 sm:h-10' : 'min-w-[160px]')}
                   disabled={
                     !whatsAppData.templateId ||
                     whatsAppData.selectedNumbers.length === 0 ||
@@ -3062,7 +3573,7 @@ export default function LeadDetailPage() {
                       const t = whatsappTemplates.find(x => x._id === whatsAppData.templateId);
                       if (!t) return true;
                       // Only require media handle if the header is a media type
-                      const isMediaType = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(t.headerType);
+                      const isMediaType = Boolean(t.headerType && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(t.headerType));
                       if (isMediaType && !whatsAppData.selectedMediaUrl) return true;
                       return false;
                     })()
@@ -3079,11 +3590,12 @@ export default function LeadDetailPage() {
                     });
                   }}
                 >
-                  {whatsAppMutation.isPending ? 'Sending...' : 'Send WhatsApp Now'}
+                  {whatsAppMutation.isPending ? 'Sending...' : isSubSuperAdmin ? 'Send Now' : 'Send WhatsApp Now'}
                 </Button>
               </div>
             </div>
           </Card>
+          </div>
         </div>
       )}
 
