@@ -4348,10 +4348,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           <PrintableAdmitCard
             courseId={admitCardPrintStudent.courseId}
             student={admitCardPrintStudent}
-            printButtonLabel="Print admit card"
+            printButtonLabel="Print acknowledgement card"
             className={JOINING_ACTION_BTN_CLASS}
             disabled={!hasManagedCourseAndBranch}
-            disabledTitle="Select college, course, and branch before printing the admit card"
+            disabledTitle="Select college, course, and branch before printing the acknowledgement card"
           />
         ) : null}
         {panelStep === 1 && canSaveJoiningDraft ? (

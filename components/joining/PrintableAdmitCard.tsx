@@ -113,15 +113,18 @@ const ADMIT_CARD_PRINT_STYLES = `
     height: 143.5mm;
     max-height: 143.5mm;
     overflow: hidden;
-    padding: 3mm 5mm 3mm;
+    padding: 2.5mm 4mm 2.5mm;
     position: relative;
     border-left: 2px solid #1e3a8a;
     border-right: 2px solid #1e3a8a;
   }
+  .card-shell {
+    width: 100%;
+  }
   .a4-page--single .half-sheet {
     flex: 0 0 auto;
     height: auto;
-    max-height: 143.5mm;
+    max-height: none;
     overflow: visible;
   }
   .a4-page > .half-sheet:first-child {
@@ -138,17 +141,17 @@ const ADMIT_CARD_PRINT_STYLES = `
   }
   .college-name-header {
     text-align: center;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
-    line-height: 1.25;
-    padding: 2px 2px 6px;
+    line-height: 1.2;
+    padding: 1px 2px 4px;
     border-bottom: 2px solid #1e3a8a;
     color: #1e3a8a;
   }
   .card-title {
     text-align: center;
-    margin: 4px 0 5px;
-    font-size: 12px;
+    margin: 3px 0 4px;
+    font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -156,23 +159,25 @@ const ADMIT_CARD_PRINT_STYLES = `
   }
   .main-grid {
     display: grid;
-    grid-template-columns: 34mm minmax(0, 1fr) 44mm;
+    grid-template-columns: 32mm minmax(0, 1fr) 38mm;
     gap: 3mm;
     align-items: start;
     margin-bottom: 3mm;
   }
   .photo-cell {
-    width: 34mm;
+    width: 32mm;
   }
   .qr-cell {
-    width: 44mm;
+    width: 38mm;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    overflow: hidden;
   }
   .photo {
-    width: 34mm;
-    height: 42mm;
+    width: 32mm;
+    height: 38mm;
+    max-height: 38mm;
     object-fit: cover;
     border: 1px solid #94a3b8;
     border-radius: 3px;
@@ -194,14 +199,14 @@ const ADMIT_CARD_PRINT_STYLES = `
   .details-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 9.5px;
+    font-size: 9px;
     table-layout: fixed;
   }
   .details-table tr {
-    height: 1.55em;
+    height: 1.45em;
   }
   .details-table td {
-    padding: 3px 0;
+    padding: 2px 0;
     vertical-align: middle;
     border-bottom: 1px dotted #e2e8f0;
     word-break: break-word;
@@ -217,58 +222,68 @@ const ADMIT_CARD_PRINT_STYLES = `
     font-weight: 700;
     color: #0f172a;
   }
-  .contact-section {
+  .footer-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3mm;
+    align-items: start;
     border-top: 1px solid #cbd5e1;
     padding-top: 3mm;
-    margin-bottom: 2mm;
+  }
+  .contact-section,
+  .payment-note-section {
+    min-width: 0;
   }
   .section-title {
     margin: 0 0 4px;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: #1e40af;
   }
   .contact-box {
-    font-size: 11px;
-    line-height: 1.5;
+    font-size: 9px;
+    line-height: 1.4;
     color: #334155;
-    padding: 6px 8px;
+    padding: 5px 7px;
     border: 1px solid #e2e8f0;
     border-radius: 4px;
     background: #f8fafc;
   }
   .fee-qr {
-    width: 44mm;
-    height: 42mm;
+    width: 38mm;
+    height: 38mm;
+    max-width: 38mm;
+    max-height: 38mm;
     object-fit: contain;
     border: 1px solid #e2e8f0;
     border-radius: 4px;
     background: #fff;
+    display: block;
   }
   .fee-qr-missing {
     display: flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    font-size: 9px;
+    font-size: 8px;
     color: #64748b;
-    padding: 8px;
-    width: 44mm;
-    height: 42mm;
+    padding: 6px;
+    width: 38mm;
+    height: 38mm;
+    max-height: 38mm;
   }
   .qr-note {
-    width: 100%;
-    padding: 5px 8px;
+    padding: 5px 7px;
     border: 1.5px dashed #2563eb;
     border-radius: 4px;
     background: #eff6ff;
     color: #1d4ed8;
     font-size: 9px;
     font-weight: 700;
-    text-align: center;
-    line-height: 1.35;
+    text-align: left;
+    line-height: 1.4;
   }
   @media print {
     .a4-page {
@@ -281,7 +296,8 @@ const ADMIT_CARD_PRINT_STYLES = `
     }
     .a4-page--single .half-sheet {
       height: auto;
-      max-height: 143.5mm;
+      max-height: none;
+      overflow: visible;
     }
     .a4-page--double {
       height: 287mm;
@@ -298,7 +314,7 @@ function buildHalfSheetHtml(student: AdmitCardPrintStudent, assets: AdmitCardAss
   const photoSrc = safeImageSrcForPrint(student.studentPhotoSrc);
   const qrSrc = safeImageSrcForPrint(assets.feeQrImage);
   const collegeName =
-    student.collegeName?.trim() || assets.collegeName?.trim() || 'Admit Card';
+    student.collegeName?.trim() || assets.collegeName?.trim() || 'Acknowledgement Card';
   const contactHtml = escapePrintHtml(
     assets.admissionContactDetails?.trim() || DEFAULT_ADMISSION_CONTACT_DETAILS
   ).replace(/\n/g, '<br/>');
@@ -319,34 +335,41 @@ function buildHalfSheetHtml(student: AdmitCardPrintStudent, assets: AdmitCardAss
     : `<div class="fee-qr fee-qr-missing">Fee QR not configured</div>`;
 
   return `
-    <div class="college-name-header">${escapePrintHtml(collegeName)}</div>
-    <div class="card-title">Admit Card</div>
-    <div class="main-grid">
-      <div class="photo-cell">${photoBlock}</div>
-      <div class="details-cell">
-        <table class="details-table">
-          ${detailRow('Student name', student.studentName)}
-          ${detailRow('Admission no.', student.admissionNumber || '—')}
-          ${detailRow('Program', student.program)}
-          ${detailRow('Branch', student.branch)}
-          ${detailRow('Student phone', student.studentPhone)}
-          ${detailRow('Father phone', student.fatherPhone)}
-        </table>
+    <div class="card-shell">
+      <div class="college-name-header">${escapePrintHtml(collegeName)}</div>
+      <div class="card-title">Acknowledgement Card</div>
+      <div class="main-grid">
+        <div class="photo-cell">${photoBlock}</div>
+        <div class="details-cell">
+          <table class="details-table">
+            ${detailRow('Student name', student.studentName)}
+            ${detailRow('Admission no.', student.admissionNumber || '—')}
+            ${detailRow('Program', student.program)}
+            ${detailRow('Branch', student.branch)}
+            ${detailRow('Student phone', student.studentPhone)}
+            ${detailRow('Father phone', student.fatherPhone)}
+          </table>
+        </div>
+        <div class="qr-cell">${qrBlock}</div>
       </div>
-      <div class="qr-cell">${qrBlock}</div>
-    </div>
-    <div class="contact-section">
-      <p class="section-title">Admission contact details</p>
-      <div class="contact-box">${contactHtml}</div>
-    </div>
-    <div class="qr-note">${qrNote}</div>`;
+      <div class="footer-row">
+        <div class="contact-section">
+          <p class="section-title">Admission contact details</p>
+          <div class="contact-box">${contactHtml}</div>
+        </div>
+        <div class="payment-note-section">
+          <p class="section-title">Pay through QR</p>
+          <div class="qr-note">${qrNote}</div>
+        </div>
+      </div>
+    </div>`;
 }
 
 /** Build A4 HTML with up to 2 half-page admit cards (2 students per sheet). */
 export function buildAdmitCardA4PageHtml(
   entries: Array<{ student: AdmitCardPrintStudent; assets: AdmitCardAssets }>
 ): string {
-  const titleName = entries[0]?.student.studentName || 'Admit cards';
+  const titleName = entries[0]?.student.studentName || 'Acknowledgement cards';
   const cardCount = Math.min(entries.length, 2);
   const pageClass = cardCount === 2 ? 'a4-page a4-page--double' : 'a4-page a4-page--single';
 
@@ -364,7 +387,7 @@ export function buildAdmitCardA4PageHtml(
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Admit Card — ${escapePrintHtml(titleName)}</title>
+  <title>Acknowledgement Card — ${escapePrintHtml(titleName)}</title>
   <style>${ADMIT_CARD_PRINT_STYLES}</style>
 </head>
 <body>
@@ -382,7 +405,7 @@ function buildAdmitCardHtml(student: AdmitCardPrintStudent, assets: AdmitCardAss
 export function PrintableAdmitCard({
   courseId,
   student,
-  printButtonLabel = 'Print admit card',
+  printButtonLabel = 'Print acknowledgement card',
   className,
   size = 'sm',
   disabled,
@@ -407,10 +430,10 @@ export function PrintableAdmitCard({
       const payload = (response as { data?: AdmitCardAssets })?.data ?? response;
       const assets = (payload as AdmitCardAssets) || {};
       const html = buildAdmitCardHtml(student, assets);
-      printHtmlDocument(html, 'Admit card');
+      printHtmlDocument(html, 'Acknowledgement card');
     } catch {
       showToast.error(
-        'Could not load admit card data. Check that the course fee QR is configured in the student database.'
+        'Could not load acknowledgement card data. Check that the course fee QR is configured in the student database.'
       );
     } finally {
       setLoading(false);
@@ -430,8 +453,8 @@ export function PrintableAdmitCard({
       title={
         disabledTitle ||
         (!String(courseId ?? '').trim()
-          ? 'Select a managed course before printing the admit card'
-          : 'Print admit card on A4 (half page — 2 per sheet)')
+          ? 'Select a managed course before printing the acknowledgement card'
+          : 'Print acknowledgement card on A4 (half page — 2 per sheet)')
       }
     >
       {loading ? 'Preparing…' : printButtonLabel}

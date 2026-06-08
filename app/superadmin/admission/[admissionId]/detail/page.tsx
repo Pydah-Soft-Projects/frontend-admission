@@ -1224,7 +1224,7 @@ export default function AdmissionDetailPage() {
           <PrintableAdmitCard
             courseId={admitCardPrintStudent.courseId}
             student={admitCardPrintStudent}
-            printButtonLabel="Print admit card"
+            printButtonLabel="Print acknowledgement card"
           />
         ) : null}
         <WorkflowNextStepButton
