@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { joiningAPI } from '@/lib/api';
 import { parseJoiningPublicLinkFromApiResponse } from '@/lib/joiningInviteLink';
 import { Button } from '@/components/ui/Button';
@@ -10,7 +10,6 @@ import { showToast } from '@/lib/toast';
 export const SELF_REG_LINK_QUERY_KEY = ['self-registration', 'public-link'] as const;
 
 type Props = {
-  showRegenerate?: boolean;
   showPrint?: boolean;
 };
 
@@ -159,26 +158,11 @@ function printSelfRegistrationQr(url: string) {
   }, 2000);
 }
 
-export function SelfRegistrationQrPanel({ showRegenerate = false, showPrint = true }: Props) {
-  const queryClient = useQueryClient();
-
+export function SelfRegistrationQrPanel({ showPrint = true }: Props) {
   const linkQuery = useQuery({
     queryKey: SELF_REG_LINK_QUERY_KEY,
     queryFn: () => joiningAPI.getSelfRegistrationLink(),
     staleTime: 5 * 60_000,
-  });
-
-  const regenerateMutation = useMutation({
-    mutationFn: () => joiningAPI.regenerateSelfRegistrationLink(),
-    onSuccess: (res) => {
-      queryClient.setQueryData(SELF_REG_LINK_QUERY_KEY, res);
-      showToast.success('New QR generated. Print or share the updated link.');
-    },
-    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
-      showToast.error(
-        error?.response?.data?.message || error?.message || 'Could not regenerate link'
-      );
-    },
   });
 
   const parsed = linkQuery.data ? parseJoiningPublicLinkFromApiResponse(linkQuery.data) : null;
@@ -214,7 +198,7 @@ export function SelfRegistrationQrPanel({ showRegenerate = false, showPrint = tr
           className="rounded-xl border border-white bg-white p-2 shadow-sm"
         />
         <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-          Permanent campus QR — stays the same unless you regenerate
+          Permanent campus QR — same link for all students
         </p>
       </div>
 
@@ -240,22 +224,6 @@ export function SelfRegistrationQrPanel({ showRegenerate = false, showPrint = tr
         >
           Copy link
         </Button>
-        {showRegenerate ? (
-          <Button
-            variant="light"
-            size="sm"
-            disabled={regenerateMutation.isPending}
-            onClick={() => {
-              if (
-                window.confirm('Regenerate the campus QR? The old printed QR will stop working.')
-              ) {
-                regenerateMutation.mutate();
-              }
-            }}
-          >
-            {regenerateMutation.isPending ? 'Regenerating…' : 'Regenerate QR'}
-          </Button>
-        ) : null}
       </div>
     </div>
   );

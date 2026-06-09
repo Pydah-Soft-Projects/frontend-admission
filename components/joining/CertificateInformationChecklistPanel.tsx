@@ -20,6 +20,7 @@ export function CertificateInformationChecklistBlock({
   certificateChecklistParsed,
   onChecklistOptionChange,
   onChecklistStatusChange,
+  readOnly = false,
 }: {
   variant: 'below-documents' | 'post-admission-step' | 'admission-step-two';
   radioNameSuffix?: string;
@@ -34,6 +35,7 @@ export function CertificateInformationChecklistBlock({
     status: JoiningDocumentStatus,
     hasCertOptions: boolean
   ) => void;
+  readOnly?: boolean;
 }) {
   const wrapClass =
     variant === 'below-documents'
@@ -105,50 +107,68 @@ export function CertificateInformationChecklistBlock({
                     </span>
                   </div>
                   {hasCertOptions ? (
-                    <div className="flex flex-wrap gap-2">
-                      {certOpts.map(({ encoded, label }) => (
+                    readOnly ? (
+                      <p className="text-xs font-medium text-indigo-900 dark:text-indigo-100">
+                        {certOpts.find((o) => o.encoded === selectedEncoded)?.label || '—'}
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {certOpts.map(({ encoded, label }) => (
+                          <label
+                            key={encoded}
+                            className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                              selectedEncoded === encoded
+                                ? 'border-indigo-500 bg-white text-indigo-950 shadow-sm ring-1 ring-indigo-300 dark:border-indigo-400 dark:bg-indigo-900/40 dark:text-indigo-50 dark:ring-indigo-600'
+                                : 'border-indigo-200/80 bg-white/70 text-indigo-900 hover:border-indigo-400 dark:border-indigo-800 dark:bg-slate-800/60 dark:text-indigo-100 dark:hover:border-indigo-500'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`cert-option-${itemId}${radioNameSuffix}`}
+                              value={encoded}
+                              checked={selectedEncoded === encoded}
+                              onChange={() => onChecklistOptionChange(itemId, encoded)}
+                              className="h-3 w-3 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )
+                  ) : null}
+                  <div className="mt-1 flex justify-end gap-3 border-t border-indigo-200/60 pt-2 dark:border-indigo-800/50">
+                    {readOnly ? (
+                      <span
+                        className={`inline-flex items-center rounded-lg border px-3 py-1 text-xs font-semibold uppercase ${
+                          status === 'received'
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                            : 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+                        }`}
+                      >
+                        {status === 'received' ? 'Received' : 'Pending'}
+                      </span>
+                    ) : (
+                      documentStatusOptions.map((statusOption) => (
                         <label
-                          key={encoded}
-                          className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition ${
-                            selectedEncoded === encoded
-                              ? 'border-indigo-500 bg-white text-indigo-950 shadow-sm ring-1 ring-indigo-300 dark:border-indigo-400 dark:bg-indigo-900/40 dark:text-indigo-50 dark:ring-indigo-600'
-                              : 'border-indigo-200/80 bg-white/70 text-indigo-900 hover:border-indigo-400 dark:border-indigo-800 dark:bg-slate-800/60 dark:text-indigo-100 dark:hover:border-indigo-500'
+                          key={`${itemId}-${statusOption}`}
+                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${
+                            status === statusOption
+                              ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
+                              : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-600 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
                           }`}
                         >
                           <input
                             type="radio"
-                            name={`cert-option-${itemId}${radioNameSuffix}`}
-                            value={encoded}
-                            checked={selectedEncoded === encoded}
-                            onChange={() => onChecklistOptionChange(itemId, encoded)}
-                            className="h-3 w-3 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            name={`cert-checklist-${itemId}${radioNameSuffix}`}
+                            value={statusOption}
+                            checked={status === statusOption}
+                            onChange={() => onChecklistStatusChange(itemId, statusOption, hasCertOptions)}
+                            className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
                           />
-                          <span>{label}</span>
+                          <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
                         </label>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className="mt-1 flex justify-end gap-3 border-t border-indigo-200/60 pt-2 dark:border-indigo-800/50">
-                    {documentStatusOptions.map((statusOption) => (
-                      <label
-                        key={`${itemId}-${statusOption}`}
-                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold uppercase transition ${
-                          status === statusOption
-                            ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
-                            : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-600 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`cert-checklist-${itemId}${radioNameSuffix}`}
-                          value={statusOption}
-                          checked={status === statusOption}
-                          onChange={() => onChecklistStatusChange(itemId, statusOption, hasCertOptions)}
-                          className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
-                      </label>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               );

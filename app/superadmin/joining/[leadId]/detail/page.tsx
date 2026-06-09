@@ -250,28 +250,15 @@ export default function JoiningDetailPage() {
         <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
           Student profile
         </h3>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Registration fields in the same order as the edit form.
-          </p>
-          {(studentProfileRegistrationEntries.some(([k]) =>
-            String(k).toLowerCase().includes('aadhaar')
-          ) ||
-            joining.studentInfo?.aadhaarNumber) && (
-            <button
-              type="button"
-              onClick={() => toggleAadhaar('student')}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
-            >
-              {revealedAadhaars.student ? 'Hide Aadhaar' : 'Show Aadhaar'}
-            </button>
-          )}
-        </div>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+          Registration fields in the same order as the edit form.
+        </p>
         <div className="mt-4">
           {studentProfileRegistrationEntries.length > 0 ? (
             <JoiningRegistrationFieldsReadView
               entries={studentProfileRegistrationEntries}
               revealAadhaar={revealedAadhaars.student}
+              onToggleAadhaar={() => toggleAadhaar('student')}
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-3">

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  formatRegistrationFieldDisplayValue,
   formatRegistrationFieldLabel,
   isRegistrationImageDataUrl,
   sortCleanRegistrationFieldEntries,
@@ -30,6 +31,8 @@ type Props = {
   className?: string;
   /** When false, masks values for registration keys that look like Aadhaar. */
   revealAadhaar?: boolean;
+  /** When set, renders Show/Hide on the Aadhaar field card instead of a detached page-level link. */
+  onToggleAadhaar?: () => void;
 };
 
 /** Read-only registration grid — same field order as the joining edit form. */
@@ -37,6 +40,7 @@ export function JoiningRegistrationFieldsReadView({
   entries,
   className,
   revealAadhaar = false,
+  onToggleAadhaar,
 }: Props) {
   const sorted = sortCleanRegistrationFieldEntries(entries);
   if (!sorted.length) {
@@ -45,24 +49,34 @@ export function JoiningRegistrationFieldsReadView({
     );
   }
 
+  const hasAadhaarField = sorted.some(([key]) => isAadhaarFieldKey(key));
+
   return (
     <div className={className ?? 'grid gap-4 md:grid-cols-3'}>
       {sorted.map(([key, raw]) => {
         const label = formatRegistrationFieldLabel(key);
-        const text =
-          typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-            ? JSON.stringify(raw)
-            : String(raw ?? '');
-        const showMaskedAadhaar =
-          !revealAadhaar && isAadhaarFieldKey(key) && text && text !== '—';
+        const text = formatRegistrationFieldDisplayValue(key, raw);
+        const isAadhaarField = isAadhaarFieldKey(key);
+        const showMaskedAadhaar = !revealAadhaar && isAadhaarField && text && text !== '—';
         return (
           <div
             key={key}
             className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30"
           >
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              {label}
-            </p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {label}
+              </p>
+              {isAadhaarField && hasAadhaarField && onToggleAadhaar ? (
+                <button
+                  type="button"
+                  onClick={onToggleAadhaar}
+                  className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                >
+                  {revealAadhaar ? 'Hide' : 'Show'}
+                </button>
+              ) : null}
+            </div>
             {isRegistrationImageDataUrl(raw) ? (
               <img
                 src={raw}

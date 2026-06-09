@@ -172,6 +172,69 @@ export function cleanRegistrationFieldEntries(
 
 export type CleanRegistrationFieldEntry = [string, unknown];
 
+function normRegistrationKey(key: string): string {
+  return String(key || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+function looksLikeDateFieldKey(key: string): boolean {
+  const n = normRegistrationKey(key);
+  return n.includes('date') || n.includes('dob') || n.includes('birth');
+}
+
+function formatDateLikeValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/** Human-readable value for registration extras on detail / read-only views. */
+export function formatRegistrationFieldDisplayValue(key: string, raw: unknown): string {
+  if (raw === undefined || raw === null) return '—';
+  if (typeof raw === 'boolean') return raw ? 'Yes' : 'No';
+  if (typeof raw === 'number') return String(raw);
+
+  if (typeof raw === 'object') {
+    if (Array.isArray(raw)) {
+      return raw.map((item) => formatRegistrationFieldDisplayValue(key, item)).filter(Boolean).join(', ') || '—';
+    }
+    const obj = raw as Record<string, unknown>;
+    if (obj.accommodationType != null) {
+      const type = obj.accommodationType === 'hostel' ? 'Hostel' : 'Bus';
+      const parts = [type];
+      if (obj.routeName) parts.push(String(obj.routeName));
+      if (obj.stageName) parts.push(String(obj.stageName));
+      if (obj.hostelName) parts.push(String(obj.hostelName));
+      if (obj.roomNumber) parts.push(`Room ${obj.roomNumber}`);
+      return parts.join(' · ');
+    }
+    if (obj.label != null && String(obj.label).trim()) return String(obj.label).trim();
+    if (obj.name != null && String(obj.name).trim()) return String(obj.name).trim();
+    if (obj.value != null && String(obj.value).trim()) return String(obj.value).trim();
+    if (obj.routeName != null && String(obj.routeName).trim()) return String(obj.routeName).trim();
+    try {
+      return JSON.stringify(obj);
+    } catch {
+      return '—';
+    }
+  }
+
+  const text = String(raw).trim();
+  if (!text) return '—';
+  if (looksLikeDateFieldKey(key) || /^\d{4}-\d{2}-\d{2}/.test(text) || /GMT|IST/.test(text)) {
+    return formatDateLikeValue(text) || text;
+  }
+  return text;
+}
+
 /** Same profile field order as `JoiningDynamicRegistrationFields` on the edit form. */
 export function sortCleanRegistrationFieldEntries(
   entries: CleanRegistrationFieldEntry[]

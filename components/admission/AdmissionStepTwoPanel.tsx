@@ -9,8 +9,8 @@ import {
   WorkflowStickyActionBar,
 } from '@/components/admission/AdmissionWorkflowSteps';
 import { joiningAPI, courseAPI } from '@/lib/api';
-import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
+import { JoiningStepTwoPaymentsPanel } from '@/components/joining/JoiningStepTwoPaymentsPanel';
 import { showToast } from '@/lib/toast';
 import { useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import {
@@ -26,8 +26,29 @@ import type {
   CertificateGuidance,
   Joining,
   JoiningDocumentStatus,
-  JoiningStudentFeeDetails,
+  PaymentSummary,
+  PaymentTransaction,
 } from '@/types';
+
+const formatCurrency = (amount?: number | null) => {
+  if (amount === undefined || amount === null || Number.isNaN(amount)) {
+    return '—';
+  }
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return String(amount);
+  }
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return '—';
+  return new Date(value).toLocaleString();
+};
 
 type AdmissionStepTwoPanelProps = {
   joiningId: string;
@@ -37,6 +58,10 @@ type AdmissionStepTwoPanelProps = {
   quota: string;
   batch: string | null;
   disabled?: boolean;
+  /** View-only admission detail page — no save, no workflow footer, read-only checklist. */
+  readOnly?: boolean;
+  paymentSummary?: PaymentSummary | null;
+  transactions?: PaymentTransaction[];
 };
 
 export function AdmissionStepTwoPanel({
@@ -47,10 +72,13 @@ export function AdmissionStepTwoPanel({
   quota,
   batch,
   disabled = false,
+  readOnly = false,
+  paymentSummary = null,
+  transactions = [],
 }: AdmissionStepTwoPanelProps) {
   const queryClient = useQueryClient();
   const { canEditAdmission } = useJoiningDeskPermissions();
-  const canWrite = canEditAdmission && !disabled;
+  const canWrite = !readOnly && canEditAdmission && !disabled;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['joining', joiningId],
@@ -79,25 +107,39 @@ export function AdmissionStepTwoPanel({
   }, [certificateGuidanceResponse]);
 
   const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
-  const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({
-    lines: [],
-    batch: '',
-  });
 
   useEffect(() => {
     if (!joining) return;
     const rf = joining.registrationFormData;
     setRegistrationExtras(rf && typeof rf === 'object' && !Array.isArray(rf) ? { ...rf } : {});
-    const sfd = joining.studentFeeDetails;
-    if (sfd && typeof sfd === 'object') {
-      setStudentFeeDetails({
-        batch: (sfd.batch != null ? String(sfd.batch) : '') || '',
-        lines: Array.isArray(sfd.lines) ? [...sfd.lines] : [],
-      });
-    } else {
-      setStudentFeeDetails({ lines: [], batch: '' });
-    }
   }, [joining?._id, joining?.updatedAt]);
+
+  const totalPaid = paymentSummary?.totalPaid ?? 0;
+  const effectiveTotalFee = paymentSummary?.totalFee ?? 0;
+  const outstandingBalance = Math.max(effectiveTotalFee - totalPaid, 0);
+  const inferredPaymentStatus = paymentSummary?.status
+    ? paymentSummary.status
+    : totalPaid <= 0
+      ? 'not_started'
+      : outstandingBalance <= 0.5
+        ? 'paid'
+        : 'partial';
+  const paymentStatusLabel = inferredPaymentStatus.replace(/_/g, ' ');
+  const paymentStatusBadgeClass =
+    inferredPaymentStatus === 'paid'
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
+      : inferredPaymentStatus === 'partial'
+        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
+        : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200';
+  const additionalFeePaid = useMemo(() => {
+    return transactions
+      .filter((transaction) => transaction.isAdditionalFee && transaction.status === 'success')
+      .reduce((sum, transaction) => sum + (transaction.amount || 0), 0);
+  }, [transactions]);
+  const baseFeeTarget = effectiveTotalFee || 0;
+  const normalizedBaseFeePaid = Math.max(totalPaid - additionalFeePaid, 0);
+  const baseFeePaid =
+    baseFeeTarget > 0 ? Math.min(normalizedBaseFeePaid, baseFeeTarget) : normalizedBaseFeePaid;
 
   useEffect(() => {
     const items = certificateGuidance?.items;
@@ -211,14 +253,10 @@ export function AdmissionStepTwoPanel({
           : stripped;
       return joiningAPI.patchStepTwo(joiningId, {
         registrationFormData,
-        studentFeeDetails: {
-          batch: studentFeeDetails.batch,
-          lines: studentFeeDetails.lines || [],
-        },
       });
     },
     onSuccess: async () => {
-      showToast.success('Certificate checklist and fee lines saved');
+      showToast.success('Certificate checklist saved');
       await queryClient.invalidateQueries({ queryKey: ['joining', joiningId] });
       await queryClient.invalidateQueries({ queryKey: ['admission', admissionId] });
       await queryClient.invalidateQueries({ queryKey: ['joining', 'registration-form-data', joiningId] });
@@ -254,7 +292,7 @@ export function AdmissionStepTwoPanel({
         className="scroll-mt-24 rounded-2xl border border-amber-200 bg-amber-50/80 p-6 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
       >
         <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
-          Step 2 — Certificate checklist &amp; fee lines
+          Step 2 — Certificate checklist &amp; admission fee
         </p>
         <p className="mt-2">
           Step 2 unlocks after the joining is <span className="font-semibold">approved</span>. Current status:{' '}
@@ -294,17 +332,19 @@ export function AdmissionStepTwoPanel({
             Step 2
           </p>
           <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Certificate checklist &amp; fee lines
+            Certificate checklist &amp; admission fee
           </h2>
         </div>
-        <Button
-          type="button"
-          variant="primary"
-          disabled={!canWrite || saveMutation.isPending}
-          onClick={() => saveMutation.mutate()}
-        >
-          {saveMutation.isPending ? 'Saving…' : 'Save certificate & fee lines'}
-        </Button>
+        {!readOnly ? (
+          <Button
+            type="button"
+            variant="primary"
+            disabled={!canWrite || saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            {saveMutation.isPending ? 'Saving…' : 'Save certificate checklist'}
+          </Button>
+        ) : null}
       </div>
 
       <CertificateInformationChecklistBlock
@@ -317,33 +357,61 @@ export function AdmissionStepTwoPanel({
         certificateChecklistParsed={certificateChecklistParsed}
         onChecklistOptionChange={updateCertificateChecklistOption}
         onChecklistStatusChange={updateCertificateChecklistStatus}
+        readOnly={readOnly}
       />
 
-      <FeeStructureSection
-        title="Fee structure & student line items"
-        course={course}
-        branch={branch}
+      <JoiningStepTwoPaymentsPanel
+        courseName={course}
+        branchName={branch}
         quota={quota}
-        batch={batch}
-        feeDetailsEditable={canWrite}
-        studentFeeDetails={studentFeeDetails}
-        onStudentFeeDetailsChange={canWrite ? setStudentFeeDetails : undefined}
-        description="Match fee heads from the Fee Management database. Editable amounts and remarks are saved with the joining and copied to this admission record when you save Step 2."
+        paymentSummary={paymentSummary}
+        transactions={transactions}
+        isLoadingTransactions={false}
+        formatCurrency={formatCurrency}
+        formatDateTime={formatDateTime}
+        baseFeeTarget={baseFeeTarget}
+        baseFeePaid={baseFeePaid}
+        outstandingBalance={outstandingBalance}
+        additionalFeePaid={additionalFeePaid}
+        totalAmountPaid={Math.max(totalPaid, 0)}
+        configuredFee={effectiveTotalFee > 0 ? effectiveTotalFee : null}
+        paymentStatusBadgeClass={paymentStatusBadgeClass}
+        paymentStatusLabel={paymentStatusLabel}
+        cashfreeConfig={null}
+        canAccessPaymentsModule
+        canWritePayments={false}
+        canUseCashfree={false}
+        paymentActionsDisabled
+        isAdditionalFeeMode={false}
+        shouldShowAdditionalFeeButton={false}
+        isProcessingPayment={false}
+        onOpenCash={() => {}}
+        onOpenOnline={() => {}}
+        onToggleAdditionalFeeMode={() => {}}
+        paymentAmount=""
+        paymentReferenceId=""
+        onPaymentAmountChange={() => {}}
+        onPaymentReferenceChange={() => {}}
+        onRecordCashPayment={() => {}}
+        paymentRecordDisabled
+        readOnly={readOnly}
       />
 
-      <WorkflowStickyActionBar
-        id="admission-step-two-actions"
-        stepLabel="Step 2 actions"
-        className="border-indigo-200/80 dark:border-indigo-900/50"
-        hint="Use Save certificate & fee lines above when needed, then continue to Step 3."
-      >
-        <WorkflowNextStepButton
-          fromStep={2}
-          surface="admission-detail"
-          joiningId={joiningId}
-          admissionId={admissionId}
-        />
-      </WorkflowStickyActionBar>
+      {!readOnly ? (
+        <WorkflowStickyActionBar
+          id="admission-step-two-actions"
+          stepLabel="Step 2 actions"
+          className="border-indigo-200/80 dark:border-indigo-900/50"
+          hint="Review the admission fee collected above, then continue to Step 3."
+        >
+          <WorkflowNextStepButton
+            fromStep={2}
+            surface="admission-detail"
+            joiningId={joiningId}
+            admissionId={admissionId}
+          />
+        </WorkflowStickyActionBar>
+      ) : null}
     </section>
   );
 }

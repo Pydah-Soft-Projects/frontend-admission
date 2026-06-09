@@ -39,6 +39,8 @@ type JoiningStepTwoPaymentsPanelProps = {
   onPaymentReferenceChange: (value: string) => void;
   onRecordCashPayment: () => void;
   paymentRecordDisabled?: boolean;
+  /** View-only admission detail — hide edit copy and configuration warnings. */
+  readOnly?: boolean;
 };
 
 /** Admission fee collection for Step 2 — inline amount / reference entry (fee-config UI hidden, code retained). */
@@ -76,6 +78,7 @@ export function JoiningStepTwoPaymentsPanel({
   onPaymentReferenceChange,
   onRecordCashPayment,
   paymentRecordDisabled = false,
+  readOnly = false,
 }: JoiningStepTwoPaymentsPanelProps) {
   return (
     <section
@@ -88,8 +91,9 @@ export function JoiningStepTwoPaymentsPanel({
             Payments &amp; transactions
           </h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Enter the amount received and transaction / reference ID below, then record the payment. Student
-            details auto-fill on the printable slip when you print from the payment dialog.
+            {readOnly
+              ? 'Admission fee collected during Step 2 of the workflow.'
+              : 'Enter the amount received and transaction / reference ID below, then record the payment. Student details auto-fill on the printable slip when you print from the payment dialog.'}
           </p>
           {/* Legacy fee-configuration copy — kept for rollback, hidden from Step 2 UI */}
           <p className="mt-1 hidden text-sm text-slate-600 dark:text-slate-400">
@@ -168,7 +172,7 @@ export function JoiningStepTwoPaymentsPanel({
         )}
       </div>
 
-      {!canUseCashfree && (
+      {!readOnly && !canUseCashfree && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/40 dark:text-amber-200">
           Cashfree is not active. Configure credentials under Payment Settings to collect online.
         </div>

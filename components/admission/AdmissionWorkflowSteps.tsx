@@ -35,7 +35,7 @@ export const ADMISSION_WORKFLOW_STEPS = [
     description:
       'Choose bus transport (route, boarding stage, and fare from the Transport database) or hostel accommodation.',
     scrollId: 'joining-wizard-step-3',
-    admissionScrollId: 'joining-wizard-step-3',
+    admissionScrollId: 'admission-step-three',
     tone: 'amber' as const,
   },
   {
@@ -45,7 +45,7 @@ export const ADMISSION_WORKFLOW_STEPS = [
     description:
       'Fee heads from the Fee Management database, payment collection, and final submit.',
     scrollId: 'joining-wizard-step-4',
-    admissionScrollId: 'joining-post-admission-payments',
+    admissionScrollId: 'admission-step-four',
     tone: 'emerald' as const,
   },
 ] as const;
@@ -104,11 +104,8 @@ export function resolveWorkflowNextTarget(
     }
   }
   if (fromStep === 2) {
-    if (surface === 'admission-detail' && joiningId) {
-      return {
-        type: 'href',
-        href: `/superadmin/joining/${joiningId}#joining-wizard-step-3`,
-      };
+    if (surface === 'admission-detail') {
+      return { type: 'scroll', id: 'admission-step-three' };
     }
     if (surface === 'joining-edit' && joiningId) {
       return { type: 'scroll', id: 'joining-wizard-step-3' };
@@ -116,11 +113,8 @@ export function resolveWorkflowNextTarget(
     return { type: 'scroll', id: 'joining-wizard-step-3' };
   }
   if (fromStep === 3) {
-    if (surface === 'admission-detail' && joiningId) {
-      return {
-        type: 'href',
-        href: `/superadmin/joining/${joiningId}#joining-post-admission-payments`,
-      };
+    if (surface === 'admission-detail') {
+      return { type: 'scroll', id: 'admission-step-four' };
     }
     if (surface === 'joining-edit' && joiningId) {
       return { type: 'scroll', id: 'joining-post-admission-payments' };
@@ -167,18 +161,11 @@ function resolveExternalHref(
   props: AdmissionWorkflowStepsProps
 ): string | null {
   const { surface, joiningId, admissionId } = props;
+  // Admission detail is read-only on this page — step pills scroll in-page only.
+  if (surface === 'admission-detail') return null;
   if (!joiningId && step !== 2) return null;
-  if (step === 1 && surface === 'admission-detail' && joiningId) {
-    return `/superadmin/joining/${joiningId}#joining-step-one`;
-  }
   if (step === 2 && (surface === 'joining-edit' || surface === 'joining-public') && admissionId) {
     return `/superadmin/admission/${admissionId}/detail#admission-step-two`;
-  }
-  if (step === 3 && surface === 'admission-detail' && joiningId) {
-    return `/superadmin/joining/${joiningId}#joining-wizard-step-3`;
-  }
-  if (step === 4 && surface === 'admission-detail' && joiningId) {
-    return `/superadmin/joining/${joiningId}#joining-post-admission-payments`;
   }
   return null;
 }
@@ -205,7 +192,7 @@ function isStepEnabled(step: AdmissionWorkflowStep, props: AdmissionWorkflowStep
     props;
   if (isAdmissionCancelled) return false;
   if (step === 1) {
-    if (surface === 'admission-detail') return Boolean(joiningId) && !isAdmissionCancelled;
+    if (surface === 'admission-detail') return !isAdmissionCancelled;
     return true;
   }
   if (onJoiningWizardStepSelect && (surface === 'joining-edit' || surface === 'joining-public')) {
@@ -218,8 +205,24 @@ function isStepEnabled(step: AdmissionWorkflowStep, props: AdmissionWorkflowStep
 }
 
 function stepDisabledTitle(step: AdmissionWorkflowStep, props: AdmissionWorkflowStepsProps): string {
-  const { joiningStatus, joiningId, admissionId, isAdmissionCancelled } = props;
+  const { joiningStatus, joiningId, admissionId, isAdmissionCancelled, surface } = props;
   if (isAdmissionCancelled) return 'Admission cancelled — this step is not available';
+  if (surface === 'admission-detail') {
+    if (step === 1) return 'Scroll to online application on this page';
+    if (step === 2) {
+      if (!joiningId || !admissionId) return 'Link a joining record to view Step 2';
+      if (joiningStatus !== 'approved') return 'Step 2 unlocks after the joining is approved';
+      return 'Scroll to certificate checklist and fee lines';
+    }
+    if (!joiningId) return 'No joining record linked';
+    if (joiningStatus !== 'approved') {
+      return step === 3
+        ? 'Step 3 unlocks after the joining is approved'
+        : 'Step 4 unlocks after the joining is approved';
+    }
+    if (step === 3) return 'Scroll to bus and hostel on this page';
+    return 'Scroll to payments on this page';
+  }
   if (step === 1 && !joiningId) return 'No joining record linked';
   if (step === 2) {
     if (!joiningId || !admissionId) return 'Link a joining record and admission to open Step 2';

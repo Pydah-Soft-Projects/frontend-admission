@@ -28,6 +28,8 @@ type Props = {
   branchName?: string;
   intakeRegistrationEntries: CleanRegistrationFieldEntry[];
   reference1?: string;
+  /** When set, replaces the read-only Reference cell (e.g. editable reference on admission detail). */
+  referenceSlot?: ReactNode;
 };
 
 /** Read-only Course &amp; quota — mirrors Step 1 on the joining edit form. */
@@ -38,6 +40,7 @@ export function JoiningCourseQuotaReadSection({
   branchName,
   intakeRegistrationEntries,
   reference1,
+  referenceSlot,
 }: Props) {
   const reservation = joining.reservation;
   const qualifications = joining.qualifications;
@@ -94,7 +97,11 @@ export function JoiningCourseQuotaReadSection({
           qualifications?.merit === true ? 'Yes' : qualifications?.merit === false ? 'No' : '—'
         }
       />
-      <ReadCell label="Reference" value={reference1?.trim() || '—'} />
+      {referenceSlot != null ? (
+        <div className="min-w-0">{referenceSlot}</div>
+      ) : (
+        <ReadCell label="Reference" value={reference1?.trim() || '—'} />
+      )}
     </div>
   );
 }

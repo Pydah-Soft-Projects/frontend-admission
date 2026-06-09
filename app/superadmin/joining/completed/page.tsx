@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { admissionAPI, courseAPI } from '@/lib/api';
 import { Admission, AdmissionListResponse } from '@/types';
@@ -230,6 +231,7 @@ const resolveAdmissionSource = (record: Admission) => {
 };
 
 const CompletedAdmissionsPage = () => {
+  const router = useRouter();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
   const queryClient = useQueryClient();
@@ -1757,26 +1759,44 @@ const CompletedAdmissionsPage = () => {
                   <th className={`${tableThClass} text-right`}>Paid</th>
                   <th className={`${tableThClass} text-right hidden md:table-cell`}>Source</th>
                   <th className={`${tableThClass} text-right hidden lg:table-cell`}>Reference</th>
-                  <th className={`${tableThClass} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
                 {isLoading || isFetching ? (
                   <tr>
-                    <td colSpan={14} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                    <td colSpan={13} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-400 border-t-transparent sm:h-12 sm:w-12" />
                       <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400 sm:mt-4">Loading admissions…</p>
                     </td>
                   </tr>
                 ) : isEmpty ? (
                   <tr>
-                    <td colSpan={14} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
+                    <td colSpan={13} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <p className="font-medium text-slate-600 dark:text-slate-400">No admissions found.</p>
                     </td>
                   </tr>
                 ) : (
                   admissions.map((record: any) => (
-                    <tr key={record._id} className="transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60">
+                    <tr
+                      key={record._id}
+                      className="cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60"
+                      onClick={() => {
+                        if (record._id) {
+                          router.push(`/superadmin/admission/${record._id}/detail`);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          if (record._id) {
+                            router.push(`/superadmin/admission/${record._id}/detail`);
+                          }
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      title="View admission details"
+                    >
                       <td className={`${tableTdClass} font-bold text-blue-600 dark:text-blue-400`}>
                         {record.admissionNumber}
                       </td>
@@ -1873,31 +1893,13 @@ const CompletedAdmissionsPage = () => {
                               type="button"
                               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
                               title="Edit reference"
-                              onClick={() => openReferenceEditor(record)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openReferenceEditor(record);
+                              }}
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className={`${tableTdClass} text-right`}>
-                        <div className="flex flex-wrap justify-end gap-1 sm:gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setStudentInfoViewRecord(record)}
-                          >
-                            View
-                          </Button>
-                          {canEditReference && record.status !== ADMISSION_CANCELLED_STATUS ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openReferenceEditor(record)}
-                              title="Edit Reference 1 on admission, joining, and lead"
-                            >
-                              Ref
-                            </Button>
                           ) : null}
                         </div>
                       </td>

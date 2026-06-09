@@ -38,7 +38,7 @@ export function ShareSelfRegistrationModal({ open, onClose }: Props) {
           </Button>
         </div>
 
-        <SelfRegistrationQrPanel showRegenerate showPrint />
+        <SelfRegistrationQrPanel showPrint />
       </div>
     </div>
   );

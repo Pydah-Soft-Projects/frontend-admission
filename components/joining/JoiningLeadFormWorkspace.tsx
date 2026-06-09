@@ -634,10 +634,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const [status, setStatus] = useState<JoiningStatus>('draft');
   const [applicationWizardStep, setApplicationWizardStep] = useState<AdmissionWorkflowStep>(1);
   const useJoiningPageWizard = !isPublicEdit;
-  const usePublicWizard = isPublicEdit && status !== 'approved';
-  const useWizard = useJoiningPageWizard || usePublicWizard;
-  /** Status/enquiry/student summary and course headings duplicate the workflow strip on Step 1. */
-  const hideJoiningStepOneRedundantIntro = useWizard && applicationWizardStep === 1;
 
   const [meta, setMeta] = useState<{
     updatedAt?: string;
@@ -758,6 +754,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     if (bootstrap?.selfRegistration) return true;
     return bootstrap?.routeKey === 'self-registration';
   }, [isPublicEdit, publicBootstrapQuery.data]);
+
+  /** Self-registration QR/link is Step 1 only — no multi-step wizard or next-step navigation. */
+  const usePublicWizard = isPublicEdit && status !== 'approved' && !isSelfRegistrationPublic;
+  const useWizard = useJoiningPageWizard || usePublicWizard;
+  /** Status/enquiry/student summary and course headings duplicate the workflow strip on Step 1. */
+  const hideJoiningStepOneRedundantIntro = useWizard && applicationWizardStep === 1;
 
   const joiningRecord = data?.data?.joining as Joining | undefined;
   // Use leadData from joining instead of populated lead
@@ -3694,7 +3696,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       return joiningAPI.submit(leadId);
     },
     onSuccess: () => {
-      showToast.success('Joining form submitted for approval');
+      if (!isPublicEdit) {
+        showToast.success('Joining form submitted for approval');
+      } else if (!isSelfRegistrationPublic) {
+        showToast.success('Joining form submitted for approval');
+      }
       if (isPublicEdit) {
         setPublicSubmitted(true);
       }
@@ -4102,15 +4108,30 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const publicExpiresAt = (publicBootstrapQuery.data?.data as { expiresAt?: string } | undefined)?.expiresAt;
 
-  if (isPublicEdit && publicSubmitted) {
+  if (
+    isPublicEdit &&
+    (publicSubmitted || (isSelfRegistrationPublic && status !== 'draft'))
+  ) {
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-10 dark:border-emerald-900/50 dark:bg-emerald-950/40">
-          <h1 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Submitted for approval</h1>
-          <p className="mt-3 text-sm text-emerald-800 dark:text-emerald-200">
-            Your joining form has been sent to the admissions team. It will appear in their{' '}
-            <strong>Joining Pipeline</strong> under <strong>Pending Approvals</strong>. You can close this window.
-          </p>
+          {isSelfRegistrationPublic ? (
+            <>
+              <h1 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Thank you</h1>
+              <p className="mt-3 text-sm leading-relaxed text-emerald-800 dark:text-emerald-200">
+                Your application has been submitted successfully. Our admissions team will review it and contact you
+                soon. You may close this window.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Submitted for approval</h1>
+              <p className="mt-3 text-sm text-emerald-800 dark:text-emerald-200">
+                Your joining form has been sent to the admissions team. It will appear in their{' '}
+                <strong>Joining Pipeline</strong> under <strong>Pending Approvals</strong>. You can close this window.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -4239,6 +4260,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   });
 
   const renderWizardStepFooter = (panelStep: AdmissionWorkflowStep) => {
+    if (isSelfRegistrationPublic) {
+      if (panelStep !== 1 || status !== 'draft') return null;
+      return (
+        <WorkflowStickyActionBar
+          id="joining-step-one-actions"
+          stepLabel="Submit application"
+          className="-mx-3 border-x-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:mx-0"
+        >
+          <Button
+            variant="primary"
+            size="sm"
+            className="w-full sm:w-auto"
+            disabled={!canSubmit || isSubmitting}
+            onClick={() => submitMutation.mutate()}
+          >
+            {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
+          </Button>
+        </WorkflowStickyActionBar>
+      );
+    }
+
     if (!useWizard || applicationWizardStep !== panelStep) return null;
 
     const stickyClass = isPublicEdit
@@ -4576,7 +4618,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           </p>
         </div>
       )}
-      {isPublicEdit && publicExpiresAt && (
+      {isPublicEdit && publicExpiresAt && !isSelfRegistrationPublic && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           Secure public form · This link expires at{' '}
           <strong>{new Date(publicExpiresAt).toLocaleString()}</strong> (5 minutes from when it was created).
@@ -5744,7 +5786,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               id="joining-wizard-step-2"
               className={cn(
                 'space-y-10',
-                useWizard && applicationWizardStep !== 2 && 'hidden'
+                (useWizard && applicationWizardStep !== 2) || isSelfRegistrationPublic ? 'hidden' : ''
               )}
             >
               <section
@@ -5869,7 +5911,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               id="joining-wizard-step-3"
               className={cn(
                 'space-y-10',
-                useWizard && applicationWizardStep !== 3 && 'hidden'
+                (useWizard && applicationWizardStep !== 3) || isSelfRegistrationPublic ? 'hidden' : ''
               )}
             >
               {(useWizard ? applicationWizardStep === 3 : showAdminPostAdmissionStep3) ? (
@@ -5890,7 +5932,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               id="joining-wizard-step-4"
               className={cn(
                 'space-y-10',
-                useWizard && applicationWizardStep !== 4 && 'hidden'
+                (useWizard && applicationWizardStep !== 4) || isSelfRegistrationPublic ? 'hidden' : ''
               )}
             >
             {(useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4) ? (

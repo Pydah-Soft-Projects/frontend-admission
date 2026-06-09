@@ -2,7 +2,7 @@ import {
   cleanRegistrationFieldEntries,
   type CleanRegistrationFieldEntry,
 } from '@/lib/registrationFieldsDisplay';
-import { isJoiningRegistrationFieldHiddenFromForm } from '@/lib/joiningRegistrationFieldFilter';
+import { isJoiningRegistrationFieldHiddenFromReadView } from '@/lib/joiningRegistrationFieldFilter';
 import { isJoiningRegistrationIntakeField } from '@/lib/joiningRegistrationFieldLayout';
 import type { Admission, Joining } from '@/types';
 
@@ -70,7 +70,7 @@ export function pickJoiningStudentProfileRegistrationEntries(
   return cleanRegistrationFieldEntries(source).filter(([key]) => {
     const n = normKey(key);
     if (intakeKeys.has(n)) return false;
-    if (isJoiningRegistrationFieldHiddenFromForm(key)) return false;
+    if (isJoiningRegistrationFieldHiddenFromReadView(key)) return false;
     return true;
   });
 }

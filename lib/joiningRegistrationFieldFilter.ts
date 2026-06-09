@@ -247,6 +247,45 @@ export function isJoiningRegistrationFieldHiddenFromForm(fieldName: string): boo
   return isHiddenNorm(norm(fieldName));
 }
 
+/** Internal lead-capture / transport keys — omit on read-only student profile (admission & joining detail). */
+const HIDDEN_READ_VIEW_EXACT = new Set(
+  [
+    'data_collection_type',
+    'data_collection',
+    'data_type',
+    'datatype',
+    'staff_name',
+    'staffname',
+    'staff_name_collected',
+    'date_of_entry',
+    'dateofentry',
+    'entry_date',
+    'transport_details',
+    'transportdetails',
+    'bus_route',
+    'busroute',
+    'college',
+    'college_name',
+    'collegename',
+  ].map((x) => norm(x))
+);
+
+/** Hide on read-only profile grids (detail pages / print-adjacent views). */
+export function isJoiningRegistrationFieldHiddenFromReadView(
+  fieldName: string,
+  fieldLabel?: string
+): boolean {
+  const n = norm(fieldName);
+  const l = norm(fieldLabel || '');
+  return (
+    isJoiningRegistrationFieldHiddenFromForm(fieldName) ||
+    HIDDEN_READ_VIEW_EXACT.has(n) ||
+    HIDDEN_READ_VIEW_EXACT.has(l) ||
+    (n.includes('data_collection') && (n.includes('type') || l.includes('collection'))) ||
+    (l.includes('data_collection') && l.includes('type'))
+  );
+}
+
 /** Hide a field from the joining dynamic block using technical name and/or display label. */
 export function isJoiningRegistrationFieldHidden(field: {
   fieldName?: string;
