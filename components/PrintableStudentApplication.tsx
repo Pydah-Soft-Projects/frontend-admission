@@ -1,9 +1,19 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import type { Joining, Admission, PaymentSummary, PaymentTransaction, JoiningDocuments } from '@/types';
+import { formatCollegeAddressForPrint } from '@/components/joining/PrintableAdmitCard';
+import { courseAPI } from '@/lib/api';
+import type {
+  Joining,
+  Admission,
+  PaymentSummary,
+  PaymentTransaction,
+  JoiningDocuments,
+  JoiningQualifications,
+} from '@/types';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
+import { normalizeJoiningDateOfBirthInput } from '@/lib/joiningRegistrationFieldMap';
 
 type ApplicationData = Joining | Admission;
 
@@ -140,6 +150,66 @@ function formatDateTime(value?: string): string {
   return new Date(value).toLocaleString();
 }
 
+function formatPrintDate(value?: string | Date): string {
+  const d = value instanceof Date ? value : value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+type EducationTableRowKey = 'ssc' | 'inter_diploma' | 'ug';
+
+const EDUCATION_TABLE_ROWS: ReadonlyArray<{ label: string; key: EducationTableRowKey }> = [
+  { label: 'SSC', key: 'ssc' },
+  { label: 'Inter / Diploma', key: 'inter_diploma' },
+  { label: 'UG', key: 'ug' },
+];
+
+function resolveEducationProgramTier(programLevel?: string): 'diploma' | 'ug' | 'pg' | null {
+  const raw = String(programLevel || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (!raw) return null;
+  if (raw === 'pg' || /postgrad|post_graduate|postgraduate|mtech|m_tech|mba/.test(raw)) {
+    return 'pg';
+  }
+  if (raw === 'ug' || /undergrad|under_graduate|undergraduate|btech|b_tech|b\.tech|b\.e|degree/.test(raw)) {
+    return 'ug';
+  }
+  if (raw === 'diploma' || /polytechnic|poly|intermediate|\binter\b|10th|ssc/.test(raw)) {
+    return 'diploma';
+  }
+  return null;
+}
+
+function resolveEducationProgramLevel(
+  application: ApplicationData,
+  courseProgramLevel?: string
+): string {
+  const fromCourse = String(courseProgramLevel || '').trim();
+  if (fromCourse) return fromCourse;
+  const leadData = application.leadData as { _joiningProgramLevel?: string } | undefined;
+  const fromLead = String(leadData?._joiningProgramLevel || '').trim();
+  if (fromLead) return fromLead;
+  const reg = application.registrationFormData as
+    | { programLevel?: string; program_level?: string }
+    | undefined;
+  return String(reg?.programLevel || reg?.program_level || '').trim();
+}
+
+function educationTableRowsForTier(
+  tier: 'diploma' | 'ug' | 'pg' | null,
+  qualifications?: JoiningQualifications
+): Array<{ label: string; key: EducationTableRowKey }> {
+  let resolved = tier;
+  if (!resolved && qualifications) {
+    if (qualifications.ug) resolved = 'pg';
+    else if (qualifications.interOrDiploma) resolved = 'ug';
+    else if (qualifications.ssc) resolved = 'diploma';
+  }
+  if (resolved === 'diploma') return [...EDUCATION_TABLE_ROWS.slice(0, 1)];
+  if (resolved === 'ug') return [...EDUCATION_TABLE_ROWS.slice(0, 2)];
+  if (resolved === 'pg') return [...EDUCATION_TABLE_ROWS];
+  return [...EDUCATION_TABLE_ROWS.slice(0, 2)];
+}
+
 export interface PrintableStudentApplicationProps {
   /** Joining or Admission (same shape for application content) */
   application: ApplicationData;
@@ -157,6 +227,8 @@ export interface PrintableStudentApplicationProps {
   transactions?: PaymentTransaction[];
   /** College display name (e.g. from course lookup); replaces generic header text. */
   collegeName?: string;
+  /** College address for print header; fetched from admit-card assets when omitted. */
+  collegeAddress?: string;
   /** Title shown at top of print */
   title?: string;
   /** Label for the print button */
@@ -190,6 +262,7 @@ function getPrintApplicationHtml(props: {
   transactions?: PaymentTransaction[];
   printedDate: string;
   collegeName?: string;
+  collegeAddress?: string;
 }): string {
   const {
     application,
@@ -202,6 +275,7 @@ function getPrintApplicationHtml(props: {
     transactions = [],
     printedDate,
     collegeName,
+    collegeAddress,
   } = props;
 
   const student = application.studentInfo;
@@ -218,6 +292,7 @@ function getPrintApplicationHtml(props: {
   const headerCollegeTitle = (collegeName || '').trim()
     ? (collegeName || '').trim().toUpperCase()
     : '—';
+  const headerCollegeAddress = formatCollegeAddressForPrint(collegeAddress);
 
   const applicationNumberDisplay = resolveApplicationNumberForPrint(application, enquiryNumber);
   const fatherPhotoSrc = safeImageSrcForPrint(parents?.father?.photo);
@@ -245,7 +320,10 @@ function getPrintApplicationHtml(props: {
     return educationHistory.find((e) => normalizeLevel(e.level) === wanted);
   };
 
-  const matchedLevels = new Set(['ssc', 'inter_diploma', 'ug']);
+  const educationProgramLevel = resolveEducationProgramLevel(application, course?.programLevel);
+  const educationProgramTier = resolveEducationProgramTier(educationProgramLevel);
+  const educationTableRows = educationTableRowsForTier(educationProgramTier, qualifications);
+  const matchedLevels = new Set<string>(educationTableRows.map((row) => row.key));
   const extraEducationEntries = educationHistory.filter(
     (e) => !matchedLevels.has(normalizeLevel(e.level))
   );
@@ -307,37 +385,50 @@ function getPrintApplicationHtml(props: {
   };
 
 
+  const parseDobDigitsForPrint = (dob?: string): string => {
+    const raw = String(dob ?? '').trim();
+    if (!raw) return '';
+    const normalized = normalizeJoiningDateOfBirthInput(raw);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      const [y, m, d] = normalized.split('-');
+      return `${d}${m}${y}`;
+    }
+    const ddMmYyyy = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+    if (ddMmYyyy) return `${ddMmYyyy[1]}${ddMmYyyy[2]}${ddMmYyyy[3]}`;
+    return '';
+  };
+
   const renderDobBoxes = (dob?: string) => {
-    if (!dob) return '<div class="dob-grid">' + Array(8).fill('<span></span>').join('') + '</div>';
-    // Assuming YYYY-MM-DD or similar
-    const date = new Date(dob);
-    if (isNaN(date.getTime())) return '<div class="dob-grid">' + Array(8).fill('<span></span>').join('') + '</div>';
-    
-    const d = String(date.getDate()).padStart(2, '0');
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const y = String(date.getFullYear());
-    const str = d + m + y;
-    return `<div class="dob-grid">${str.split('').map(char => `<span>${char}</span>`).join('')}</div>`;
+    const emptyBoxes = '<div class="dob-grid">' + Array(8).fill('<span></span>').join('') + '</div>';
+    const str = parseDobDigitsForPrint(dob);
+    if (str.length !== 8) return emptyBoxes;
+    return `<div class="dob-grid">${str
+      .split('')
+      .map((char) => `<span>${escapeHtml(char)}</span>`)
+      .join('')}</div>`;
   };
 
   /** All document slots for print summary (received vs not received). */
-  const docList: Array<{ id: keyof JoiningDocuments; label: string }> = [
-    { id: 'ssc', label: 'S.S.C' },
-    { id: 'casteCertificate', label: 'Caste Certificate' },
-    { id: 'inter', label: 'Inter' },
-    { id: 'cetRankCard', label: 'CET Rank Card' },
-    { id: 'ugOrPgCmm', label: 'U.G - P.C / C.M.M' },
-    { id: 'cetHallTicket', label: 'CET Hall Ticket' },
-    { id: 'transferCertificate', label: 'TC' },
-    { id: 'allotmentLetter', label: 'Allotment Letter' },
-    { id: 'studyCertificate', label: 'Study Certificate' },
-    { id: 'joiningReport', label: 'Joining Report' },
-    { id: 'aadhaarCard', label: 'Aadhar Card' },
-    { id: 'bankPassBook', label: 'Bank Pass Book' },
-    { id: 'photos', label: 'Photos(5)' },
-    { id: 'rationCard', label: 'Ration Card' },
-    { id: 'incomeCertificate', label: 'Income Certificate' },
-  ].filter((d) =>
+  type DocListItem = { id: keyof JoiningDocuments; label: string };
+  const docList = (
+    [
+      { id: 'ssc', label: 'S.S.C' },
+      { id: 'casteCertificate', label: 'Caste Certificate' },
+      { id: 'inter', label: 'Inter' },
+      { id: 'cetRankCard', label: 'CET Rank Card' },
+      { id: 'ugOrPgCmm', label: 'U.G - P.C / C.M.M' },
+      { id: 'cetHallTicket', label: 'CET Hall Ticket' },
+      { id: 'transferCertificate', label: 'TC' },
+      { id: 'allotmentLetter', label: 'Allotment Letter' },
+      { id: 'studyCertificate', label: 'Study Certificate' },
+      { id: 'joiningReport', label: 'Joining Report' },
+      { id: 'aadhaarCard', label: 'Aadhar Card' },
+      { id: 'bankPassBook', label: 'Bank Pass Book' },
+      { id: 'photos', label: 'Photos(5)' },
+      { id: 'rationCard', label: 'Ration Card' },
+      { id: 'incomeCertificate', label: 'Income Certificate' },
+    ] satisfies DocListItem[]
+  ).filter((d): d is DocListItem =>
     isJoiningDocumentChecklistKeyVisible(d.id, course?.quota, { paperChecklist: false })
   );
 
@@ -402,10 +493,18 @@ function getPrintApplicationHtml(props: {
       <div class="sig-block">
         <div class="sig-section-title">STUDENT SIGNATURE</div>
         <div class="sig-box"></div>
+        <div class="sig-date-row">
+          <span class="sig-date-label">Date :</span>
+          <span class="sig-date-line">${escapeHtml(printedDate)}</span>
+        </div>
       </div>
       <div class="sig-block">
         <div class="sig-section-title">PARENT / GUARDIAN SIGNATURE</div>
         <div class="sig-box"></div>
+        <div class="sig-date-row">
+          <span class="sig-date-label">Date :</span>
+          <span class="sig-date-line">${escapeHtml(printedDate)}</span>
+        </div>
       </div>
       </div>
     </div>`;
@@ -414,8 +513,8 @@ function getPrintApplicationHtml(props: {
     <div class="top-meta print-continuation-meta">
       <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
       <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
-      <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
       <div>PIN No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
+      <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
       <div>College: <span style="border-bottom: 1px dotted #333; min-width: 120px; display: inline-block;">${escapeHtml((collegeName || '').trim() || '—')}</span></div>
       <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
       <div>Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span></div>
@@ -433,74 +532,262 @@ function getPrintApplicationHtml(props: {
       margin: 0; 
       padding: 5mm 10mm; /* Padding acts as the new margin since @page margin is 0 */
       color: #333; 
-      font-size: 11px; 
-      line-height: 1.3; 
+      font-size: 13px; 
+      line-height: 1.45; 
     }
     .page { position: relative; }
     
-    .top-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; row-gap: 6px; margin-bottom: 10px; font-weight: 600; font-size: 10px; }
-    .top-meta div { display: flex; align-items: center; gap: 5px; }
-    .top-meta .box { border: 3px solid #8B2323; padding: 4px 12px; min-width: 100px; height: 22px; display: inline-block; text-align: center; line-height: 16px; font-weight: bold; background: #f9f9f9; }
-
-    /* Flex container for Header and Office Use Box */
-    .header-container {
+    .top-meta {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 15px;
-      border-bottom: 2px solid #8B2323;
-      padding-bottom: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      row-gap: 6px;
+      margin-bottom: 10px;
+      font-weight: 600;
+      font-size: 11px;
     }
-    
-    .header-logo { width: 160px; height: 100px; margin-right: 20px; flex-shrink: 0; }
-    .header-logo img { width: 100%; height: 100%; object-fit: contain; }
-    
-    .header-main { 
-      flex: 1;
-      text-align: center; 
-      display: flex;
+    .top-meta div { display: flex; align-items: center; gap: 5px; }
+    .top-meta .box {
+      border: 3px solid #8B2323;
+      padding: 4px 12px;
+      min-width: 100px;
+      height: 22px;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 20px;
+      text-align: center;
+      line-height: 1;
+      font-weight: bold;
+      background: #f9f9f9;
+      box-sizing: border-box;
     }
-    .header-main h1 { margin: 0; font-size: 24px; color: #8B2323; text-transform: uppercase; letter-spacing: 1px; }
+
+    .header-container {
+      margin-bottom: 2px;
+    }
+    .header-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 14px;
+    }
+    .header-logo {
+      width: 140px;
+      height: 90px;
+      flex-shrink: 0;
+      align-self: center;
+    }
+    .header-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .header-brand-stack {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .form-section {
+      margin-top: 0;
+    }
+    .form-body-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 188px;
+      column-gap: 14px;
+      align-items: start;
+      margin-bottom: 0;
+    }
+    .form-left-column {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-width: 0;
+    }
+    .form-left-column .app-title-box {
+      align-self: center;
+      margin-top: -6px;
+      margin-bottom: 2px;
+      padding: 3px 12px;
+    }
+    .form-right-column {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 188px;
+      flex-shrink: 0;
+    }
+    .student-form-left {
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+    }
+    .student-form-left > .form-row:first-child {
+      margin-top: 0;
+    }
+    .student-form-left > .form-row:last-child {
+      margin-bottom: 4px;
+    }
+    .header-main h1 {
+      margin: 0;
+      font-size: 26px;
+      color: #8B2323;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      line-height: 1.15;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .header-college-address {
+      margin: 5px 0 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: #334155;
+      line-height: 1.35;
+      text-align: center;
+      max-width: 520px;
+    }
     .header-main p { margin: 2px 0; font-weight: bold; font-size: 14px; }
-    
-    .office-use-top { border: 1px solid #777; width: 180px; padding: 5px; font-size: 10px; background: #fff; }
+    .app-title-box {
+      border: 1px solid #777;
+      padding: 4px 12px;
+      text-align: center;
+      width: fit-content;
+      max-width: 100%;
+      margin: 0;
+    }
+    .app-title-box h2 {
+      margin: 0;
+      font-size: 16px;
+      color: #8B2323;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .app-title-box p {
+      margin: 0;
+      font-size: 9.5px;
+      font-weight: 600;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .office-use-top {
+      border: 1px solid #777;
+      width: 100%;
+      padding: 5px;
+      font-size: 12px;
+      background: #fff;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
     .office-use-top .title { text-align: center; font-weight: bold; border-bottom: 1px solid #777; margin-bottom: 5px; padding-bottom: 2px; }
     .office-use-top div { margin-bottom: 4px; display: flex; }
     .office-use-top div span:first-child { width: 50px; font-weight: 600; }
     .office-use-top div span:last-child { border-bottom: 1px dotted #333; flex: 1; min-height: 12px; }
 
-    .app-title-box { border: 1px solid #777; padding: 5px; text-align: center; margin: 10px auto; max-width: 400px; }
-    .app-title-box h2 { margin: 0; font-size: 16px; color: #8B2323; }
-    .app-title-box p { margin: 0; font-size: 9px; font-weight: 600; }
-
-    .section-num { font-weight: bold; margin-right: 5px; }
-    .form-row { display: flex; margin-bottom: 8px; align-items: center; }
-    .form-label { min-width: 130px; font-weight: 600; }
-    .form-value { border-bottom: 1px dotted #333; flex: 1; padding-left: 5px; min-height: 14px; }
-    .inline-val { border-bottom: 1px dotted #333; padding: 0 5px; min-width: 50px; flex: 1; }
-    .selected-inline { font-weight: 600; padding-left: 5px; min-height: 14px; flex: 1; border-bottom: 1px dotted #333; }
-    .dob-grid { display: flex; gap: 2px; }
-    .dob-grid span { border: 1px solid #333; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
-
-    .photos-inline-row {
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
-      gap: 18px;
-      margin: 8px 0 14px 0;
-      flex-wrap: nowrap;
+    .section-num { font-weight: bold; margin-right: 5px; font-size: 13px; width: 20px; flex-shrink: 0; }
+    .form-row { display: flex; margin-bottom: 12px; align-items: center; min-height: 18px; }
+    .form-label { min-width: 130px; max-width: 130px; font-weight: 600; font-size: 13px; flex-shrink: 0; }
+    .form-value { border-bottom: 1px dotted #333; flex: 1; padding-left: 5px; min-height: 16px; font-size: 13px; }
+    .form-value.bold { flex: 1; font-weight: 700; }
+    .form-row-sub { padding-left: 25px; }
+    .form-row-sub .form-label { min-width: 130px; max-width: 130px; flex-shrink: 0; white-space: nowrap; }
+    .form-row-sub .form-label-wide {
+      min-width: 168px;
+      max-width: none;
+      white-space: nowrap;
     }
-    .photos-inline-item {
+    .form-row-section-title .form-label {
+      min-width: auto;
+      max-width: none;
+      white-space: nowrap;
+      flex: 0 1 auto;
+    }
+    .qualified-exam-row {
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      align-items: center;
+    }
+    .qualified-exam-row .form-label-wide {
+      min-width: 180px;
+      max-width: 180px;
+      font-weight: 600;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .qualified-exam-row .form-label-compact {
+      min-width: auto;
+      max-width: none;
+      font-weight: 600;
+      font-size: 12px;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+    .form-field-inline {
+      border-bottom: 1px dotted #333;
+      padding: 0 5px;
+      min-height: 16px;
+      font-size: 13px;
+      font-weight: 600;
+      flex: 0 1 auto;
+      min-width: 48px;
+    }
+    .qualified-exam-row .form-field-inline-wide {
+      flex: 1;
+      min-width: 80px;
+    }
+    .form-field-line {
+      flex: 1;
+      border-bottom: 1px dotted #333;
+      min-height: 16px;
+      padding-left: 5px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .student-form-left .form-row,
+    .form-section .form-row-lined {
+      width: 100%;
+    }
+    .ssc-inline-hint {
+      font-size: 11px;
+      font-weight: 600;
+      color: #555;
+      margin-left: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-style: italic;
+    }
+    .inline-val { border-bottom: 1px dotted #333; padding: 0 5px; min-width: 50px; flex: 1; font-size: 13px; }
+    .selected-inline { font-weight: 600; padding-left: 5px; min-height: 16px; flex: 1; border-bottom: 1px dotted #333; font-size: 13px; }
+    .dob-grid { display: flex; gap: 2px; flex-shrink: 0; }
+    .dob-grid span { border: 1px solid #333; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+
+    .student-photos-column {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      flex-shrink: 0;
+      width: 100%;
+    }
+    .parent-photos-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+    .photos-stack-item {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 4px;
-      flex: 0 0 auto;
+      width: 100%;
     }
-    .photos-inline-label { font-size: 9px; font-weight: 600; color: #333; text-align: center; max-width: 96px; line-height: 1.15; }
+    .parent-photos-stack .photos-stack-item {
+      width: 100%;
+    }
+    .photos-stack-label { font-size: 11px; font-weight: 600; color: #333; text-align: center; line-height: 1.15; }
     .portrait-thumb {
       border: 1px solid #777;
       width: 88px;
@@ -513,14 +800,34 @@ function getPrintApplicationHtml(props: {
       background: #fafafa;
     }
     .portrait-img { max-width: 100%; max-height: 100%; object-fit: cover; }
-    .portrait-empty { font-size: 9px; color: #999; }
+    .portrait-empty { font-size: 11px; color: #999; }
 
+    .address-fields-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 14px;
+      row-gap: 8px;
+      margin-left: 20px;
+      margin-bottom: 4px;
+    }
+    .address-fields-grid .form-row-sub {
+      padding-left: 0;
+      margin-bottom: 0;
+    }
+    .address-fields-grid .form-label {
+      min-width: 118px;
+      max-width: 118px;
+      font-size: 12px;
+    }
+    .address-field-full {
+      grid-column: 1 / -1;
+    }
     .relative-address-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px; }
     .relative-box { border: 1px solid #777; padding: 5px; height: 60px; }
 
     table.data-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-    table.data-table th, table.data-table td { border: 1px solid #777; padding: 4px; text-align: left; }
-    table.data-table th { background: #f2f2f2; font-size: 9px; }
+    table.data-table th, table.data-table td { border: 1px solid #777; padding: 4px; text-align: left; font-size: 11px; }
+    table.data-table th { background: #f2f2f2; font-size: 10px; }
     table.data-table thead { display: table-header-group; }
 
     /* Three sheets: (1) sections 1–7 + signatures, (2) 8–10 + declaration + signatures, (3) fee + signatures. */
@@ -530,6 +837,7 @@ function getPrintApplicationHtml(props: {
     .print-page-two-content {
       display: block;
       line-height: 1.45;
+      font-size: 13px;
     }
     .print-signature-footer {
       margin-top: 18px;
@@ -551,10 +859,12 @@ function getPrintApplicationHtml(props: {
     .fee-print-page {
       padding-top: 14mm;
       line-height: 1.45;
+      font-size: 13px;
     }
     .print-continuation-meta {
       margin-bottom: 18px;
       row-gap: 10px;
+      font-size: 11px;
     }
     .print-continuation-meta div {
       margin-bottom: 2px;
@@ -578,6 +888,10 @@ function getPrintApplicationHtml(props: {
     .print-page-two-content .data-table td {
       padding: 6px 5px;
       line-height: 1.4;
+      font-size: 11px;
+    }
+    .print-page-two-content .data-table th {
+      font-size: 10px;
     }
     .print-page-two-content .doc-required-section {
       margin-top: 12px;
@@ -620,12 +934,10 @@ function getPrintApplicationHtml(props: {
     .fee-print-page .data-table td {
       padding: 6px 5px;
       line-height: 1.4;
+      font-size: 11px;
     }
-    .fee-print-page .footer-note {
-      margin-top: 16px;
-      margin-bottom: 8px;
-      padding: 12px 14px;
-      line-height: 1.5;
+    .fee-print-page .data-table th {
+      font-size: 10px;
     }
     .education-table { break-inside: auto; page-break-inside: auto; }
     
@@ -638,7 +950,7 @@ function getPrintApplicationHtml(props: {
       page-break-inside: auto;
     }
     .declaration-title { text-align: center; margin: -15px auto 8px; background: #8B2323; color: white; width: 150px; border-radius: 10px; padding: 2px; font-weight: bold; }
-    .declaration-list { list-style: disc; padding-left: 20px; font-size: 12px; margin: 8px 0 4px; }
+    .declaration-list { list-style: disc; padding-left: 20px; font-size: 13px; margin: 8px 0 4px; }
 
     .print-signature-footer .signature-row {
       display: flex;
@@ -661,8 +973,26 @@ function getPrintApplicationHtml(props: {
       clear: both;
     }
     .sig-block { width: 180px; flex-shrink: 0; border: 1px solid #777; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
-    .sig-section-title { font-size: 9px; color: #8B2323; font-weight: bold; text-align: center; background: #f2f2f2; border-bottom: 1px solid #777; margin: 0; padding: 4px 0; }
+    .sig-section-title { font-size: 10px; color: #8B2323; font-weight: bold; text-align: center; background: #f2f2f2; border-bottom: 1px solid #777; margin: 0; padding: 4px 0; }
     .sig-box { height: 50px; background: #fff; }
+    .sig-date-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px 6px;
+      font-size: 10px;
+      font-weight: 600;
+      border-top: 1px solid #777;
+      background: #fff;
+    }
+    .sig-date-label { flex-shrink: 0; color: #333; }
+    .sig-date-line {
+      flex: 1;
+      min-height: 14px;
+      border-bottom: 1px dotted #333;
+      text-align: center;
+      line-height: 1.3;
+    }
 
     .office-use-bottom { border: 1px solid #777; margin-top: 15px; display: flex; }
     .office-use-bottom-left { flex: 1; border-right: 1px solid #777; padding: 5px; display: flex; flex-direction: column; align-items: center; }
@@ -670,23 +1000,73 @@ function getPrintApplicationHtml(props: {
     
     .office-label-tag { background: #8B2323; color: white; padding: 4px 20px; border-radius: 10px; font-weight: bold; margin: 10px auto; display: block; width: fit-content; text-align: center; }
 
-    .footer-note { background: #FFD700; color: #8B2323; text-align: center; padding: 10px; margin-top: 10px; font-weight: bold; font-size: 12px; border: 3px solid #8B2323; border-radius: 8px; }
-    
     .doc-required-section { display: flex; gap: 10px; margin-top: 10px; }
     .doc-table { flex: 1; border-collapse: collapse; }
-    .doc-table th, .doc-table td { border: 1px solid #777; padding: 3px; font-size: 9px; }
+    .doc-table th, .doc-table td { border: 1px solid #777; padding: 3px; font-size: 10px; }
 
     .m-t-10 { margin-top: 10px; }
     .bold { font-weight: bold; }
     .text-red { color: #8B2323; }
-    .font-8 { font-size: 8px; }
+    .font-8 { font-size: 10px; }
 
     .print-doc-declaration-block { break-inside: auto; page-break-inside: auto; }
     .office-use-bottom { break-inside: auto; page-break-inside: auto; }
-    .fee-print-page .footer-note { break-inside: avoid; page-break-inside: avoid; }
 
     @media print {
       body { padding: 0; margin: 5mm 10mm; }
+      .header-top-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .header-brand-stack {
+        align-items: center;
+        justify-content: center;
+      }
+      .header-main h1,
+      .app-title-box h2,
+      .app-title-box p {
+        white-space: nowrap;
+      }
+      .form-section {
+        margin-top: 0;
+      }
+      .form-body-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 188px;
+        column-gap: 14px;
+        align-items: start;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .form-left-column {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .form-row {
+        margin-bottom: 12px;
+      }
+      .parent-photos-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .address-fields-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 14px;
+        row-gap: 8px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .student-photos-column {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
       .print-page-two,
       .fee-print-page {
         padding-top: 14mm;
@@ -738,139 +1118,154 @@ function getPrintApplicationHtml(props: {
     </div>
 
     <div class="header-container">
-      <div class="header-logo">
-        <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Pydah Logo" />
-      </div>
-      <div class="header-main">
-        <div>
-          <h1>${escapeHtml(headerCollegeTitle)}</h1>
+      <div class="header-top-row">
+        <div class="header-logo">
+          <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Pydah Logo" />
+        </div>
+        <div class="header-brand-stack">
+          <div class="header-main">
+            <h1>${escapeHtml(headerCollegeTitle)}</h1>
+            <p class="header-college-address">${escapeHtml(headerCollegeAddress)}</p>
+          </div>
         </div>
       </div>
-
-      <div class="office-use-top">
-        <div class="title">For Office Use</div>
-        <div><span>College :</span> <span>${escapeHtml((collegeName || '').trim() || '—')}</span></div>
-        <div><span>Course :</span> <span>${escapeHtml(courseName || course?.course)}</span></div>
-        <div><span>Branch :</span> <span>${escapeHtml(branchName || course?.branch)}</span></div>
-        <div><span>Quota :</span> <span>${escapeHtml(course?.quota)}</span></div>
-      </div>
-    </div>
-
-    <div class="app-title-box">
-      <h2>APPLICATION FOR ADMISSION</h2>
-      <p>(PLEASE FILL THE FORM IN CAPITAL LETTERS)</p>
-      <p style="margin: 8px 0 0; font-size: 11px; font-weight: 700; color: #8B2323;">
-        Application / Enquiry No.:
-        <span style="border: 2px solid #8B2323; padding: 2px 14px; margin-left: 6px; display: inline-block; min-width: 90px; background: #f9f9f9;">${escapeHtml(applicationNumberDisplay || '—')}</span>
-      </p>
     </div>
 
     <div class="form-section">
-      <div class="form-row">
-        <span class="section-num">1.</span>
-        <span class="form-label">Name of the Student :</span>
-        <span class="form-value bold">${escapeHtml(student?.name?.toUpperCase())}</span>
-      </div>
-      <div class="form-row" style="margin-left: 20px; font-size: 9px;">
-        <span>(As per S.S.C)</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 80px;">Aadhar No :</span>
-        <span class="inline-val">${escapeHtml(student?.aadhaarNumber)}</span>
-        <span style="min-width: 80px; margin-left: 20px;">Mobile :</span>
-        <span class="inline-val">${escapeHtml(student?.phone)}</span>
-      </div>
+      <div class="form-body-layout">
+        <div class="form-left-column">
+          <div class="app-title-box">
+            <h2>APPLICATION FOR ADMISSION</h2>
+            <p>(PLEASE FILL THE FORM IN CAPITAL LETTERS)</p>
+          </div>
+          <div class="student-form-left">
+          <div class="form-row">
+            <span class="section-num">1.</span>
+            <span class="form-label">Name of the Student :</span>
+            <span class="form-value bold">${escapeHtml(student?.name?.toUpperCase())}<span class="ssc-inline-hint"> (As per S.S.C)</span></span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Aadhar No :</span>
+            <span class="form-field-line">${escapeHtml(student?.aadhaarNumber)}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Mobile :</span>
+            <span class="form-field-line">${escapeHtml(student?.phone)}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Nationality :</span>
+            <span class="form-field-line">INDIAN</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label form-label-wide">Reservation Category :</span>
+            <span class="form-field-line">${escapeHtml(displayReservationCategoryText || '—')}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label form-label-wide">Other Reservation :</span>
+            <span class="form-field-line">${escapeHtml(displayOtherReservationText || '—')}</span>
+          </div>
 
-      <div class="form-row">
-        <span class="section-num">2.</span>
-        <span class="form-label">Gender :</span>
-        <span class="selected-inline">${escapeHtml(displayGenderText || '—')}</span>
-        <span class="form-label" style="min-width: 150px; margin-left: 12px;">Date of Birth (As Per SSC) :</span>
-        ${renderDobBoxes(student?.dateOfBirth)}
-      </div>
+          <div class="form-row">
+            <span class="section-num">2.</span>
+            <span class="form-label">Gender :</span>
+            <span class="form-field-line">${escapeHtml(displayGenderText || '—')}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label form-label-wide">Date of Birth (As Per SSC) :</span>
+            ${renderDobBoxes(student?.dateOfBirth)}
+          </div>
 
-      <div class="photos-inline-row" aria-label="Applicant portraits">
-        <div class="photos-inline-item">
-          <div class="portrait-thumb">${portraitPhotoCell(studentPhotoSrc)}</div>
-          <span class="photos-inline-label">Student photo</span>
+          <div class="form-row">
+            <span class="section-num">3.</span>
+            <span class="form-label">Father's Name :</span>
+            <span class="form-field-line">${escapeHtml(parents?.father?.name?.toUpperCase())}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Aadhar No :</span>
+            <span class="form-field-line">${escapeHtml(parents?.father?.aadhaarNumber)}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Mobile :</span>
+            <span class="form-field-line">${escapeHtml(parents?.father?.phone)}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Mother's Name :</span>
+            <span class="form-field-line">${escapeHtml(parents?.mother?.name?.toUpperCase())}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Aadhar No :</span>
+            <span class="form-field-line">${escapeHtml(parents?.mother?.aadhaarNumber)}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Mobile :</span>
+            <span class="form-field-line">${escapeHtml(parents?.mother?.phone)}</span>
+          </div>
         </div>
-        <div class="photos-inline-item">
-          <div class="portrait-thumb">${portraitPhotoCell(fatherPhotoSrc)}</div>
-          <span class="photos-inline-label">Father photo</span>
         </div>
-        <div class="photos-inline-item">
-          <div class="portrait-thumb">${portraitPhotoCell(motherPhotoSrc)}</div>
-          <span class="photos-inline-label">Mother photo</span>
+
+        <div class="form-right-column">
+          <div class="office-use-top">
+            <div class="title">For Office Use</div>
+            <div><span>Course :</span> <span>${escapeHtml(courseName || course?.course)}</span></div>
+            <div><span>Branch :</span> <span>${escapeHtml(branchName || course?.branch)}</span></div>
+            <div><span>Quota :</span> <span>${escapeHtml(course?.quota)}</span></div>
+          </div>
+          <div class="student-photos-column" aria-label="Applicant portraits">
+            <div class="photos-stack-item">
+              <div class="portrait-thumb">${portraitPhotoCell(studentPhotoSrc)}</div>
+              <span class="photos-stack-label">Student photo</span>
+            </div>
+            <div class="parent-photos-stack">
+              <div class="photos-stack-item">
+                <div class="portrait-thumb">${portraitPhotoCell(fatherPhotoSrc)}</div>
+                <span class="photos-stack-label">Father photo</span>
+              </div>
+              <div class="photos-stack-item">
+                <div class="portrait-thumb">${portraitPhotoCell(motherPhotoSrc)}</div>
+                <span class="photos-stack-label">Mother photo</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="form-row">
-        <span class="section-num">3.</span>
-        <span class="form-label">Father's Name :</span>
-        <span class="form-value">${escapeHtml(parents?.father?.name?.toUpperCase())}</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 80px;">Aadhar No :</span>
-        <span class="inline-val">${escapeHtml(parents?.father?.aadhaarNumber)}</span>
-        <span style="min-width: 80px; margin-left: 20px;">Mobile :</span>
-        <span class="inline-val">${escapeHtml(parents?.father?.phone)}</span>
-      </div>
-      <div class="form-row">
-        <span style="width: 20px;"></span>
-        <span class="form-label">Nationality :</span>
-        <span class="form-value">INDIAN</span>
-      </div>
-      <div class="form-row">
-        <span style="width: 20px;"></span>
-        <span class="form-label">Mother's Name :</span>
-        <span class="form-value">${escapeHtml(parents?.mother?.name?.toUpperCase())}</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 80px;">Aadhar No :</span>
-        <span class="inline-val">${escapeHtml(parents?.mother?.aadhaarNumber)}</span>
-        <span style="min-width: 80px; margin-left: 20px;">Mobile :</span>
-        <span class="inline-val">${escapeHtml(parents?.mother?.phone)}</span>
-      </div>
-
-      <div class="form-row m-t-10">
+      <div class="form-row form-row-lined form-row-section-title" style="margin-top: 4px;">
         <span class="section-num">4.</span>
-        <span class="form-label" style="min-width: 150px;">Reservation Category :</span>
-        <span class="selected-inline">${escapeHtml(displayReservationCategoryText || '—')}</span>
+        <span class="form-label">Address for communication(In Capital Letters) :</span>
       </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span class="form-label" style="min-width: 120px;">Other Reservation :</span>
-        <span class="selected-inline">${escapeHtml(displayOtherReservationText || '—')}</span>
+      <div class="address-fields-grid">
+        <div class="form-row form-row-sub form-row-lined address-field-full">
+          <span class="form-label">Door No/ Street Name :</span>
+          <span class="form-field-line">${escapeHtml(address?.communication?.doorOrStreet?.toUpperCase())}</span>
+        </div>
+        <div class="form-row form-row-sub form-row-lined">
+          <span class="form-label">Land Mark :</span>
+          <span class="form-field-line">${escapeHtml(address?.communication?.landmark?.toUpperCase())}</span>
+        </div>
+        <div class="form-row form-row-sub form-row-lined">
+          <span class="form-label">Village/City/Town :</span>
+          <span class="form-field-line">${escapeHtml(address?.communication?.villageOrCity?.toUpperCase())}</span>
+        </div>
+        <div class="form-row form-row-sub form-row-lined">
+          <span class="form-label">Mandal :</span>
+          <span class="form-field-line">${escapeHtml(address?.communication?.mandal?.toUpperCase())}</span>
+        </div>
+        <div class="form-row form-row-sub form-row-lined">
+          <span class="form-label">District :</span>
+          <span class="form-field-line">${escapeHtml(address?.communication?.district?.toUpperCase())}</span>
+        </div>
+        <div class="form-row form-row-sub form-row-lined">
+          <span class="form-label">State :</span>
+          <span class="form-field-line">${escapeHtml(address?.communication?.state?.toUpperCase())}</span>
+        </div>
+        <div class="form-row form-row-sub form-row-lined">
+          <span class="form-label">Pin Code :</span>
+          <span class="form-field-line">${escapeHtml(address?.communication?.pinCode)}</span>
+        </div>
       </div>
 
-      <div class="form-row m-t-10">
+      <div class="form-row m-t-10 form-row-section-title">
         <span class="section-num">5.</span>
-        <span class="form-label" style="min-width: 250px;">Address for communication(In Capital Letters) :</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 130px;">Door No/ Street Name</span>
-        <span class="form-value">${escapeHtml(address?.communication?.doorOrStreet?.toUpperCase())}</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 130px;">Land Mark :</span>
-        <span class="form-value">${escapeHtml(address?.communication?.landmark?.toUpperCase())}</span>
-        <span style="margin-left: 10px; min-width: 120px;">Village/City/Town :</span>
-        <span class="form-value">${escapeHtml(address?.communication?.villageOrCity?.toUpperCase())}</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 130px;">Mandal :</span>
-        <span class="form-value">${escapeHtml(address?.communication?.mandal?.toUpperCase())}</span>
-        <span style="margin-left: 10px; min-width: 120px;">District :</span>
-        <span class="form-value">${escapeHtml(address?.communication?.district?.toUpperCase())}</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span style="min-width: 130px;">State :</span>
-        <span class="form-value">${escapeHtml(address?.communication?.state?.toUpperCase())}</span>
-        <span style="margin-left: 10px; min-width: 80px;">Pin Code :</span>
-        <span class="inline-val">${escapeHtml(address?.communication?.pinCode)}</span>
-      </div>
-
-      <div class="form-row m-t-10">
-        <span class="section-num">6.</span>
         <span class="form-label">Full Address of any Relative / Friends</span>
       </div>
       <div class="relative-address-grid" style="margin-left: 20px;">
@@ -905,7 +1300,7 @@ function getPrintApplicationHtml(props: {
             return `
               <div class="relative-box">
                 <div><strong>${idx + 1}) ${escapeHtml(nameLine.toUpperCase() || '')}</strong></div>
-                <div style="font-size: 9px; margin-top: 2px;">${escapeHtml(addressLine.toUpperCase())}</div>
+                <div style="font-size: 10px; margin-top: 2px;">${escapeHtml(addressLine.toUpperCase())}</div>
                 <div style="margin-top: 4px;">Mobile : ${escapeHtml(mobile)}</div>
               </div>
             `;
@@ -917,18 +1312,14 @@ function getPrintApplicationHtml(props: {
         })()}
       </div>
 
-      <div class="form-row m-t-10">
-        <span class="section-num">7.</span>
-        <span class="form-label" style="min-width: 180px;">Details of Qualified Examination :</span>
-        <span class="selected-inline">${escapeHtml(displayQualifiedExamText || '—')}</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span class="form-label" style="min-width: 120px;">Merit :</span>
-        <span class="selected-inline">${escapeHtml(displayMeritText || '—')}</span>
-      </div>
-      <div class="form-row" style="padding-left: 20px;">
-        <span class="form-label" style="min-width: 180px;">Medium of Qualified Examination :</span>
-        <span class="selected-inline">${escapeHtml(displayMediumText || '—')}</span>
+      <div class="form-row qualified-exam-row m-t-10">
+        <span class="section-num">6.</span>
+        <span class="form-label-wide">Details of Qualified Examination :</span>
+        <span class="form-field-inline form-field-inline-wide">${escapeHtml(displayQualifiedExamText || '—')}</span>
+        <span class="form-label-compact">Merit :</span>
+        <span class="form-field-inline">${escapeHtml(displayMeritText || '—')}</span>
+        <span class="form-label-compact">Medium of Qualified Examination :</span>
+        <span class="form-field-inline">${escapeHtml(displayMediumText || '—')}</span>
       </div>
     </div>
     ${renderPrintSignatureRow('page-one-signatures')}
@@ -937,7 +1328,7 @@ function getPrintApplicationHtml(props: {
     <div class="print-page print-page-two">
     ${renderContinuationTopMeta()}
     <div class="print-page-two-content">
-      <div class="form-row m-t-10">
+      <div class="form-row m-t-10 form-row-section-title">
         <span class="section-num">8.</span>
         <span class="form-label">Details of the School/College Last Studied :</span>
       </div>
@@ -955,11 +1346,7 @@ function getPrintApplicationHtml(props: {
           </tr>
         </thead>
         <tbody>
-          ${[
-            { label: 'SSC', key: 'ssc' },
-            { label: 'Inter / Diploma', key: 'inter_diploma' },
-            { label: 'UG', key: 'ug' },
-          ].map(({ label, key }) => {
+          ${educationTableRows.map(({ label, key }) => {
             const edu = findEducationByLevel(key);
             const institutionText = [edu?.institutionName, edu?.institutionAddress]
               .filter(Boolean)
@@ -969,7 +1356,7 @@ function getPrintApplicationHtml(props: {
                 <td>${label}</td>
                 <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
                 <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
-                <td style="font-size: 8px;">${escapeHtml(institutionText)}</td>
+                <td style="font-size: 10px;">${escapeHtml(institutionText)}</td>
                 <td>${escapeHtml(edu?.hallTicketNumber || '')}</td>
                 <td>${escapeHtml(edu?.totalMarksOrGrade || '')}</td>
                 <td></td>
@@ -991,7 +1378,7 @@ function getPrintApplicationHtml(props: {
                 <td>${escapeHtml(standardLabel)}</td>
                 <td>${escapeHtml(edu?.courseOrBranch || '')}</td>
                 <td>${escapeHtml(edu?.yearOfPassing || '')}</td>
-                <td style="font-size: 8px;">${escapeHtml(institutionText)}</td>
+                <td style="font-size: 10px;">${escapeHtml(institutionText)}</td>
                 <td>${escapeHtml(edu?.hallTicketNumber || '')}</td>
                 <td>${escapeHtml(edu?.totalMarksOrGrade || '')}</td>
                 <td></td>
@@ -1041,7 +1428,7 @@ function getPrintApplicationHtml(props: {
         </tbody>
       </table>
 
-    <div class="form-row">
+    <div class="form-row form-row-section-title">
       <span class="section-num">10.</span>
       <span class="form-label">List of Documents Required</span>
     </div>
@@ -1053,9 +1440,6 @@ function getPrintApplicationHtml(props: {
       <div class="form-row" style="padding-left: 20px; margin-bottom: 8px;">
         <span class="form-label" style="min-width: 160px;">Not received (No) :</span>
         <span class="selected-inline">${escapeHtml(notReceivedDocLabels.join(', ') || '—')}</span>
-      </div>
-      <div style="background: #f2f2f2; font-weight: bold; padding: 6px 10px; font-size: 9px; border: 1px solid #777;">
-        NOTE : 2 Sets of Xerox copies of the certificates from 1 to 6
       </div>
     </div>
 
@@ -1088,13 +1472,13 @@ function getPrintApplicationHtml(props: {
       <div class="office-use-bottom-left">
         <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">Fee Paid Details</div>
         ${paymentSummary ? `
-          <div style="font-size: 9px; margin-bottom: 4px; display: flex; gap: 12px; justify-content: center;">
+          <div style="font-size: 11px; margin-bottom: 4px; display: flex; gap: 12px; justify-content: center;">
             <span><strong>Total:</strong> ${formatCurrency(paymentSummary.totalFee)}</span>
             <span><strong>Paid:</strong> ${formatCurrency(paymentSummary.totalPaid)}</span>
             <span><strong>Balance:</strong> ${formatCurrency(paymentSummary.balance)}</span>
           </div>
         ` : ''}
-        <table class="data-table" style="font-size: 8px;">
+        <table class="data-table" style="font-size: 10px;">
           <thead>
             <tr>
               <th>S.no</th>
@@ -1133,10 +1517,6 @@ function getPrintApplicationHtml(props: {
       </div>
     </div>
 
-    <div class="footer-note">
-      Do not pay the fees without receipt. Do not transfer/deposit College<br/>
-      fees to any personal account
-    </div>
     ${renderPrintSignatureRow('page-three-signatures')}
     </div>
 
@@ -1150,6 +1530,15 @@ function getPrintApplicationHtml(props: {
  * Reusable printable full student application. Uses the same hidden-iframe
  * print mechanism as PrintableDocumentChecklist (single print dialog, cleanup on afterprint).
  */
+function parseAdmitCardAssetsCollegeAddress(response: unknown): string {
+  const root = response as { data?: { collegeAddress?: string } } | { collegeAddress?: string } | null;
+  const payload =
+    root && typeof root === 'object' && 'data' in root && root.data && typeof root.data === 'object'
+      ? root.data
+      : root;
+  return String((payload as { collegeAddress?: string })?.collegeAddress ?? '').trim();
+}
+
 export function PrintableStudentApplication({
   application,
   enquiryNumber,
@@ -1159,6 +1548,7 @@ export function PrintableStudentApplication({
   paymentSummary,
   transactions,
   collegeName,
+  collegeAddress: collegeAddressProp,
   title = DEFAULT_TITLE,
   printButtonLabel = 'Print application',
   className,
@@ -1166,9 +1556,23 @@ export function PrintableStudentApplication({
   onPrintOpen,
   onPrintClose,
 }: PrintableStudentApplicationProps) {
-  const handlePrint = useCallback(() => {
+  const [loading, setLoading] = useState(false);
+
+  const handlePrint = useCallback(async () => {
     if (typeof document === 'undefined') return;
+    setLoading(true);
+    try {
     onPrintOpen?.();
+    let collegeAddress = String(collegeAddressProp ?? '').trim();
+    const courseId = String(application.courseInfo?.courseId ?? '').trim();
+    if (!collegeAddress && courseId) {
+      try {
+        const response = await courseAPI.getAdmitCardAssets(courseId);
+        collegeAddress = parseAdmitCardAssetsCollegeAddress(response);
+      } catch {
+        // Print without college address when assets cannot be loaded.
+      }
+    }
     const html = getPrintApplicationHtml({
       application,
       title,
@@ -1178,8 +1582,9 @@ export function PrintableStudentApplication({
       branchName,
       paymentSummary: paymentSummary ?? null,
       transactions: transactions ?? [],
-      printedDate: '',
+      printedDate: formatPrintDate(),
       collegeName,
+      collegeAddress: collegeAddress || undefined,
     });
     const iframe = document.createElement('iframe');
     iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;overflow:hidden;');
@@ -1217,6 +1622,9 @@ export function PrintableStudentApplication({
     setTimeout(() => {
       if (!printTriggered) triggerPrint();
     }, 300);
+    } finally {
+      setLoading(false);
+    }
   }, [
     application,
     title,
@@ -1227,6 +1635,7 @@ export function PrintableStudentApplication({
     paymentSummary,
     transactions,
     collegeName,
+    collegeAddressProp,
     onPrintOpen,
     onPrintClose,
   ]);
@@ -1234,8 +1643,14 @@ export function PrintableStudentApplication({
   if (!renderButton) return null;
 
   return (
-    <Button type="button" variant="outline" onClick={handlePrint} className={className}>
-      {printButtonLabel}
+    <Button
+      type="button"
+      variant="outline"
+      onClick={() => void handlePrint()}
+      className={className}
+      disabled={loading}
+    >
+      {loading ? 'Preparing…' : printButtonLabel}
     </Button>
   );
 }
