@@ -1797,14 +1797,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const documentsChecklistForPrint = useMemo(() => {
     const labels: Record<string, string> = {};
-    const docs: Record<string, JoiningDocumentStatus | undefined> = {};
+    const documents: Record<string, JoiningDocumentStatus | undefined> = {};
     const quota = formState.courseInfo.quota;
     (Object.entries(documentLabels) as [keyof JoiningDocuments, string][]).forEach(([key, label]) => {
       if (!isJoiningDocumentChecklistKeyVisible(key, quota)) return;
       labels[key] = label;
-      docs[key] = formState.documents[key] || 'pending';
+      documents[key] = formState.documents[key] || 'pending';
     });
-    return { labels, docs };
+    return { labels, documents };
   }, [formState.documents, formState.courseInfo.quota]);
 
   const isManagementQuotaSelected = isManagementQuotaLabel(
@@ -4017,6 +4017,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         lead,
         admissionNumber: admissionNumberDisplay || meta.admissionNumber,
         collegeName: selectedCollegeName,
+        dateOfJoining: admissionRecord?.admissionDate ?? admissionRecord?.createdAt,
+        documentChecklist: documentsChecklistForPrint,
         registrationFormData: registrationExtras as Record<string, unknown>,
         application: joiningRecord ?? admissionRecord ?? undefined,
       }),
@@ -4026,9 +4028,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       admissionNumberDisplay,
       meta.admissionNumber,
       selectedCollegeName,
+      documentsChecklistForPrint,
+      admissionRecord,
       registrationExtras,
       joiningRecord,
-      admissionRecord,
     ]
   );
   const isBusy = isLoading || (isAdmissionEditable && isLoadingAdmission && !admissionRecord);
@@ -5728,7 +5731,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 </div>
                 <PrintableDocumentChecklist
                   documentLabels={documentsChecklistForPrint.labels}
-                  documents={documentsChecklistForPrint.docs}
+                  documents={documentsChecklistForPrint.documents}
                   title="Documents Checklist"
                   studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
                   enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}

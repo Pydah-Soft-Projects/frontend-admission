@@ -902,6 +902,13 @@ export const courseAPI = {
     const response = await api.get(`/courses/${courseId}/admit-card-assets`);
     return response.data;
   },
+  /** Binary course fee QR (used when the stored image is too large for JSON). */
+  getFeeQrImageBlob: async (courseId: string) => {
+    const response = await api.get(`/courses/${courseId}/fee-qr-image`, {
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
   /** Colleges from secondary DB (same source as courses). */
   listCollegesFromSecondary: async (params?: { showInactive?: boolean }) => {
     const queryParams = new URLSearchParams();

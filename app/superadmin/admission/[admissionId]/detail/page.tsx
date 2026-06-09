@@ -27,6 +27,7 @@ import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDispl
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import {
   PrintableAdmitCard,
+  buildAdmitCardDocumentChecklist,
   pickStudentPortraitForAdmitCard,
 } from '@/components/joining/PrintableAdmitCard';
 import { AdmissionStepTwoPanel } from '@/components/admission/AdmissionStepTwoPanel';
@@ -332,16 +333,31 @@ export default function AdmissionDetailPage() {
       '—';
     const branchName =
       getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || '—';
+    const admissionDate = admission.admissionDate || admission.createdAt;
+    const parsedAdmissionDate = admissionDate ? new Date(admissionDate) : null;
+    const dateOfJoining =
+      parsedAdmissionDate && !Number.isNaN(parsedAdmissionDate.getTime())
+        ? parsedAdmissionDate.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          })
+        : '—';
     return {
       courseId: String(admission.courseInfo?.courseId ?? '').trim(),
-      studentName: admission.studentInfo?.name || lead?.name || '—',
+      studentName: String(admission.studentInfo?.name || lead?.name || '—'),
       admissionNumber: admission.admissionNumber,
       program: courseName,
       branch: branchName,
-      studentPhone: admission.studentInfo?.phone || lead?.phone || '—',
-      fatherPhone: admission.parents?.father?.phone || lead?.fatherPhone || '—',
+      quota: admission.courseInfo?.quota || '—',
+      dateOfJoining,
+      studentPhone: String(admission.studentInfo?.phone || lead?.phone || '—'),
+      fatherPhone: String(admission.parents?.father?.phone || lead?.fatherPhone || '—'),
       studentPhotoSrc: pickStudentPortraitForAdmitCard(admission),
       collegeName: getCollegeNameForCourse(admission.courseInfo?.courseId) || undefined,
+      documentChecklist: admission.documents
+        ? buildAdmitCardDocumentChecklist(admission.documents, admission.courseInfo?.quota)
+        : undefined,
     };
   }, [admission, lead, getCourseName, getBranchName, getCollegeNameForCourse]);
 

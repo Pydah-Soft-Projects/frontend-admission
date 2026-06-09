@@ -4,26 +4,93 @@ import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { courseAPI } from '@/lib/api';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
+import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { showToast } from '@/lib/toast';
-import type { Admission, Joining } from '@/types';
+import type { Admission, Joining, JoiningDocumentStatus, JoiningDocuments } from '@/types';
+
+export type AdmitCardDocumentChecklist = {
+  labels: Record<string, string>;
+  documents: Record<string, JoiningDocumentStatus | undefined>;
+};
 
 export type AdmitCardPrintStudent = {
   studentName: string;
   admissionNumber?: string;
   program: string;
   branch: string;
+  quota?: string;
+  dateOfJoining?: string;
   studentPhone: string;
   fatherPhone: string;
   studentPhotoSrc?: string | null;
   collegeName?: string;
+  documentChecklist?: AdmitCardDocumentChecklist;
 };
+
+const ACKNOWLEDGEMENT_DOCUMENT_LABELS: Record<keyof JoiningDocuments, string> = {
+  ssc: 'SSC',
+  inter: 'Intermediate',
+  ugOrPgCmm: 'UG / PG CMM',
+  transferCertificate: 'Transfer Certificate',
+  studyCertificate: 'Study Certificate',
+  aadhaarCard: 'Aadhaar Card',
+  photos: 'Photos (5)',
+  incomeCertificate: 'Income Certificate',
+  casteCertificate: 'Caste Certificate',
+  cetRankCard: 'CET Rank Card',
+  cetHallTicket: 'CET Hall Ticket',
+  allotmentLetter: 'Allotment Letter',
+  joiningReport: 'Joining Report',
+  bankPassBook: 'Bank Pass Book',
+  rationCard: 'Ration Card',
+};
+
+export function buildAdmitCardDocumentChecklist(
+  documents: JoiningDocuments,
+  quota?: string | null
+): AdmitCardDocumentChecklist {
+  const labels: Record<string, string> = {};
+  const statuses: Record<string, JoiningDocumentStatus | undefined> = {};
+  (Object.entries(ACKNOWLEDGEMENT_DOCUMENT_LABELS) as [keyof JoiningDocuments, string][]).forEach(
+    ([key, label]) => {
+      if (!isJoiningDocumentChecklistKeyVisible(key, quota)) return;
+      labels[key] = label;
+      statuses[key] = documents[key] || 'pending';
+    }
+  );
+  return { labels, documents: statuses };
+}
+
+function formatAdmitCardDate(value?: string | null): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
 export const DEFAULT_ADMISSION_CONTACT_DETAILS =
   'Mobile: +91 73820 15999\nMail: admissions@pydah.edu.in';
 
+export const EMPTY_COLLEGE_ADDRESS_PLACEHOLDER = '(_____)';
+
+export type AdmitCardPaperSize = 'A5' | 'A4';
+
+const PAPER_DIMENSIONS: Record<AdmitCardPaperSize, { widthMm: number; heightMm: number; label: string }> =
+  {
+    A5: { widthMm: 148, heightMm: 210, label: 'A5 (148 × 210 mm)' },
+    A4: { widthMm: 210, heightMm: 297, label: 'A4 (210 × 297 mm)' },
+  };
+
 export type AdmitCardAssets = {
   collegeName?: string;
+  collegeAddress?: string;
   feeQrImage?: string | null;
+  /** True when a QR exists in the DB but must be fetched via /fee-qr-image. */
+  hasFeeQrImage?: boolean;
   admissionContactDetails?: string;
   feeQrPaymentNote?: string;
 };
@@ -43,7 +110,79 @@ function safeImageSrcForPrint(url?: string | null): string | null {
   if (/^data:image\//i.test(s)) return s;
   if (/^https?:\/\//i.test(s)) return s;
   if (s.startsWith('/')) return s;
+  if (s.startsWith('blob:')) return s;
   return null;
+}
+
+function parseAdmitCardAssetsResponse(response: unknown): AdmitCardAssets {
+  const root = response as { data?: AdmitCardAssets } | AdmitCardAssets | null | undefined;
+  const payload =
+    root && typeof root === 'object' && 'data' in root && root.data && typeof root.data === 'object'
+      ? root.data
+      : root;
+  return (payload as AdmitCardAssets) || {};
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read image blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Downscale large QR/photo blobs so print HTML stays small enough for the browser. */
+function compressImageDataUrlForPrint(src: string, maxDim = 420): Promise<string> {
+  if (typeof document === 'undefined') return Promise.resolve(src);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height, 1));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(src);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      try {
+        resolve(canvas.toDataURL('image/jpeg', 0.88));
+      } catch {
+        resolve(src);
+      }
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
+}
+
+async function resolveFeeQrForPrint(
+  courseId: string,
+  assets: AdmitCardAssets
+): Promise<string | null> {
+  const inline = safeImageSrcForPrint(assets.feeQrImage);
+  if (inline) {
+    if (inline.startsWith('data:image/') && inline.length > 180_000) {
+      return compressImageDataUrlForPrint(inline);
+    }
+    return inline;
+  }
+
+  if (!assets.hasFeeQrImage) return null;
+
+  try {
+    const blob = await courseAPI.getFeeQrImageBlob(courseId);
+    if (!blob || blob.size === 0) return null;
+    const dataUrl = await blobToDataUrl(blob);
+    return compressImageDataUrlForPrint(dataUrl);
+  } catch {
+    return null;
+  }
 }
 
 function pickStudentPortraitFromRegistration(
@@ -85,99 +224,103 @@ export function pickStudentPortraitForAdmitCard(
   return safeImageSrcForPrint(si?.photo);
 }
 
-/** One admit card = top or bottom half of an A4 sheet (2 students per A4 page). */
-const ADMIT_CARD_PRINT_STYLES = `
-  @page { size: A4 portrait; margin: 5mm; }
+function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
+  const isA4 = paperSize === 'A4';
+  const { widthMm, heightMm } = PAPER_DIMENSIONS[paperSize];
+  const pageSizeName = isA4 ? 'A4 portrait' : 'A5 portrait';
+  const pad = isA4 ? '8mm 10mm' : '5mm 6mm';
+  const rightCol = isA4 ? '52mm' : '36mm';
+  const photoW = isA4 ? '45mm' : '32mm';
+  const photoH = isA4 ? '52mm' : '38mm';
+  const qrSize = isA4 ? '48mm' : '34mm';
+  const collegeNameFs = isA4 ? '22px' : '18px';
+  const collegeAddrFs = isA4 ? '11px' : '10px';
+  const cardTitleFs = isA4 ? '16px' : '14px';
+  const detailsFs = isA4 ? '12px' : '11px';
+  const docTableFs = isA4 ? '10px' : '9.5px';
+  const sectionFs = isA4 ? '11px' : '10px';
+
+  return `
+  @page {
+    size: ${pageSizeName};
+    size: ${widthMm}mm ${heightMm}mm;
+    margin: 0;
+  }
   * { box-sizing: border-box; }
   html, body {
+    width: ${widthMm}mm;
     margin: 0;
     padding: 0;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     color: #111827;
     background: #fff;
   }
-  .a4-page {
-    width: 200mm;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-  }
-  .a4-page--single {
-    height: auto;
-  }
-  .a4-page--double {
-    height: 287mm;
-  }
-  .half-sheet {
-    flex: 0 0 50%;
-    height: 143.5mm;
-    max-height: 143.5mm;
+  .print-page {
+    width: ${widthMm}mm;
+    max-width: ${widthMm}mm;
+    margin: 0;
+    padding: ${pad};
+    border: 1.5px solid #1e3a8a;
     overflow: hidden;
-    padding: 2.5mm 4mm 2.5mm;
-    position: relative;
-    border-left: 2px solid #1e3a8a;
-    border-right: 2px solid #1e3a8a;
+    page-break-after: always;
+    page-break-inside: avoid;
   }
   .card-shell {
     width: 100%;
   }
-  .a4-page--single .half-sheet {
-    flex: 0 0 auto;
-    height: auto;
-    max-height: none;
-    overflow: visible;
-  }
-  .a4-page > .half-sheet:first-child {
-    border-top: 2px solid #1e3a8a;
-  }
-  .a4-page > .half-sheet:last-child {
+  .college-header-block {
+    flex-shrink: 0;
     border-bottom: 2px solid #1e3a8a;
-  }
-  .half-sheet--filled {
-    border-bottom: 1px dashed #64748b;
-  }
-  .a4-page > .half-sheet--filled:last-child {
-    border-bottom: 2px solid #1e3a8a;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
   }
   .college-name-header {
     text-align: center;
-    font-size: 13px;
+    font-size: ${collegeNameFs};
     font-weight: 800;
-    line-height: 1.2;
-    padding: 1px 2px 4px;
-    border-bottom: 2px solid #1e3a8a;
+    line-height: 1.25;
+    padding: 2px 4px 2px;
     color: #1e3a8a;
+  }
+  .college-address {
+    text-align: center;
+    font-size: ${collegeAddrFs};
+    font-weight: 600;
+    line-height: 1.35;
+    color: #334155;
+    padding: 0 4px 2px;
   }
   .card-title {
     text-align: center;
-    margin: 3px 0 4px;
-    font-size: 11px;
+    margin: 4px 0 6px;
+    font-size: ${cardTitleFs};
     font-weight: 800;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: #1e40af;
   }
-  .main-grid {
+  .body-grid {
     display: grid;
-    grid-template-columns: 32mm minmax(0, 1fr) 38mm;
+    grid-template-columns: minmax(0, 1fr) ${rightCol};
     gap: 3mm;
     align-items: start;
-    margin-bottom: 3mm;
+    margin-bottom: 2mm;
   }
-  .photo-cell {
-    width: 32mm;
+  .left-col {
+    min-width: 0;
   }
-  .qr-cell {
-    width: 38mm;
+  .right-col {
+    width: ${rightCol};
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    overflow: hidden;
+    flex-direction: column;
+    align-items: center;
+    gap: 2mm;
+    flex-shrink: 0;
   }
   .photo {
-    width: 32mm;
-    height: 38mm;
-    max-height: 38mm;
+    width: ${photoW};
+    height: ${photoH};
+    max-height: ${photoH};
     object-fit: cover;
     border: 1px solid #94a3b8;
     border-radius: 3px;
@@ -189,31 +332,27 @@ const ADMIT_CARD_PRINT_STYLES = `
     justify-content: center;
     background: #f1f5f9;
     color: #64748b;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 600;
-  }
-  .details-cell {
-    min-width: 0;
-    padding-top: 1mm;
   }
   .details-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 9px;
+    font-size: ${detailsFs};
     table-layout: fixed;
   }
   .details-table tr {
-    height: 1.45em;
+    height: 1.5em;
   }
   .details-table td {
     padding: 2px 0;
     vertical-align: middle;
     border-bottom: 1px dotted #e2e8f0;
     word-break: break-word;
-    line-height: 1.3;
+    line-height: 1.35;
   }
   .details-table .lbl {
-    width: 38%;
+    width: 40%;
     color: #475569;
     font-weight: 600;
     padding-right: 4px;
@@ -222,13 +361,57 @@ const ADMIT_CARD_PRINT_STYLES = `
     font-weight: 700;
     color: #0f172a;
   }
+  .doc-checklist {
+    margin-top: 2mm;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: ${docTableFs};
+    table-layout: fixed;
+  }
+  .doc-table th {
+    padding: 3px 4px;
+    text-align: left;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+  .doc-table th.status-col {
+    width: 28%;
+    text-align: center;
+  }
+  .doc-table td {
+    padding: 2px 4px;
+    vertical-align: middle;
+    border: 1px solid #e2e8f0;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .doc-table td.status-cell {
+    text-align: center;
+    font-weight: 700;
+  }
+  .doc-table td.status-received {
+    color: #15803d;
+  }
+  .doc-table td.status-pending {
+    color: #b45309;
+  }
   .footer-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 3mm;
+    gap: 2mm;
     align-items: start;
     border-top: 1px solid #cbd5e1;
-    padding-top: 3mm;
+    padding-top: 2mm;
+    margin-top: 3mm;
   }
   .contact-section,
   .payment-note-section {
@@ -236,15 +419,15 @@ const ADMIT_CARD_PRINT_STYLES = `
   }
   .section-title {
     margin: 0 0 4px;
-    font-size: 9px;
+    font-size: ${sectionFs};
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: #1e40af;
   }
   .contact-box {
-    font-size: 9px;
-    line-height: 1.4;
+    font-size: ${sectionFs};
+    line-height: 1.45;
     color: #334155;
     padding: 5px 7px;
     border: 1px solid #e2e8f0;
@@ -252,10 +435,10 @@ const ADMIT_CARD_PRINT_STYLES = `
     background: #f8fafc;
   }
   .fee-qr {
-    width: 38mm;
-    height: 38mm;
-    max-width: 38mm;
-    max-height: 38mm;
+    width: ${qrSize};
+    height: ${qrSize};
+    max-width: ${qrSize};
+    max-height: ${qrSize};
     object-fit: contain;
     border: 1px solid #e2e8f0;
     border-radius: 4px;
@@ -267,12 +450,12 @@ const ADMIT_CARD_PRINT_STYLES = `
     align-items: center;
     justify-content: center;
     text-align: center;
-    font-size: 8px;
+    font-size: 9px;
     color: #64748b;
     padding: 6px;
-    width: 38mm;
-    height: 38mm;
-    max-height: 38mm;
+    width: ${qrSize};
+    height: ${qrSize};
+    max-height: ${qrSize};
   }
   .qr-note {
     padding: 5px 7px;
@@ -280,50 +463,112 @@ const ADMIT_CARD_PRINT_STYLES = `
     border-radius: 4px;
     background: #eff6ff;
     color: #1d4ed8;
-    font-size: 9px;
+    font-size: ${sectionFs};
     font-weight: 700;
     text-align: left;
-    line-height: 1.4;
+    line-height: 1.45;
   }
   @media print {
-    .a4-page {
-      width: auto;
+    html, body {
+      width: ${widthMm}mm !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .print-page {
+      width: ${widthMm}mm !important;
+      max-width: ${widthMm}mm !important;
+      margin: 0 !important;
+      padding: ${pad};
+      border: 1.5px solid #1e3a8a;
+      overflow: hidden;
       page-break-after: always;
+      page-break-inside: avoid;
     }
-    .a4-page--single {
-      height: auto;
-      min-height: 0;
+    .details-table tr {
+      height: 1.3em;
     }
-    .a4-page--single .half-sheet {
-      height: auto;
-      max-height: none;
-      overflow: visible;
+    .details-table td {
+      padding: 1px 0;
     }
-    .a4-page--double {
-      height: 287mm;
-      min-height: 287mm;
+    .doc-table th {
+      font-size: ${isA4 ? '8.5px' : '7px'};
+      padding: 1px 2px;
     }
-    .a4-page--double .half-sheet {
-      height: 143.5mm;
-      max-height: 143.5mm;
+    .doc-table td {
+      padding: 1px 2px;
+      line-height: 1.2;
+    }
+    .section-title {
+      margin-bottom: 2px;
+    }
+    .contact-box,
+    .qr-note {
+      line-height: 1.35;
+      padding: 3px 4px;
     }
   }
 `;
+}
 
-function buildHalfSheetHtml(student: AdmitCardPrintStudent, assets: AdmitCardAssets): string {
+function buildDocumentChecklistTableHtml(checklist?: AdmitCardDocumentChecklist): string {
+  if (!checklist || Object.keys(checklist.labels).length === 0) return '';
+
+  const statuses = checklist.documents ?? {};
+  const rows = Object.entries(checklist.labels)
+    .map(([key, label]) => {
+      const isReceived = statuses[key] === 'received';
+      const status = isReceived ? 'Received' : 'Pending';
+      const statusClass = isReceived ? 'status-received' : 'status-pending';
+      return `
+        <tr>
+          <td>${escapePrintHtml(label)}</td>
+          <td class="status-cell ${statusClass}">${escapePrintHtml(status)}</td>
+        </tr>`;
+    })
+    .join('');
+
+  return `
+    <div class="doc-checklist">
+      <p class="section-title">Documents checklist</p>
+      <table class="doc-table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th class="status-col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+export function formatCollegeAddressForPrint(address?: string | null): string {
+  const trimmed = String(address ?? '').trim();
+  if (!trimmed) return EMPTY_COLLEGE_ADDRESS_PLACEHOLDER;
+  const inner = trimmed.replace(/^\(\s*([\s\S]*?)\s*\)$/, '$1').trim();
+  return `( ${inner} )`;
+}
+
+function buildCardHtml(student: AdmitCardPrintStudent, assets: AdmitCardAssets): string {
   const photoSrc = safeImageSrcForPrint(student.studentPhotoSrc);
   const qrSrc = safeImageSrcForPrint(assets.feeQrImage);
   const collegeName =
     student.collegeName?.trim() || assets.collegeName?.trim() || 'Acknowledgement Card';
+  const collegeAddress = formatCollegeAddressForPrint(assets.collegeAddress);
   const contactHtml = escapePrintHtml(
     assets.admissionContactDetails?.trim() || DEFAULT_ADMISSION_CONTACT_DETAILS
   ).replace(/\n/g, '<br/>');
   const qrNote = escapePrintHtml(assets.feeQrPaymentNote || 'Pay the fee through the QR');
 
-  const detailRow = (label: string, value: string) => `
+  const detailRow = (label: string, value: unknown) => `
     <tr>
       <td class="lbl">${escapePrintHtml(label)}</td>
-      <td class="val">${escapePrintHtml(value || '—')}</td>
+      <td class="val">${escapePrintHtml(String(value ?? '').trim() || '—')}</td>
     </tr>`;
 
   const photoBlock = photoSrc
@@ -336,21 +581,29 @@ function buildHalfSheetHtml(student: AdmitCardPrintStudent, assets: AdmitCardAss
 
   return `
     <div class="card-shell">
-      <div class="college-name-header">${escapePrintHtml(collegeName)}</div>
+      <div class="college-header-block">
+        <div class="college-name-header">${escapePrintHtml(collegeName)}</div>
+        <div class="college-address">${escapePrintHtml(collegeAddress)}</div>
+      </div>
       <div class="card-title">Acknowledgement Card</div>
-      <div class="main-grid">
-        <div class="photo-cell">${photoBlock}</div>
-        <div class="details-cell">
+      <div class="body-grid">
+        <div class="left-col">
           <table class="details-table">
             ${detailRow('Student name', student.studentName)}
             ${detailRow('Admission no.', student.admissionNumber || '—')}
             ${detailRow('Program', student.program)}
             ${detailRow('Branch', student.branch)}
+            ${detailRow('Student quota', student.quota || '—')}
+            ${detailRow('Date of joining', student.dateOfJoining || '—')}
             ${detailRow('Student phone', student.studentPhone)}
             ${detailRow('Father phone', student.fatherPhone)}
           </table>
+          ${buildDocumentChecklistTableHtml(student.documentChecklist)}
         </div>
-        <div class="qr-cell">${qrBlock}</div>
+        <div class="right-col">
+          ${photoBlock}
+          ${qrBlock}
+        </div>
       </div>
       <div class="footer-row">
         <div class="contact-section">
@@ -365,20 +618,19 @@ function buildHalfSheetHtml(student: AdmitCardPrintStudent, assets: AdmitCardAss
     </div>`;
 }
 
-/** Build A4 HTML with up to 2 half-page admit cards (2 students per sheet). */
-export function buildAdmitCardA4PageHtml(
-  entries: Array<{ student: AdmitCardPrintStudent; assets: AdmitCardAssets }>
+/** Build printable HTML — one acknowledgement card per sheet (A5 or A4). */
+export function buildAdmitCardPageHtml(
+  entries: Array<{ student: AdmitCardPrintStudent; assets: AdmitCardAssets }>,
+  paperSize: AdmitCardPaperSize = 'A5'
 ): string {
   const titleName = entries[0]?.student.studentName || 'Acknowledgement cards';
-  const cardCount = Math.min(entries.length, 2);
-  const pageClass = cardCount === 2 ? 'a4-page a4-page--double' : 'a4-page a4-page--single';
+  const { widthMm, heightMm, label } = PAPER_DIMENSIONS[paperSize];
 
-  const filledSheets = entries
-    .slice(0, 2)
+  const pages = entries
     .map(
       (entry) => `
-  <section class="half-sheet half-sheet--filled">
-    ${buildHalfSheetHtml(entry.student, entry.assets)}
+  <section class="print-page" data-paper="${paperSize}">
+    ${buildCardHtml(entry.student, entry.assets)}
   </section>`
     )
     .join('');
@@ -387,19 +639,29 @@ export function buildAdmitCardA4PageHtml(
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Acknowledgement Card — ${escapePrintHtml(titleName)}</title>
-  <style>${ADMIT_CARD_PRINT_STYLES}</style>
+  <meta name="viewport" content="width=${widthMm}mm, initial-scale=1" />
+  <title>Acknowledgement Card (${label}) — ${escapePrintHtml(titleName)}</title>
+  <style>${buildAdmitCardPrintStyles(paperSize)}</style>
 </head>
-<body>
-  <div class="${pageClass}">
-    ${filledSheets}
-  </div>
+<body class="print-body" data-paper="${paperSize}" style="width:${widthMm}mm;margin:0;padding:0;">
+  ${pages}
 </body>
 </html>`;
 }
 
-function buildAdmitCardHtml(student: AdmitCardPrintStudent, assets: AdmitCardAssets): string {
-  return buildAdmitCardA4PageHtml([{ student, assets }]);
+/** @deprecated Use buildAdmitCardPageHtml — kept for any external callers. */
+export function buildAdmitCardA4PageHtml(
+  entries: Array<{ student: AdmitCardPrintStudent; assets: AdmitCardAssets }>
+): string {
+  return buildAdmitCardPageHtml(entries, 'A4');
+}
+
+function buildAdmitCardHtml(
+  student: AdmitCardPrintStudent,
+  assets: AdmitCardAssets,
+  paperSize: AdmitCardPaperSize = 'A5'
+): string {
+  return buildAdmitCardPageHtml([{ student, assets }], paperSize);
 }
 
 export function PrintableAdmitCard({
@@ -427,14 +689,31 @@ export function PrintableAdmitCard({
     setLoading(true);
     try {
       const response = await courseAPI.getAdmitCardAssets(cid);
-      const payload = (response as { data?: AdmitCardAssets })?.data ?? response;
-      const assets = (payload as AdmitCardAssets) || {};
-      const html = buildAdmitCardHtml(student, assets);
-      printHtmlDocument(html, 'Acknowledgement card');
+      const assets = parseAdmitCardAssetsResponse(response);
+      const feeQrImage = await resolveFeeQrForPrint(cid, assets);
+      let studentForPrint = student;
+      const photoSrc = safeImageSrcForPrint(student.studentPhotoSrc);
+      if (photoSrc?.startsWith('data:image/') && photoSrc.length > 180_000) {
+        try {
+          studentForPrint = {
+            ...student,
+            studentPhotoSrc: await compressImageDataUrlForPrint(photoSrc, 320),
+          };
+        } catch {
+          // Keep original photo if compression fails.
+        }
+      }
+      const html = buildAdmitCardHtml(studentForPrint, { ...assets, feeQrImage }, 'A5');
+      printHtmlDocument(html, 'Acknowledgement card — A5');
+      if (!feeQrImage) {
+        showToast.error(
+          assets.hasFeeQrImage
+            ? 'Acknowledgement card opened, but the fee QR image could not be loaded.'
+            : 'Acknowledgement card opened, but no fee QR is configured for this course in the student database.'
+        );
+      }
     } catch {
-      showToast.error(
-        'Could not load acknowledgement card data. Check that the course fee QR is configured in the student database.'
-      );
+      showToast.error('Could not load acknowledgement card data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -454,7 +733,7 @@ export function PrintableAdmitCard({
         disabledTitle ||
         (!String(courseId ?? '').trim()
           ? 'Select a managed course before printing the acknowledgement card'
-          : 'Print acknowledgement card on A4 (half page — 2 per sheet)')
+          : 'Print acknowledgement card on A5 (148 × 210 mm)')
       }
     >
       {loading ? 'Preparing…' : printButtonLabel}
@@ -467,25 +746,38 @@ export function buildAdmitCardStudentFromForm(input: {
   formState: {
     studentInfo: { name?: string; phone?: string };
     parents: { father: { phone?: string } };
-    courseInfo: { course?: string; branch?: string; courseId?: string };
+    courseInfo: { course?: string; branch?: string; courseId?: string; quota?: string };
+    documents?: JoiningDocuments;
   };
   lead?: { name?: string; phone?: string; fatherPhone?: string } | null;
   admissionNumber?: string | null;
   collegeName?: string | null;
+  dateOfJoining?: string | null;
+  documentChecklist?: AdmitCardDocumentChecklist;
   registrationFormData?: Record<string, unknown>;
   application?: Joining | Admission;
 }): AdmitCardPrintStudent & { courseId: string } {
   const photoFromApp = input.application ? pickStudentPortraitForAdmitCard(input.application) : null;
   const photoFromReg = pickStudentPortraitFromRegistration(input.registrationFormData);
+  const quota = String(input.formState.courseInfo.quota ?? '').trim();
+  const documentChecklist =
+    input.documentChecklist ??
+    (input.formState.documents
+      ? buildAdmitCardDocumentChecklist(input.formState.documents, quota)
+      : undefined);
+
   return {
     courseId: String(input.formState.courseInfo.courseId ?? '').trim(),
     studentName: input.formState.studentInfo.name || input.lead?.name || '—',
     admissionNumber: input.admissionNumber || undefined,
     program: input.formState.courseInfo.course || '—',
     branch: input.formState.courseInfo.branch || '—',
+    quota: quota || '—',
+    dateOfJoining: formatAdmitCardDate(input.dateOfJoining ?? new Date().toISOString()),
     studentPhone: input.formState.studentInfo.phone || input.lead?.phone || '—',
     fatherPhone: input.formState.parents.father.phone || input.lead?.fatherPhone || '—',
     studentPhotoSrc: photoFromApp || photoFromReg,
     collegeName: input.collegeName?.trim() || undefined,
+    documentChecklist,
   };
 }
