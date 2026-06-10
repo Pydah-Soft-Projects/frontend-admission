@@ -85,6 +85,15 @@ type AdmissionStatsPivotCourse = {
   pivotKey?: string;
 };
 
+type AdmissionReferenceStatsRow = {
+  referenceKey?: string | null;
+  name: string;
+  department?: string | null;
+  designation?: string | null;
+  counts?: Record<string, number>;
+  total?: number;
+};
+
 const admissionPivotCountsKey = (c: AdmissionStatsPivotCourse) =>
   c.pivotKey ?? `${c.courseId}::${c.lateralTrack ?? 0}`;
 
@@ -526,7 +535,7 @@ const CompletedAdmissionsPage = () => {
   });
 
   const referenceCourses = (referenceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
-  const referenceRows = referenceStatsData?.rows ?? [];
+  const referenceRows = (referenceStatsData?.rows ?? []) as AdmissionReferenceStatsRow[];
   const sourceCourses = (sourceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
   const sourceRows = sourceStatsData?.rows ?? [];
   const dateWiseCourses = (dateWiseStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
@@ -746,6 +755,9 @@ const CompletedAdmissionsPage = () => {
   const pivotThClass =
     'px-2 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-slate-500 sm:px-3 sm:py-3 sm:text-[10px]';
   const pivotTdClass = 'px-2 py-2 text-center text-xs font-semibold sm:px-3 sm:py-3 sm:text-sm';
+  const pivotMetaTdClass =
+    'px-2 py-2 text-left text-xs text-slate-600 sm:px-3 sm:py-3 sm:text-sm dark:text-slate-300';
+  const referencePivotFixedColCount = 5;
 
   return (
     <div className="w-full space-y-4 pb-8 sm:space-y-6 sm:pb-12">
@@ -1942,6 +1954,8 @@ const CompletedAdmissionsPage = () => {
                   <th className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotThClass} dark:bg-slate-900`}>
                     Reference
                   </th>
+                  <th className={pivotThClass}>Dept</th>
+                  <th className={pivotThClass}>Designation</th>
                   {referenceCourses.map((c) => (
                     <th
                       key={admissionPivotColumnReactKey(c)}
@@ -1960,7 +1974,7 @@ const CompletedAdmissionsPage = () => {
                 {referenceStatsLoading ? (
                   <tr>
                     <td
-                      colSpan={Math.max(3 + referenceCourses.length, 3)}
+                      colSpan={Math.max(referencePivotFixedColCount + referenceCourses.length, referencePivotFixedColCount)}
                       className="py-16 text-center text-slate-500"
                     >
                       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
@@ -1970,14 +1984,14 @@ const CompletedAdmissionsPage = () => {
                 ) : referenceRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={Math.max(3 + referenceCourses.length, 3)}
+                      colSpan={Math.max(referencePivotFixedColCount + referenceCourses.length, referencePivotFixedColCount)}
                       className="py-16 text-center text-slate-500"
                     >
                       No data for the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  referenceRows.map((row: any, idx: number) => {
+                  referenceRows.map((row, idx: number) => {
                     const rowTotal =
                       Number(row.total) ||
                       referenceCourses.reduce(
@@ -1995,6 +2009,8 @@ const CompletedAdmissionsPage = () => {
                         <td className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotTdClass} font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100`}>
                           {row.name}
                         </td>
+                        <td className={pivotMetaTdClass}>{row.department?.trim() || '—'}</td>
+                        <td className={pivotMetaTdClass}>{row.designation?.trim() || '—'}</td>
                         {referenceCourses.map((c) => (
                           <td
                             key={admissionPivotColumnReactKey(c)}

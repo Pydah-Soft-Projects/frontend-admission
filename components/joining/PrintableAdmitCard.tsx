@@ -4,13 +4,30 @@ import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { courseAPI } from '@/lib/api';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
+import { listCertificateItemOptions, parseCertificateChecklistEntry } from '@/lib/certificateChecklistEntry';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { showToast } from '@/lib/toast';
-import type { Admission, Joining, JoiningDocumentStatus, JoiningDocuments } from '@/types';
+import type {
+  Admission,
+  CertificateGuidance,
+  Joining,
+  JoiningDocumentStatus,
+  JoiningDocuments,
+} from '@/types';
 
 export type AdmitCardDocumentChecklist = {
   labels: Record<string, string>;
   documents: Record<string, JoiningDocumentStatus | undefined>;
+};
+
+export type AdmitCardCertificateChecklistRow = {
+  name: string;
+  optionLabel?: string;
+  status: 'Received' | 'Pending';
+};
+
+export type AdmitCardCertificateChecklist = {
+  rows: AdmitCardCertificateChecklistRow[];
 };
 
 export type AdmitCardPrintStudent = {
@@ -24,10 +41,17 @@ export type AdmitCardPrintStudent = {
   fatherPhone: string;
   studentPhotoSrc?: string | null;
   collegeName?: string;
+  /** Step 2 certificate items — merged into the documents checklist on print only. */
+  certificateChecklist?: AdmitCardCertificateChecklist;
   documentChecklist?: AdmitCardDocumentChecklist;
 };
 
-const ACKNOWLEDGEMENT_DOCUMENT_LABELS: Record<keyof JoiningDocuments, string> = {
+type AcknowledgementChecklistDocumentKey = Exclude<
+  keyof JoiningDocuments,
+  'bankPassBook' | 'rationCard'
+>;
+
+const ACKNOWLEDGEMENT_DOCUMENT_LABELS: Record<AcknowledgementChecklistDocumentKey, string> = {
   ssc: 'SSC',
   inter: 'Intermediate',
   ugOrPgCmm: 'UG / PG CMM',
@@ -41,8 +65,6 @@ const ACKNOWLEDGEMENT_DOCUMENT_LABELS: Record<keyof JoiningDocuments, string> = 
   cetHallTicket: 'CET Hall Ticket',
   allotmentLetter: 'Allotment Letter',
   joiningReport: 'Joining Report',
-  bankPassBook: 'Bank Pass Book',
-  rationCard: 'Ration Card',
 };
 
 export function buildAdmitCardDocumentChecklist(
@@ -51,7 +73,7 @@ export function buildAdmitCardDocumentChecklist(
 ): AdmitCardDocumentChecklist {
   const labels: Record<string, string> = {};
   const statuses: Record<string, JoiningDocumentStatus | undefined> = {};
-  (Object.entries(ACKNOWLEDGEMENT_DOCUMENT_LABELS) as [keyof JoiningDocuments, string][]).forEach(
+  (Object.entries(ACKNOWLEDGEMENT_DOCUMENT_LABELS) as [AcknowledgementChecklistDocumentKey, string][]).forEach(
     ([key, label]) => {
       if (!isJoiningDocumentChecklistKeyVisible(key, quota)) return;
       labels[key] = label;
@@ -59,6 +81,56 @@ export function buildAdmitCardDocumentChecklist(
     }
   );
   return { labels, documents: statuses };
+}
+
+export function buildAdmitCardCertificateChecklist(
+  certificateGuidance: CertificateGuidance | null | undefined,
+  certificateChecklistParsed?: Record<string, unknown>
+): AdmitCardCertificateChecklist | undefined {
+  const items =
+    certificateGuidance?.format === 'certificate_config' && certificateGuidance.items
+      ? certificateGuidance.items.filter((item) => String(item.id || item.name || '').trim())
+      : [];
+  if (items.length === 0) return undefined;
+
+  const parsedMap =
+    certificateChecklistParsed &&
+    typeof certificateChecklistParsed === 'object' &&
+    !Array.isArray(certificateChecklistParsed)
+      ? certificateChecklistParsed
+      : {};
+
+  const rows = items.map((item) => {
+    const itemId = String(item.id || item.name || '').trim();
+    const certOpts = listCertificateItemOptions(item);
+    const entry = parseCertificateChecklistEntry(parsedMap[itemId]);
+    const status: AdmitCardCertificateChecklistRow['status'] =
+      entry.status === 'received' ? 'Received' : 'Pending';
+    let optionLabel = '';
+    if (entry.option && certOpts.length > 0) {
+      const match = certOpts.find((o) => o.encoded === entry.option);
+      optionLabel = match?.label || entry.option;
+    }
+    return {
+      name: String(item.name || itemId),
+      optionLabel: optionLabel || undefined,
+      status,
+    };
+  });
+
+  return { rows };
+}
+
+export function buildAdmitCardCertificateChecklistFromRegistration(
+  certificateGuidance: CertificateGuidance | null | undefined,
+  registrationFormData?: Record<string, unknown> | null
+): AdmitCardCertificateChecklist | undefined {
+  const raw = registrationFormData?.certificate_checklist;
+  const parsed =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : undefined;
+  return buildAdmitCardCertificateChecklist(certificateGuidance, parsed);
 }
 
 function formatAdmitCardDate(value?: string | null): string {
@@ -513,22 +585,34 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
 `;
 }
 
-function buildDocumentChecklistTableHtml(checklist?: AdmitCardDocumentChecklist): string {
-  if (!checklist || Object.keys(checklist.labels).length === 0) return '';
+function buildDocumentChecklistTableHtml(
+  documentChecklist?: AdmitCardDocumentChecklist,
+  certificateChecklist?: AdmitCardCertificateChecklist
+): string {
+  const certificateRows = (certificateChecklist?.rows ?? []).map((row) => {
+    const label = row.optionLabel ? `${row.name} — ${row.optionLabel}` : row.name;
+    const statusClass = row.status === 'Received' ? 'status-received' : 'status-pending';
+    return `
+        <tr>
+          <td>${escapePrintHtml(label)}</td>
+          <td class="status-cell ${statusClass}">${escapePrintHtml(row.status)}</td>
+        </tr>`;
+  });
 
-  const statuses = checklist.documents ?? {};
-  const rows = Object.entries(checklist.labels)
-    .map(([key, label]) => {
-      const isReceived = statuses[key] === 'received';
-      const status = isReceived ? 'Received' : 'Pending';
-      const statusClass = isReceived ? 'status-received' : 'status-pending';
-      return `
+  const statuses = documentChecklist?.documents ?? {};
+  const documentRows = Object.entries(documentChecklist?.labels ?? {}).map(([key, label]) => {
+    const isReceived = statuses[key] === 'received';
+    const status = isReceived ? 'Received' : 'Pending';
+    const statusClass = isReceived ? 'status-received' : 'status-pending';
+    return `
         <tr>
           <td>${escapePrintHtml(label)}</td>
           <td class="status-cell ${statusClass}">${escapePrintHtml(status)}</td>
         </tr>`;
-    })
-    .join('');
+  });
+
+  const rows = [...certificateRows, ...documentRows].join('');
+  if (!rows) return '';
 
   return `
     <div class="doc-checklist">
@@ -598,7 +682,7 @@ function buildCardHtml(student: AdmitCardPrintStudent, assets: AdmitCardAssets):
             ${detailRow('Student phone', student.studentPhone)}
             ${detailRow('Father phone', student.fatherPhone)}
           </table>
-          ${buildDocumentChecklistTableHtml(student.documentChecklist)}
+          ${buildDocumentChecklistTableHtml(student.documentChecklist, student.certificateChecklist)}
         </div>
         <div class="right-col">
           ${photoBlock}
@@ -754,6 +838,8 @@ export function buildAdmitCardStudentFromForm(input: {
   collegeName?: string | null;
   dateOfJoining?: string | null;
   documentChecklist?: AdmitCardDocumentChecklist;
+  certificateGuidance?: CertificateGuidance | null;
+  certificateChecklistParsed?: Record<string, unknown>;
   registrationFormData?: Record<string, unknown>;
   application?: Joining | Admission;
 }): AdmitCardPrintStudent & { courseId: string } {
@@ -765,6 +851,15 @@ export function buildAdmitCardStudentFromForm(input: {
     (input.formState.documents
       ? buildAdmitCardDocumentChecklist(input.formState.documents, quota)
       : undefined);
+  const certificateChecklist =
+    buildAdmitCardCertificateChecklist(
+      input.certificateGuidance,
+      input.certificateChecklistParsed
+    ) ??
+    buildAdmitCardCertificateChecklistFromRegistration(
+      input.certificateGuidance,
+      input.registrationFormData
+    );
 
   return {
     courseId: String(input.formState.courseInfo.courseId ?? '').trim(),
@@ -778,6 +873,7 @@ export function buildAdmitCardStudentFromForm(input: {
     fatherPhone: input.formState.parents.father.phone || input.lead?.fatherPhone || '—',
     studentPhotoSrc: photoFromApp || photoFromReg,
     collegeName: input.collegeName?.trim() || undefined,
+    certificateChecklist,
     documentChecklist,
   };
 }

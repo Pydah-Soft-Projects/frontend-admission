@@ -378,6 +378,17 @@ function RelativeAddressRow({
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <Input compact label="Name" value={relative.name || ''} onChange={(e) => updateRelative(index, 'name', e.target.value)} />
         <Input compact label="Relationship" value={relative.relationship || ''} onChange={(e) => updateRelative(index, 'relationship', e.target.value)} />
+        <Input
+          compact
+          label="Mobile Number"
+          type="tel"
+          inputMode="numeric"
+          autoComplete="tel"
+          value={relative.phone || ''}
+          onChange={(e) => updateRelative(index, 'phone', e.target.value.replace(/\D/g, ''))}
+          placeholder="10-digit mobile"
+          maxLength={15}
+        />
         <Input compact label="Door / Street" value={relative.doorOrStreet || ''} onChange={(e) => updateRelative(index, 'doorOrStreet', e.target.value.toUpperCase())} />
         <Input compact label="Landmark" value={relative.landmark || ''} onChange={(e) => updateRelative(index, 'landmark', e.target.value.toUpperCase())} />
         <Input compact label="Village / City" value={relative.villageOrCity || ''} onChange={(e) => updateRelative(index, 'villageOrCity', e.target.value.toUpperCase())} />
@@ -491,6 +502,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
         ? joining.address.relatives.map((relative) => ({
           name: relative.name || '',
           relationship: relative.relationship || '',
+          phone: relative.phone || '',
           state: relative.state || '',
           doorOrStreet: relative.doorOrStreet || '',
           landmark: relative.landmark || '',
@@ -3247,6 +3259,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           {
             name: '',
             relationship: '',
+            phone: '',
             state: '',
             doorOrStreet: '',
             landmark: '',
@@ -4019,6 +4032,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         collegeName: selectedCollegeName,
         dateOfJoining: admissionRecord?.admissionDate ?? admissionRecord?.createdAt,
         documentChecklist: documentsChecklistForPrint,
+        certificateGuidance,
+        certificateChecklistParsed: registrationExtras.certificate_checklist as
+          | Record<string, unknown>
+          | undefined,
         registrationFormData: registrationExtras as Record<string, unknown>,
         application: joiningRecord ?? admissionRecord ?? undefined,
       }),
@@ -4029,8 +4046,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       meta.admissionNumber,
       selectedCollegeName,
       documentsChecklistForPrint,
-      admissionRecord,
+      certificateGuidance,
       registrationExtras,
+      admissionRecord,
       joiningRecord,
     ]
   );

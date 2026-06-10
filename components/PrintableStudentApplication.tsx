@@ -517,7 +517,11 @@ function getPrintApplicationHtml(props: {
       <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
       <div>College: <span style="border-bottom: 1px dotted #333; min-width: 120px; display: inline-block;">${escapeHtml((collegeName || '').trim() || '—')}</span></div>
       <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
-      <div>Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span></div>
+      <div>
+        Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span>
+        <span style="margin-left: 14px;">Quota:</span>
+        <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;">${escapeHtml(course?.quota)}</span>
+      </div>
     </div>`;
 
   return `<!DOCTYPE html>
@@ -738,13 +742,47 @@ function getPrintApplicationHtml(props: {
     }
     .form-field-line {
       flex: 1;
+      min-width: 0;
       border-bottom: 1px dotted #333;
       min-height: 16px;
       padding-left: 5px;
       font-size: 13px;
       font-weight: 600;
+      box-sizing: border-box;
     }
-    .student-form-left .form-row,
+    /* Align dotted-line start/end in sections 1–3 without changing row markup */
+    .student-form-left .form-row {
+      display: grid;
+      grid-template-columns: 25px 168px minmax(0, 1fr);
+      column-gap: 4px;
+      align-items: center;
+      padding-left: 0;
+      width: 100%;
+    }
+    .student-form-left .form-row-sub {
+      padding-left: 0;
+    }
+    .student-form-left .form-row .section-num {
+      grid-column: 1;
+      width: 25px;
+      margin-right: 0;
+    }
+    .student-form-left .form-row .form-label,
+    .student-form-left .form-row .form-label-wide {
+      grid-column: 2;
+      min-width: 0;
+      max-width: none;
+    }
+    .student-form-left .form-row .form-field-line,
+    .student-form-left .form-row .form-value {
+      grid-column: 3;
+      min-width: 0;
+      width: 100%;
+    }
+    .student-form-left .form-row .dob-grid {
+      grid-column: 3;
+      justify-self: start;
+    }
     .form-section .form-row-lined {
       width: 100%;
     }
@@ -790,7 +828,7 @@ function getPrintApplicationHtml(props: {
     .photos-stack-label { font-size: 11px; font-weight: 600; color: #333; text-align: center; line-height: 1.15; }
     .portrait-thumb {
       border: 1px solid #777;
-      width: 88px;
+      width: 100%;
       height: 104px;
       flex-shrink: 0;
       display: flex;
@@ -798,29 +836,57 @@ function getPrintApplicationHtml(props: {
       justify-content: center;
       overflow: hidden;
       background: #fafafa;
+      box-sizing: border-box;
     }
     .portrait-img { max-width: 100%; max-height: 100%; object-fit: cover; }
     .portrait-empty { font-size: 11px; color: #999; }
 
+    /* Match form-body-layout width so address dots end at photo-column right edge */
+    .address-section-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 188px;
+      column-gap: 14px;
+    }
     .address-fields-grid {
+      grid-column: 1 / -1;
       display: grid;
       grid-template-columns: 1fr 1fr;
       column-gap: 14px;
       row-gap: 8px;
-      margin-left: 20px;
+      margin-left: 25px;
+      margin-right: 0;
       margin-bottom: 4px;
+      box-sizing: border-box;
     }
     .address-fields-grid .form-row-sub {
       padding-left: 0;
       margin-bottom: 0;
+      display: grid;
+      grid-template-columns: 142px minmax(0, 1fr);
+      column-gap: 4px;
+      align-items: center;
     }
     .address-fields-grid .form-label {
-      min-width: 118px;
-      max-width: 118px;
+      min-width: 0;
+      max-width: none;
       font-size: 12px;
+      grid-column: 1;
+    }
+    .address-fields-grid .form-field-line {
+      grid-column: 2;
+      min-width: 0;
+      width: 100%;
     }
     .address-field-full {
       grid-column: 1 / -1;
+      grid-template-columns: 142px minmax(0, 1fr);
+    }
+    .address-field-full .form-label {
+      grid-column: 1;
+      white-space: nowrap;
+    }
+    .address-field-full .form-field-line {
+      grid-column: 2;
     }
     .relative-address-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px; }
     .relative-box { border: 1px solid #777; padding: 5px; height: 60px; }
@@ -1055,6 +1121,13 @@ function getPrintApplicationHtml(props: {
         align-items: center;
         gap: 10px;
       }
+      .address-section-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 188px;
+        column-gap: 14px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
       .address-fields-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -1153,8 +1226,12 @@ function getPrintApplicationHtml(props: {
             <span class="form-field-line">${escapeHtml(student?.phone)}</span>
           </div>
           <div class="form-row form-row-sub">
-            <span class="form-label">Nationality :</span>
-            <span class="form-field-line">INDIAN</span>
+            <span class="form-label">Gender :</span>
+            <span class="form-field-line">${escapeHtml(displayGenderText || '—')}</span>
+          </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label form-label-wide">Date of Birth (As Per SSC) :</span>
+            ${renderDobBoxes(student?.dateOfBirth)}
           </div>
           <div class="form-row form-row-sub">
             <span class="form-label form-label-wide">Reservation Category :</span>
@@ -1164,19 +1241,13 @@ function getPrintApplicationHtml(props: {
             <span class="form-label form-label-wide">Other Reservation :</span>
             <span class="form-field-line">${escapeHtml(displayOtherReservationText || '—')}</span>
           </div>
+          <div class="form-row form-row-sub">
+            <span class="form-label">Nationality :</span>
+            <span class="form-field-line">INDIAN</span>
+          </div>
 
           <div class="form-row">
             <span class="section-num">2.</span>
-            <span class="form-label">Gender :</span>
-            <span class="form-field-line">${escapeHtml(displayGenderText || '—')}</span>
-          </div>
-          <div class="form-row form-row-sub">
-            <span class="form-label form-label-wide">Date of Birth (As Per SSC) :</span>
-            ${renderDobBoxes(student?.dateOfBirth)}
-          </div>
-
-          <div class="form-row">
-            <span class="section-num">3.</span>
             <span class="form-label">Father's Name :</span>
             <span class="form-field-line">${escapeHtml(parents?.father?.name?.toUpperCase())}</span>
           </div>
@@ -1188,7 +1259,9 @@ function getPrintApplicationHtml(props: {
             <span class="form-label">Mobile :</span>
             <span class="form-field-line">${escapeHtml(parents?.father?.phone)}</span>
           </div>
-          <div class="form-row form-row-sub">
+
+          <div class="form-row">
+            <span class="section-num">3.</span>
             <span class="form-label">Mother's Name :</span>
             <span class="form-field-line">${escapeHtml(parents?.mother?.name?.toUpperCase())}</span>
           </div>
@@ -1233,6 +1306,7 @@ function getPrintApplicationHtml(props: {
         <span class="section-num">4.</span>
         <span class="form-label">Address for communication(In Capital Letters) :</span>
       </div>
+      <div class="address-section-layout">
       <div class="address-fields-grid">
         <div class="form-row form-row-sub form-row-lined address-field-full">
           <span class="form-label">Door No/ Street Name :</span>
@@ -1262,6 +1336,7 @@ function getPrintApplicationHtml(props: {
           <span class="form-label">Pin Code :</span>
           <span class="form-field-line">${escapeHtml(address?.communication?.pinCode)}</span>
         </div>
+      </div>
       </div>
 
       <div class="form-row m-t-10 form-row-section-title">

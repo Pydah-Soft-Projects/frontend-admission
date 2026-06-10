@@ -463,6 +463,7 @@ export interface JoiningCommunicationAddress {
 export interface JoiningRelativeAddress extends JoiningCommunicationAddress {
   name?: string;
   relationship?: string;
+  phone?: string;
 }
 
 export interface JoiningQualifications {

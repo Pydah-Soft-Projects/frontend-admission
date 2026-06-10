@@ -11,6 +11,10 @@ import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentCheck
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
+import {
+  formatCommunicationAddressLines,
+  formatRelativeAddressBlock,
+} from '@/lib/formatJoiningAddressDisplay';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import { ApplicationSectionCard } from '@/components/admission/ApplicationSectionCard';
@@ -444,37 +448,44 @@ export default function JoiningDetailPage() {
           <div className="grid gap-6 md:grid-cols-2">
             <div>
               <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">Communication Address</h3>
-              <div className="space-y-2 text-sm">
-                <p className="text-gray-900 dark:text-slate-100">
-                  {joining.address.communication?.doorOrStreet || '—'}
-                </p>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {joining.address.communication?.landmark && `Near: ${joining.address.communication.landmark}`}
-                </p>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {[
-                    joining.address.communication?.villageOrCity,
-                    joining.address.communication?.mandal,
-                    joining.address.communication?.district,
-                  ]
-                    .filter(Boolean)
-                    .join(', ') || '—'}
-                </p>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {joining.address.communication?.pinCode && `PIN: ${joining.address.communication.pinCode}`}
-                </p>
-              </div>
+              {(() => {
+                const lines = formatCommunicationAddressLines(joining.address.communication);
+                return (
+                  <div className="space-y-2 text-sm">
+                    <p className="text-gray-900 dark:text-slate-100">{lines.doorOrStreet}</p>
+                    {lines.landmark ? (
+                      <p className="text-gray-600 dark:text-slate-400">{lines.landmark}</p>
+                    ) : null}
+                    <p className="text-gray-600 dark:text-slate-400">{lines.locality}</p>
+                    {lines.pin ? (
+                      <p className="text-gray-600 dark:text-slate-400">{lines.pin}</p>
+                    ) : null}
+                  </div>
+                );
+              })()}
             </div>
             {joining.address.relatives && joining.address.relatives.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">Relatives</h3>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">
+                  Relatives / Friends
+                </h3>
                 <div className="space-y-3">
-                  {joining.address.relatives.map((relative, idx) => (
-                    <div key={idx} className="border-l-2 border-blue-200 pl-3">
-                      <p className="font-semibold text-gray-900 dark:text-slate-100">{relative.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-slate-400">{relative.relationship}</p>
-                    </div>
-                  ))}
+                  {joining.address.relatives.map((relative, idx) => {
+                    const block = formatRelativeAddressBlock(relative);
+                    return (
+                      <div key={idx} className="border-l-2 border-blue-200 pl-3">
+                        <p className="font-semibold text-gray-900 dark:text-slate-100">{block.header}</p>
+                        {block.addressLine ? (
+                          <p className="mt-1 text-xs text-gray-600 dark:text-slate-400">{block.addressLine}</p>
+                        ) : null}
+                        {block.mobile ? (
+                          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                            Mobile: {block.mobile}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

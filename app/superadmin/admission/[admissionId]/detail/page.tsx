@@ -15,8 +15,15 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
-import { admissionAPI, joiningAPI, paymentAPI } from '@/lib/api';
-import { Admission, Joining, JoiningDocuments, PaymentSummary, PaymentTransaction } from '@/types';
+import { admissionAPI, courseAPI, joiningAPI, paymentAPI } from '@/lib/api';
+import {
+  Admission,
+  CertificateGuidance,
+  Joining,
+  JoiningDocuments,
+  PaymentSummary,
+  PaymentTransaction,
+} from '@/types';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
@@ -24,9 +31,14 @@ import { AdmissionReferenceEditor } from '@/components/admission/AdmissionRefere
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
+import {
+  formatCommunicationAddressLines,
+  formatRelativeAddressBlock,
+} from '@/lib/formatJoiningAddressDisplay';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import {
   PrintableAdmitCard,
+  buildAdmitCardCertificateChecklistFromRegistration,
   buildAdmitCardDocumentChecklist,
   pickStudentPortraitForAdmitCard,
 } from '@/components/joining/PrintableAdmitCard';
@@ -325,6 +337,30 @@ export default function AdmissionDetailPage() {
     return { lines: [], batch: resolveBatch(admission, lead) || '' };
   }, [admission, joiningForReference, lead]);
 
+  const programLevelTrimmed = useMemo(
+    () =>
+      String(
+        admission?.courseInfo?.programLevel || joiningForReference?.courseInfo?.programLevel || ''
+      ).trim(),
+    [admission?.courseInfo?.programLevel, joiningForReference?.courseInfo?.programLevel]
+  );
+
+  const { data: certificateGuidanceResponse } = useQuery({
+    queryKey: ['courses', 'certificate-guidance', programLevelTrimmed, 'admit-card-print'],
+    enabled: Boolean(programLevelTrimmed),
+    queryFn: async () => courseAPI.getCertificateGuidance(programLevelTrimmed),
+  });
+
+  const certificateGuidanceForPrint: CertificateGuidance | null = useMemo(() => {
+    const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
+    const inner =
+      envelope && typeof envelope === 'object' && 'data' in envelope
+        ? (envelope as { data: unknown }).data
+        : envelope;
+    if (!inner || typeof inner !== 'object') return null;
+    return inner as CertificateGuidance;
+  }, [certificateGuidanceResponse]);
+
   const admitCardPrintStudent = useMemo(() => {
     if (!admission) return null;
     const courseName =
@@ -358,8 +394,20 @@ export default function AdmissionDetailPage() {
       documentChecklist: admission.documents
         ? buildAdmitCardDocumentChecklist(admission.documents, admission.courseInfo?.quota)
         : undefined,
+      certificateChecklist: buildAdmitCardCertificateChecklistFromRegistration(
+        certificateGuidanceForPrint,
+        registrationSource
+      ),
     };
-  }, [admission, lead, getCourseName, getBranchName, getCollegeNameForCourse]);
+  }, [
+    admission,
+    lead,
+    getCourseName,
+    getBranchName,
+    getCollegeNameForCourse,
+    certificateGuidanceForPrint,
+    registrationSource,
+  ]);
 
   useEffect(() => {
     setHeaderContent(
@@ -843,39 +891,44 @@ export default function AdmissionDetailPage() {
               <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">
                 Communication Address
               </h3>
-              <div className="space-y-2 text-sm">
-                <p className="text-gray-900 dark:text-slate-100">
-                  {admission.address.communication?.doorOrStreet || '—'}
-                </p>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {admission.address.communication?.landmark &&
-                    `Near: ${admission.address.communication.landmark}`}
-                </p>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {[
-                    admission.address.communication?.villageOrCity,
-                    admission.address.communication?.mandal,
-                    admission.address.communication?.district,
-                  ]
-                    .filter(Boolean)
-                    .join(', ') || '—'}
-                </p>
-                <p className="text-gray-600 dark:text-slate-400">
-                  {admission.address.communication?.pinCode &&
-                    `PIN: ${admission.address.communication.pinCode}`}
-                </p>
-              </div>
+              {(() => {
+                const lines = formatCommunicationAddressLines(admission.address.communication);
+                return (
+                  <div className="space-y-2 text-sm">
+                    <p className="text-gray-900 dark:text-slate-100">{lines.doorOrStreet}</p>
+                    {lines.landmark ? (
+                      <p className="text-gray-600 dark:text-slate-400">{lines.landmark}</p>
+                    ) : null}
+                    <p className="text-gray-600 dark:text-slate-400">{lines.locality}</p>
+                    {lines.pin ? (
+                      <p className="text-gray-600 dark:text-slate-400">{lines.pin}</p>
+                    ) : null}
+                  </div>
+                );
+              })()}
             </div>
             {admission.address.relatives && admission.address.relatives.length > 0 && (
               <div>
-                <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">Relatives</h3>
+                <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">
+                  Relatives / Friends
+                </h3>
                 <div className="space-y-3">
-                  {admission.address.relatives.map((relative, idx) => (
-                    <div key={idx} className="border-l-2 border-blue-200 pl-3">
-                      <p className="font-semibold text-gray-900 dark:text-slate-100">{relative.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-slate-400">{relative.relationship}</p>
-                    </div>
-                  ))}
+                  {admission.address.relatives.map((relative, idx) => {
+                    const block = formatRelativeAddressBlock(relative);
+                    return (
+                      <div key={idx} className="border-l-2 border-blue-200 pl-3">
+                        <p className="font-semibold text-gray-900 dark:text-slate-100">{block.header}</p>
+                        {block.addressLine ? (
+                          <p className="mt-1 text-xs text-gray-600 dark:text-slate-400">{block.addressLine}</p>
+                        ) : null}
+                        {block.mobile ? (
+                          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                            Mobile: {block.mobile}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
