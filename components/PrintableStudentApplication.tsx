@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCollegeAddressForPrint } from '@/components/joining/PrintableAdmitCard';
-import { courseAPI } from '@/lib/api';
+import { courseAPI, feeStructureAPI } from '@/lib/api';
 import type {
   Joining,
   Admission,
@@ -11,9 +11,23 @@ import type {
   PaymentTransaction,
   JoiningDocuments,
   JoiningQualifications,
+  JoiningCommunicationAddress,
+  JoiningRelativeAddress,
+  Course,
+  Branch,
 } from '@/types';
+import {
+  buildPrintFeeStructureYearRows,
+  courseCatalogFromCourseList,
+  mapQuotaToFeeCategory,
+  resolvePrintFeeBatch,
+  resolveProgramTotalYears,
+  unwrapFeeStructureListPayload,
+  type PrintFeeStructureYearRow,
+} from '@/lib/printApplicationFeeStructure';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { normalizeJoiningDateOfBirthInput } from '@/lib/joiningRegistrationFieldMap';
+import { normalizeAddressFieldForDisplay } from '@/lib/formatJoiningAddressDisplay';
 
 type ApplicationData = Joining | Admission;
 
@@ -156,6 +170,115 @@ function formatPrintDate(value?: string | Date): string {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function formatPrintFeeAmount(amount?: number | null): string {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return '';
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return String(amount);
+  }
+}
+
+function renderPrintFeeStructureTableHtml(rows: PrintFeeStructureYearRow[]): string {
+  if (!rows.length) return '';
+
+  return `
+    <div class="print-fee-structure-block">
+      <div class="print-fee-structure-title">Fee Structure</div>
+      <table class="data-table print-fee-structure-table">
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Tuition Fee</th>
+            <th>Transport Fee</th>
+            <th>Other Fee</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map(
+              (row) => `
+            <tr>
+              <td>Year ${row.year}</td>
+              <td>${escapeHtml(formatPrintFeeAmount(row.tuition))}</td>
+              <td>${escapeHtml(formatPrintFeeAmount(row.transport))}</td>
+              <td>${escapeHtml(formatPrintFeeAmount(row.other))}</td>
+            </tr>
+          `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function resolvePrintFeeStructureTableHtml(
+  application: ApplicationData,
+  courseName?: string,
+  branchName?: string
+): Promise<string> {
+  const courseId = String(application.courseInfo?.courseId ?? '').trim();
+  const branchId = String(application.courseInfo?.branchId ?? '').trim();
+  const resolvedCourseName = String(courseName || application.courseInfo?.course || '').trim();
+  const resolvedBranchName = String(branchName || application.courseInfo?.branch || '').trim();
+  const quota = String(application.courseInfo?.quota || '').trim();
+  const batch = resolvePrintFeeBatch(application);
+  const category = mapQuotaToFeeCategory(quota);
+
+  if (!resolvedCourseName && !resolvedBranchName && !courseId) {
+    return '';
+  }
+
+  let courseList: Array<Course & { branches?: Branch[] }> = [];
+  try {
+    const response = await courseAPI.list({ includeBranches: true, showInactive: true });
+    const payload = response?.data;
+    courseList = Array.isArray(payload)
+      ? (payload as Array<Course & { branches?: Branch[] }>)
+      : Array.isArray((payload as { data?: unknown })?.data)
+        ? ((payload as { data: Array<Course & { branches?: Branch[] }> }).data)
+        : [];
+  } catch {
+    courseList = [];
+  }
+
+  let feeStructures = unwrapFeeStructureListPayload(
+    await feeStructureAPI
+      .list({
+        course: resolvedCourseName || undefined,
+        branch: resolvedBranchName || undefined,
+        category: category || undefined,
+        quota: quota || undefined,
+        batch: batch || undefined,
+      })
+      .catch(() => null)
+  );
+
+  if (feeStructures.length === 0 && (resolvedCourseName || resolvedBranchName)) {
+    feeStructures = unwrapFeeStructureListPayload(
+      await feeStructureAPI
+        .list({
+          course: resolvedCourseName || undefined,
+          branch: resolvedBranchName || undefined,
+          batch: batch || undefined,
+        })
+        .catch(() => null)
+    );
+  }
+
+  const catalog = courseCatalogFromCourseList(courseList);
+  const totalYears = resolveProgramTotalYears(catalog, courseId, branchId, feeStructures);
+  const rows = buildPrintFeeStructureYearRows(feeStructures, totalYears);
+
+  return renderPrintFeeStructureTableHtml(rows);
+}
+
 type EducationTableRowKey = 'ssc' | 'inter_diploma' | 'ug';
 
 const EDUCATION_TABLE_ROWS: ReadonlyArray<{ label: string; key: EducationTableRowKey }> = [
@@ -177,6 +300,76 @@ function resolveEducationProgramTier(programLevel?: string): 'diploma' | 'ug' | 
     return 'diploma';
   }
   return null;
+}
+
+function pickRegistrationExtraCI(extras: Record<string, unknown>, keys: readonly string[]): string {
+  const want = new Set(keys.map((k) => k.toLowerCase()));
+  for (const [k, v] of Object.entries(extras)) {
+    if (!want.has(k.toLowerCase())) continue;
+    if (v === undefined || v === null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return '';
+}
+
+function formatPrintAddressValue(value: unknown, upper = false): string {
+  const s = normalizeAddressFieldForDisplay(value);
+  if (!s) return '';
+  return upper ? s.toUpperCase() : s;
+}
+
+/** Merge structured address with registration extras and lead snapshot for print. */
+function resolveCommunicationAddressForPrint(
+  application: ApplicationData
+): JoiningCommunicationAddress {
+  const comm = application.address?.communication ?? {};
+  const reg =
+    application.registrationFormData &&
+    typeof application.registrationFormData === 'object' &&
+    !Array.isArray(application.registrationFormData)
+      ? (application.registrationFormData as Record<string, unknown>)
+      : {};
+  const lead =
+    application.leadData &&
+    typeof application.leadData === 'object' &&
+    !Array.isArray(application.leadData)
+      ? (application.leadData as Record<string, unknown>)
+      : {};
+
+  const pick = (
+    fromComm: string | undefined,
+    regKeys: readonly string[],
+    leadKey?: string
+  ): string => {
+    const direct = normalizeAddressFieldForDisplay(fromComm);
+    if (direct) return direct;
+    const fromReg = normalizeAddressFieldForDisplay(pickRegistrationExtraCI(reg, regKeys));
+    if (fromReg) return fromReg;
+    if (leadKey) {
+      const fromLead = normalizeAddressFieldForDisplay(lead[leadKey]);
+      if (fromLead) return fromLead;
+    }
+    return '';
+  };
+
+  return {
+    doorOrStreet: pick(comm.doorOrStreet, ['address_door_street', 'door_street'], 'address'),
+    landmark: pick(comm.landmark, ['address_landmark', 'landmark']),
+    villageOrCity: pick(
+      comm.villageOrCity,
+      ['address_village_city', 'village', 'city', 'address_village'],
+      'village'
+    ),
+    mandal: pick(comm.mandal, ['address_mandal', 'mandal'], 'mandal'),
+    district: pick(comm.district, ['address_district', 'district'], 'district'),
+    state: pick(comm.state, ['state', 'address_state'], 'state'),
+    pinCode: pick(comm.pinCode, ['pincode', 'pin_code', 'address_pin_code']),
+  };
+}
+
+function resolveRelativesForPrint(application: ApplicationData): JoiningRelativeAddress[] {
+  return application.address?.relatives ?? [];
 }
 
 function resolveEducationProgramLevel(
@@ -263,6 +456,7 @@ function getPrintApplicationHtml(props: {
   printedDate: string;
   collegeName?: string;
   collegeAddress?: string;
+  feeStructureTableHtml?: string;
 }): string {
   const {
     application,
@@ -276,18 +470,19 @@ function getPrintApplicationHtml(props: {
     printedDate,
     collegeName,
     collegeAddress,
+    feeStructureTableHtml = '',
   } = props;
 
   const student = application.studentInfo;
   const course = application.courseInfo;
   const parents = application.parents;
-  const address = application.address;
   const reservation = application.reservation;
   const qualifications = application.qualifications;
   const educationHistory = application.educationHistory ?? [];
   const documents = application.documents ?? {};
   const siblings = (application as Joining).siblings ?? (application as Admission).siblings ?? [];
-  const relatives = address?.relatives ?? [];
+  const communicationAddress = resolveCommunicationAddressForPrint(application);
+  const relatives = resolveRelativesForPrint(application);
 
   const headerCollegeTitle = (collegeName || '').trim()
     ? (collegeName || '').trim().toUpperCase()
@@ -575,52 +770,66 @@ function getPrintApplicationHtml(props: {
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 14px;
+      gap: 12px;
     }
     .header-logo {
       width: 140px;
       height: 90px;
       flex-shrink: 0;
-      align-self: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .header-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
     .header-brand-stack {
       flex: 1;
       min-width: 0;
+      min-height: 90px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
+      margin-top: -4px;
+    }
+    .header-main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
     }
     .form-section {
       margin-top: 0;
     }
-    .form-body-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 188px;
+    /* Independent left/right stacks so sections 1–3 sit directly under the title */
+    .form-page-top {
+      display: flex;
+      align-items: flex-start;
       column-gap: 14px;
-      align-items: start;
-      margin-bottom: 0;
-    }
-    .form-left-column {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      min-width: 0;
-    }
-    .form-left-column .app-title-box {
-      align-self: center;
+      width: 100%;
       margin-top: -6px;
-      margin-bottom: 2px;
-      padding: 3px 12px;
+      margin-bottom: 0;
+      box-sizing: border-box;
     }
-    .form-right-column {
+    .form-page-top-left {
+      flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 2px;
+    }
+    .form-page-top-right {
       width: 188px;
       flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .form-page-top-left .app-title-box {
+      align-self: center;
+      margin-left: calc((188px + 14px) / 2);
+      padding: 3px 12px;
     }
     .student-form-left {
       min-width: 0;
@@ -644,7 +853,7 @@ function getPrintApplicationHtml(props: {
       white-space: nowrap;
     }
     .header-college-address {
-      margin: 5px 0 0;
+      margin: 4px 0 0;
       font-size: 11px;
       font-weight: 600;
       color: #334155;
@@ -786,13 +995,21 @@ function getPrintApplicationHtml(props: {
     .form-section .form-row-lined {
       width: 100%;
     }
-    .ssc-inline-hint {
+    .student-form-left .form-row-student-name {
+      align-items: start;
+    }
+    .student-form-left .form-label-with-ssc-hint {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+      line-height: 1.2;
+    }
+    .ssc-label-hint {
       font-size: 11px;
       font-weight: 600;
       color: #555;
-      margin-left: 6px;
       white-space: nowrap;
-      flex-shrink: 0;
       font-style: italic;
     }
     .inline-val { border-bottom: 1px dotted #333; padding: 0 5px; min-width: 50px; flex: 1; font-size: 13px; }
@@ -841,52 +1058,53 @@ function getPrintApplicationHtml(props: {
     .portrait-img { max-width: 100%; max-height: 100%; object-fit: cover; }
     .portrait-empty { font-size: 11px; color: #999; }
 
-    /* Match form-body-layout width so address dots end at photo-column right edge */
+    /* Match form-page-top width so address dots end at photo-column right edge */
     .address-section-layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 188px;
       column-gap: 14px;
     }
+    /* 4-column rows: label | dots | label | dots — dots fill each half with no wide gap */
     .address-fields-grid {
       grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      column-gap: 14px;
+      grid-template-columns: minmax(118px, max-content) minmax(0, 1fr) minmax(118px, max-content) minmax(0, 1fr);
+      column-gap: 8px;
       row-gap: 8px;
       margin-left: 25px;
       margin-right: 0;
       margin-bottom: 4px;
       box-sizing: border-box;
+      align-items: center;
     }
-    .address-fields-grid .form-row-sub {
-      padding-left: 0;
-      margin-bottom: 0;
+    .address-door-row {
+      grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: 142px minmax(0, 1fr);
+      grid-template-columns: minmax(142px, max-content) minmax(0, 1fr);
       column-gap: 4px;
       align-items: center;
+      min-height: 18px;
     }
     .address-fields-grid .form-label {
       min-width: 0;
       max-width: none;
       font-size: 12px;
-      grid-column: 1;
+      white-space: nowrap;
+      font-weight: 600;
     }
     .address-fields-grid .form-field-line {
-      grid-column: 2;
       min-width: 0;
       width: 100%;
-    }
-    .address-field-full {
-      grid-column: 1 / -1;
-      grid-template-columns: 142px minmax(0, 1fr);
-    }
-    .address-field-full .form-label {
-      grid-column: 1;
-      white-space: nowrap;
-    }
-    .address-field-full .form-field-line {
-      grid-column: 2;
+      flex: none;
+      display: block;
+      line-height: 1.35;
+      color: #111;
+      border-bottom: 1px dotted #333;
+      min-height: 16px;
+      padding-left: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      box-sizing: border-box;
     }
     .relative-address-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px; }
     .relative-box { border: 1px solid #777; padding: 5px; height: 60px; }
@@ -984,7 +1202,35 @@ function getPrintApplicationHtml(props: {
     .declaration-list li {
       margin-bottom: 9px;
     }
-    /* Page 3: fee section breathing room */
+    /* Page 3: fee structure + office-use section */
+    .print-fee-structure-block {
+      margin-top: 8px;
+      margin-bottom: 16px;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .print-fee-structure-title {
+      text-align: center;
+      font-weight: bold;
+      font-size: 14px;
+      color: #8B2323;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .print-fee-structure-table {
+      width: 100%;
+      margin-bottom: 4px;
+    }
+    .print-fee-structure-table th,
+    .print-fee-structure-table td {
+      text-align: center;
+    }
+    .print-fee-structure-table th:first-child,
+    .print-fee-structure-table td:first-child {
+      text-align: left;
+      width: 72px;
+    }
     .fee-print-page .office-label-tag {
       margin-top: 6px;
       margin-bottom: 14px;
@@ -1090,6 +1336,18 @@ function getPrintApplicationHtml(props: {
       .header-brand-stack {
         align-items: center;
         justify-content: center;
+        min-height: 90px;
+        margin-top: -4px;
+      }
+      .form-page-top {
+        display: flex;
+        column-gap: 14px;
+        align-items: flex-start;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .form-page-top-left .app-title-box {
+        margin-left: calc((188px + 14px) / 2);
       }
       .header-main h1,
       .app-title-box h2,
@@ -1098,19 +1356,6 @@ function getPrintApplicationHtml(props: {
       }
       .form-section {
         margin-top: 0;
-      }
-      .form-body-layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 188px;
-        column-gap: 14px;
-        align-items: start;
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-      .form-left-column {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
       }
       .form-row {
         margin-bottom: 12px;
@@ -1130,8 +1375,8 @@ function getPrintApplicationHtml(props: {
       }
       .address-fields-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        column-gap: 14px;
+        grid-template-columns: minmax(118px, max-content) minmax(0, 1fr) minmax(118px, max-content) minmax(0, 1fr);
+        column-gap: 8px;
         row-gap: 8px;
         break-inside: avoid;
         page-break-inside: avoid;
@@ -1205,17 +1450,20 @@ function getPrintApplicationHtml(props: {
     </div>
 
     <div class="form-section">
-      <div class="form-body-layout">
-        <div class="form-left-column">
+      <div class="form-page-top">
+        <div class="form-page-top-left">
           <div class="app-title-box">
             <h2>APPLICATION FOR ADMISSION</h2>
             <p>(PLEASE FILL THE FORM IN CAPITAL LETTERS)</p>
           </div>
           <div class="student-form-left">
-          <div class="form-row">
+          <div class="form-row form-row-student-name">
             <span class="section-num">1.</span>
-            <span class="form-label">Name of the Student :</span>
-            <span class="form-value bold">${escapeHtml(student?.name?.toUpperCase())}<span class="ssc-inline-hint"> (As per S.S.C)</span></span>
+            <span class="form-label form-label-with-ssc-hint">
+              <span>Name of the Student :</span>
+              <span class="ssc-label-hint">(As per S.S.C)</span>
+            </span>
+            <span class="form-value bold">${escapeHtml(student?.name?.toUpperCase())}</span>
           </div>
           <div class="form-row form-row-sub">
             <span class="form-label">Aadhar No :</span>
@@ -1273,10 +1521,9 @@ function getPrintApplicationHtml(props: {
             <span class="form-label">Mobile :</span>
             <span class="form-field-line">${escapeHtml(parents?.mother?.phone)}</span>
           </div>
+          </div>
         </div>
-        </div>
-
-        <div class="form-right-column">
+        <div class="form-page-top-right">
           <div class="office-use-top">
             <div class="title">For Office Use</div>
             <div><span>Course :</span> <span>${escapeHtml(courseName || course?.course)}</span></div>
@@ -1308,34 +1555,22 @@ function getPrintApplicationHtml(props: {
       </div>
       <div class="address-section-layout">
       <div class="address-fields-grid">
-        <div class="form-row form-row-sub form-row-lined address-field-full">
+        <div class="address-door-row">
           <span class="form-label">Door No/ Street Name :</span>
-          <span class="form-field-line">${escapeHtml(address?.communication?.doorOrStreet?.toUpperCase())}</span>
+          <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.doorOrStreet, true))}</span>
         </div>
-        <div class="form-row form-row-sub form-row-lined">
-          <span class="form-label">Land Mark :</span>
-          <span class="form-field-line">${escapeHtml(address?.communication?.landmark?.toUpperCase())}</span>
-        </div>
-        <div class="form-row form-row-sub form-row-lined">
-          <span class="form-label">Village/City/Town :</span>
-          <span class="form-field-line">${escapeHtml(address?.communication?.villageOrCity?.toUpperCase())}</span>
-        </div>
-        <div class="form-row form-row-sub form-row-lined">
-          <span class="form-label">Mandal :</span>
-          <span class="form-field-line">${escapeHtml(address?.communication?.mandal?.toUpperCase())}</span>
-        </div>
-        <div class="form-row form-row-sub form-row-lined">
-          <span class="form-label">District :</span>
-          <span class="form-field-line">${escapeHtml(address?.communication?.district?.toUpperCase())}</span>
-        </div>
-        <div class="form-row form-row-sub form-row-lined">
-          <span class="form-label">State :</span>
-          <span class="form-field-line">${escapeHtml(address?.communication?.state?.toUpperCase())}</span>
-        </div>
-        <div class="form-row form-row-sub form-row-lined">
-          <span class="form-label">Pin Code :</span>
-          <span class="form-field-line">${escapeHtml(address?.communication?.pinCode)}</span>
-        </div>
+        <span class="form-label">Land Mark :</span>
+        <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.landmark, true))}</span>
+        <span class="form-label">Village/City/Town :</span>
+        <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.villageOrCity, true))}</span>
+        <span class="form-label">Mandal :</span>
+        <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.mandal, true))}</span>
+        <span class="form-label">District :</span>
+        <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.district, true))}</span>
+        <span class="form-label">State :</span>
+        <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.state, true))}</span>
+        <span class="form-label">Pin Code :</span>
+        <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.pinCode))}</span>
       </div>
       </div>
 
@@ -1367,7 +1602,8 @@ function getPrintApplicationHtml(props: {
               rel.state,
               rel.pinCode,
             ]
-              .filter((part) => part && String(part).trim() !== '')
+              .map((part) => formatPrintAddressValue(part))
+              .filter(Boolean)
               .join(', ');
             const mobile = (rel as { phone?: string; mobile?: string }).phone
               || (rel as { phone?: string; mobile?: string }).mobile
@@ -1542,6 +1778,8 @@ function getPrintApplicationHtml(props: {
     <div class="print-page fee-print-page">
     ${renderContinuationTopMeta()}
 
+    ${feeStructureTableHtml}
+
     <div class="office-label-tag">FOR OFFICE USE</div>
     <div class="office-use-bottom">
       <div class="office-use-bottom-left">
@@ -1648,6 +1886,11 @@ export function PrintableStudentApplication({
         // Print without college address when assets cannot be loaded.
       }
     }
+    const feeStructureTableHtml = await resolvePrintFeeStructureTableHtml(
+      application,
+      courseName,
+      branchName
+    );
     const html = getPrintApplicationHtml({
       application,
       title,
@@ -1660,6 +1903,7 @@ export function PrintableStudentApplication({
       printedDate: formatPrintDate(),
       collegeName,
       collegeAddress: collegeAddress || undefined,
+      feeStructureTableHtml,
     });
     const iframe = document.createElement('iframe');
     iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;overflow:hidden;');

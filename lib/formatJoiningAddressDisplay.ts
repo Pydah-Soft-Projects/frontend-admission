@@ -1,17 +1,61 @@
 import type { JoiningCommunicationAddress, JoiningRelativeAddress } from '@/types';
 
+const PLACEHOLDER_ADDRESS_VALUES = new Set([
+  'not provided',
+  'not specified',
+  'n/a',
+  'na',
+  'nil',
+  'none',
+  '-',
+  '—',
+]);
+
+export function isPlaceholderAddressValue(value?: string | null): boolean {
+  const s = String(value ?? '').trim();
+  if (!s) return true;
+  return PLACEHOLDER_ADDRESS_VALUES.has(s.toLowerCase());
+}
+
+export function normalizeAddressFieldForDisplay(value?: unknown): string {
+  const s = String(value ?? '').trim();
+  if (!s || isPlaceholderAddressValue(s)) return '';
+  return s;
+}
+
+export function communicationAddressHasDisplayValues(
+  comm?: JoiningCommunicationAddress | null
+): boolean {
+  const c = comm || {};
+  return [
+    c.doorOrStreet,
+    c.landmark,
+    c.villageOrCity,
+    c.mandal,
+    c.district,
+    c.state,
+    c.pinCode,
+  ].some((part) => !isPlaceholderAddressValue(part == null ? '' : String(part)));
+}
+
 export function formatCommunicationAddressLines(comm?: JoiningCommunicationAddress | null) {
   const c = comm || {};
   const locality = [c.villageOrCity, c.mandal, c.district, c.state]
-    .map((part) => (part == null ? '' : String(part).trim()))
+    .map((part) => normalizeAddressFieldForDisplay(part))
     .filter(Boolean)
     .join(', ');
 
+  const doorOrStreet = normalizeAddressFieldForDisplay(c.doorOrStreet);
+
   return {
-    doorOrStreet: String(c.doorOrStreet || '').trim() || '—',
-    landmark: String(c.landmark || '').trim() ? `Near: ${String(c.landmark).trim()}` : null,
+    doorOrStreet: doorOrStreet || '—',
+    landmark: normalizeAddressFieldForDisplay(c.landmark)
+      ? `Near: ${normalizeAddressFieldForDisplay(c.landmark)}`
+      : null,
     locality: locality || '—',
-    pin: String(c.pinCode || '').trim() ? `PIN: ${String(c.pinCode).trim()}` : null,
+    pin: normalizeAddressFieldForDisplay(c.pinCode)
+      ? `PIN: ${normalizeAddressFieldForDisplay(c.pinCode)}`
+      : null,
   };
 }
 
@@ -30,7 +74,7 @@ export function formatRelativeAddressBlock(rel: JoiningRelativeAddress) {
     rel.state,
     rel.pinCode ? `PIN ${rel.pinCode}` : '',
   ]
-    .map((part) => (part == null ? '' : String(part).trim()))
+    .map((part) => normalizeAddressFieldForDisplay(part))
     .filter(Boolean)
     .join(', ');
 

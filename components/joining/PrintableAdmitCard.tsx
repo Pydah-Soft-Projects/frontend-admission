@@ -41,6 +41,10 @@ export type AdmitCardPrintStudent = {
   fatherPhone: string;
   studentPhotoSrc?: string | null;
   collegeName?: string;
+  /** Program level for Step 2 certificate rules (resolved at print if omitted). */
+  programLevel?: string;
+  /** Saved registration extras — includes `certificate_checklist` for Step 2 print. */
+  registrationFormData?: Record<string, unknown>;
   /** Step 2 certificate items — merged into the documents checklist on print only. */
   certificateChecklist?: AdmitCardCertificateChecklist;
   documentChecklist?: AdmitCardDocumentChecklist;
@@ -131,6 +135,63 @@ export function buildAdmitCardCertificateChecklistFromRegistration(
       ? (raw as Record<string, unknown>)
       : undefined;
   return buildAdmitCardCertificateChecklist(certificateGuidance, parsed);
+}
+
+function parseCertificateGuidanceResponse(response: unknown): CertificateGuidance | null {
+  const envelope = (response as { data?: unknown })?.data ?? response;
+  const inner =
+    envelope && typeof envelope === 'object' && 'data' in envelope
+      ? (envelope as { data: unknown }).data
+      : envelope;
+  if (!inner || typeof inner !== 'object') return null;
+  return inner as CertificateGuidance;
+}
+
+async function inferProgramLevelFromCourseId(courseId: string): Promise<string> {
+  const cid = String(courseId ?? '').trim();
+  if (!cid) return '';
+  try {
+    const response = await courseAPI.list({ includeBranches: true, showInactive: true });
+    const payload = (response as { data?: unknown })?.data ?? response;
+    const list = Array.isArray(payload)
+      ? payload
+      : Array.isArray((payload as { data?: unknown })?.data)
+        ? ((payload as { data: unknown[] }).data)
+        : [];
+    const match = list.find(
+      (course) => String((course as { _id?: string })._id ?? '').trim() === cid
+    ) as { level?: string } | undefined;
+    return String(match?.level ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Fetch certificate rules at print time when guidance was not ready on first render (e.g. hard reload). */
+async function resolveCertificateChecklistForPrint(
+  student: AdmitCardPrintStudent,
+  courseId: string
+): Promise<AdmitCardCertificateChecklist | undefined> {
+  if (student.certificateChecklist?.rows?.length) {
+    return student.certificateChecklist;
+  }
+
+  let programLevel = String(student.programLevel ?? '').trim();
+  if (!programLevel) {
+    programLevel = await inferProgramLevelFromCourseId(courseId);
+  }
+  if (!programLevel) return undefined;
+
+  try {
+    const response = await courseAPI.getCertificateGuidance(programLevel);
+    const guidance = parseCertificateGuidanceResponse(response);
+    return buildAdmitCardCertificateChecklistFromRegistration(
+      guidance,
+      student.registrationFormData ?? null
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function formatAdmitCardDate(value?: string | null): string {
@@ -787,6 +848,10 @@ export function PrintableAdmitCard({
           // Keep original photo if compression fails.
         }
       }
+      const certificateChecklist = await resolveCertificateChecklistForPrint(studentForPrint, cid);
+      if (certificateChecklist?.rows?.length) {
+        studentForPrint = { ...studentForPrint, certificateChecklist };
+      }
       const html = buildAdmitCardHtml(studentForPrint, { ...assets, feeQrImage }, 'A5');
       printHtmlDocument(html, 'Acknowledgement card — A5');
       if (!feeQrImage) {
@@ -830,7 +895,13 @@ export function buildAdmitCardStudentFromForm(input: {
   formState: {
     studentInfo: { name?: string; phone?: string };
     parents: { father: { phone?: string } };
-    courseInfo: { course?: string; branch?: string; courseId?: string; quota?: string };
+    courseInfo: {
+      course?: string;
+      branch?: string;
+      courseId?: string;
+      quota?: string;
+      programLevel?: string;
+    };
     documents?: JoiningDocuments;
   };
   lead?: { name?: string; phone?: string; fatherPhone?: string } | null;
@@ -851,6 +922,10 @@ export function buildAdmitCardStudentFromForm(input: {
     (input.formState.documents
       ? buildAdmitCardDocumentChecklist(input.formState.documents, quota)
       : undefined);
+  const registrationFormData =
+    input.registrationFormData ??
+    (input.application?.registrationFormData as Record<string, unknown> | undefined);
+  const programLevel = String(input.formState.courseInfo.programLevel ?? '').trim();
   const certificateChecklist =
     buildAdmitCardCertificateChecklist(
       input.certificateGuidance,
@@ -858,7 +933,7 @@ export function buildAdmitCardStudentFromForm(input: {
     ) ??
     buildAdmitCardCertificateChecklistFromRegistration(
       input.certificateGuidance,
-      input.registrationFormData
+      registrationFormData
     );
 
   return {
@@ -873,6 +948,8 @@ export function buildAdmitCardStudentFromForm(input: {
     fatherPhone: input.formState.parents.father.phone || input.lead?.fatherPhone || '—',
     studentPhotoSrc: photoFromApp || photoFromReg,
     collegeName: input.collegeName?.trim() || undefined,
+    programLevel: programLevel || undefined,
+    registrationFormData,
     certificateChecklist,
     documentChecklist,
   };

@@ -32,6 +32,7 @@ import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 import {
+  communicationAddressHasDisplayValues,
   formatCommunicationAddressLines,
   formatRelativeAddressBlock,
 } from '@/lib/formatJoiningAddressDisplay';
@@ -243,8 +244,24 @@ export default function AdmissionDetailPage() {
         (admission?.leadData as Record<string, unknown> | undefined)?.reference1 ?? ''
       ).trim()
   );
+  const hasCertificateChecklistOnAdmission = Boolean(
+    admission?.registrationFormData &&
+      typeof admission.registrationFormData === 'object' &&
+      admission.registrationFormData.certificate_checklist
+  );
+  const hasProgramLevelOnAdmission = Boolean(
+    String(admission?.courseInfo?.programLevel ?? '').trim()
+  );
+  const hasCommunicationAddressOnAdmission = communicationAddressHasDisplayValues(
+    admission?.address?.communication
+  );
   const needsJoiningFallback =
-    !!admission?.joiningId && (!hasRegistrationOnAdmission || !hasReferenceOnAdmission);
+    !!admission?.joiningId &&
+    (!hasRegistrationOnAdmission ||
+      !hasReferenceOnAdmission ||
+      !hasCertificateChecklistOnAdmission ||
+      !hasProgramLevelOnAdmission ||
+      !hasCommunicationAddressOnAdmission);
 
   const { data: transactionsData } = useQuery({
     queryKey: ['transactions', admission?._id],
@@ -292,6 +309,46 @@ export default function AdmissionDetailPage() {
   const leadForReference =
     (joiningForRegistrationData?.data?.lead as AdmissionLeadData | undefined) || lead;
 
+  const printApplication = useMemo(() => {
+    if (!admission) return undefined;
+    if (!joiningForReference) return admission;
+
+    const joiningReg =
+      joiningForReference.registrationFormData &&
+      typeof joiningForReference.registrationFormData === 'object' &&
+      !Array.isArray(joiningForReference.registrationFormData)
+        ? joiningForReference.registrationFormData
+        : {};
+    const admissionReg =
+      admission.registrationFormData &&
+      typeof admission.registrationFormData === 'object' &&
+      !Array.isArray(admission.registrationFormData)
+        ? admission.registrationFormData
+        : {};
+    const mergedRegistration =
+      Object.keys({ ...joiningReg, ...admissionReg }).length > 0
+        ? { ...joiningReg, ...admissionReg }
+        : admission.registrationFormData;
+
+    const mergedCommunication = {
+      ...(joiningForReference.address?.communication || {}),
+      ...(admission.address?.communication || {}),
+    };
+    const mergedRelatives =
+      (admission.address?.relatives?.length ?? 0) > 0
+        ? admission.address!.relatives
+        : joiningForReference.address?.relatives ?? [];
+
+    return {
+      ...admission,
+      registrationFormData: mergedRegistration,
+      address: {
+        communication: mergedCommunication,
+        relatives: mergedRelatives,
+      },
+    };
+  }, [admission, joiningForReference]);
+
   const resolvedReference1 = useMemo(
     () => resolveJoiningReference1(admission, joiningForReference, leadForReference),
     [admission, joiningForReference, leadForReference]
@@ -301,15 +358,22 @@ export default function AdmissionDetailPage() {
     (joiningForRegistrationData?.data?.joining?.status as string | undefined) ?? 'approved';
 
   const registrationSource = useMemo<Record<string, unknown>>(() => {
-    if (admission?.registrationFormData && Object.keys(admission.registrationFormData).length > 0) {
-      return admission.registrationFormData;
+    const fromJoining = joiningForReference?.registrationFormData;
+    const joiningReg =
+      fromJoining && typeof fromJoining === 'object' && !Array.isArray(fromJoining)
+        ? (fromJoining as Record<string, unknown>)
+        : {};
+    const fromAdmission = admission?.registrationFormData;
+    const admissionReg =
+      fromAdmission && typeof fromAdmission === 'object' && Object.keys(fromAdmission).length > 0
+        ? fromAdmission
+        : null;
+    const base = admissionReg ? { ...admissionReg } : { ...joiningReg };
+    if (!base.certificate_checklist && joiningReg.certificate_checklist) {
+      return { ...base, certificate_checklist: joiningReg.certificate_checklist };
     }
-    return (
-      (joiningForRegistrationData?.data?.joining?.registrationFormData as
-        | Record<string, unknown>
-        | undefined) || {}
-    );
-  }, [admission?.registrationFormData, joiningForRegistrationData]);
+    return base;
+  }, [admission?.registrationFormData, joiningForReference?.registrationFormData]);
 
   const courseQuotaRegistrationEntries = useMemo(
     () => pickJoiningCourseQuotaRegistrationEntries(registrationSource),
@@ -394,6 +458,8 @@ export default function AdmissionDetailPage() {
       documentChecklist: admission.documents
         ? buildAdmitCardDocumentChecklist(admission.documents, admission.courseInfo?.quota)
         : undefined,
+      programLevel: programLevelTrimmed || undefined,
+      registrationFormData: registrationSource,
       certificateChecklist: buildAdmitCardCertificateChecklistFromRegistration(
         certificateGuidanceForPrint,
         registrationSource
@@ -407,6 +473,7 @@ export default function AdmissionDetailPage() {
     getCollegeNameForCourse,
     certificateGuidanceForPrint,
     registrationSource,
+    programLevelTrimmed,
   ]);
 
   useEffect(() => {
@@ -433,9 +500,9 @@ export default function AdmissionDetailPage() {
               isAdmissionCancelled={isAdmissionCancelled}
             />
           ) : null}
-          {admission && (
+          {admission && printApplication && (
             <PrintableStudentApplication
-              application={admission}
+              application={printApplication}
               enquiryNumber={lead?.enquiryNumber ?? admission?.enquiryNumber}
               admissionNumber={admission.admissionNumber}
               courseName={resolveJoiningOrAdmissionCourseLabel(admission, getCourseName) || undefined}
