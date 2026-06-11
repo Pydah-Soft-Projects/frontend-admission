@@ -28,6 +28,7 @@ import {
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { normalizeJoiningDateOfBirthInput } from '@/lib/joiningRegistrationFieldMap';
 import { normalizeAddressFieldForDisplay } from '@/lib/formatJoiningAddressDisplay';
+import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 
 type ApplicationData = Joining | Admission;
 
@@ -195,8 +196,8 @@ function renderPrintFeeStructureTableHtml(rows: PrintFeeStructureYearRow[]): str
           <tr>
             <th>Year</th>
             <th>Tuition Fee</th>
-            <th>Transport Fee</th>
             <th>Other Fee</th>
+            <th>Transport Fee</th>
           </tr>
         </thead>
         <tbody>
@@ -206,8 +207,8 @@ function renderPrintFeeStructureTableHtml(rows: PrintFeeStructureYearRow[]): str
             <tr>
               <td>Year ${row.year}</td>
               <td>${escapeHtml(formatPrintFeeAmount(row.tuition))}</td>
-              <td>${escapeHtml(formatPrintFeeAmount(row.transport))}</td>
               <td>${escapeHtml(formatPrintFeeAmount(row.other))}</td>
+              <td>${escapeHtml(formatPrintFeeAmount(row.transport))}</td>
             </tr>
           `
             )
@@ -490,13 +491,18 @@ function getPrintApplicationHtml(props: {
   const headerCollegeAddress = formatCollegeAddressForPrint(collegeAddress);
 
   const applicationNumberDisplay = resolveApplicationNumberForPrint(application, enquiryNumber);
+  const referenceNameDisplay = resolveJoiningReference1(
+    application as Admission,
+    application as Joining,
+    ((application as Joining).lead ?? application.leadData) as Record<string, unknown> | undefined
+  );
   const fatherPhotoSrc = safeImageSrcForPrint(parents?.father?.photo);
   const motherPhotoSrc = safeImageSrcForPrint(parents?.mother?.photo);
   const studentPhotoSrc = pickStudentPortraitForPrint(application);
-  const portraitPhotoCell = (src: string | null) =>
+  const portraitPhotoCell = (src: string | null, emptyLabel: string) =>
     src
       ? `<img src="${escapeHtmlAttribute(src)}" alt="" class="portrait-img" />`
-      : `<span class="portrait-empty">—</span>`;
+      : `<span class="portrait-placeholder-label">${escapeHtml(emptyLabel)}</span>`;
 
   // Normalize education level value so we can match data regardless of case
   // or separator differences (e.g. "ssc", "SSC", "inter_diploma",
@@ -681,6 +687,9 @@ function getPrintApplicationHtml(props: {
     return parts.length ? parts.join(', ') : '';
   })();
 
+  const renderPrintPageNumber = (page: number, total = 3) =>
+    `<div class="print-page-number" aria-hidden="true">Page ${page} of ${total}</div>`;
+
   const renderPrintSignatureRow = (extraClass = '') => `
     <div class="print-signature-footer print-page-signatures ${extraClass}" aria-label="Student and parent signatures">
       <div class="signature-divider" aria-hidden="true"></div>
@@ -704,19 +713,27 @@ function getPrintApplicationHtml(props: {
       </div>
     </div>`;
 
-  const renderContinuationTopMeta = () => `
-    <div class="top-meta print-continuation-meta">
-      <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
-      <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
-      <div>PIN No: <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;"></span></div>
-      <div>STUDENT NAME : <span class="bold" style="border-bottom: 1px dotted #333; min-width: 150px; display: inline-block;">${escapeHtml(student?.name?.toUpperCase())}</span></div>
-      <div>College: <span style="border-bottom: 1px dotted #333; min-width: 120px; display: inline-block;">${escapeHtml((collegeName || '').trim() || '—')}</span></div>
-      <div>Course: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(courseName || course?.course)}</span></div>
-      <div>
-        Branch: <span style="border-bottom: 1px dotted #333; min-width: 100px; display: inline-block;">${escapeHtml(branchName || course?.branch)}</span>
-        <span style="margin-left: 14px;">Quota:</span>
-        <span style="border-bottom: 1px dotted #333; min-width: 80px; display: inline-block;">${escapeHtml(course?.quota)}</span>
+  const renderPrintPageHeader = () => `
+    <div class="header-container">
+      <div class="header-top-row">
+        <div class="header-logo">
+          <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Pydah Logo" />
+        </div>
+        <div class="header-brand-stack">
+          <div class="header-main">
+            <h1>${escapeHtml(headerCollegeTitle)}</h1>
+            <p class="header-college-address">${escapeHtml(headerCollegeAddress)}</p>
+          </div>
+        </div>
       </div>
+    </div>`;
+
+  const renderPrintStudentMetaInline = () => `
+    <div class="print-student-meta-inline" aria-label="Student and course details">
+      <span class="meta-item">STUDENT NAME : <span class="meta-value meta-value-name">${escapeHtml(student?.name?.toUpperCase() || '—')}</span></span>
+      <span class="meta-item">Course: <span class="meta-value">${escapeHtml(courseName || course?.course || '—')}</span></span>
+      <span class="meta-item">Branch: <span class="meta-value">${escapeHtml(branchName || course?.branch || '—')}</span></span>
+      <span class="meta-item">Quota: <span class="meta-value">${escapeHtml(course?.quota || '—')}</span></span>
     </div>`;
 
   return `<!DOCTYPE html>
@@ -725,6 +742,9 @@ function getPrintApplicationHtml(props: {
   <meta charset="utf-8" />
   <title>${escapeHtml(title)}</title>
   <style>
+    :root {
+      --print-sidebar-width: 192px;
+    }
     @page { margin: 0; size: A4; }
     body { 
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -770,11 +790,11 @@ function getPrintApplicationHtml(props: {
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 12px;
+      gap: 14px;
     }
     .header-logo {
-      width: 140px;
-      height: 90px;
+      width: 118px;
+      height: 72px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -784,13 +804,11 @@ function getPrintApplicationHtml(props: {
     .header-brand-stack {
       flex: 1;
       min-width: 0;
-      min-height: 90px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
-      margin-top: -4px;
     }
     .header-main {
       display: flex;
@@ -802,34 +820,37 @@ function getPrintApplicationHtml(props: {
     .form-section {
       margin-top: 0;
     }
-    /* Independent left/right stacks so sections 1–3 sit directly under the title */
-    .form-page-top {
+    .app-title-row {
       display: flex;
-      align-items: flex-start;
-      column-gap: 14px;
+      justify-content: center;
       width: 100%;
-      margin-top: -6px;
+      margin: 6px 0 14px;
+    }
+    /* Sidebar height = sections 1–3 + section 4 title + door row (mother photo aligns to door line) */
+    .form-sidebar-row {
+      position: relative;
+      width: 100%;
+      margin-top: 0;
       margin-bottom: 0;
       box-sizing: border-box;
     }
-    .form-page-top-left {
-      flex: 1;
+    .form-sidebar-main {
       min-width: 0;
+      margin-right: calc(var(--print-sidebar-width) + 12px);
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 0;
     }
-    .form-page-top-right {
-      width: 188px;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .form-page-top-left .app-title-box {
-      align-self: center;
-      margin-left: calc((188px + 14px) / 2);
-      padding: 3px 12px;
+    .form-sidebar-aside {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: var(--print-sidebar-width);
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr 1fr 1fr;
+      gap: 7px;
+      min-height: 0;
     }
     .student-form-left {
       min-width: 0;
@@ -840,26 +861,37 @@ function getPrintApplicationHtml(props: {
       margin-top: 0;
     }
     .student-form-left > .form-row:last-child {
+      margin-bottom: 0;
+    }
+    .print-address-block {
+      margin-top: 0;
+    }
+    .print-page-one .section-4-title {
+      margin-top: 0;
+      margin-bottom: 4px;
+    }
+    .form-sidebar-main .section-4-title {
       margin-bottom: 4px;
     }
     .header-main h1 {
       margin: 0;
-      font-size: 26px;
+      font-size: 29px;
+      font-weight: 800;
       color: #8B2323;
       text-transform: uppercase;
-      letter-spacing: 0.6px;
-      line-height: 1.15;
+      letter-spacing: 0.8px;
+      line-height: 1.12;
       text-align: center;
       white-space: nowrap;
     }
     .header-college-address {
-      margin: 4px 0 0;
-      font-size: 11px;
+      margin: 5px 0 0;
+      font-size: 12px;
       font-weight: 600;
       color: #334155;
       line-height: 1.35;
       text-align: center;
-      max-width: 520px;
+      max-width: 540px;
     }
     .header-main p { margin: 2px 0; font-weight: bold; font-size: 14px; }
     .app-title-box {
@@ -887,16 +919,37 @@ function getPrintApplicationHtml(props: {
     .office-use-top {
       border: 1px solid #777;
       width: 100%;
-      padding: 5px;
-      font-size: 12px;
+      padding: 4px 5px;
+      font-size: 10.5px;
+      line-height: 1.2;
       background: #fff;
       flex-shrink: 0;
       box-sizing: border-box;
     }
-    .office-use-top .title { text-align: center; font-weight: bold; border-bottom: 1px solid #777; margin-bottom: 5px; padding-bottom: 2px; }
-    .office-use-top div { margin-bottom: 4px; display: flex; }
-    .office-use-top div span:first-child { width: 50px; font-weight: 600; }
-    .office-use-top div span:last-child { border-bottom: 1px dotted #333; flex: 1; min-height: 12px; }
+    .office-use-top .title {
+      text-align: center;
+      font-weight: bold;
+      font-size: 11px;
+      border-bottom: 1px solid #777;
+      margin-bottom: 4px;
+      padding-bottom: 2px;
+    }
+    .office-use-top .office-use-row {
+      margin-bottom: 3px;
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      column-gap: 4px;
+      align-items: baseline;
+      white-space: nowrap;
+    }
+    .office-use-top .office-use-row span:first-child { font-weight: 600; }
+    .office-use-top .office-use-row span:last-child {
+      border-bottom: 1px dotted #333;
+      min-height: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .section-num { font-weight: bold; margin-right: 5px; font-size: 13px; width: 20px; flex-shrink: 0; }
     .form-row { display: flex; margin-bottom: 12px; align-items: center; min-height: 18px; }
@@ -916,25 +969,54 @@ function getPrintApplicationHtml(props: {
       white-space: nowrap;
       flex: 0 1 auto;
     }
-    .qualified-exam-row {
-      flex-wrap: wrap;
-      gap: 4px 10px;
-      align-items: center;
+    .qualified-exam-section {
+      margin-top: 10px;
     }
-    .qualified-exam-row .form-label-wide {
-      min-width: 180px;
-      max-width: 180px;
+    .qualified-exam-row-main {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .qualified-exam-row-main .form-label-wide {
+      min-width: 220px;
+      max-width: none;
       font-weight: 600;
       font-size: 13px;
       flex-shrink: 0;
+      white-space: nowrap;
     }
-    .qualified-exam-row .form-label-compact {
+    .qualified-exam-row-sub {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-left: 25px;
+    }
+    .qualified-exam-two-col {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      column-gap: 20px;
+      align-items: center;
+    }
+    .qualified-exam-col {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+    .qualified-exam-col .form-label-compact {
       min-width: auto;
       max-width: none;
       font-weight: 600;
       font-size: 12px;
       flex-shrink: 0;
-      margin-left: 4px;
+      white-space: nowrap;
+    }
+    .qualified-exam-col .form-field-inline {
+      flex: 1;
+      min-width: 0;
     }
     .form-field-inline {
       border-bottom: 1px dotted #333;
@@ -945,7 +1027,7 @@ function getPrintApplicationHtml(props: {
       flex: 0 1 auto;
       min-width: 48px;
     }
-    .qualified-exam-row .form-field-inline-wide {
+    .qualified-exam-row-main .form-field-inline-wide {
       flex: 1;
       min-width: 80px;
     }
@@ -1017,37 +1099,18 @@ function getPrintApplicationHtml(props: {
     .dob-grid { display: flex; gap: 2px; flex-shrink: 0; }
     .dob-grid span { border: 1px solid #333; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
 
-    .student-photos-column {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      align-items: center;
-      flex-shrink: 0;
-      width: 100%;
-    }
-    .parent-photos-stack {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      width: 100%;
-    }
     .photos-stack-item {
+      min-height: 0;
+      overflow: hidden;
+      width: 100%;
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      width: 100%;
     }
-    .parent-photos-stack .photos-stack-item {
-      width: 100%;
-    }
-    .photos-stack-label { font-size: 11px; font-weight: 600; color: #333; text-align: center; line-height: 1.15; }
     .portrait-thumb {
       border: 1px solid #777;
       width: 100%;
-      height: 104px;
-      flex-shrink: 0;
+      height: 100%;
+      min-height: 0;
+      flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1055,14 +1118,22 @@ function getPrintApplicationHtml(props: {
       background: #fafafa;
       box-sizing: border-box;
     }
-    .portrait-img { max-width: 100%; max-height: 100%; object-fit: cover; }
-    .portrait-empty { font-size: 11px; color: #999; }
+    .portrait-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .portrait-placeholder-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #555;
+      text-align: center;
+      padding: 6px 4px;
+      line-height: 1.2;
+    }
 
-    /* Match form-page-top width so address dots end at photo-column right edge */
     .address-section-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 188px;
-      column-gap: 14px;
+      display: block;
+    }
+    .form-sidebar-main .address-door-row {
+      margin-left: 25px;
+      margin-bottom: 0;
     }
     /* 4-column rows: label | dots | label | dots — dots fill each half with no wide gap */
     .address-fields-grid {
@@ -1084,6 +1155,11 @@ function getPrintApplicationHtml(props: {
       column-gap: 4px;
       align-items: center;
       min-height: 18px;
+    }
+    .address-door-row .form-field-line {
+      text-align: center;
+      padding-left: 0;
+      padding-right: 5px;
     }
     .address-fields-grid .form-label {
       min-width: 0;
@@ -1117,6 +1193,19 @@ function getPrintApplicationHtml(props: {
     /* Three sheets: (1) sections 1–7 + signatures, (2) 8–10 + declaration + signatures, (3) fee + signatures. */
     .print-page {
       display: block;
+      position: relative;
+      padding-bottom: 14px;
+      box-sizing: border-box;
+    }
+    .print-page-number {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      font-weight: 600;
+      color: #475569;
+      line-height: 1;
     }
     .print-page-two-content {
       display: block;
@@ -1127,6 +1216,49 @@ function getPrintApplicationHtml(props: {
       margin-top: 18px;
       padding: 0 16px;
       box-sizing: border-box;
+    }
+    .print-page-one .form-row {
+      margin-bottom: 10px;
+    }
+    .print-page-one .student-form-left .form-row {
+      margin-bottom: 10px;
+    }
+    .print-page-one .m-t-10 {
+      margin-top: 8px !important;
+    }
+    .print-page-one {
+      min-height: 277mm;
+      display: flex;
+      flex-direction: column;
+    }
+    .print-page-one .print-page-one-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 0;
+    }
+    .print-page-one .relative-address-grid {
+      flex: 1;
+      align-items: stretch;
+      min-height: 58px;
+    }
+    .print-page-one .relative-box {
+      min-height: 58px;
+      height: 100%;
+      padding: 5px;
+      box-sizing: border-box;
+    }
+    .print-page-one .address-fields-grid {
+      row-gap: 8px;
+      margin-bottom: 2px;
+    }
+    .print-page-one .print-signature-footer.page-one-signatures {
+      margin-top: 10px;
+      flex-shrink: 0;
+    }
+    .print-page-one .sig-box {
+      height: 52px;
     }
     .print-page-signatures {
       margin-top: 0;
@@ -1141,20 +1273,40 @@ function getPrintApplicationHtml(props: {
     }
     .print-page-two,
     .fee-print-page {
-      padding-top: 14mm;
+      padding-top: 12mm;
       line-height: 1.45;
       font-size: 13px;
+      box-sizing: border-box;
     }
-    .print-continuation-meta {
-      margin-bottom: 18px;
-      row-gap: 10px;
+    .print-page-two .header-container,
+    .fee-print-page .header-container {
+      margin-bottom: 6px;
+    }
+    .print-student-meta-inline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 20px;
+      margin-bottom: 12px;
+      font-weight: 600;
       font-size: 11px;
+      line-height: 1.4;
     }
-    .print-continuation-meta div {
-      margin-bottom: 2px;
+    .print-student-meta-inline .meta-item {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
     }
-    .fee-print-page .print-continuation-meta {
-      margin-bottom: 16px;
+    .print-student-meta-inline .meta-value {
+      border-bottom: 1px dotted #333;
+      min-height: 14px;
+      padding: 0 4px;
+      font-weight: 700;
+      color: #111;
+    }
+    .print-student-meta-inline .meta-value-name {
+      min-width: 140px;
     }
     /* Page 2: relaxed vertical rhythm */
     .print-page-two-content .form-row {
@@ -1308,7 +1460,45 @@ function getPrintApplicationHtml(props: {
 
     .office-use-bottom { border: 1px solid #777; margin-top: 15px; display: flex; }
     .office-use-bottom-left { flex: 1; border-right: 1px solid #777; padding: 5px; display: flex; flex-direction: column; align-items: center; }
-    .office-use-bottom-right { width: 350px; padding: 5px; display: flex; flex-direction: column; align-items: center; }
+    .office-use-bottom-right {
+      width: 350px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      box-sizing: border-box;
+    }
+    .office-reference-name-block {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-height: 100%;
+    }
+    .office-reference-name-title {
+      text-align: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #8B2323;
+      border-bottom: 1px solid #777;
+      width: 100%;
+      padding-bottom: 4px;
+    }
+    .office-reference-name-value {
+      width: 100%;
+      min-height: 120px;
+      flex: 1;
+      border: 1px solid #777;
+      padding: 8px 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      line-height: 1.35;
+      box-sizing: border-box;
+      word-break: break-word;
+    }
     
     .office-label-tag { background: #8B2323; color: white; padding: 4px 20px; border-radius: 10px; font-weight: bold; margin: 10px auto; display: block; width: fit-content; text-align: center; }
 
@@ -1336,18 +1526,25 @@ function getPrintApplicationHtml(props: {
       .header-brand-stack {
         align-items: center;
         justify-content: center;
-        min-height: 90px;
-        margin-top: -4px;
       }
-      .form-page-top {
-        display: flex;
-        column-gap: 14px;
-        align-items: flex-start;
+      .form-sidebar-row {
+        position: relative;
         break-inside: avoid;
         page-break-inside: avoid;
       }
-      .form-page-top-left .app-title-box {
-        margin-left: calc((188px + 14px) / 2);
+      .form-sidebar-main {
+        margin-right: calc(var(--print-sidebar-width) + 12px);
+      }
+      .form-sidebar-aside {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: var(--print-sidebar-width);
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr 1fr 1fr;
+        gap: 7px;
+        min-height: 0;
       }
       .header-main h1,
       .app-title-box h2,
@@ -1360,18 +1557,21 @@ function getPrintApplicationHtml(props: {
       .form-row {
         margin-bottom: 12px;
       }
-      .parent-photos-stack {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-      }
       .address-section-layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 188px;
-        column-gap: 14px;
+        display: block;
         break-inside: avoid;
         page-break-inside: avoid;
+      }
+      .print-page-one {
+        min-height: 277mm;
+        display: flex;
+        flex-direction: column;
+      }
+      .print-page-one .print-page-one-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
       }
       .address-fields-grid {
         display: grid;
@@ -1381,13 +1581,25 @@ function getPrintApplicationHtml(props: {
         break-inside: avoid;
         page-break-inside: avoid;
       }
-      .student-photos-column {
+      .photos-stack-item,
+      .portrait-thumb {
         break-inside: avoid;
         page-break-inside: avoid;
       }
+      .print-page-one .print-signature-footer.page-one-signatures {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-top: 6px;
+      }
       .print-page-two,
       .fee-print-page {
-        padding-top: 14mm;
+        padding-top: 12mm;
+        box-sizing: border-box;
+      }
+      .print-page-two .header-container,
+      .fee-print-page .header-container {
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       .no-print { display: none; }
       .education-table tbody tr { break-inside: auto; page-break-inside: auto; }
@@ -1429,33 +1641,17 @@ function getPrintApplicationHtml(props: {
 <body>
   <div class="page">
     <div class="print-page print-page-one">
-    <div class="top-meta">
-      <div>Application No: <span class="box text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
-      <div>Admission No: <span class="box">${escapeHtml(admissionNumber || '')}</span></div>
-      <div>PIN No: <span class="box"></span></div>
-    </div>
+    ${renderPrintPageHeader()}
 
-    <div class="header-container">
-      <div class="header-top-row">
-        <div class="header-logo">
-          <img src="https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png" alt="Pydah Logo" />
-        </div>
-        <div class="header-brand-stack">
-          <div class="header-main">
-            <h1>${escapeHtml(headerCollegeTitle)}</h1>
-            <p class="header-college-address">${escapeHtml(headerCollegeAddress)}</p>
-          </div>
+    <div class="form-section print-page-one-body">
+      <div class="app-title-row">
+        <div class="app-title-box">
+          <h2>APPLICATION FOR ADMISSION</h2>
+          <p>(PLEASE FILL THE FORM IN CAPITAL LETTERS)</p>
         </div>
       </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-page-top">
-        <div class="form-page-top-left">
-          <div class="app-title-box">
-            <h2>APPLICATION FOR ADMISSION</h2>
-            <p>(PLEASE FILL THE FORM IN CAPITAL LETTERS)</p>
-          </div>
+      <div class="form-sidebar-row">
+        <div class="form-sidebar-main">
           <div class="student-form-left">
           <div class="form-row form-row-student-name">
             <span class="section-num">1.</span>
@@ -1522,43 +1718,40 @@ function getPrintApplicationHtml(props: {
             <span class="form-field-line">${escapeHtml(parents?.mother?.phone)}</span>
           </div>
           </div>
+          <div class="form-row form-row-lined form-row-section-title section-4-title">
+            <span class="section-num">4.</span>
+            <span class="form-label">Address for communication(In Capital Letters) :</span>
+          </div>
+          <div class="address-door-row">
+            <span class="form-label">Door No/ Street Name :</span>
+            <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.doorOrStreet, true))}</span>
+          </div>
         </div>
-        <div class="form-page-top-right">
+        <div class="form-sidebar-aside">
           <div class="office-use-top">
             <div class="title">For Office Use</div>
-            <div><span>Course :</span> <span>${escapeHtml(courseName || course?.course)}</span></div>
-            <div><span>Branch :</span> <span>${escapeHtml(branchName || course?.branch)}</span></div>
-            <div><span>Quota :</span> <span>${escapeHtml(course?.quota)}</span></div>
+            <div class="office-use-row"><span>PIN No :</span><span></span></div>
+            <div class="office-use-row"><span>Admission No :</span><span>${escapeHtml(admissionNumber || '')}</span></div>
+            <div class="office-use-row"><span>Application No :</span><span class="text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
+            <div class="office-use-row"><span>Course :</span><span>${escapeHtml(courseName || course?.course)}</span></div>
+            <div class="office-use-row"><span>Branch :</span><span>${escapeHtml(branchName || course?.branch)}</span></div>
+            <div class="office-use-row"><span>Quota :</span><span>${escapeHtml(course?.quota)}</span></div>
           </div>
-          <div class="student-photos-column" aria-label="Applicant portraits">
-            <div class="photos-stack-item">
-              <div class="portrait-thumb">${portraitPhotoCell(studentPhotoSrc)}</div>
-              <span class="photos-stack-label">Student photo</span>
-            </div>
-            <div class="parent-photos-stack">
-              <div class="photos-stack-item">
-                <div class="portrait-thumb">${portraitPhotoCell(fatherPhotoSrc)}</div>
-                <span class="photos-stack-label">Father photo</span>
-              </div>
-              <div class="photos-stack-item">
-                <div class="portrait-thumb">${portraitPhotoCell(motherPhotoSrc)}</div>
-                <span class="photos-stack-label">Mother photo</span>
-              </div>
-            </div>
+          <div class="photos-stack-item" aria-label="Student photo">
+            <div class="portrait-thumb">${portraitPhotoCell(studentPhotoSrc, 'Student photo')}</div>
+          </div>
+          <div class="photos-stack-item" aria-label="Father photo">
+            <div class="portrait-thumb">${portraitPhotoCell(fatherPhotoSrc, 'Father photo')}</div>
+          </div>
+          <div class="photos-stack-item" aria-label="Mother photo">
+            <div class="portrait-thumb">${portraitPhotoCell(motherPhotoSrc, 'Mother photo')}</div>
           </div>
         </div>
       </div>
 
-      <div class="form-row form-row-lined form-row-section-title" style="margin-top: 4px;">
-        <span class="section-num">4.</span>
-        <span class="form-label">Address for communication(In Capital Letters) :</span>
-      </div>
+      <div class="print-address-block">
       <div class="address-section-layout">
       <div class="address-fields-grid">
-        <div class="address-door-row">
-          <span class="form-label">Door No/ Street Name :</span>
-          <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.doorOrStreet, true))}</span>
-        </div>
         <span class="form-label">Land Mark :</span>
         <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.landmark, true))}</span>
         <span class="form-label">Village/City/Town :</span>
@@ -1571,6 +1764,7 @@ function getPrintApplicationHtml(props: {
         <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.state, true))}</span>
         <span class="form-label">Pin Code :</span>
         <span class="form-field-line">${escapeHtml(formatPrintAddressValue(communicationAddress.pinCode))}</span>
+      </div>
       </div>
       </div>
 
@@ -1623,21 +1817,33 @@ function getPrintApplicationHtml(props: {
         })()}
       </div>
 
-      <div class="form-row qualified-exam-row m-t-10">
-        <span class="section-num">6.</span>
-        <span class="form-label-wide">Details of Qualified Examination :</span>
-        <span class="form-field-inline form-field-inline-wide">${escapeHtml(displayQualifiedExamText || '—')}</span>
-        <span class="form-label-compact">Merit :</span>
-        <span class="form-field-inline">${escapeHtml(displayMeritText || '—')}</span>
-        <span class="form-label-compact">Medium of Qualified Examination :</span>
-        <span class="form-field-inline">${escapeHtml(displayMediumText || '—')}</span>
+      <div class="qualified-exam-section">
+        <div class="form-row qualified-exam-row-main">
+          <span class="section-num">6.</span>
+          <span class="form-label-wide">Details of Qualified Examination :</span>
+          <span class="form-field-inline form-field-inline-wide">${escapeHtml(displayQualifiedExamText || '—')}</span>
+        </div>
+        <div class="form-row qualified-exam-row-sub">
+          <div class="qualified-exam-two-col">
+            <div class="qualified-exam-col">
+              <span class="form-label-compact">Merit :</span>
+              <span class="form-field-inline">${escapeHtml(displayMeritText || '—')}</span>
+            </div>
+            <div class="qualified-exam-col">
+              <span class="form-label-compact">Medium of Qualified Examination :</span>
+              <span class="form-field-inline">${escapeHtml(displayMediumText || '—')}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     ${renderPrintSignatureRow('page-one-signatures')}
+    ${renderPrintPageNumber(1)}
     </div>
 
     <div class="print-page print-page-two">
-    ${renderContinuationTopMeta()}
+    ${renderPrintPageHeader()}
+    ${renderPrintStudentMetaInline()}
     <div class="print-page-two-content">
       <div class="form-row m-t-10 form-row-section-title">
         <span class="section-num">8.</span>
@@ -1773,10 +1979,12 @@ function getPrintApplicationHtml(props: {
     </div>
     </div>
     ${renderPrintSignatureRow('page-two-signatures')}
+    ${renderPrintPageNumber(2)}
     </div>
 
     <div class="print-page fee-print-page">
-    ${renderContinuationTopMeta()}
+    ${renderPrintPageHeader()}
+    ${renderPrintStudentMetaInline()}
 
     ${feeStructureTableHtml}
 
@@ -1826,11 +2034,15 @@ function getPrintApplicationHtml(props: {
         </table>
       </div>
       <div class="office-use-bottom-right">
-        <!-- Empty for office notes -->
+        <div class="office-reference-name-block">
+          <div class="office-reference-name-title">Reference Name</div>
+          <div class="office-reference-name-value">${escapeHtml(referenceNameDisplay || '')}</div>
+        </div>
       </div>
     </div>
 
     ${renderPrintSignatureRow('page-three-signatures')}
+    ${renderPrintPageNumber(3)}
     </div>
 
   </div>
