@@ -12,6 +12,13 @@ export interface ModulePermission {
   editAdmission?: boolean;
   /** Joining desk: approve or reject fee requests on the Fee Requests page. */
   approveFeeRequest?: boolean;
+  /** Admissions page (`/joining/completed`) tab access (requires joining module access). */
+  admissionTabAbstract?: boolean;
+  admissionTabDetailed?: boolean;
+  admissionTabStudentInfo?: boolean;
+  admissionTabReference?: boolean;
+  admissionTabSource?: boolean;
+  admissionTabDateWise?: boolean;
 }
 
 export interface User {

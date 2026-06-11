@@ -19,10 +19,13 @@ import { auth } from '@/lib/auth';
 import type { ModulePermission } from '@/types';
 import {
   JOINING_PERMISSION_KEY,
+  allowedAdmissionTabs,
+  resolveAdmissionTabAccess,
   resolveJoiningEditAdmission,
   resolveJoiningEditReference,
   resolveSubmitFeeRequest,
   resolveApproveFeeRequest,
+  type AdmissionTabKey,
 } from '@/lib/joiningPermissions';
 import { NotificationBell } from '../NotificationBell';
 import { MobileBottomNav, flattenNavItemsForMobile } from './MobileBottomNav';
@@ -149,6 +152,8 @@ type PermissionContextValue = {
   canJoiningEditAdmission: () => boolean;
   canSubmitFeeRequest: () => boolean;
   canApproveFeeRequest: () => boolean;
+  canAccessAdmissionTab: (tab: AdmissionTabKey) => boolean;
+  getAllowedAdmissionTabs: () => AdmissionTabKey[];
 };
 
 const PermissionContext = createContext<PermissionContextValue | null>(null);
@@ -167,6 +172,31 @@ export const useModulePermission = (moduleKey: string) => {
   return {
     hasAccess: ctx.hasAccess(moduleKey),
     canWrite: ctx.canWrite(moduleKey),
+  };
+};
+
+export const useAdmissionTabPermissions = () => {
+  const ctx = useContext(PermissionContext);
+  const base = useModulePermission(JOINING_PERMISSION_KEY);
+  const allTabs: AdmissionTabKey[] = [
+    'abstract',
+    'detailed',
+    'student-info',
+    'reference-list',
+    'source-list',
+    'date-wise',
+  ];
+  if (!ctx) {
+    return {
+      ...base,
+      allowedTabs: allTabs,
+      canAccessTab: () => true,
+    };
+  }
+  return {
+    ...base,
+    allowedTabs: ctx.getAllowedAdmissionTabs(),
+    canAccessTab: (tab: AdmissionTabKey) => ctx.canAccessAdmissionTab(tab),
   };
 };
 
@@ -360,10 +390,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   );
 
   const joiningPermissionEntry = normalizedPermissions[JOINING_PERMISSION_KEY] as ModulePermission | undefined;
+  const isSuperAdminRole = roleName === 'Super Admin';
 
   const canJoiningEditReference = useCallback(
-    () => resolveJoiningEditReference(joiningPermissionEntry),
-    [joiningPermissionEntry]
+    () => resolveJoiningEditReference(joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
   );
 
   const canJoiningEditAdmission = useCallback(
@@ -379,6 +410,17 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const canApproveFeeRequest = useCallback(
     () => resolveApproveFeeRequest(joiningPermissionEntry),
     [joiningPermissionEntry]
+  );
+
+  const canAccessAdmissionTab = useCallback(
+    (tab: AdmissionTabKey) =>
+      resolveAdmissionTabAccess(tab, joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
+  );
+
+  const getAllowedAdmissionTabs = useCallback(
+    () => allowedAdmissionTabs(joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
   );
 
   const filterNavItems = useCallback(
@@ -740,6 +782,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       canJoiningEditAdmission,
       canSubmitFeeRequest,
       canApproveFeeRequest,
+      canAccessAdmissionTab,
+      getAllowedAdmissionTabs,
     }),
     [
       normalizedPermissions,
@@ -749,6 +793,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       canJoiningEditAdmission,
       canSubmitFeeRequest,
       canApproveFeeRequest,
+      canAccessAdmissionTab,
+      getAllowedAdmissionTabs,
     ]
   );
 

@@ -3907,7 +3907,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   const canEditReferenceField =
     !isSelfRegistrationRecord &&
     !isPublicEdit &&
-    (status === 'approved' ? canEditReference && isAdmissionEditable : canWriteJoining);
+    canEditReference &&
+    (status === 'approved' ? isAdmissionEditable : canWriteJoining);
   /** Student / father / mother numbers for the preferred-mobile dropdown (form + lead snapshot). */
   const preferredMobileSources = useMemo(
     () =>

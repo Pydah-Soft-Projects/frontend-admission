@@ -16,7 +16,10 @@ import Link from 'next/link';
 import { PERMISSION_MODULES, PermissionModuleKey } from '@/constants/permissions';
 import { JoiningModulePermissionExtras } from '@/components/users/JoiningModulePermissionExtras';
 import {
+  admissionTabsFromStored,
+  defaultAdmissionTabExtras,
   defaultJoiningPermissionExtras,
+  enabledAdmissionTabLabels,
   joiningExtrasFromStored,
   JOINING_PERMISSION_KEY,
   modulePermissionForSave,
@@ -117,7 +120,9 @@ const UserManagementPage = () => {
         [module.key]: {
           access: false,
           permission: 'read' as ModulePermission['permission'],
-          ...(module.key === JOINING_PERMISSION_KEY ? defaultJoiningPermissionExtras() : {}),
+          ...(module.key === JOINING_PERMISSION_KEY
+            ? { ...defaultJoiningPermissionExtras(), ...defaultAdmissionTabExtras() }
+            : {}),
         },
       }),
       {} as Record<PermissionModuleKey, ModulePermission>
@@ -622,7 +627,7 @@ const UserManagementPage = () => {
           access: nextAccess,
           permission: nextAccess ? prev[moduleKey].permission || 'read' : prev[moduleKey].permission,
           ...(moduleKey === JOINING_PERMISSION_KEY && nextAccess && !prev[moduleKey].access
-            ? defaultJoiningPermissionExtras()
+            ? { ...defaultJoiningPermissionExtras(), ...defaultAdmissionTabExtras() }
             : {}),
         },
       };
@@ -635,7 +640,7 @@ const UserManagementPage = () => {
       [moduleKey]: {
         ...prev[moduleKey],
         permission: level,
-        ...(moduleKey === JOINING_PERMISSION_KEY ? defaultJoiningPermissionExtras() : {}),
+        ...(moduleKey === JOINING_PERMISSION_KEY && level === 'read' ? defaultJoiningPermissionExtras() : {}),
       },
     }));
   };
@@ -646,7 +651,7 @@ const UserManagementPage = () => {
       [moduleKey]: {
         ...prev[moduleKey],
         permission: level,
-        ...(moduleKey === JOINING_PERMISSION_KEY ? defaultJoiningPermissionExtras() : {}),
+        ...(moduleKey === JOINING_PERMISSION_KEY && level === 'read' ? defaultJoiningPermissionExtras() : {}),
       },
     }));
   };
@@ -1155,6 +1160,10 @@ const UserManagementPage = () => {
                             module.key === JOINING_PERMISSION_KEY && isWrite
                               ? joiningExtrasFromStored(entry)
                               : null;
+                          const admissionTabLabels =
+                            module.key === JOINING_PERMISSION_KEY
+                              ? enabledAdmissionTabLabels(entry)
+                              : null;
                           return (
                             <div
                               key={module.key}
@@ -1167,15 +1176,20 @@ const UserManagementPage = () => {
                               {joiningExtras && (
                                 <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
                                   Desk edits:{' '}
-                                  {joiningExtras.editReference ? 'Reference' : '—'}
-                                  {joiningExtras.editReference && joiningExtras.editAdmission ? ' · ' : ''}
-                                  {joiningExtras.editAdmission ? 'Admission' : ''}
-                                  {joiningExtras.approveFeeRequest ? ' · Approve fees' : ''}
-                                  {!joiningExtras.editReference &&
-                                  !joiningExtras.editAdmission &&
-                                  !joiningExtras.approveFeeRequest
+                                  {joiningExtras.editAdmission ? 'Admission' : '—'}
+                                  {joiningExtras.editAdmission && joiningExtras.approveFeeRequest ? ' · ' : ''}
+                                  {joiningExtras.approveFeeRequest ? 'Approve fees' : ''}
+                                  {!joiningExtras.editAdmission && !joiningExtras.approveFeeRequest
                                     ? 'None (view only on desk)'
                                     : ''}
+                                </p>
+                              )}
+                              {admissionTabLabels && (
+                                <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
+                                  Admissions tabs:{' '}
+                                  {admissionTabLabels.length > 0
+                                    ? admissionTabLabels.join(' · ')
+                                    : 'None selected'}
                                 </p>
                               )}
                             </div>
@@ -1185,7 +1199,7 @@ const UserManagementPage = () => {
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Use Edit User to change Joining Desk reference, admission, or fee request approval.
+                    Use Edit User to change Joining Desk admission edits, admissions tabs, or fee request approval.
                   </p>
                 </div>
               )}
@@ -1269,7 +1283,8 @@ const UserManagementPage = () => {
                                 ? {
                                     access: true,
                                     permission,
-                                    ...joiningExtrasFromStored(entry),
+                                    ...admissionTabsFromStored(entry),
+                                    ...(permission === 'write' ? joiningExtrasFromStored(entry) : {}),
                                   }
                                 : { access: true, permission };
                           }
@@ -1993,7 +2008,10 @@ const UserManagementPage = () => {
                                           ...(module.key === JOINING_PERMISSION_KEY &&
                                           nextAccess &&
                                           !prev[module.key].access
-                                            ? defaultJoiningPermissionExtras()
+                                            ? {
+                                                ...defaultJoiningPermissionExtras(),
+                                                ...defaultAdmissionTabExtras(),
+                                              }
                                             : {}),
                                         },
                                       };

@@ -19,7 +19,12 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog';
 import { showToast } from '@/lib/toast';
-import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
+import {
+  useAdmissionTabPermissions,
+  useDashboardHeader,
+  useJoiningDeskPermissions,
+} from '@/components/layout/DashboardShell';
+import { ADMISSION_PAGE_TABS, type AdmissionTabKey } from '@/lib/joiningPermissions';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { useInstitutions } from '@/lib/useInstitutions';
 import {
@@ -239,14 +244,33 @@ const resolveAdmissionSource = (record: Admission) => {
   return 'Manual Form';
 };
 
+const ADMISSION_TAB_ICONS: Record<AdmissionTabKey, typeof LayoutGrid> = {
+  abstract: LayoutGrid,
+  detailed: List,
+  'student-info': Filter,
+  'reference-list': UserCircle,
+  'source-list': Megaphone,
+  'date-wise': CalendarDays,
+};
+
 const CompletedAdmissionsPage = () => {
   const router = useRouter();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
+  const { allowedTabs, canAccessTab, hasAccess: hasJoiningAccess } = useAdmissionTabPermissions();
+  const visibleAdmissionTabs = useMemo(
+    () => ADMISSION_PAGE_TABS.filter(({ key }) => canAccessTab(key)),
+    [canAccessTab]
+  );
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<
-    'abstract' | 'detailed' | 'student-info' | 'reference-list' | 'source-list' | 'date-wise'
-  >('abstract');
+  const [activeTab, setActiveTab] = useState<AdmissionTabKey>('abstract');
+
+  useEffect(() => {
+    if (visibleAdmissionTabs.length === 0) return;
+    if (!allowedTabs.includes(activeTab)) {
+      setActiveTab(visibleAdmissionTabs[0].key);
+    }
+  }, [activeTab, allowedTabs, visibleAdmissionTabs]);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -759,6 +783,23 @@ const CompletedAdmissionsPage = () => {
     'px-2 py-2 text-left text-xs text-slate-600 sm:px-3 sm:py-3 sm:text-sm dark:text-slate-300';
   const referencePivotFixedColCount = 5;
 
+  if (!hasJoiningAccess) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        You do not have access to the Joining Desk.
+      </div>
+    );
+  }
+
+  if (visibleAdmissionTabs.length === 0) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        No Admissions page tabs are assigned to your account. Ask a Super Admin to enable tabs under User
+        Management → Joining Desk.
+      </div>
+    );
+  }
+
   return (
     <div className="w-full space-y-4 pb-8 sm:space-y-6 sm:pb-12">
       <Dialog
@@ -1096,323 +1137,272 @@ const CompletedAdmissionsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Statistics Cards — Total + all courses; hover a course card to see its college */}
-      <div className="space-y-3">
-        {statsLoading || collegesLoading ? (
-          <div className={statCardsGridClass}>
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div
-                key={`stats-skeleton-${i}`}
-                className="h-[3.75rem] w-full min-w-0 animate-pulse rounded-md bg-slate-100 sm:h-[5rem] sm:rounded-lg dark:bg-slate-800"
-              />
-            ))}
-          </div>
-        ) : courseStatsForCards.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">No course admissions in this date range.</p>
-        ) : (
-          <div className={statCardsGridClass}>
-            <Card
-              noPadding
-              className={`${statCardShell} border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50/95 to-white dark:from-blue-950/40 dark:to-slate-900`}
-            >
-              <div className={statCardInner} title="All colleges combined">
-                <p className="truncate text-[10px] font-bold uppercase tracking-wide text-blue-800 sm:text-xs md:text-sm dark:text-blue-200">
-                  Total
-                </p>
-                {renderStatCounts(totalAdmissionsCount, totalCancelledCount)}
-              </div>
-            </Card>
-            {courseStatsForCards.map((s) => {
-              const key = `${s.courseId || s.courseName || 'unknown'}-${String(s.lateralTrack ?? 0)}`;
-              const active = Number(s.totalAdmissions) || 0;
-              const cancelled = Number(s.totalCancelled) || 0;
-              const label = resolveStatCourseLabel(s);
-              const collegeName = resolveStatCollegeName(s);
-              return (
-                <Card key={key} noPadding className={`${statCardShell} group`}>
-                  <div
-                    className={statCardInner}
-                    title={`${label} · ${collegeName}`}
-                  >
-                    <div className="relative min-h-[1.75rem] shrink-0 sm:min-h-[2.4rem]">
-                      <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-700 transition-opacity duration-150 sm:text-xs md:text-sm group-hover:opacity-0 dark:text-slate-200">
-                        {label}
-                      </p>
-                      <div className="pointer-events-none absolute inset-0 flex flex-col justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                        <StatCardTwoLineLabel
-                          label={collegeName}
-                          className="text-slate-500 dark:text-slate-400"
-                        />
+      {activeTab === 'abstract' && canAccessTab('abstract') ? (
+        <div className="space-y-3">
+          {statsLoading || collegesLoading ? (
+            <div className={statCardsGridClass}>
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div
+                  key={`stats-skeleton-${i}`}
+                  className="h-[3.75rem] w-full min-w-0 animate-pulse rounded-md bg-slate-100 sm:h-[5rem] sm:rounded-lg dark:bg-slate-800"
+                />
+              ))}
+            </div>
+          ) : courseStatsForCards.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No course admissions in this date range.</p>
+          ) : (
+            <div className={statCardsGridClass}>
+              <Card
+                noPadding
+                className={`${statCardShell} border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50/95 to-white dark:from-blue-950/40 dark:to-slate-900`}
+              >
+                <div className={statCardInner} title="All colleges combined">
+                  <p className="truncate text-[10px] font-bold uppercase tracking-wide text-blue-800 sm:text-xs md:text-sm dark:text-blue-200">
+                    Total
+                  </p>
+                  {renderStatCounts(totalAdmissionsCount, totalCancelledCount)}
+                </div>
+              </Card>
+              {courseStatsForCards.map((s) => {
+                const key = `${s.courseId || s.courseName || 'unknown'}-${String(s.lateralTrack ?? 0)}`;
+                const active = Number(s.totalAdmissions) || 0;
+                const cancelled = Number(s.totalCancelled) || 0;
+                const label = resolveStatCourseLabel(s);
+                const collegeName = resolveStatCollegeName(s);
+                return (
+                  <Card key={key} noPadding className={`${statCardShell} group`}>
+                    <div className={statCardInner} title={`${label} · ${collegeName}`}>
+                      <div className="relative min-h-[1.75rem] shrink-0 sm:min-h-[2.4rem]">
+                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-700 transition-opacity duration-150 sm:text-xs md:text-sm group-hover:opacity-0 dark:text-slate-200">
+                          {label}
+                        </p>
+                        <div className="pointer-events-none absolute inset-0 flex flex-col justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                          <StatCardTwoLineLabel
+                            label={collegeName}
+                            className="text-slate-500 dark:text-slate-400"
+                          />
+                        </div>
                       </div>
+                      {renderStatCounts(active, cancelled)}
                     </div>
-                    {renderStatCounts(active, cancelled)}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Combined Filters & Tabs Bar */}
       <Card className="bg-slate-50/50 p-3 sm:p-4 dark:bg-slate-900/50">
         <div className="flex flex-col gap-4 sm:gap-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {/* Tabs Switcher — horizontal scroll on mobile */}
             <div className="-mx-1 flex items-center gap-1 overflow-x-auto rounded-2xl bg-slate-200/50 p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden dark:bg-slate-800/50">
-              <button
-                onClick={() => setActiveTab('abstract')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
-                  activeTab === 'abstract'
-                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
-                }`}
-              >
-                <LayoutGrid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="whitespace-nowrap">Abstract</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('detailed')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
-                  activeTab === 'detailed'
-                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
-                }`}
-              >
-                <List className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="whitespace-nowrap">Detailed</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('student-info')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
-                  activeTab === 'student-info'
-                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
-                }`}
-              >
-                <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="whitespace-nowrap">Student Info</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('reference-list')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
-                  activeTab === 'reference-list'
-                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
-                }`}
-              >
-                <UserCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="whitespace-nowrap">Reference</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('source-list')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
-                  activeTab === 'source-list'
-                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
-                }`}
-              >
-                <Megaphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="whitespace-nowrap">Source</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('date-wise')}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
-                  activeTab === 'date-wise'
-                    ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                    : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
-                }`}
-              >
-                <CalendarDays className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="whitespace-nowrap">Date-wise</span>
-              </button>
+              {visibleAdmissionTabs.map(({ key, label }) => {
+                const TabIcon = ADMISSION_TAB_ICONS[key];
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveTab(key)}
+                    className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${
+                      activeTab === key
+                        ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+                        : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <TabIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span className="whitespace-nowrap">{label}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-               <Button 
-                 variant="outline" 
-                 size="sm" 
-                 className="w-full gap-2 sm:w-auto"
-                 onClick={handleExportExcel}
-                 isLoading={isExporting}
-               >
-                 <Download className="h-4 w-4" />
-                 <span className="sm:hidden">Export</span>
-                 <span className="hidden sm:inline">Export XLSX</span>
-               </Button>
-            </div>
-          </div>
-
-          {/* Search — always visible on mobile */}
-          <div className="md:hidden">
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Search
-            </label>
-            <Input
-              placeholder="Search student, admission #, phone..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-              className="h-[38px]"
-            />
-          </div>
-
-          {/* Mobile filter toggle */}
-          <div className="flex flex-wrap items-center gap-2 md:hidden">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setShowFilters((prev) => !prev)}
-            >
-              <Filter className="h-4 w-4" />
-              {showFilters ? 'Hide' : 'Show'} Filters
-              {activeFilterCount > 0 ? (
-                <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                  {activeFilterCount}
-                </span>
-              ) : null}
-            </Button>
-            {(activeFilterCount > 0 || searchTerm.trim()) ? (
-              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={clearFilters}>
-                <X className="h-3.5 w-3.5" />
-                Clear
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-2 sm:w-auto"
+                onClick={handleExportExcel}
+                isLoading={isExporting}
+              >
+                <Download className="h-4 w-4" />
+                <span className="sm:hidden">Export</span>
+                <span className="hidden sm:inline">Export XLSX</span>
               </Button>
-            ) : null}
-          </div>
-
-          <div
-            className={`grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-8 ${
-              showFilters ? 'grid' : 'hidden md:grid'
-            }`}
-          >
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                College
-              </label>
-              <select
-                value={collegeFilter}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setCollegeFilter(next);
-                  setCourseFilter('');
-                  setBranchFilter('');
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
-              >
-                <option value="">All Colleges</option>
-                {colleges.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Course</label>
-              <select
-                value={courseFilter}
-                onChange={(e) => {
-                  setCourseFilter(e.target.value);
-                  setBranchFilter('');
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
-              >
-                <option value="">
-                  {collegeFilter ? 'All Courses in College' : 'All Courses'}
-                </option>
-                {coursesForCollegeFilter.map((c: { _id: string; name: string }) => (
-                  <option key={c._id} value={c._id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Branch</label>
-              <select
-                value={branchFilter}
-                onChange={(e) => {
-                  setBranchFilter(e.target.value);
-                  setPage(1);
-                }}
-                disabled={!courseFilter}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900"
-              >
-                <option value="">{courseFilter ? 'All Branches' : 'Select Course First'}</option>
-                {branches.map((b: any) => (
-                  <option key={b._id} value={b._id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value as AdmissionStatusFilter);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
-              >
-                {statusOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission From</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="date"
-                  value={dateRange.from}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission To</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="date"
-                  value={dateRange.to}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
-                />
-              </div>
-            </div>
-
-            <div className="hidden md:col-span-2 md:block lg:col-span-2">
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Search</label>
-              <Input
-                placeholder="Search student, admission #, phone..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setPage(1);
-                }}
-                className="h-[38px]"
-              />
             </div>
           </div>
+
+          <>
+              <div className="md:hidden">
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Search
+                </label>
+                <Input
+                  placeholder="Search student, admission #, phone..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-[38px]"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 md:hidden">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setShowFilters((prev) => !prev)}
+                >
+                  <Filter className="h-4 w-4" />
+                  {showFilters ? 'Hide' : 'Show'} Filters
+                  {activeFilterCount > 0 ? (
+                    <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {activeFilterCount}
+                    </span>
+                  ) : null}
+                </Button>
+                {activeFilterCount > 0 || searchTerm.trim() ? (
+                  <Button type="button" variant="outline" size="sm" className="gap-1" onClick={clearFilters}>
+                    <X className="h-3.5 w-3.5" />
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+
+              <div
+                className={`grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-8 ${
+                  showFilters ? 'grid' : 'hidden md:grid'
+                }`}
+              >
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    College
+                  </label>
+                  <select
+                    value={collegeFilter}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCollegeFilter(next);
+                      setCourseFilter('');
+                      setBranchFilter('');
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <option value="">All Colleges</option>
+                    {colleges.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Course</label>
+                  <select
+                    value={courseFilter}
+                    onChange={(e) => {
+                      setCourseFilter(e.target.value);
+                      setBranchFilter('');
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <option value="">
+                      {collegeFilter ? 'All Courses in College' : 'All Courses'}
+                    </option>
+                    {coursesForCollegeFilter.map((c: { _id: string; name: string }) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Branch</label>
+                  <select
+                    value={branchFilter}
+                    onChange={(e) => {
+                      setBranchFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    disabled={!courseFilter}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <option value="">{courseFilter ? 'All Branches' : 'Select Course First'}</option>
+                    {branches.map((b: any) => (
+                      <option key={b._id} value={b._id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value as AdmissionStatusFilter);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission From</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="date"
+                      value={dateRange.from}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission To</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="date"
+                      value={dateRange.to}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="hidden md:col-span-2 md:block lg:col-span-2">
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Search</label>
+                  <Input
+                    placeholder="Search student, admission #, phone..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-[38px]"
+                  />
+                </div>
+              </div>
+            </>
         </div>
       </Card>
 
       {activeTab === 'abstract' ? (
-        <div className="w-full">
+        <div className="space-y-3">
           <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
             <div className="-mx-1 overflow-x-auto sm:mx-0">
               <table className="min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
@@ -1454,14 +1444,9 @@ const CompletedAdmissionsPage = () => {
                     >
                       Merit
                     </th>
-                    <th
-                      rowSpan={2}
-                      className="w-10 px-2 py-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-500 sm:w-14 sm:px-4 sm:py-3 sm:text-[10px]"
-                    >
-                      Edit
-                    </th>
+                    <th rowSpan={2} className={abstractThClass}>Edit</th>
                   </tr>
-                  <tr className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                  <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50">
                     <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-blue-600 dark:text-blue-400`}>Active</th>
                     <th className={`${abstractSubHeaderClass} ${abstractBlockCellEnd} text-red-600 dark:text-red-400`}>Cancelled</th>
                     <th className={`${abstractSubHeaderClass} ${abstractBlockCellStart} text-slate-500`}>Intake</th>
@@ -1608,7 +1593,9 @@ const CompletedAdmissionsPage = () => {
             </div>
           </Card>
         </div>
-      ) : activeTab === 'detailed' ? (
+      ) : null}
+
+      {activeTab === 'detailed' ? (
         <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
           <div className="-mx-1 overflow-x-auto sm:mx-0">
             <table className="min-w-[640px] w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">

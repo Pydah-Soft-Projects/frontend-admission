@@ -450,6 +450,10 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
     gap: 2mm;
     flex-shrink: 0;
   }
+  .right-col .payment-note-section {
+    width: 100%;
+    min-width: 0;
+  }
   .photo {
     width: ${photoW};
     height: ${photoH};
@@ -539,15 +543,14 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
   }
   .footer-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 2mm;
     align-items: start;
     border-top: 1px solid #cbd5e1;
     padding-top: 2mm;
     margin-top: 3mm;
   }
-  .contact-section,
-  .payment-note-section {
+  .contact-section {
     min-width: 0;
   }
   .section-title {
@@ -747,6 +750,10 @@ function buildCardHtml(student: AdmitCardPrintStudent, assets: AdmitCardAssets):
         </div>
         <div class="right-col">
           ${photoBlock}
+          <div class="payment-note-section">
+            <p class="section-title">Pay through QR</p>
+            <div class="qr-note">${qrNote}</div>
+          </div>
           ${qrBlock}
         </div>
       </div>
@@ -754,10 +761,6 @@ function buildCardHtml(student: AdmitCardPrintStudent, assets: AdmitCardAssets):
         <div class="contact-section">
           <p class="section-title">Admission contact details</p>
           <div class="contact-box">${contactHtml}</div>
-        </div>
-        <div class="payment-note-section">
-          <p class="section-title">Pay through QR</p>
-          <div class="qr-note">${qrNote}</div>
         </div>
       </div>
     </div>`;

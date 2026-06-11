@@ -24,7 +24,7 @@ import {
   DASHBOARD_PERMISSION_KEY,
   PermissionModuleKey,
 } from '@/constants/permissions';
-import { joiningExtrasFromStored } from '@/lib/joiningPermissions';
+import { admissionTabsFromStored, joiningExtrasFromStored } from '@/lib/joiningPermissions';
 import { TestNotificationsButton } from '@/components/TestNotificationsButton';
 import { Loading } from '@/components/Loading';
 
@@ -91,6 +91,12 @@ const buildFullAccessPermissions = (): Record<PermissionModuleKey, ModulePermiss
             editReference: true,
             editAdmission: true,
             approveFeeRequest: true,
+            admissionTabAbstract: true,
+            admissionTabDetailed: true,
+            admissionTabStudentInfo: true,
+            admissionTabReference: true,
+            admissionTabSource: true,
+            admissionTabDateWise: true,
           }
         : {
             access: true,
@@ -113,11 +119,20 @@ const sanitizeSubAdminPermissions = (
     const entry = permissions?.[module.key];
     if (entry?.access) {
       const permission = entry.permission === 'write' ? 'write' : 'read';
-      if (module.key === 'joining' && permission === 'write') {
+      if (module.key === 'joining') {
+        const typedEntry = entry as import('@/types').ModulePermission;
+        const joiningExtras = joiningExtrasFromStored(typedEntry);
         sanitized[module.key] = {
           access: true,
-          permission: 'write',
-          ...joiningExtrasFromStored(entry as import('@/types').ModulePermission),
+          permission,
+          ...admissionTabsFromStored(typedEntry),
+          ...(permission === 'write'
+            ? {
+                editReference: false,
+                editAdmission: joiningExtras.editAdmission,
+                approveFeeRequest: joiningExtras.approveFeeRequest,
+              }
+            : {}),
         };
       } else {
         sanitized[module.key] = {
