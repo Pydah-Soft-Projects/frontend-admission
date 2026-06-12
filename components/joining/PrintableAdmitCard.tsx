@@ -441,6 +441,12 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
   }
   .left-col {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .left-col .contact-section {
+    margin-top: 2mm;
+    flex-shrink: 0;
   }
   .right-col {
     width: ${rightCol};
@@ -502,6 +508,14 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
     margin-top: 2mm;
     min-height: 0;
     overflow: hidden;
+    flex-shrink: 0;
+  }
+  .doc-table th.doc-col-divider,
+  .doc-table td.doc-col-divider {
+    border-left: 2px solid #cbd5e1;
+  }
+  .doc-table td.doc-empty {
+    background: #fafafa;
   }
   .doc-table {
     width: 100%;
@@ -521,7 +535,7 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
     border: 1px solid #e2e8f0;
   }
   .doc-table th.status-col {
-    width: 28%;
+    width: 22%;
     text-align: center;
   }
   .doc-table td {
@@ -542,13 +556,7 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
     color: #b45309;
   }
   .footer-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2mm;
-    align-items: start;
-    border-top: 1px solid #cbd5e1;
-    padding-top: 2mm;
-    margin-top: 3mm;
+    display: none;
   }
   .contact-section {
     min-width: 0;
@@ -601,7 +609,7 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
     color: #1d4ed8;
     font-size: ${sectionFs};
     font-weight: 700;
-    text-align: left;
+    text-align: center;
     line-height: 1.45;
   }
   @media print {
@@ -649,34 +657,57 @@ function buildAdmitCardPrintStyles(paperSize: AdmitCardPaperSize): string {
 `;
 }
 
+type DocumentChecklistRowHtml = {
+  label: string;
+  status: 'Received' | 'Pending';
+};
+
+function buildDocumentChecklistRowCells(row?: DocumentChecklistRowHtml, withDivider = false): string {
+  const dividerClass = withDivider ? ' doc-col-divider' : '';
+  if (!row) {
+    return `
+          <td class="doc-empty${dividerClass}">&nbsp;</td>
+          <td class="doc-empty status-cell">&nbsp;</td>`;
+  }
+  const statusClass = row.status === 'Received' ? 'status-received' : 'status-pending';
+  return `
+          <td class="${withDivider ? 'doc-col-divider' : ''}">${escapePrintHtml(row.label)}</td>
+          <td class="status-cell ${statusClass}">${escapePrintHtml(row.status)}</td>`;
+}
+
 function buildDocumentChecklistTableHtml(
   documentChecklist?: AdmitCardDocumentChecklist,
   certificateChecklist?: AdmitCardCertificateChecklist
 ): string {
-  const certificateRows = (certificateChecklist?.rows ?? []).map((row) => {
-    const label = row.optionLabel ? `${row.name} — ${row.optionLabel}` : row.name;
-    const statusClass = row.status === 'Received' ? 'status-received' : 'status-pending';
-    return `
-        <tr>
-          <td>${escapePrintHtml(label)}</td>
-          <td class="status-cell ${statusClass}">${escapePrintHtml(row.status)}</td>
-        </tr>`;
-  });
+  const certificateRows: DocumentChecklistRowHtml[] = (certificateChecklist?.rows ?? []).map((row) => ({
+    label: row.optionLabel ? `${row.name} — ${row.optionLabel}` : row.name,
+    status: row.status,
+  }));
 
   const statuses = documentChecklist?.documents ?? {};
-  const documentRows = Object.entries(documentChecklist?.labels ?? {}).map(([key, label]) => {
-    const isReceived = statuses[key] === 'received';
-    const status = isReceived ? 'Received' : 'Pending';
-    const statusClass = isReceived ? 'status-received' : 'status-pending';
-    return `
-        <tr>
-          <td>${escapePrintHtml(label)}</td>
-          <td class="status-cell ${statusClass}">${escapePrintHtml(status)}</td>
-        </tr>`;
-  });
+  const documentRows: DocumentChecklistRowHtml[] = Object.entries(documentChecklist?.labels ?? {}).map(
+    ([key, label]) => {
+      const isReceived = statuses[key] === 'received';
+      return {
+        label,
+        status: isReceived ? 'Received' : 'Pending',
+      };
+    }
+  );
 
-  const rows = [...certificateRows, ...documentRows].join('');
-  if (!rows) return '';
+  const allRows = [...certificateRows, ...documentRows];
+  if (allRows.length === 0) return '';
+
+  const pairedRows: string[] = [];
+  for (let i = 0; i < allRows.length; i += 2) {
+    const left = allRows[i];
+    const right = allRows[i + 1];
+    pairedRows.push(`
+        <tr>
+          ${buildDocumentChecklistRowCells(left)}
+          ${buildDocumentChecklistRowCells(right, true)}
+        </tr>`);
+  }
 
   return `
     <div class="doc-checklist">
@@ -686,10 +717,12 @@ function buildDocumentChecklistTableHtml(
           <tr>
             <th>Document</th>
             <th class="status-col">Status</th>
+            <th class="doc-col-divider">Document</th>
+            <th class="status-col">Status</th>
           </tr>
         </thead>
         <tbody>
-          ${rows}
+          ${pairedRows.join('')}
         </tbody>
       </table>
     </div>`;
@@ -747,20 +780,17 @@ function buildCardHtml(student: AdmitCardPrintStudent, assets: AdmitCardAssets):
             ${detailRow('Father phone', student.fatherPhone)}
           </table>
           ${buildDocumentChecklistTableHtml(student.documentChecklist, student.certificateChecklist)}
+          <div class="contact-section">
+            <p class="section-title">Admission contact details</p>
+            <div class="contact-box">${contactHtml}</div>
+          </div>
         </div>
         <div class="right-col">
           ${photoBlock}
           <div class="payment-note-section">
-            <p class="section-title">Pay through QR</p>
             <div class="qr-note">${qrNote}</div>
           </div>
           ${qrBlock}
-        </div>
-      </div>
-      <div class="footer-row">
-        <div class="contact-section">
-          <p class="section-title">Admission contact details</p>
-          <div class="contact-box">${contactHtml}</div>
         </div>
       </div>
     </div>`;
