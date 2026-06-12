@@ -2022,9 +2022,10 @@ const CompletedAdmissionsPage = () => {
           <div className="bg-slate-50 px-3 py-3 sm:px-6 sm:py-4 dark:bg-slate-800/50">
             <h3 className="text-sm font-semibold text-slate-900 sm:text-base dark:text-slate-100">Source list</h3>
             <p className="mt-1 text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">
-              Admissions grouped by lead source (CRM lead, admission lead_data, bulk upload, joining form
-              link, or manual form), broken down by course. Uses the course, branch, status, and admission
-              date filters above.
+              Admissions grouped by lead source. <strong>Direct</strong> = Reference 1 is Direct.{' '}
+              <strong>Joining Form</strong> = all joining-desk and token/SMS public-link admissions
+              (staff Add Joining Form and student link submissions) when reference is not Direct.
+              Other sources (Bulk Upload, Manual Form, etc.) are unchanged. Uses the filters above.
             </p>
           </div>
           <div className="-mx-1 overflow-x-auto sm:mx-0">

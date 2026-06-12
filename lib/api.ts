@@ -1382,13 +1382,8 @@ export const joiningAPI = {
     quota?: string;
     programLevel?: string;
     reference1?: string;
-    /** CRM lead source; defaults to Direct Admission on the server. */
-    source?: string;
   }) => {
-    const response = await api.post('/joinings/send-public-link', {
-      ...data,
-      source: data.source ?? 'Direct Admission',
-    });
+    const response = await api.post('/joinings/send-public-link', data);
     return response.data as {
       data?: {
         leadId: string;
@@ -1399,6 +1394,36 @@ export const joiningAPI = {
         token: string;
         expiresAt: string;
         ttlSeconds: number;
+      };
+      message?: string;
+    };
+  },
+  /** Debounced lookup while entering mobiles on Add Joining Form. */
+  checkExistingLeadByPhones: async (
+    studentPhone: string,
+    fatherPhone: string,
+    reference1?: string
+  ) => {
+    const response = await api.get('/joinings/check-existing-lead', {
+      params: { studentPhone, fatherPhone, reference1: reference1?.trim() || undefined },
+    });
+    return response.data as {
+      data?: {
+        exists: boolean;
+        source: string;
+        lead?: {
+          id: string;
+          enquiryNumber: string;
+          name: string;
+          phone: string;
+          fatherPhone: string;
+          courseInterested: string;
+          quota: string;
+          source: string;
+          reference1?: string;
+          managedCourseId?: string;
+          managedBranchId?: string;
+        } | null;
       };
       message?: string;
     };
@@ -1477,6 +1502,13 @@ export const admissionAPI = {
   }) => {
     const response = await api.put('/admissions/branch-intake', payload);
     return response.data?.data || response.data;
+  },
+  searchHrmsEmployeesForReference: async (q: string) => {
+    const response = await api.get('/admissions/hrms-employees/search', {
+      params: { q },
+    });
+    const payload = response.data?.data ?? response.data;
+    return Array.isArray(payload) ? payload : [];
   },
   listReferenceNames: async () => {
     const response = await api.get('/admissions/reference-names');

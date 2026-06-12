@@ -3,14 +3,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Pencil, Search, Trash2, UserPlus, X } from 'lucide-react';
-import { admissionAPI, userAPI } from '@/lib/api';
+import { admissionAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { QuickAddReferenceUserDialog } from '@/components/admission/QuickAddReferenceUserDialog';
 import {
   ReferenceNameManageDialog,
   type ReferenceNameManageMode,
 } from '@/components/admission/ReferenceNameManageDialog';
-import type { User } from '@/types';
+
+type HrmsEmployeeOption = {
+  _id?: string;
+  id?: string;
+  emp_no?: string | number | null;
+  name: string;
+  email?: string | null;
+  mobileNumber?: string | null;
+  division?: string | null;
+  department?: string | null;
+  group?: string | null;
+};
 
 export const REFERENCE_NAMES_QUERY_KEY = ['admissions', 'reference-names'] as const;
 
@@ -43,6 +54,7 @@ export function ReferenceUserSelect({
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [manageDialog, setManageDialog] = useState<{
     mode: ReferenceNameManageMode;
@@ -53,13 +65,19 @@ export function ReferenceUserSelect({
   const [pendingCustomNames, setPendingCustomNames] = useState<string[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const { data: usersData, isLoading: usersLoading } = useQuery({
-    queryKey: ['users', 'reference-picker'],
-    queryFn: async () => {
-      const response = await userAPI.getAll();
-      return response.data ?? response;
-    },
-    staleTime: 5 * 60 * 1000,
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const searchTerm = debouncedSearch.trim();
+  const canSearchHrms = open && searchTerm.length >= 2;
+
+  const { data: hrmsEmployees = [], isLoading: hrmsSearching } = useQuery({
+    queryKey: ['admissions', 'hrms-reference-search', searchTerm],
+    queryFn: () => admissionAPI.searchHrmsEmployeesForReference(searchTerm),
+    enabled: canSearchHrms,
+    staleTime: 30 * 1000,
   });
 
   const { data: savedReferenceNames = [], isLoading: refsLoading } = useQuery({
@@ -75,18 +93,6 @@ export function ReferenceUserSelect({
 
   const isManaging = Boolean(manageDialog);
 
-  const users = useMemo(() => {
-    const list = (Array.isArray(usersData) ? usersData : (usersData as { data?: User[] })?.data ?? []) as User[];
-    return list
-      .filter((u) => u.isActive !== false)
-      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-  }, [usersData]);
-
-  const portalNameKeys = useMemo(
-    () => new Set(users.map((u) => normalizeName(u.name))),
-    [users]
-  );
-
   const trimmedValue = value.trim();
 
   /** Names used on past admissions/joinings that are not portal staff accounts. */
@@ -97,7 +103,6 @@ export function ReferenceUserSelect({
       const name = String(raw ?? '').trim();
       if (!name) return;
       const key = normalizeName(name);
-      if (portalNameKeys.has(key)) return;
       if (seen.has(key)) return;
       seen.add(key);
       out.push(name);
@@ -106,7 +111,7 @@ export function ReferenceUserSelect({
     for (const raw of pendingCustomNames) add(raw);
     if (trimmedValue) add(trimmedValue);
     return out.sort((a, b) => a.localeCompare(b));
-  }, [savedReferenceNames, portalNameKeys, pendingCustomNames, trimmedValue]);
+  }, [savedReferenceNames, pendingCustomNames, trimmedValue]);
 
   const filteredCustomReferences = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -114,26 +119,23 @@ export function ReferenceUserSelect({
     return savedCustomReferences.filter((name) => name.toLowerCase().includes(q));
   }, [savedCustomReferences, search]);
 
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) => {
-      const hay = `${u.name} ${u.email} ${u.roleName} ${u.designation ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [users, search]);
+  const sortedHrmsEmployees = useMemo(() => {
+    return [...hrmsEmployees].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''))
+    ) as HrmsEmployeeOption[];
+  }, [hrmsEmployees]);
 
-  const matchedUser = users.find((u) => normalizeName(u.name) === normalizeName(trimmedValue));
-  const isCustomSavedValue = Boolean(
-    trimmedValue && !matchedUser && savedCustomReferences.some((n) => normalizeName(n) === normalizeName(trimmedValue))
+  const matchedHrmsEmployee = sortedHrmsEmployees.find(
+    (emp) => normalizeName(emp.name) === normalizeName(trimmedValue)
   );
-  const isLegacyValue = Boolean(trimmedValue && !matchedUser && !isCustomSavedValue);
+  const isCustomSavedValue = Boolean(
+    trimmedValue &&
+      !matchedHrmsEmployee &&
+      savedCustomReferences.some((n) => normalizeName(n) === normalizeName(trimmedValue))
+  );
+  const isLegacyValue = Boolean(trimmedValue && !matchedHrmsEmployee && !isCustomSavedValue);
 
-  const triggerLabel = trimmedValue
-    ? matchedUser
-      ? matchedUser.name
-      : trimmedValue
-    : '';
+  const triggerLabel = trimmedValue ? matchedHrmsEmployee?.name ?? trimmedValue : '';
 
   const invalidateReferenceNames = () => {
     void queryClient.invalidateQueries({ queryKey: [...REFERENCE_NAMES_QUERY_KEY] });
@@ -206,10 +208,15 @@ export function ReferenceUserSelect({
     }
   };
 
-  const isLoading = usersLoading || refsLoading;
+  const isLoading = refsLoading;
   const hasCustomSection = filteredCustomReferences.length > 0;
-  const hasStaffSection = filteredUsers.length > 0;
-  const listEmpty = !isLoading && !hasCustomSection && !hasStaffSection;
+  const hasHrmsSection = canSearchHrms && sortedHrmsEmployees.length > 0;
+  const showHrmsHint = open && search.trim().length < 2;
+  const showHrmsSearching = canSearchHrms && hrmsSearching;
+  const showHrmsNoMatches =
+    canSearchHrms && !hrmsSearching && sortedHrmsEmployees.length === 0;
+  const listEmpty =
+    !isLoading && !hasCustomSection && !hasHrmsSection && !showHrmsHint && !showHrmsSearching;
 
   return (
     <div ref={rootRef} className={className}>
@@ -283,7 +290,7 @@ export function ReferenceUserSelect({
                   type="search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search saved references or staff…"
+                  placeholder="Search by name or employee ID…"
                   className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   autoFocus
                 />
@@ -306,7 +313,11 @@ export function ReferenceUserSelect({
               {isLoading ? (
                 <li className="px-3 py-3 text-center text-xs text-slate-500">Loading references…</li>
               ) : listEmpty ? (
-                <li className="px-3 py-3 text-center text-xs text-slate-500">No matches. Use Add to enter a new name.</li>
+                <li className="px-3 py-3 text-center text-xs text-slate-500">
+                  {showHrmsNoMatches
+                    ? 'No HRMS employees found. Try another name or employee ID, or use Add for a custom name.'
+                    : 'No matches. Use Add to enter a new name.'}
+                </li>
               ) : (
                 <>
                   {hasCustomSection ? (
@@ -365,15 +376,24 @@ export function ReferenceUserSelect({
                       })}
                     </>
                   ) : null}
-                  {hasStaffSection ? (
+                  {showHrmsHint ? (
+                    <li className="px-3 py-3 text-center text-xs text-slate-500">
+                      Type at least 2 characters to search all HRMS employees by name or employee ID.
+                    </li>
+                  ) : null}
+                  {showHrmsSearching ? (
+                    <li className="px-3 py-3 text-center text-xs text-slate-500">Searching HRMS employees…</li>
+                  ) : null}
+                  {hasHrmsSection ? (
                     <>
                       <li className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Staff
+                        HRMS employees
                       </li>
-                      {filteredUsers.map((u) => {
-                        const selected = normalizeName(u.name) === normalizeName(trimmedValue);
+                      {sortedHrmsEmployees.map((emp) => {
+                        const selected = normalizeName(emp.name) === normalizeName(trimmedValue);
+                        const empNo = emp.emp_no != null ? String(emp.emp_no).trim() : '';
                         return (
-                          <li key={u._id || u.id}>
+                          <li key={emp._id || emp.id || `${emp.name}-${empNo}`}>
                             <button
                               type="button"
                               className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${
@@ -381,11 +401,13 @@ export function ReferenceUserSelect({
                                   ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                                   : 'text-slate-800 dark:text-slate-100'
                               }`}
-                              onClick={() => pick(u.name.trim())}
+                              onClick={() => pick(emp.name.trim())}
                             >
-                              <span className="block font-medium">{u.name}</span>
+                              <span className="block font-medium">{emp.name}</span>
                               <span className="block text-xs text-slate-500 dark:text-slate-400">
-                                {[u.roleName, u.designation, u.email].filter(Boolean).join(' · ')}
+                                {[empNo ? `ID: ${empNo}` : null, emp.department, emp.division, emp.email]
+                                  .filter(Boolean)
+                                  .join(' · ')}
                               </span>
                             </button>
                           </li>
@@ -402,7 +424,7 @@ export function ReferenceUserSelect({
 
       {isLegacyValue ? (
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          This reference is stored by name. Pick from Saved references, Staff, or Add a new name.
+          This reference is stored by name. Pick from Saved references, HRMS employees, or Add a new name.
         </p>
       ) : null}
 

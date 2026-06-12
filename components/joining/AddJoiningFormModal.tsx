@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { joiningAPI, paymentSettingsAPI, courseAPI } from '@/lib/api';
 import { REFERENCE_NAMES_QUERY_KEY } from '@/components/admission/ReferenceUserSelect';
@@ -17,7 +17,17 @@ import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
 import type { CoursePaymentSettings } from '@/types';
 
-const ADD_JOINING_SOURCE = 'Direct Admission';
+const JOINING_FORM_DIRECT_SOURCE = 'Direct';
+const JOINING_FORM_DEFAULT_SOURCE = 'Joining Form';
+
+function resolveJoiningFormSource(reference1: string): string {
+  if (reference1.trim().toLowerCase() === 'direct') return JOINING_FORM_DIRECT_SOURCE;
+  return JOINING_FORM_DEFAULT_SOURCE;
+}
+
+type ExistingLeadPreview = NonNullable<
+  Awaited<ReturnType<typeof joiningAPI.checkExistingLeadByPhones>>['data']
+>['lead'];
 
 type FormState = {
   studentName: string;
@@ -48,12 +58,73 @@ const initialForm: FormState = {
 
 const onlyDigits = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 
+function applyExistingLeadToForm(
+  prev: FormState,
+  lead: NonNullable<ExistingLeadPreview>,
+  courseSettings: CoursePaymentSettings[]
+): FormState {
+  const next = { ...prev };
+
+  if (!next.studentName.trim() && lead.name) {
+    next.studentName = lead.name.trim();
+  }
+  if (!next.studentPhone.trim() && lead.phone) {
+    next.studentPhone = onlyDigits(lead.phone);
+  }
+  if (!next.fatherPhone.trim() && lead.fatherPhone) {
+    next.fatherPhone = onlyDigits(lead.fatherPhone);
+  }
+
+  let courseId = String(lead.managedCourseId ?? '').trim();
+  let branchId = String(lead.managedBranchId ?? '').trim();
+  const courseInterested = String(lead.courseInterested ?? '').trim();
+
+  if (!courseId && courseInterested && courseSettings.length > 0) {
+    const matchedCourse = courseSettings.find(
+      (item) => String(item.course.name ?? '').trim().toLowerCase() === courseInterested.toLowerCase()
+    );
+    if (matchedCourse) {
+      courseId = String(matchedCourse.course._id ?? '').trim();
+    }
+  }
+
+  if (!next.courseId.trim() && courseId) {
+    next.courseId = courseId;
+  }
+  if (!next.branchId.trim() && branchId) {
+    next.branchId = branchId;
+  }
+  if (!next.courseInterested.trim()) {
+    if (courseInterested) {
+      next.courseInterested = courseInterested;
+    } else if (next.courseId) {
+      const matchedCourse = courseSettings.find(
+        (item) => String(item.course._id ?? '').trim() === next.courseId
+      );
+      if (matchedCourse?.course.name) {
+        next.courseInterested = matchedCourse.course.name;
+      }
+    }
+  }
+  if (!next.quota.trim() && lead.quota && lead.quota !== 'Not Applicable') {
+    next.quota = lead.quota.trim();
+  }
+  if (!next.reference1.trim() && lead.reference1) {
+    next.reference1 = lead.reference1.trim();
+  }
+
+  return next;
+}
+
 const selectClassName =
   'w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100';
 
 export function AddJoiningFormModal({ open, onClose }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(initialForm);
+  const [debouncedPhones, setDebouncedPhones] = useState({ studentPhone: '', fatherPhone: '' });
+  const [debouncedReference1, setDebouncedReference1] = useState('');
+  const appliedLeadKeyRef = useRef<string | null>(null);
   const [smsSession, setSmsSession] = useState<{
     leadId: string;
     admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
@@ -102,6 +173,73 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
     );
   }, [selectedCourse, form.branchId]);
 
+  const studentPhoneDigits = onlyDigits(form.studentPhone);
+  const fatherPhoneDigits = onlyDigits(form.fatherPhone);
+
+  useEffect(() => {
+    if (!open) {
+      setDebouncedPhones({ studentPhone: '', fatherPhone: '' });
+      appliedLeadKeyRef.current = null;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setDebouncedPhones({
+        studentPhone: studentPhoneDigits,
+        fatherPhone: fatherPhoneDigits,
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [open, studentPhoneDigits, fatherPhoneDigits]);
+
+  useEffect(() => {
+    if (!open) {
+      setDebouncedReference1('');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setDebouncedReference1(form.reference1.trim());
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [open, form.reference1]);
+
+  const canCheckExistingLead =
+    debouncedPhones.studentPhone.length === 10 || debouncedPhones.fatherPhone.length === 10;
+
+  const { data: existingLeadCheck, isFetching: isCheckingExistingLead } = useQuery({
+    queryKey: [
+      'joining-existing-lead-check',
+      debouncedPhones.studentPhone,
+      debouncedPhones.fatherPhone,
+      debouncedReference1,
+    ],
+    queryFn: async () =>
+      joiningAPI.checkExistingLeadByPhones(
+        debouncedPhones.studentPhone,
+        debouncedPhones.fatherPhone,
+        debouncedReference1
+      ),
+    enabled: open && canCheckExistingLead,
+    staleTime: 30_000,
+  });
+
+  const existingLeadDetected = Boolean(existingLeadCheck?.data?.exists);
+  const matchedLead = existingLeadCheck?.data?.lead ?? null;
+  const resolvedSource =
+    existingLeadCheck?.data?.source ?? resolveJoiningFormSource(form.reference1);
+
+  useEffect(() => {
+    if (!open) return;
+    const lead = matchedLead;
+    if (!lead?.id) {
+      appliedLeadKeyRef.current = null;
+      return;
+    }
+    const applyKey = `${lead.id}:${debouncedPhones.studentPhone}:${debouncedPhones.fatherPhone}`;
+    if (appliedLeadKeyRef.current === applyKey) return;
+    setForm((prev) => applyExistingLeadToForm(prev, lead, courseSettings));
+    appliedLeadKeyRef.current = applyKey;
+  }, [open, matchedLead, debouncedPhones.studentPhone, debouncedPhones.fatherPhone, courseSettings]);
+
   const createDraftMutation = useMutation({
     mutationFn: async () => {
       const courseName = selectedCourse?.course.name || form.courseInterested.trim();
@@ -119,7 +257,6 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
         programLevel:
           selectedCourse?.course.level != null ? String(selectedCourse.course.level) : undefined,
         reference1: form.reference1.trim() || undefined,
-        source: ADD_JOINING_SOURCE,
       });
     },
     onSuccess: (res) => {
@@ -162,8 +299,8 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
 
   const canSubmit =
     form.studentName.trim() &&
-    onlyDigits(form.studentPhone).length === 10 &&
-    onlyDigits(form.fatherPhone).length === 10 &&
+    studentPhoneDigits.length === 10 &&
+    fatherPhoneDigits.length === 10 &&
     courseOk &&
     branchOk &&
     quotaOk;
@@ -213,6 +350,57 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
                   placeholder="10 digit mobile number"
                   maxLength={10}
                 />
+                <div className="flex flex-col justify-end">
+                  <p className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Lead source
+                  </p>
+                  <div
+                    className={`min-h-[46px] rounded-xl border-2 px-4 py-3 text-sm shadow-sm ${
+                      isCheckingExistingLead
+                        ? 'border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500'
+                        : existingLeadDetected
+                          ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200'
+                          : canCheckExistingLead
+                            ? 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-400'
+                            : 'border-dashed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500'
+                    }`}
+                  >
+                    {isCheckingExistingLead ? (
+                      'Checking CRM…'
+                    ) : !canCheckExistingLead ? (
+                      'Enter student or parent mobile'
+                    ) : existingLeadDetected ? (
+                      <span>
+                        <span className="font-semibold">{resolvedSource}</span>
+                        {matchedLead?.enquiryNumber ? (
+                          <span className="mt-0.5 block text-xs opacity-90">
+                            Existing CRM lead {matchedLead.enquiryNumber}
+                            {matchedLead.name ? ` · ${matchedLead.name}` : ''}
+                            {form.reference1.trim().toLowerCase() === 'direct'
+                              ? ' · reference Direct'
+                              : form.reference1.trim()
+                                ? ` · reference ${form.reference1.trim()}`
+                                : ''}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <span>
+                        <span className="font-semibold">{resolvedSource}</span>
+                        <span className="mt-0.5 block text-xs opacity-90">
+                          {form.reference1.trim().toLowerCase() === 'direct'
+                            ? 'Reference is Direct'
+                            : form.reference1.trim()
+                              ? `Reference: ${form.reference1.trim()}`
+                              : 'No matching lead — set reference to Direct or a staff name'}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                     College / course <span className="text-red-500">*</span>
