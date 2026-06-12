@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  canvasToJpegFile,
+  preloadPortraitSegmenter,
+  processPortraitBackground,
+  type PortraitBackgroundMode,
+} from '@/lib/portraitPhotoBackground';
 import { SwitchCamera } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -48,6 +54,33 @@ function waitMs(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
+/** Passport-style face outline so users align their face inside the square crop. */
+function PortraitFaceGuideOverlay() {
+  const stroke = 'rgba(255,255,255,0.92)';
+  const strokeSoft = 'rgba(255,255,255,0.55)';
+  const corner = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => (
+    <path d={`M ${x1} ${y1} L ${x2} ${y2} L ${x3} ${y3}`} stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  );
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10" aria-hidden>
+      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {corner(10, 22, 10, 10, 22, 10)}
+        {corner(90, 22, 90, 10, 78, 10)}
+        {corner(10, 78, 10, 90, 22, 90)}
+        {corner(90, 78, 90, 90, 78, 90)}
+        <ellipse cx="50" cy="42" rx="21" ry="25" stroke={stroke} strokeWidth="1.6" strokeDasharray="5 3.5" />
+        <circle cx="42" cy="39" r="1.4" fill={strokeSoft} />
+        <circle cx="58" cy="39" r="1.4" fill={strokeSoft} />
+        <path d="M 46 50 Q 50 53 54 50" stroke={strokeSoft} strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+      <p className="absolute bottom-2 left-0 right-0 text-center text-[10px] font-medium tracking-wide text-white/90 drop-shadow-sm">
+        Align face in outline
+      </p>
+    </div>
+  );
+}
+
 function isCameraBusyError(err: unknown): boolean {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return (
@@ -74,6 +107,8 @@ type Props = {
   'aria-label'?: string;
   /** JPEG from live camera after the user taps “Use photo”. */
   onCapture: (file: File) => void;
+  /** Replace room background with white, or blur it. Default: white (passport-style). */
+  portraitBackground?: PortraitBackgroundMode;
 };
 
 /**
@@ -88,11 +123,13 @@ export function JoiningCameraCaptureButton({
   disabled,
   'aria-label': ariaLabel,
   onCapture,
+  portraitBackground = 'white',
 }: Props) {
   const dialogTitleId = useId();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [processingCapture, setProcessingCapture] = useState(false);
   const [activeFacing, setActiveFacing] = useState<JoiningCameraFacing>(facing);
   const [switchingFacing, setSwitchingFacing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -107,10 +144,13 @@ export function JoiningCameraCaptureButton({
     if (!open || typeof document === 'undefined') return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    if (portraitBackground !== 'none') {
+      preloadPortraitSegmenter();
+    }
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [open]);
+  }, [open, portraitBackground]);
 
   const stopStream = useCallback(() => {
     const stream = streamRef.current;
@@ -329,6 +369,7 @@ export function JoiningCameraCaptureButton({
 
   const close = useCallback(() => {
     stopStream();
+    setProcessingCapture(false);
     setOpen(false);
   }, [stopStream]);
 
@@ -354,7 +395,8 @@ export function JoiningCameraCaptureButton({
     };
   }, [open, attachStreamToVideo, activeFacing]);
 
-  const confirmCapture = useCallback(() => {
+  const confirmCapture = useCallback(async () => {
+    if (processingCapture) return;
     const video = videoRef.current;
     if (!video || video.videoWidth < 2 || video.videoHeight < 2) {
       setErr('Video is not ready yet. Wait for the preview, or switch camera again.');
@@ -362,23 +404,43 @@ export function JoiningCameraCaptureButton({
     }
     const w = video.videoWidth;
     const h = video.videoHeight;
+    const side = Math.min(w, h);
+    const sx = Math.floor((w - side) / 2);
+    const sy = Math.floor((h - side) / 2);
     const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = side;
+    canvas.height = side;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0, w, h);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+
+    setProcessingCapture(true);
+    setErr(null);
+    try {
+      ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+      let outputCanvas = canvas;
+      if (portraitBackground !== 'none') {
+        outputCanvas = await processPortraitBackground(canvas, portraitBackground, false);
+      }
+      const file = await canvasToJpegFile(outputCanvas);
+      if (!file) {
+        setErr('Could not save photo. Try again or use Upload.');
+        return;
+      }
+      close();
+      onCapture(file);
+    } catch {
+      const fallbackFile = await canvasToJpegFile(canvas);
+      if (fallbackFile) {
         close();
-        onCapture(file);
-      },
-      'image/jpeg',
-      0.92
-    );
-  }, [close, onCapture]);
+        onCapture(fallbackFile);
+        setErr('Background could not be cleaned — saved the original photo.');
+      } else {
+        setErr('Could not process photo. Try again or use Upload.');
+      }
+    } finally {
+      setProcessingCapture(false);
+    }
+  }, [close, onCapture, portraitBackground, processingCapture]);
 
   return (
     <>
@@ -423,8 +485,9 @@ export function JoiningCameraCaptureButton({
                     Take photo
                   </h2>
                   <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                    Choose <span className="font-medium">Front</span> or <span className="font-medium">Rear</span>, position
-                    in frame, then tap <span className="font-medium">Use photo</span>.
+                    Choose <span className="font-medium">Front</span> or <span className="font-medium">Rear</span>, align your
+                    face in the square guide, then tap <span className="font-medium">Use photo</span>. The room background is
+                    automatically replaced with a plain white background.
                   </p>
                   {allowFacingSwitch ? (
                     <div
@@ -462,17 +525,19 @@ export function JoiningCameraCaptureButton({
                   ) : null}
                 </div>
                 <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-black p-2 sm:p-3">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="mx-auto aspect-video h-auto max-h-[min(48dvh,20rem)] w-full max-w-full rounded-lg object-contain sm:max-h-[min(56dvh,24rem)]"
-                  />
-                  {allowFacingSwitch ? (
-                    <button
-                      type="button"
-                      className="absolute bottom-4 right-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/55 text-white shadow-lg backdrop-blur-sm transition hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-white/80 disabled:cursor-not-allowed disabled:opacity-50 sm:bottom-5 sm:right-5"
+                  <div className="relative mx-auto aspect-square w-full max-h-[min(48dvh,20rem)] max-w-[min(100%,20rem)] overflow-hidden rounded-lg sm:max-h-[min(56dvh,24rem)] sm:max-w-[min(100%,24rem)]">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                    <PortraitFaceGuideOverlay />
+                    {allowFacingSwitch ? (
+                      <button
+                        type="button"
+                        className="absolute bottom-3 right-3 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/55 text-white shadow-lg backdrop-blur-sm transition hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-white/80 disabled:cursor-not-allowed disabled:opacity-50 sm:bottom-4 sm:right-4"
                       aria-label={
                         activeFacing === 'user' ? 'Switch to rear camera' : 'Switch to front camera'
                       }
@@ -480,25 +545,28 @@ export function JoiningCameraCaptureButton({
                       disabled={switchingFacing}
                       onClick={() => void toggleFacing()}
                     >
-                      <SwitchCamera className="h-5 w-5" aria-hidden />
-                      <span className="sr-only">Flip camera</span>
-                    </button>
-                  ) : null}
+                        <SwitchCamera className="h-5 w-5" aria-hidden />
+                        <span className="sr-only">Flip camera</span>
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 px-3 py-3 sm:flex-row sm:justify-end sm:px-4 dark:border-slate-700">
                   <button
                     type="button"
-                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto"
+                    className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto"
+                    disabled={processingCapture}
                     onClick={close}
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
-                    className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 sm:w-auto"
-                    onClick={confirmCapture}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    disabled={processingCapture}
+                    onClick={() => void confirmCapture()}
                   >
-                    Use photo
+                    {processingCapture ? 'Processing…' : 'Use photo'}
                   </button>
                 </div>
               </div>
