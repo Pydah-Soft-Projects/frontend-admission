@@ -371,3 +371,45 @@ export function computeAcademicYearRegistrationPatches(
   }
   return out;
 }
+
+/** Step 1 intake calendar year (e.g. 2026) stored on registrationFormData. */
+export function resolveJoiningStepOneAcademicYear(args: {
+  registrationExtras: Record<string, unknown>;
+  gate: JoiningRegistrationFixedGate;
+  leadAcademicYear?: number | string | null;
+}): string {
+  const { registrationExtras, gate, leadAcademicYear } = args;
+
+  if (gate.isBtech) {
+    return normalizeBtechIntakeYearString(
+      registrationExtras.academic_year ?? registrationExtras.academicYear,
+      gate.calendarYear
+    ).year;
+  }
+
+  if (leadAcademicYear != null && !Number.isNaN(Number(leadAcademicYear))) {
+    return String(clampApplicationCalendarYear(Number(leadAcademicYear)));
+  }
+
+  const fromRegistration = String(
+    registrationExtras.academic_year ?? registrationExtras.academicYear ?? ''
+  ).trim();
+  if (fromRegistration) return fromRegistration;
+
+  return gate.standardIntakeYear || String(gate.calendarYear);
+}
+
+/** Display / transport session from Step 1 calendar year (2026 → 2026-2027). */
+export function calendarYearToAcademicYearRange(year: string | number | null | undefined): string {
+  const raw = String(year ?? '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{4}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{4})/);
+  if (match) {
+    const start = Number(match[1]);
+    if (Number.isFinite(start) && start >= 2000) {
+      return `${start}-${start + 1}`;
+    }
+  }
+  return raw;
+}

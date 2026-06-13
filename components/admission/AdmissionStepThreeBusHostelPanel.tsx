@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hostelAPI, transportAPI } from '@/lib/api';
 import { normalizeHostelFeesByYear } from '@/lib/joiningBusFeeSync';
+import { calendarYearToAcademicYearRange } from '@/lib/joiningAcademicYearRegistration';
 import { cn } from '@/lib/utils';
 import type {
   HostelCategorySummary,
@@ -40,6 +41,8 @@ type AdmissionStepThreeBusHostelPanelProps = {
   className?: string;
   courseName?: string | null;
   programTotalYears?: number;
+  /** Step 1 intake calendar year (e.g. 2026) from registrationFormData. */
+  joiningAcademicYear?: string | null;
 };
 
 const emptyTransportDetails = (): JoiningTransportDetails => ({
@@ -68,7 +71,32 @@ export function parseJoiningTransportDetails(raw: unknown): JoiningTransportDeta
       source.stageFare === null || source.stageFare === undefined
         ? null
         : Number(source.stageFare),
-    academicYear: source.academicYear != null ? String(source.academicYear) : undefined,
+    busId:
+      source.busId != null
+        ? String(source.busId)
+        : source.bus_id != null
+          ? String(source.bus_id)
+          : source.busNumber != null
+            ? String(source.busNumber)
+            : undefined,
+    busNumber:
+      source.busNumber != null
+        ? String(source.busNumber)
+        : source.busId != null
+          ? String(source.busId)
+          : source.bus_id != null
+            ? String(source.bus_id)
+            : undefined,
+    academicYear: (() => {
+      const raw =
+        source.academicYear != null
+          ? String(source.academicYear)
+          : source.academic_year != null
+            ? String(source.academic_year)
+            : undefined;
+      if (!raw?.trim()) return undefined;
+      return calendarYearToAcademicYearRange(raw.trim());
+    })(),
     hostelId: source.hostelId != null ? String(source.hostelId) : undefined,
     hostelName: source.hostelName != null ? String(source.hostelName) : undefined,
     hostelType,
@@ -119,6 +147,7 @@ export function AdmissionStepThreeBusHostelPanel({
   className,
   courseName,
   programTotalYears = 4,
+  joiningAcademicYear,
 }: AdmissionStepThreeBusHostelPanelProps) {
   const canEdit = Boolean(onChange) && !disabled;
   const [activeTab, setActiveTab] = useState<AccommodationTab>(value.accommodationType || 'bus');
@@ -126,6 +155,17 @@ export function AdmissionStepThreeBusHostelPanel({
   useEffect(() => {
     setActiveTab(value.accommodationType || 'bus');
   }, [value.accommodationType]);
+
+  const busAcademicYearSession = useMemo(
+    () => calendarYearToAcademicYearRange(joiningAcademicYear),
+    [joiningAcademicYear]
+  );
+
+  useEffect(() => {
+    if (!canEdit || !onChange || !busAcademicYearSession) return;
+    if (value.academicYear === busAcademicYearSession) return;
+    onChange({ ...value, academicYear: busAcademicYearSession });
+  }, [busAcademicYearSession, canEdit, onChange, value]);
 
   const {
     data: routesResponse,
@@ -260,6 +300,8 @@ export function AdmissionStepThreeBusHostelPanel({
     stageId: undefined,
     stageName: undefined,
     stageFare: null,
+    busId: undefined,
+    busNumber: undefined,
   });
 
   const clearHostelFields = (): Partial<JoiningTransportDetails> => ({
@@ -303,6 +345,14 @@ export function AdmissionStepThreeBusHostelPanel({
         selectedStage?.fare === undefined || selectedStage?.fare === null
           ? null
           : Number(selectedStage.fare),
+    });
+  };
+
+  const handleBusChange = (busNumber: string) => {
+    const trimmed = busNumber.trim();
+    patchValue({
+      busId: trimmed || undefined,
+      busNumber: trimmed || undefined,
     });
   };
 
@@ -358,6 +408,39 @@ export function AdmissionStepThreeBusHostelPanel({
 
   const stages = routeDetail?.stages || [];
   const buses = routeDetail?.buses || [];
+  const selectedBusNumber = String(value.busId || value.busNumber || '').trim();
+
+  useEffect(() => {
+    if (!canEdit || !onChange || activeTab !== 'bus') return;
+    if (!selectedRouteId || buses.length === 0) return;
+
+    const numberedBuses = buses
+      .map((bus) => String(bus.busNumber || '').trim())
+      .filter(Boolean);
+    if (numberedBuses.length === 0) return;
+
+    if (selectedBusNumber && numberedBuses.includes(selectedBusNumber)) return;
+
+    const preferredNumber =
+      numberedBuses.length === 1
+        ? numberedBuses[0]
+        : String(
+            buses.find((bus) => String(bus.status || '').toLowerCase() === 'active')?.busNumber ||
+              buses[0]?.busNumber ||
+              ''
+          ).trim();
+
+    if (!preferredNumber || preferredNumber === selectedBusNumber) return;
+    onChange({ ...value, busId: preferredNumber, busNumber: preferredNumber });
+  }, [
+    activeTab,
+    buses,
+    canEdit,
+    onChange,
+    selectedBusNumber,
+    selectedRouteId,
+    value,
+  ]);
   const displayHostelFees =
     resolvedHostelFeesByYear.length > 0
       ? resolvedHostelFeesByYear
@@ -376,9 +459,8 @@ export function AdmissionStepThreeBusHostelPanel({
     resolvedFeeAcademicYear !== value.academicYear;
   const resolvedFeeCourse = roomsPayload?.yearlyFees?.[0]?.course || roomsPayload?.fee?.course || '';
   const feeCourseMismatch =
-    Boolean(courseName) &&
-    Boolean(resolvedFeeCourse) &&
-    resolvedFeeCourse.toLowerCase() !== courseName.toLowerCase();
+    Boolean(courseName && resolvedFeeCourse) &&
+    resolvedFeeCourse.toLowerCase() !== String(courseName).toLowerCase();
 
   return (
     <section
@@ -426,6 +508,23 @@ export function AdmissionStepThreeBusHostelPanel({
 
       {activeTab === 'bus' ? (
         <div className="space-y-5 rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
+          <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/40">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Academic year
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {busAcademicYearSession || '—'}
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Session {busAcademicYearSession || '—'} from Step 1 intake year
+              {joiningAcademicYear ? ` (${joiningAcademicYear})` : ''}. This is not the fee batch
+              year — it is used for bus passenger requests and transport application numbers
+              (COLLEGE-COURSE-0001, e.g. PCE-BTECH-0001, per session and course). Fee catalog on
+              Step 4 uses the intake year (
+              {joiningAcademicYear || 'Step 1'}) as batch.
+            </p>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -501,6 +600,36 @@ export function AdmissionStepThreeBusHostelPanel({
               </div>
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Assigned bus
+                </p>
+                {buses.length > 1 ? (
+                  <select
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    value={selectedBusNumber}
+                    disabled={!canEdit}
+                    onChange={(event) => handleBusChange(event.target.value)}
+                  >
+                    <option value="">Select assigned bus</option>
+                    {buses.map((bus) => {
+                      const number = String(bus.busNumber || '').trim();
+                      if (!number) return null;
+                      return (
+                        <option key={bus._id || number} value={number}>
+                          {number}
+                          {bus.driverName ? ` · ${bus.driverName}` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                ) : (
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {selectedBusNumber ||
+                      (buses[0]?.busNumber ? String(buses[0].busNumber) : 'No bus assigned to this route')}
+                  </p>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Selected stage fee
                 </p>
                 <p className="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-300">
@@ -508,16 +637,6 @@ export function AdmissionStepThreeBusHostelPanel({
                 </p>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                   {value.stageName || 'Pick a stage to view fare'}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Assigned buses
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {buses.length > 0
-                    ? buses.map((bus) => bus.busNumber).filter(Boolean).join(', ')
-                    : 'No buses assigned'}
                 </p>
               </div>
             </div>

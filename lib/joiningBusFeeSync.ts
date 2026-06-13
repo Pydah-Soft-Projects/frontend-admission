@@ -7,8 +7,6 @@ import type {
 
 export const BUS_FEE_STRUCTURE_ID_PREFIX = 'joining-bus-fee-year-';
 export const HOSTEL_FEE_STRUCTURE_ID_PREFIX = 'joining-hostel-fee-year-';
-
-/** Fee Management `feeheads` row for transport (TRN01). */
 export const BUS_FEE_HEAD = {
   id: '6996e24c2e1678e39883918a',
   name: 'Bus Fee',
@@ -56,6 +54,9 @@ const mapQuotaToCategory = (quota?: string | null): string => {
 
 export function buildBusFeeRemarks(transport: JoiningTransportDetails): string {
   return [
+    transport.busNumber || transport.busId
+      ? `Bus: ${transport.busNumber || transport.busId}`
+      : '',
     transport.routeName ? `Route: ${transport.routeName}` : '',
     transport.stageName ? `Stage: ${transport.stageName}` : '',
   ]
@@ -113,6 +114,7 @@ export function hasValidHostelFeeAmount(amount: number | null | undefined): amou
 export function shouldApplyBusFee(transport: JoiningTransportDetails): boolean {
   return (
     transport.accommodationType === 'bus' &&
+    Boolean(transport.academicYear) &&
     Boolean(transport.routeId) &&
     Boolean(transport.stageId) &&
     transport.stageFare != null &&
@@ -252,7 +254,6 @@ function buildHostelYearlyOverrideLines(
     if (!hasValidHostelFeeAmount(amount)) continue;
     lines.push({
       structureId: hostelFeeStructureIdForYear(studentYear),
-      amount,
       remarks,
     });
   }
@@ -276,7 +277,6 @@ export function applyAccommodationFeesToStudentFeeDetails(
     for (let studentYear = 1; studentYear <= years; studentYear += 1) {
       extraLines.push({
         structureId: busFeeStructureIdForYear(studentYear),
-        amount: Number(transport.stageFare),
         remarks: buildBusFeeRemarks(transport),
       });
     }
@@ -348,4 +348,45 @@ export function buildBusFeeInjectedRows(
     transport.accommodationType === 'bus' ? transport : { ...transport, accommodationType: 'bus' },
     params
   );
+}
+
+type CatalogFeeRow = Pick<FeeStructure, '_id' | 'id' | 'amount'>;
+
+/**
+ * True when any fee line overrides the catalog amount (Step 4 "Changed" rows).
+ * Bus/hostel rows at catalog fare do not count as revised.
+ */
+export function hasRevisedStudentFeeLineOverrides(
+  lines: JoiningStudentFeeLineOverride[] | undefined | null,
+  catalogRows: CatalogFeeRow[]
+): boolean {
+  const catalogById = new Map<string, number>();
+  for (const row of catalogRows) {
+    const id = String(row._id ?? row.id ?? '').trim();
+    if (id) catalogById.set(id, Number(row.amount) || 0);
+  }
+
+  for (const line of lines || []) {
+    const sid = String(line.structureId || '').trim();
+    if (!sid) continue;
+    if (
+      line.amount === undefined ||
+      line.amount === null ||
+      !Number.isFinite(Number(line.amount))
+    ) {
+      continue;
+    }
+    const overrideAmount = Number(line.amount);
+    const catalogAmount = catalogById.get(sid);
+    if (catalogAmount === undefined) {
+      if (!isSyntheticAccommodationFeeStructureId(sid)) {
+        return true;
+      }
+      continue;
+    }
+    if (overrideAmount !== catalogAmount) {
+      return true;
+    }
+  }
+  return false;
 }

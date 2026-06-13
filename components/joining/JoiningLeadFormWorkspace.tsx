@@ -55,6 +55,7 @@ import { SELF_REGISTRATION_SOURCE } from '@/lib/joiningSelfRegistration';
 import {
   applyAccommodationFeesToStudentFeeDetails,
   buildAccommodationInjectedRows,
+  hasRevisedStudentFeeLineOverrides,
 } from '@/lib/joiningBusFeeSync';
 import {
   computeScholarshipRegistrationPatches,
@@ -78,6 +79,7 @@ import {
   listRegistrationRemarkFieldNames,
   normalizeBtechIntakeYearString,
   resolveBtechSemesterFromLateral,
+  resolveJoiningStepOneAcademicYear,
   resolveTotalYearsFromCourseSettings,
   sanitizeJoiningRegistrationBatchFieldValue,
   type JoiningRegistrationFixedGate,
@@ -3505,13 +3507,35 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     return totalYears && totalYears > 0 ? totalYears : 4;
   }, [courseSettings, formState.courseInfo.courseId, formState.courseInfo.branchId]);
 
+  const stepOneAcademicYear = useMemo(
+    () =>
+      resolveJoiningStepOneAcademicYear({
+        registrationExtras,
+        gate: joiningRegistrationCourseContext,
+        leadAcademicYear: (lead as LeadLike | undefined)?.academicYear,
+      }),
+    [registrationExtras, joiningRegistrationCourseContext, lead]
+  );
+
+  const joiningRegistrationPatch = useMemo(
+    () => ({
+      transport_details: transportDetails,
+      program_total_years: programTotalYears,
+      ...(stepOneAcademicYear
+        ? { academic_year: stepOneAcademicYear, academicYear: stepOneAcademicYear }
+        : {}),
+    }),
+    [transportDetails, programTotalYears, stepOneAcademicYear]
+  );
+
   const feeConfigurationBatch = useMemo(() => {
     const fromDetails = studentFeeDetails.batch != null ? String(studentFeeDetails.batch).trim() : '';
     if (fromDetails) return fromDetails;
+    if (stepOneAcademicYear) return stepOneAcademicYear;
     const fromLead = (lead as { academicYear?: number | string } | undefined)?.academicYear;
     if (fromLead != null && String(fromLead).trim() !== '') return String(fromLead).trim();
     return String(new Date().getFullYear());
-  }, [studentFeeDetails.batch, lead]);
+  }, [studentFeeDetails.batch, stepOneAcademicYear, lead]);
 
   const accommodationInjectedRows = useMemo(
     () =>
@@ -3595,9 +3619,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       ...(!isSelfRegistrationRecord ? { reference1: reference1.trim() } : {}),
       ...(isApprovedAdmission
         ? {
-            registrationFormData: {
-              transport_details: transportDetails,
-            },
+            registrationFormData: joiningRegistrationPatch,
             studentFeeDetails: {
               batch: studentFeeDetails.batch || feeConfigurationBatch,
               lines: studentFeeDetails.lines || [],
@@ -3608,7 +3630,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
               const withTransport = {
                 ...stripped,
-                transport_details: transportDetails,
+                ...joiningRegistrationPatch,
               };
               if (derivedCertificationStatus !== null) {
                 return {
@@ -3636,7 +3658,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     derivedCertificationStatus,
     isPublicEdit,
     studentFeeDetails,
-    transportDetails,
+    joiningRegistrationPatch,
     status,
     feeConfigurationBatch,
     reference1,
@@ -4057,13 +4079,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const hasRevisedFeeLines = useMemo(
     () =>
-      (studentFeeDetails.lines || []).some(
-        (line) =>
-          line.amount !== undefined &&
-          line.amount !== null &&
-          Number.isFinite(Number(line.amount))
+      hasRevisedStudentFeeLineOverrides(
+        studentFeeDetails.lines,
+        accommodationInjectedRows
       ),
-    [studentFeeDetails.lines]
+    [studentFeeDetails.lines, accommodationInjectedRows]
   );
 
   const pendingFeeRequestQuery = useQuery({
@@ -4078,7 +4098,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   });
   const pendingFeeRequest = pendingFeeRequestQuery.data;
 
-  const handleSaveAdmissionRecord = () => {
+  const handleSaveAdmissionRecord = async () => {
     if (!canEditApprovedAdmission) {
       showToast.error('You do not have permission to edit admissions on the joining desk');
       return;
@@ -4095,7 +4115,44 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       );
       return;
     }
-    updateAdmissionMutation.mutate(payloadForSave);
+
+    const canSyncExternalSystems =
+      status === 'approved' &&
+      workflowJoiningId &&
+      !pendingFeeRequest;
+
+    const shouldSyncFeesDirectly = canSyncExternalSystems && !hasRevisedFeeLines;
+
+    try {
+      if (canSyncExternalSystems) {
+        await joiningAPI.patchStepTwo(workflowJoiningId, {
+          registrationFormData: joiningRegistrationPatch,
+          ...(shouldSyncFeesDirectly
+            ? {
+                studentFeeDetails: {
+                  batch: studentFeeDetails.batch || feeConfigurationBatch,
+                  lines: studentFeeDetails.lines || [],
+                },
+              }
+            : {}),
+        });
+      }
+      updateAdmissionMutation.mutate(payloadForSave);
+    } catch (error: unknown) {
+      const message =
+        error &&
+        typeof error === 'object' &&
+        'response' in error &&
+        error.response &&
+        typeof error.response === 'object' &&
+        'data' in error.response &&
+        error.response.data &&
+        typeof error.response.data === 'object' &&
+        'message' in error.response.data
+          ? String((error.response.data as { message?: string }).message)
+          : 'Failed to save fee configuration before updating admission';
+      showToast.error(message);
+    }
   };
 
   if (!isPublicEdit && !leadId) {
@@ -4186,9 +4243,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
         throw new Error('Save the joining form first');
       }
       return joiningAPI.patchStepTwo(workflowJoiningId, {
-        registrationFormData: {
-          transport_details: transportDetails,
-        },
+        registrationFormData: joiningRegistrationPatch,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
           lines: studentFeeDetails.lines || [],
@@ -4216,9 +4271,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       }
       return feeRequestAPI.submit({
         joiningId: joiningRecord._id,
-        registrationFormData: {
-          transport_details: transportDetails,
-        },
+        registrationFormData: joiningRegistrationPatch,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
           lines: studentFeeDetails.lines || [],
@@ -4253,7 +4306,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
           : stripped;
       if (status === 'approved') {
         return joiningAPI.patchStepTwo(workflowJoiningId, {
-          registrationFormData,
+          registrationFormData: {
+            ...registrationFormData,
+            ...joiningRegistrationPatch,
+          },
           studentFeeDetails: {
             batch: studentFeeDetails.batch,
             lines: studentFeeDetails.lines || [],
@@ -4338,7 +4394,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             status === 'approved'
               ? hasRevisedFeeLines
                 ? 'Revised fees require approval before syncing to the fee portal. Submit the fee request when ready.'
-                : 'Unchanged fees save directly to the fee portal, bus, and hostel systems.'
+                : 'Unchanged fees sync automatically when you click Update Admission (fee portal, bus passenger request, and hostel).'
               : 'Review configured fee heads and save certificate or fee line updates on Step 2 before collecting payments.'
           }
           className={stickyClass}
@@ -4359,17 +4415,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
               >
                 {submitFeeRequestMutation.isPending ? 'Submitting…' : 'Submit fee request for approval'}
               </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                className={JOINING_ACTION_BTN_CLASS}
-                disabled={saveStepFourMutation.isPending || isBusy}
-                onClick={() => saveStepFourMutation.mutate()}
-              >
-                {saveStepFourMutation.isPending ? 'Saving…' : 'Save fee configuration'}
-              </Button>
-            )
+            ) : null
           ) : null}
           {isAdmissionEditable && (
             <Button
@@ -5944,6 +5990,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                     disabled={!canWriteJoining}
                     courseName={formState.courseInfo.course}
                     programTotalYears={programTotalYears}
+                    joiningAcademicYear={stepOneAcademicYear}
                   />
                   {renderWizardStepFooter(3)}
                 </>
@@ -5995,10 +6042,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
                 course={formState.courseInfo.course}
                 branch={formState.courseInfo.branch}
                 quota={formState.courseInfo.quota}
-                batch={
-                  (lead as { academicYear?: number | string } | undefined)?.academicYear ??
-                  feeConfigurationBatch
-                }
+                batch={stepOneAcademicYear || feeConfigurationBatch}
                 title="Fee configuration (Fee Management database)"
                 description={
                   status === 'approved'

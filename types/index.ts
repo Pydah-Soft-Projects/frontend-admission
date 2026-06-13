@@ -542,6 +542,9 @@ export interface JoiningTransportDetails {
   stageId?: string;
   stageName?: string;
   stageFare?: number | null;
+  /** Assigned bus number (maps to transport_requests.bus_id). */
+  busId?: string;
+  busNumber?: string;
   academicYear?: string;
   hostelId?: string;
   hostelName?: string;
