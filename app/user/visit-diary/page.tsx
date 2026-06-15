@@ -139,6 +139,7 @@ export default function VisitDiaryPage() {
       showToast.success(`Successfully recorded ${queuedLeads.length} outcomes`);
       queryClient.invalidateQueries({ queryKey: ['visit-diary-search'] });
       queryClient.invalidateQueries({ queryKey: ['visit-history'] });
+      queryClient.invalidateQueries({ queryKey: ['visit-history-range'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       setQueuedLeads([]);
       setSearch('');
