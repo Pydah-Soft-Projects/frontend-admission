@@ -135,6 +135,19 @@ export function shouldApplyHostelFee(transport: JoiningTransportDetails): boolea
   return hasValidHostelFeeAmount(transport.hostelFee);
 }
 
+/** True once bus fee, hostel fee, or explicit "none" is decided — other options must stay hidden. */
+export function isAccommodationChoiceLocked(transport: JoiningTransportDetails): boolean {
+  if (transport.accommodationType === 'none') return true;
+  if (shouldApplyBusFee(transport)) return true;
+  if (shouldApplyHostelFee(transport)) return true;
+  return false;
+}
+
+/** Step 3 can advance when accommodation is explicitly none or a fee-bearing choice is complete. */
+export function canProceedFromAccommodationStep(transport: JoiningTransportDetails): boolean {
+  return isAccommodationChoiceLocked(transport);
+}
+
 function buildSyntheticFeeStructureRows(params: {
   prefix: typeof BUS_FEE_STRUCTURE_ID_PREFIX | typeof HOSTEL_FEE_STRUCTURE_ID_PREFIX;
   feeHead: typeof BUS_FEE_HEAD | typeof HOSTEL_FEE_HEAD;

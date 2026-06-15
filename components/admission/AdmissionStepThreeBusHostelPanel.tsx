@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hostelAPI, transportAPI } from '@/lib/api';
-import { normalizeHostelFeesByYear } from '@/lib/joiningBusFeeSync';
+import { normalizeHostelFeesByYear, isAccommodationChoiceLocked } from '@/lib/joiningBusFeeSync';
 import { calendarYearToAcademicYearRange } from '@/lib/joiningAcademicYearRegistration';
 import { cn } from '@/lib/utils';
 import type {
@@ -31,7 +31,7 @@ const formatCurrency = (amount?: number | null) => {
   }
 };
 
-type AccommodationTab = 'bus' | 'hostel';
+type AccommodationTab = 'bus' | 'hostel' | 'none';
 type HostelType = 'boys' | 'girls';
 
 type AdmissionStepThreeBusHostelPanelProps = {
@@ -45,16 +45,24 @@ type AdmissionStepThreeBusHostelPanelProps = {
   joiningAcademicYear?: string | null;
 };
 
-const emptyTransportDetails = (): JoiningTransportDetails => ({
-  accommodationType: 'bus',
-});
+const emptyTransportDetails = (): JoiningTransportDetails => ({});
 
 export function parseJoiningTransportDetails(raw: unknown): JoiningTransportDetails {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return emptyTransportDetails();
   }
   const source = raw as Record<string, unknown>;
-  const accommodationType = source.accommodationType === 'hostel' ? 'hostel' : 'bus';
+  const rawType = String(source.accommodationType || '').toLowerCase();
+  let accommodationType: JoiningTransportDetails['accommodationType'];
+  if (rawType === 'hostel' || source.hostelId != null) {
+    accommodationType = 'hostel';
+  } else if (rawType === 'none') {
+    accommodationType = 'none';
+  } else if (rawType === 'bus' || source.routeId != null) {
+    accommodationType = 'bus';
+  } else {
+    accommodationType = undefined;
+  }
   const hostelTypeRaw = String(source.hostelType || '').toLowerCase();
   const hostelType =
     hostelTypeRaw === 'boys' || hostelTypeRaw === 'girls'
@@ -150,22 +158,42 @@ export function AdmissionStepThreeBusHostelPanel({
   joiningAcademicYear,
 }: AdmissionStepThreeBusHostelPanelProps) {
   const canEdit = Boolean(onChange) && !disabled;
-  const [activeTab, setActiveTab] = useState<AccommodationTab>(value.accommodationType || 'bus');
+  const choiceLocked = isAccommodationChoiceLocked(value);
+  const selectedTab: AccommodationTab | null =
+    value.accommodationType === 'hostel'
+      ? 'hostel'
+      : value.accommodationType === 'bus'
+        ? 'bus'
+        : value.accommodationType === 'none'
+          ? 'none'
+          : null;
+  const [activeTab, setActiveTab] = useState<AccommodationTab>(selectedTab || 'bus');
 
   useEffect(() => {
-    setActiveTab(value.accommodationType || 'bus');
-  }, [value.accommodationType]);
+    if (selectedTab) {
+      setActiveTab(selectedTab);
+    }
+  }, [selectedTab]);
 
   const joiningAcademicYearSession = useMemo(
     () => calendarYearToAcademicYearRange(joiningAcademicYear),
     [joiningAcademicYear]
   );
 
+  const effectiveAcademicYear = joiningAcademicYearSession || value.academicYear || '';
+
   useEffect(() => {
     if (!canEdit || !onChange || !joiningAcademicYearSession) return;
     if (value.academicYear === joiningAcademicYearSession) return;
     onChange({ ...value, academicYear: joiningAcademicYearSession });
   }, [joiningAcademicYearSession, canEdit, onChange, value]);
+
+  const withHostelAcademicYear = (
+    patch: Partial<JoiningTransportDetails>
+  ): Partial<JoiningTransportDetails> => ({
+    ...patch,
+    ...(effectiveAcademicYear ? { academicYear: effectiveAcademicYear } : {}),
+  });
 
   const {
     data: routesResponse,
@@ -227,7 +255,7 @@ export function AdmissionStepThreeBusHostelPanel({
       'rooms',
       value.hostelId,
       value.categoryId,
-      value.academicYear,
+      effectiveAcademicYear,
       courseName,
       programTotalYears,
     ],
@@ -235,7 +263,7 @@ export function AdmissionStepThreeBusHostelPanel({
       hostelAPI.listRooms({
         hostelId: value.hostelId as string,
         categoryId: value.categoryId as string,
-        academicYear: value.academicYear,
+        academicYear: effectiveAcademicYear,
         course: courseName || undefined,
         totalYears: programTotalYears,
       }),
@@ -243,7 +271,7 @@ export function AdmissionStepThreeBusHostelPanel({
       activeTab === 'hostel' &&
       Boolean(value.hostelId) &&
       Boolean(value.categoryId) &&
-      Boolean(value.academicYear),
+      Boolean(effectiveAcademicYear),
     staleTime: 60_000,
   });
 
@@ -307,12 +335,23 @@ export function AdmissionStepThreeBusHostelPanel({
   });
 
   const handleTabChange = (tab: AccommodationTab) => {
+    if (choiceLocked && selectedTab && tab !== selectedTab) return;
     setActiveTab(tab);
     if (!canEdit || !onChange) return;
+    if (tab === 'none') {
+      onChange({
+        accommodationType: 'none',
+        ...clearBusFields(),
+        ...clearHostelFields(),
+      });
+      return;
+    }
     onChange({
       ...value,
       accommodationType: tab,
-      ...(tab === 'bus' ? clearHostelFields() : clearBusFields()),
+      ...(tab === 'bus'
+        ? clearHostelFields()
+        : withHostelAcademicYear(clearBusFields())),
     });
   };
 
@@ -350,29 +389,33 @@ export function AdmissionStepThreeBusHostelPanel({
       ? hostels.filter((hostel) => hostel.type === hostelType)
       : [];
     const selectedHostel = matchingHostels[0];
-    patchValue({
-      hostelType: hostelType || undefined,
-      hostelId: selectedHostel?._id,
-      hostelName: selectedHostel?.name,
-      categoryId: undefined,
-      categoryName: undefined,
-      roomId: undefined,
-      roomNumber: undefined,
-      hostelFee: null,
-      hostelFeesByYear: undefined,
-    });
+    patchValue(
+      withHostelAcademicYear({
+        hostelType: hostelType || undefined,
+        hostelId: selectedHostel?._id,
+        hostelName: selectedHostel?.name,
+        categoryId: undefined,
+        categoryName: undefined,
+        roomId: undefined,
+        roomNumber: undefined,
+        hostelFee: null,
+        hostelFeesByYear: undefined,
+      })
+    );
   };
 
   const handleCategoryChange = (categoryId: string) => {
     const selected = categories.find((category) => category._id === categoryId);
-    patchValue({
-      categoryId: categoryId || undefined,
-      categoryName: selected?.name || undefined,
-      roomId: undefined,
-      roomNumber: undefined,
-      hostelFee: null,
-      hostelFeesByYear: undefined,
-    });
+    patchValue(
+      withHostelAcademicYear({
+        categoryId: categoryId || undefined,
+        categoryName: selected?.name || undefined,
+        roomId: undefined,
+        roomNumber: undefined,
+        hostelFee: null,
+        hostelFeesByYear: undefined,
+      })
+    );
   };
 
   const handleRoomChange = (roomId: string) => {
@@ -428,12 +471,12 @@ export function AdmissionStepThreeBusHostelPanel({
   const hasVariableHostelFees =
     displayHostelFees.length > 1 &&
     new Set(displayHostelFees.map((row) => row.amount)).size > 1;
-  const resolvedFeeAcademicYear = roomsPayload?.resolvedAcademicYear || value.academicYear;
+  const resolvedFeeAcademicYear = roomsPayload?.resolvedAcademicYear || effectiveAcademicYear;
   const feeUsedFallback =
     roomsPayload?.feeMatchedBy === 'fallback' &&
     resolvedFeeAcademicYear &&
-    value.academicYear &&
-    resolvedFeeAcademicYear !== value.academicYear;
+    effectiveAcademicYear &&
+    resolvedFeeAcademicYear !== effectiveAcademicYear;
   const resolvedFeeCourse = roomsPayload?.yearlyFees?.[0]?.course || roomsPayload?.fee?.course || '';
   const feeCourseMismatch =
     Boolean(courseName && resolvedFeeCourse) &&
@@ -454,16 +497,37 @@ export function AdmissionStepThreeBusHostelPanel({
           Accommodation selection
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-          Choose bus transport or hostel accommodation from the linked databases. The selected{' '}
-          <span className="font-semibold">Bus Fee</span> or{' '}
-          <span className="font-semibold">Hostel Fee</span> is added automatically to Step 4 for
-          every program year.
+          Choose exactly one: bus transport, hostel accommodation, or none. Once a bus or hostel fee
+          is decided—or you select <span className="font-semibold">None</span>—that choice is final
+          and other options are hidden. The selected <span className="font-semibold">Bus Fee</span> or{' '}
+          <span className="font-semibold">Hostel Fee</span> is added automatically to Step 4 for every
+          program year.
         </p>
       </div>
 
+      {choiceLocked ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+          Accommodation choice is final
+          {selectedTab === 'none'
+            ? ': no bus or hostel fees will be added in Step 4.'
+            : selectedTab === 'bus'
+              ? ': bus fee will be added in Step 4.'
+              : ': hostel fee will be added in Step 4.'}
+        </div>
+      ) : (
+        <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+          Pick <span className="font-semibold">Bus</span> (route and stage),{' '}
+          <span className="font-semibold">Hostel</span> (category with configured fee), or{' '}
+          <span className="font-semibold">None</span> to continue to Step 4. You can switch options
+          until one is decided.
+        </p>
+      )}
+
       <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900/80">
-        {(['bus', 'hostel'] as AccommodationTab[]).map((tab) => {
-          const isActive = activeTab === tab;
+        {(['bus', 'hostel', 'none'] as AccommodationTab[]).map((tab) => {
+          const isActive = (selectedTab || activeTab) === tab;
+          const tabLocked = choiceLocked && selectedTab != null && tab !== selectedTab;
+          if (tabLocked) return null;
           return (
             <button
               key={tab}
@@ -473,17 +537,34 @@ export function AdmissionStepThreeBusHostelPanel({
                 'rounded-lg px-4 py-2 text-sm font-semibold capitalize transition',
                 isActive
                   ? 'bg-[#ea580c] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+                  : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800',
+                !canEdit && !isActive && 'opacity-50'
               )}
               onClick={() => handleTabChange(tab)}
             >
-              {tab}
+              {tab === 'none' ? 'None' : tab}
             </button>
           );
         })}
       </div>
 
-      {activeTab === 'bus' ? (
+      {!selectedTab && canEdit ? (
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Select Bus, Hostel, or None above to configure accommodation.
+        </p>
+      ) : null}
+
+      {selectedTab === 'none' ? (
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            No bus or hostel
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            This student will not use college bus transport or hostel accommodation. No transport or
+            hostel fee rows are added in Step 4.
+          </p>
+        </div>
+      ) : selectedTab === 'bus' ? (
         <div className="space-y-5 rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
           <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/40">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -663,7 +744,7 @@ export function AdmissionStepThreeBusHostelPanel({
             </div>
           ) : null}
         </div>
-      ) : (
+      ) : selectedTab === 'hostel' ? (
         <div className="space-y-5 rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
           <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/40">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -745,7 +826,7 @@ export function AdmissionStepThreeBusHostelPanel({
                 disabled={
                   !canEdit ||
                   !value.categoryId ||
-                  !value.academicYear ||
+                  !effectiveAcademicYear ||
                   isLoadingRooms ||
                   rooms.length === 0
                 }
@@ -754,7 +835,7 @@ export function AdmissionStepThreeBusHostelPanel({
                 <option value="">
                   {!value.categoryId
                     ? 'Select category first'
-                    : !value.academicYear
+                    : !effectiveAcademicYear
                       ? 'Academic year not set from Step 1'
                       : isLoadingRooms
                         ? 'Loading rooms…'
@@ -776,7 +857,7 @@ export function AdmissionStepThreeBusHostelPanel({
             </div>
           </div>
 
-          {value.categoryId && roomsPayload ? (
+          {value.categoryId && effectiveAcademicYear && (isLoadingRooms || roomsPayload) ? (
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -795,9 +876,9 @@ export function AdmissionStepThreeBusHostelPanel({
                 </p>
                 {!hasHostelFeeRows ? (
                   <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-300">
-                    No hostel fee configured for {value.academicYear || 'this academic year'} in HMS.
-                    Configure fee structures for this session in the hostel portal, then reselect
-                    the category here.
+                    {isLoadingRooms
+                      ? 'Loading hostel fees for this category…'
+                      : `No hostel fee configured for ${effectiveAcademicYear || 'this academic year'} in HMS. Configure fee structures for this session in the hostel portal, then reselect the category here.`}
                   </p>
                 ) : hasVariableHostelFees || displayHostelFees.length > 1 ? (
                   <div className="mt-2 space-y-1">
@@ -824,7 +905,7 @@ export function AdmissionStepThreeBusHostelPanel({
                     ? ` · ${displayHostelFees.length} program year${displayHostelFees.length === 1 ? '' : 's'}`
                     : ''}
                   {feeUsedFallback
-                    ? ` · Fee from AY ${resolvedFeeAcademicYear} (no ${value.academicYear} config yet)`
+                    ? ` · Fee from AY ${resolvedFeeAcademicYear} (no ${effectiveAcademicYear} config yet)`
                     : ''}
                   {feeCourseMismatch
                     ? ` · Using ${resolvedFeeCourse} category fee (no ${courseName} config yet)`
@@ -836,16 +917,21 @@ export function AdmissionStepThreeBusHostelPanel({
                   Room availability
                 </p>
                 <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {roomsPayload.availableCount} of {roomsPayload.total} rooms have free beds
+                  {isLoadingRooms
+                    ? 'Loading…'
+                    : `${roomsPayload?.availableCount ?? 0} of ${roomsPayload?.total ?? 0} rooms have free beds`}
                 </p>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  {value.roomNumber ? `Selected room ${value.roomNumber}` : 'Select a room'}
+                  {effectiveAcademicYear
+                    ? `Counts for academic year ${effectiveAcademicYear} from HMS occupancy history`
+                    : 'Academic year required for availability'}
+                  {value.roomNumber ? ` · Selected room ${value.roomNumber}` : ''}
                 </p>
               </div>
             </div>
           ) : null}
 
-          {value.categoryId && rooms.length > 0 ? (
+          {value.categoryId && effectiveAcademicYear && !isLoadingRooms && rooms.length > 0 ? (
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 Rooms in category {value.categoryName || ''}
@@ -859,6 +945,9 @@ export function AdmissionStepThreeBusHostelPanel({
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         Beds
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Occupied
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         Available
@@ -887,6 +976,9 @@ export function AdmissionStepThreeBusHostelPanel({
                             {room.bedCount}
                           </td>
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                            {room.totalOccupancy ?? room.occupiedBeds}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                             {room.availableBeds} free
                           </td>
                         </tr>
@@ -898,7 +990,7 @@ export function AdmissionStepThreeBusHostelPanel({
             </div>
           ) : null}
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

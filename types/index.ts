@@ -536,7 +536,8 @@ export interface JoiningStudentFeeDetails {
 
 /** Bus / hostel selection for Step 3 (persisted in joinings.registrationFormData.transport_details). */
 export interface JoiningTransportDetails {
-  accommodationType: 'bus' | 'hostel';
+  /** Unset until staff picks bus, hostel, or none. */
+  accommodationType?: 'bus' | 'hostel' | 'none';
   routeId?: string;
   routeName?: string;
   stageId?: string;
@@ -577,7 +578,11 @@ export interface HostelRoomSummary {
   _id: string;
   roomNumber: string;
   bedCount: number;
+  /** Active student allocations for the requested academic year. */
+  studentCount?: number;
   occupiedBeds: number;
+  /** Same as occupiedBeds — total beds taken for the academic year session. */
+  totalOccupancy?: number;
   availableBeds: number;
   isAvailable: boolean;
   hostelId: string;
@@ -601,7 +606,9 @@ export interface HostelRoomsPayload {
   fee: HostelFeeSummary | null;
   /** Academic year the fee rows were resolved from (may differ from selected year). */
   resolvedAcademicYear?: string;
-  feeMatchedBy?: 'exact' | 'fallback' | 'none';
+  feeMatchedBy?: 'exact' | 'fallback' | 'feestructures' | 'none';
+  /** Academic year used for occupancy (YYYY-YYYY). */
+  academicYear?: string;
   total: number;
   availableCount: number;
 }

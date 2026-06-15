@@ -208,7 +208,9 @@ export function formatRegistrationFieldDisplayValue(key: string, raw: unknown): 
     }
     const obj = raw as Record<string, unknown>;
     if (obj.accommodationType != null) {
-      const type = obj.accommodationType === 'hostel' ? 'Hostel' : 'Bus';
+      const rawType = String(obj.accommodationType).toLowerCase();
+      const type =
+        rawType === 'hostel' ? 'Hostel' : rawType === 'none' ? 'None' : 'Bus';
       const parts = [type];
       if (obj.routeName) parts.push(String(obj.routeName));
       if (obj.stageName) parts.push(String(obj.stageName));

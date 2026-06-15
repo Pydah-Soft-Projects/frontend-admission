@@ -55,6 +55,7 @@ import { SELF_REGISTRATION_SOURCE } from '@/lib/joiningSelfRegistration';
 import {
   applyAccommodationFeesToStudentFeeDetails,
   buildAccommodationInjectedRows,
+  canProceedFromAccommodationStep,
   hasRevisedStudentFeeLineOverrides,
 } from '@/lib/joiningBusFeeSync';
 import {
@@ -693,9 +694,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
   );
   /** Per–fee-head student amounts/notes; persisted in joinings.lead_data._joiningStudentFeeDetails on Save Draft. */
   const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({ lines: [] });
-  const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({
-    accommodationType: 'bus',
-  });
+  const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({});
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [openPaymentMode, setOpenPaymentMode] = useState<'cash' | 'online' | null>(null);
@@ -4366,11 +4365,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
       : undefined;
 
     if (panelStep === 3) {
+      const canProceedStep3 = canProceedFromAccommodationStep(transportDetails);
       return (
         <WorkflowStickyActionBar
           id="joining-wizard-step-3-actions"
           stepLabel="Step 3 — Bus & hostel"
-          hint="Select bus route/stage or hostel category/room — fees are added automatically to Step 4."
+          hint={
+            canProceedStep3
+              ? 'Accommodation choice is set. Continue to Step 4 for fee configuration.'
+              : 'Choose bus (route and stage), hostel (category with fee), or None before continuing.'
+          }
           className={stickyClass}
         >
           <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(2)} />
@@ -4380,6 +4384,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
             joiningId={workflowJoiningId}
             admissionId={admissionRecord?._id}
             onWizardAdvance={() => advanceApplicationWizard(4)}
+            disabled={!canProceedStep3}
+            disabledTitle="Complete bus, hostel, or None selection before continuing to Step 4."
           />
         </WorkflowStickyActionBar>
       );
