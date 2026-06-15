@@ -826,7 +826,7 @@ function getPrintApplicationHtml(props: {
       width: 100%;
       margin: 6px 0 14px;
     }
-    /* Sidebar height = sections 1–3 + section 4 title + door row (mother photo aligns to door line) */
+    /* Sidebar height = sections 1–3 + section 4 title + door row (photos distributed in remaining space) */
     .form-sidebar-row {
       position: relative;
       width: 100%;
@@ -847,10 +847,18 @@ function getPrintApplicationHtml(props: {
       right: 0;
       width: var(--print-sidebar-width);
       height: 100%;
-      display: grid;
-      grid-template-rows: auto 1fr 1fr 1fr;
-      gap: 7px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      box-sizing: border-box;
+    }
+    .form-sidebar-photos {
+      flex: 1;
       min-height: 0;
+      display: grid;
+      grid-template-rows: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
     }
     .student-form-left {
       min-width: 0;
@@ -926,14 +934,6 @@ function getPrintApplicationHtml(props: {
       flex-shrink: 0;
       box-sizing: border-box;
     }
-    .office-use-top .title {
-      text-align: center;
-      font-weight: bold;
-      font-size: 11px;
-      border-bottom: 1px solid #777;
-      margin-bottom: 4px;
-      padding-bottom: 2px;
-    }
     .office-use-top .office-use-row {
       margin-bottom: 3px;
       display: grid;
@@ -941,14 +941,16 @@ function getPrintApplicationHtml(props: {
       column-gap: 4px;
       align-items: baseline;
       white-space: nowrap;
+      font-weight: 700;
     }
-    .office-use-top .office-use-row span:first-child { font-weight: 600; }
+    .office-use-top .office-use-row span:first-child { font-weight: 700; }
     .office-use-top .office-use-row span:last-child {
       border-bottom: 1px dotted #333;
       min-height: 12px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-weight: 700;
     }
 
     .section-num { font-weight: bold; margin-right: 5px; font-size: 13px; width: 20px; flex-shrink: 0; }
@@ -1101,16 +1103,19 @@ function getPrintApplicationHtml(props: {
 
     .photos-stack-item {
       min-height: 0;
-      overflow: hidden;
+      min-width: 0;
       width: 100%;
       display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
     }
     .portrait-thumb {
       border: 1px solid #777;
-      width: 100%;
+      aspect-ratio: 1 / 1;
       height: 100%;
-      min-height: 0;
-      flex: 1;
+      width: auto;
+      max-width: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1541,10 +1546,18 @@ function getPrintApplicationHtml(props: {
         right: 0;
         width: var(--print-sidebar-width);
         height: 100%;
-        display: grid;
-        grid-template-rows: auto 1fr 1fr 1fr;
-        gap: 7px;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        box-sizing: border-box;
+      }
+      .form-sidebar-photos {
+        flex: 1;
         min-height: 0;
+        display: grid;
+        grid-template-rows: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
       }
       .header-main h1,
       .app-title-box h2,
@@ -1582,7 +1595,8 @@ function getPrintApplicationHtml(props: {
         page-break-inside: avoid;
       }
       .photos-stack-item,
-      .portrait-thumb {
+      .portrait-thumb,
+      .form-sidebar-photos {
         break-inside: avoid;
         page-break-inside: avoid;
       }
@@ -1729,7 +1743,6 @@ function getPrintApplicationHtml(props: {
         </div>
         <div class="form-sidebar-aside">
           <div class="office-use-top">
-            <div class="title">For Office Use</div>
             <div class="office-use-row"><span>PIN No :</span><span></span></div>
             <div class="office-use-row"><span>Admission No :</span><span>${escapeHtml(admissionNumber || '')}</span></div>
             <div class="office-use-row"><span>Application No :</span><span class="text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
@@ -1737,6 +1750,7 @@ function getPrintApplicationHtml(props: {
             <div class="office-use-row"><span>Branch :</span><span>${escapeHtml(branchName || course?.branch)}</span></div>
             <div class="office-use-row"><span>Quota :</span><span>${escapeHtml(course?.quota)}</span></div>
           </div>
+          <div class="form-sidebar-photos">
           <div class="photos-stack-item" aria-label="Student photo">
             <div class="portrait-thumb">${portraitPhotoCell(studentPhotoSrc, 'Student photo')}</div>
           </div>
@@ -1745,6 +1759,7 @@ function getPrintApplicationHtml(props: {
           </div>
           <div class="photos-stack-item" aria-label="Mother photo">
             <div class="portrait-thumb">${portraitPhotoCell(motherPhotoSrc, 'Mother photo')}</div>
+          </div>
           </div>
         </div>
       </div>

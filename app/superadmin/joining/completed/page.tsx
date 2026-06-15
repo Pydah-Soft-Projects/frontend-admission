@@ -76,6 +76,8 @@ type AbstractIntakeEditRow = {
   branchId: string;
   courseName: string;
   branchName: string;
+  /** 0 = regular B.Tech; 1 = B.Tech lateral entry (separate abstract row). */
+  lateralTrack?: number;
   cqIntake: number | null;
   mqIntake: number | null;
 };
@@ -98,6 +100,33 @@ type AdmissionReferenceStatsRow = {
   counts?: Record<string, number>;
   total?: number;
 };
+
+type ReferenceAdmissionDrilldownRow = {
+  id: string;
+  admissionNumber: string;
+  studentName: string;
+  status: string;
+  courseId?: string | null;
+  course: string;
+  branch: string;
+};
+
+const REFERENCE_META_BLANK = '__blank__';
+
+const normalizeReferenceMetaValue = (value?: string | null) => {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || REFERENCE_META_BLANK;
+};
+
+const referenceMetaFilterLabel = (value: string) =>
+  value === REFERENCE_META_BLANK ? '(Not set)' : value;
+
+const sortReferenceMetaOptions = (values: string[]) =>
+  [...values].sort((a, b) => {
+    if (a === REFERENCE_META_BLANK) return 1;
+    if (b === REFERENCE_META_BLANK) return -1;
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  });
 
 const admissionPivotCountsKey = (c: AdmissionStatsPivotCourse) =>
   c.pivotKey ?? `${c.courseId}::${c.lateralTrack ?? 0}`;
@@ -294,6 +323,10 @@ const CompletedAdmissionsPage = () => {
   const [studentInfoViewRecord, setStudentInfoViewRecord] = useState<Admission | null>(null);
   const [referenceEditTarget, setReferenceEditTarget] = useState<Admission | null>(null);
   const [referenceEditValue, setReferenceEditValue] = useState('');
+  const [referenceDepartmentFilter, setReferenceDepartmentFilter] = useState('');
+  const [referenceDesignationFilter, setReferenceDesignationFilter] = useState('');
+  const [referenceDrilldownTarget, setReferenceDrilldownTarget] =
+    useState<AdmissionReferenceStatsRow | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
@@ -453,6 +486,15 @@ const CompletedAdmissionsPage = () => {
     return getCollegeNameForCourse(row.courseId) || 'Other';
   };
 
+  const resolveReferenceAdmissionCollege = (row: ReferenceAdmissionDrilldownRow) => {
+    const courseId = String(row.courseId ?? '').trim();
+    const collegeId = courseId ? courseIdToCollegeId.get(courseId) : undefined;
+    if (collegeId) {
+      return collegeNameById.get(collegeId) || getCollegeNameForCourse(courseId) || '—';
+    }
+    return getCollegeNameForCourse(courseId) || '—';
+  };
+
   useEffect(() => {
     if (!collegeFilter) return;
     if (courseFilter) {
@@ -471,6 +513,7 @@ const CompletedAdmissionsPage = () => {
         branchId: payload.branchId,
         courseName: payload.courseName,
         branchName: payload.branchName,
+        lateralTrack: payload.lateralTrack ?? 0,
         cqIntake: payload.cqIntake,
         mqIntake: payload.mqIntake,
       }),
@@ -560,6 +603,95 @@ const CompletedAdmissionsPage = () => {
 
   const referenceCourses = (referenceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
   const referenceRows = (referenceStatsData?.rows ?? []) as AdmissionReferenceStatsRow[];
+
+  const referenceDepartmentOptions = useMemo(() => {
+    const values = new Set<string>();
+    referenceRows.forEach((row) => {
+      values.add(normalizeReferenceMetaValue(row.department));
+    });
+    return sortReferenceMetaOptions(Array.from(values));
+  }, [referenceRows]);
+
+  const referenceDesignationOptions = useMemo(() => {
+    const values = new Set<string>();
+    referenceRows.forEach((row) => {
+      if (
+        referenceDepartmentFilter &&
+        normalizeReferenceMetaValue(row.department) !== referenceDepartmentFilter
+      ) {
+        return;
+      }
+      values.add(normalizeReferenceMetaValue(row.designation));
+    });
+    return sortReferenceMetaOptions(Array.from(values));
+  }, [referenceRows, referenceDepartmentFilter]);
+
+  const filteredReferenceRows = useMemo(
+    () =>
+      referenceRows.filter((row) => {
+        if (
+          referenceDepartmentFilter &&
+          normalizeReferenceMetaValue(row.department) !== referenceDepartmentFilter
+        ) {
+          return false;
+        }
+        if (
+          referenceDesignationFilter &&
+          normalizeReferenceMetaValue(row.designation) !== referenceDesignationFilter
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [referenceRows, referenceDepartmentFilter, referenceDesignationFilter]
+  );
+
+  useEffect(() => {
+    if (!referenceDesignationFilter) return;
+    if (!referenceDesignationOptions.includes(referenceDesignationFilter)) {
+      setReferenceDesignationFilter('');
+    }
+  }, [referenceDesignationFilter, referenceDesignationOptions]);
+
+  const referenceDrilldownUnspecified = useMemo(() => {
+    if (!referenceDrilldownTarget) return false;
+    return (
+      !referenceDrilldownTarget.referenceKey &&
+      referenceDrilldownTarget.name.trim().toLowerCase() === '(not specified)'
+    );
+  }, [referenceDrilldownTarget]);
+
+  const referenceDrilldownParams = useMemo(
+    () => ({
+      ...pivotReportParams,
+      referenceKey: referenceDrilldownUnspecified
+        ? undefined
+        : referenceDrilldownTarget?.referenceKey ?? referenceDrilldownTarget?.name,
+      name: referenceDrilldownTarget?.name,
+      unspecified: referenceDrilldownUnspecified ? true : undefined,
+    }),
+    [
+      pivotReportParams,
+      referenceDrilldownTarget?.name,
+      referenceDrilldownTarget?.referenceKey,
+      referenceDrilldownUnspecified,
+    ]
+  );
+
+  const {
+    data: referenceDrilldownData,
+    isLoading: referenceDrilldownLoading,
+    isError: referenceDrilldownError,
+  } = useQuery({
+    queryKey: ['admissions', 'stats', 'by-reference', 'admissions', referenceDrilldownParams],
+    queryFn: async () => admissionAPI.getReferenceAdmissions(referenceDrilldownParams),
+    enabled: !!referenceDrilldownTarget,
+    staleTime: 60_000,
+  });
+
+  const referenceDrilldownAdmissions = (referenceDrilldownData?.admissions ??
+    []) as ReferenceAdmissionDrilldownRow[];
+
   const sourceCourses = (sourceStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
   const sourceRows = sourceStatsData?.rows ?? [];
   const dateWiseCourses = (dateWiseStatsData?.courses ?? []) as AdmissionStatsPivotCourse[];
@@ -781,6 +913,8 @@ const CompletedAdmissionsPage = () => {
   const pivotTdClass = 'px-2 py-2 text-center text-xs font-semibold sm:px-3 sm:py-3 sm:text-sm';
   const pivotMetaTdClass =
     'px-2 py-2 text-left text-xs text-slate-600 sm:px-3 sm:py-3 sm:text-sm dark:text-slate-300';
+  const referencePivotHeaderSelectClass =
+    'mt-1 h-7 w-full min-w-[5.5rem] max-w-[9rem] rounded-md border border-slate-300 bg-white px-1.5 text-[10px] font-normal normal-case tracking-normal text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200';
   const referencePivotFixedColCount = 5;
 
   if (!hasJoiningAccess) {
@@ -855,6 +989,104 @@ const CompletedAdmissionsPage = () => {
               onClick={() => saveReferenceMutation.mutate()}
             >
               Save Reference
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!referenceDrilldownTarget}
+        onOpenChange={(open) => {
+          if (!open) setReferenceDrilldownTarget(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] w-[95vw] max-w-4xl overflow-hidden p-0">
+          <DialogHeader className="border-b border-slate-200 px-4 py-4 sm:px-6 dark:border-slate-800">
+            <DialogTitle>Admissions for reference</DialogTitle>
+            <DialogDescription>
+              {referenceDrilldownTarget?.name ?? 'Reference'}
+              {referenceDrilldownLoading ? (
+                <> · loading admissions…</>
+              ) : referenceDrilldownError ? (
+                <> · could not load admissions</>
+              ) : (
+                <>
+                  {' '}
+                  · {referenceDrilldownData?.total ?? 0} admission
+                  {(referenceDrilldownData?.total ?? 0) === 1 ? '' : 's'} matching the filters above
+                  {referenceDrilldownData?.truncated ? ' (showing first 500)' : ''}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[min(60vh,520px)] overflow-auto px-4 py-3 sm:px-6">
+            {referenceDrilldownLoading ? (
+              <div className="py-16 text-center text-slate-500">
+                <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-400">Loading admissions…</p>
+              </div>
+            ) : referenceDrilldownError ? (
+              <p className="py-12 text-center text-sm text-red-600 dark:text-red-400">
+                Could not load admissions for this reference. Please try again.
+              </p>
+            ) : referenceDrilldownAdmissions.length === 0 ? (
+              <p className="py-12 text-center text-sm text-slate-500">No admissions found for this reference.</p>
+            ) : (
+              <table className="min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <thead className="sticky top-0 z-10 bg-white dark:bg-slate-950">
+                  <tr>
+                    <th className={tableThClass}>Admission #</th>
+                    <th className={tableThClass}>Student</th>
+                    <th className={tableThClass}>College</th>
+                    <th className={tableThClass}>Course</th>
+                    <th className={tableThClass}>Branch</th>
+                    <th className={`${tableThClass} text-right`}>Open</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
+                  {referenceDrilldownAdmissions.map((admission) => (
+                    <tr
+                      key={admission.id || admission.admissionNumber}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                    >
+                      <td className={`${tableTdClass} font-mono text-xs font-semibold text-blue-600 dark:text-blue-400`}>
+                        {admission.admissionNumber}
+                      </td>
+                      <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
+                        {admission.studentName}
+                      </td>
+                      <td className={`${tableTdClass} text-slate-700 dark:text-slate-300`}>
+                        {resolveReferenceAdmissionCollege(admission)}
+                      </td>
+                      <td className={tableTdClass}>
+                        {resolveJoiningOrAdmissionCourseLabel(
+                          { courseInfo: { courseId: admission.courseId, course: admission.course } },
+                          getCourseName
+                        ) || admission.course}
+                      </td>
+                      <td className={tableTdClass}>{admission.branch || '—'}</td>
+                      <td className={`${tableTdClass} text-right`}>
+                        {admission.id ? (
+                          <Link
+                            href={`/superadmin/admission/${admission.id}/detail`}
+                            className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                            onClick={() => setReferenceDrilldownTarget(null)}
+                          >
+                            View
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <DialogFooter className="border-t border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-800">
+            <Button type="button" variant="outline" onClick={() => setReferenceDrilldownTarget(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1089,7 +1321,13 @@ const CompletedAdmissionsPage = () => {
           <div className="space-y-4">
             <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
               <p className="font-semibold text-slate-900 dark:text-slate-100">
-                {intakeEditTarget?.courseName || '—'}
+                {intakeEditTarget
+                  ? resolveStatCourseLabel({
+                      courseId: intakeEditTarget.courseId,
+                      courseName: intakeEditTarget.courseName,
+                      lateralTrack: intakeEditTarget.lateralTrack,
+                    })
+                  : '—'}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {intakeEditTarget?.branchName || '—'}
@@ -1928,7 +2166,8 @@ const CompletedAdmissionsPage = () => {
             <p className="mt-1 text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">
               Admissions grouped by Reference 1 (admission record, then linked joining or CRM lead when
               missing), broken down by course. Uses the course, branch, status, and admission date filters
-              above.
+              above. Filter by Dept and Designation from the column headers. Click a reference row to view
+              its admissions.
             </p>
           </div>
           <div className="-mx-1 overflow-x-auto sm:mx-0">
@@ -1941,8 +2180,45 @@ const CompletedAdmissionsPage = () => {
                   <th className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotThClass} dark:bg-slate-900`}>
                     Reference
                   </th>
-                  <th className={pivotThClass}>Dept</th>
-                  <th className={pivotThClass}>Designation</th>
+                  <th className={pivotThClass}>
+                    <div className="flex min-w-[5.5rem] flex-col gap-0.5">
+                      <span>Dept</span>
+                      <select
+                        value={referenceDepartmentFilter}
+                        onChange={(e) => {
+                          setReferenceDepartmentFilter(e.target.value);
+                          setReferenceDesignationFilter('');
+                        }}
+                        aria-label="Filter by department"
+                        className={referencePivotHeaderSelectClass}
+                      >
+                        <option value="">All</option>
+                        {referenceDepartmentOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {referenceMetaFilterLabel(opt)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </th>
+                  <th className={pivotThClass}>
+                    <div className="flex min-w-[5.5rem] flex-col gap-0.5">
+                      <span>Designation</span>
+                      <select
+                        value={referenceDesignationFilter}
+                        onChange={(e) => setReferenceDesignationFilter(e.target.value)}
+                        aria-label="Filter by designation"
+                        className={referencePivotHeaderSelectClass}
+                      >
+                        <option value="">All</option>
+                        {referenceDesignationOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {referenceMetaFilterLabel(opt)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </th>
                   {referenceCourses.map((c) => (
                     <th
                       key={admissionPivotColumnReactKey(c)}
@@ -1977,8 +2253,17 @@ const CompletedAdmissionsPage = () => {
                       No data for the selected filters.
                     </td>
                   </tr>
+                ) : filteredReferenceRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={Math.max(referencePivotFixedColCount + referenceCourses.length, referencePivotFixedColCount)}
+                      className="py-16 text-center text-slate-500"
+                    >
+                      No references match the Dept / Designation filters.
+                    </td>
+                  </tr>
                 ) : (
-                  referenceRows.map((row, idx: number) => {
+                  filteredReferenceRows.map((row, idx: number) => {
                     const rowTotal =
                       Number(row.total) ||
                       referenceCourses.reduce(
@@ -1988,7 +2273,15 @@ const CompletedAdmissionsPage = () => {
                     return (
                       <tr
                         key={row.referenceKey ?? `ref-${idx}`}
-                        className="transition hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                        onClick={() => {
+                          if (rowTotal > 0) setReferenceDrilldownTarget(row);
+                        }}
+                        className={`transition ${
+                          rowTotal > 0
+                            ? 'cursor-pointer hover:bg-blue-50/70 dark:hover:bg-slate-800/40'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'
+                        }`}
+                        title={rowTotal > 0 ? 'View admissions for this reference' : undefined}
                       >
                         <td className={`sticky left-0 z-10 bg-white ${pivotTdClass} font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-300`}>
                           {idx + 1}

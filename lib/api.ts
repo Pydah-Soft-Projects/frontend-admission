@@ -1497,6 +1497,7 @@ export const admissionAPI = {
     branchId: string;
     courseName?: string;
     branchName?: string;
+    lateralTrack?: number;
     cqIntake?: number | null;
     mqIntake?: number | null;
   }) => {
@@ -1564,6 +1565,39 @@ export const admissionAPI = {
     }
     const query = queryParams.toString();
     const response = await api.get(`/admissions/stats/by-reference${query ? `?${query}` : ''}`);
+    return response.data?.data || response.data;
+  },
+  getReferenceAdmissions: async (params?: {
+    name?: string;
+    referenceKey?: string;
+    unspecified?: boolean | string;
+    startDate?: string;
+    endDate?: string;
+    collegeId?: string;
+    courseId?: string;
+    branchId?: string;
+    courseName?: string;
+    branchName?: string;
+    status?: string;
+    limit?: number;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') return;
+        if (key === 'unspecified') {
+          if (value === true || value === 'true' || value === '1') {
+            queryParams.append('unspecified', '1');
+          }
+          return;
+        }
+        queryParams.append(key, String(value));
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(
+      `/admissions/stats/by-reference/admissions${query ? `?${query}` : ''}`
+    );
     return response.data?.data || response.data;
   },
   getStatsBySource: async (params?: {

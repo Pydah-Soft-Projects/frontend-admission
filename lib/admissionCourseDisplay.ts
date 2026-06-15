@@ -55,7 +55,6 @@ export function resolveAdmissionStatCourseLabel(args: {
   lateralTrack?: number | string | null;
   getCourseName?: (courseId?: string | null) => string;
 }): string {
-  const lateral = Number(args.lateralTrack) === 1;
   const fromApi = String(args.courseName || '').trim();
   const fromCatalog = String(args.getCourseName?.(args.courseId) || '').trim();
 
@@ -78,7 +77,10 @@ export function resolveAdmissionStatCourseLabel(args: {
   if (!base) return 'Other';
 
   base = base.replace(/\s*\(lateral\)\s*/gi, '').trim();
-  const isLateral = lateral || /\(lateral\)/i.test(fromApi);
+  const hasExplicitTrack = args.lateralTrack != null && args.lateralTrack !== '';
+  const isLateral = hasExplicitTrack
+    ? Number(args.lateralTrack) === 1
+    : /\(lateral\)/i.test(fromApi);
 
   if (isBtechCourseFromCatalog(base, null)) {
     return formatBtechCourseDisplayLabel(base, isLateral);

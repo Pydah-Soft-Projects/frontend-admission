@@ -519,6 +519,7 @@ const UserManagementPage = () => {
         mobileNumber: emp.mobileNumber || prev.mobileNumber,
         emp_no: emp.emp_no,
         hrms_id: emp.id || emp._id,
+        designation: emp.designation || prev.designation,
       }));
     } else {
       setFormState(prev => ({
@@ -528,6 +529,7 @@ const UserManagementPage = () => {
         mobileNumber: emp.mobileNumber || prev.mobileNumber,
         emp_no: emp.emp_no,
         hrms_id: emp.id || emp._id,
+        designation: emp.designation || prev.designation,
       }));
     }
     setHrmsResults([]);
@@ -545,12 +547,12 @@ const UserManagementPage = () => {
       return;
     }
 
-    if (!formState.emp_no && !formState.password) {
+    if (!formState.emp_no && !formState.hrms_id && !formState.password) {
       showToast.error('Password is required for non-HRMS users');
       return;
     }
 
-    if (!formState.emp_no && formState.password.length < 6) {
+    if (!formState.emp_no && !formState.hrms_id && formState.password.length < 6) {
       showToast.error('Password must be at least 6 characters long');
       return;
     }
@@ -565,9 +567,12 @@ const UserManagementPage = () => {
       emp_no: formState.emp_no || undefined,
     } as Parameters<typeof userAPI.create>[0];
 
-    // Designation logic removed
-    if (formState.roleName === 'Student Counselor' || formState.roleName === 'Data Entry User') {
-      // Designation logic removed
+    if (
+      formState.roleName === 'Student Counselor' ||
+      formState.roleName === 'Data Entry User' ||
+      formState.roleName === 'PRO'
+    ) {
+      payload.designation = formState.designation?.trim() || undefined;
     }
 
     if (formState.roleName === 'Sub Super Admin') {
@@ -1740,8 +1745,11 @@ const UserManagementPage = () => {
                   payload.password = editFormState.password;
                 }
 
-                // Designation logic removed
-                if (editFormState.roleName === 'Student Counselor' || editFormState.roleName === 'Data Entry User') {
+                if (
+                  editFormState.roleName === 'Student Counselor' ||
+                  editFormState.roleName === 'Data Entry User' ||
+                  editFormState.roleName === 'PRO'
+                ) {
                   payload.designation = editFormState.designation?.trim() || undefined;
                 }
 
