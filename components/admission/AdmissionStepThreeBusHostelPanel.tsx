@@ -156,16 +156,16 @@ export function AdmissionStepThreeBusHostelPanel({
     setActiveTab(value.accommodationType || 'bus');
   }, [value.accommodationType]);
 
-  const busAcademicYearSession = useMemo(
+  const joiningAcademicYearSession = useMemo(
     () => calendarYearToAcademicYearRange(joiningAcademicYear),
     [joiningAcademicYear]
   );
 
   useEffect(() => {
-    if (!canEdit || !onChange || !busAcademicYearSession) return;
-    if (value.academicYear === busAcademicYearSession) return;
-    onChange({ ...value, academicYear: busAcademicYearSession });
-  }, [busAcademicYearSession, canEdit, onChange, value]);
+    if (!canEdit || !onChange || !joiningAcademicYearSession) return;
+    if (value.academicYear === joiningAcademicYearSession) return;
+    onChange({ ...value, academicYear: joiningAcademicYearSession });
+  }, [joiningAcademicYearSession, canEdit, onChange, value]);
 
   const {
     data: routesResponse,
@@ -196,22 +196,12 @@ export function AdmissionStepThreeBusHostelPanel({
     [routeDetailResponse]
   );
 
-  const { data: academicYearsResponse, isLoading: isLoadingAcademicYears } = useQuery({
-    queryKey: ['hostel', 'academic-years'],
-    queryFn: async () => hostelAPI.listAcademicYears(),
-    staleTime: 120_000,
-  });
-
   const { data: hostelsResponse, isLoading: isLoadingHostels } = useQuery({
     queryKey: ['hostel', 'hostels'],
     queryFn: async () => hostelAPI.listHostels(),
     staleTime: 120_000,
   });
 
-  const academicYears = useMemo(
-    () => unwrapList<string>(academicYearsResponse),
-    [academicYearsResponse]
-  );
   const hostels = useMemo(() => unwrapList<HostelSummary>(hostelsResponse), [hostelsResponse]);
 
   const filteredHostels = useMemo(() => {
@@ -305,7 +295,6 @@ export function AdmissionStepThreeBusHostelPanel({
   });
 
   const clearHostelFields = (): Partial<JoiningTransportDetails> => ({
-    academicYear: undefined,
     hostelId: undefined,
     hostelName: undefined,
     hostelType: undefined,
@@ -353,18 +342,6 @@ export function AdmissionStepThreeBusHostelPanel({
     patchValue({
       busId: trimmed || undefined,
       busNumber: trimmed || undefined,
-    });
-  };
-
-  const handleAcademicYearChange = (academicYear: string) => {
-    patchValue({
-      academicYear: academicYear || undefined,
-      categoryId: undefined,
-      categoryName: undefined,
-      roomId: undefined,
-      roomNumber: undefined,
-      hostelFee: null,
-      hostelFeesByYear: undefined,
     });
   };
 
@@ -513,10 +490,10 @@ export function AdmissionStepThreeBusHostelPanel({
               Academic year
             </p>
             <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {busAcademicYearSession || '—'}
+              {joiningAcademicYearSession || '—'}
             </p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Session {busAcademicYearSession || '—'} from Step 1 intake year
+              Session {joiningAcademicYearSession || '—'} from Step 1 intake year
               {joiningAcademicYear ? ` (${joiningAcademicYear})` : ''}. This is not the fee batch
               year — it is used for bus passenger requests and transport application numbers
               (COLLEGE-COURSE-0001, e.g. PCE-BTECH-0001, per session and course). Fee catalog on
@@ -688,28 +665,21 @@ export function AdmissionStepThreeBusHostelPanel({
         </div>
       ) : (
         <div className="space-y-5 rounded-xl border border-slate-200 bg-white/90 p-5 dark:border-slate-700 dark:bg-slate-900/80">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Academic year
-              </label>
-              <select
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                value={value.academicYear || ''}
-                disabled={!canEdit || isLoadingAcademicYears}
-                onChange={(event) => handleAcademicYearChange(event.target.value)}
-              >
-                <option value="">
-                  {isLoadingAcademicYears ? 'Loading academic years…' : 'Select academic year'}
-                </option>
-                {academicYears.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/40">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Academic year
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {joiningAcademicYearSession || value.academicYear || '—'}
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Session {joiningAcademicYearSession || value.academicYear || '—'} from Step 1 intake year
+              {joiningAcademicYear ? ` (${joiningAcademicYear})` : ''}. Used for hostel room availability
+              and fee lookup in HMS.
+            </p>
+          </div>
 
+          <div className="grid gap-4 lg:grid-cols-2">
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Hostel type
@@ -785,7 +755,7 @@ export function AdmissionStepThreeBusHostelPanel({
                   {!value.categoryId
                     ? 'Select category first'
                     : !value.academicYear
-                      ? 'Select academic year first'
+                      ? 'Academic year not set from Step 1'
                       : isLoadingRooms
                         ? 'Loading rooms…'
                         : rooms.length === 0
@@ -825,7 +795,9 @@ export function AdmissionStepThreeBusHostelPanel({
                 </p>
                 {!hasHostelFeeRows ? (
                   <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-300">
-                    No hostel fee configured for this hostel, category, and academic year in HMS.
+                    No hostel fee configured for {value.academicYear || 'this academic year'} in HMS.
+                    Configure fee structures for this session in the hostel portal, then reselect
+                    the category here.
                   </p>
                 ) : hasVariableHostelFees || displayHostelFees.length > 1 ? (
                   <div className="mt-2 space-y-1">
