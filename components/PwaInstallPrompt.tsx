@@ -8,7 +8,7 @@ export default function PwaInstallPrompt() {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isVisible, setIsVisible] = useState(false);
     const pathname = usePathname();
-    const hideOnLeadForm = pathname === "/lead-form";
+    const hideOnLeadForm = pathname === "/lead-form" || pathname.startsWith("/joining/public");
 
     useEffect(() => {
         const handleBeforeInstallPrompt = (e: any) => {
