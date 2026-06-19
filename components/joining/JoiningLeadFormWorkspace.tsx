@@ -624,9 +624,13 @@ const normalizeStudentFeeDetailsFromRecord = (
 export type JoiningLeadFormWorkspaceProps = {
   adminLeadId?: string | null;
   publicToken?: string | null;
+  /** Pre-fetched bootstrap payload from PublicJoiningGate. When provided the
+   *  internal bootstrap query is skipped entirely, preventing hook-count
+   *  mismatches caused by the query error/loading state changing between renders. */
+  publicBootstrapData?: import('@/lib/joiningPublicApi').JoiningPublicBootstrapData | null;
 };
 
-export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLeadFormWorkspaceProps) {
+export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBootstrapData }: JoiningLeadFormWorkspaceProps) {
   const isPublicEdit = Boolean(publicToken);
   const params = useParams();
   const router = useRouter();
@@ -727,9 +731,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
 
   const publicBootstrapQuery = useQuery({
     queryKey: ['joining-public-bootstrap', publicToken],
-    enabled: isPublicEdit && !!publicToken,
+    // When bootstrap data is pre-fetched by PublicJoiningGate, disable the query
+    // entirely. This keeps the hook call count stable across all render states and
+    // prevents the "too many re-renders" error caused by the query error state.
+    enabled: isPublicEdit && !!publicToken && !publicBootstrapData,
     queryFn: async () => joiningPublicApi.getBootstrap(publicToken as string),
     retry: false,
+    // Seed the cache with the pre-fetched data so all usages of publicBootstrapQuery.data work
+    initialData: publicBootstrapData
+      ? { success: true as const, data: publicBootstrapData }
+      : undefined,
   });
 
   const adminJoiningQuery = useQuery({
@@ -4158,54 +4169,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken }: JoiningLe
     return (
       <div className="p-6">
         <p className="text-sm text-red-500">Invalid URL. Lead identifier is missing.</p>
-      </div>
-    );
-  }
-
-  if (isPublicEdit && publicBootstrapQuery.isError) {
-    const err = publicBootstrapQuery.error as (Error & { statusCode?: number }) | null;
-    const isExpired =
-      err?.statusCode === 410 ||
-      (err?.message ?? '').includes('LINK_EXPIRED') ||
-      (err?.message ?? '').toLowerCase().includes('expired');
-
-    if (isExpired) {
-      return (
-        <div className="mx-auto max-w-lg p-8 text-center">
-          <div className="mb-4 flex justify-center">
-            <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
-              <svg className="h-7 w-7 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <circle cx="12" cy="12" r="9" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 3" />
-              </svg>
-            </span>
-          </div>
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">This link has expired</h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            The 5-minute joining form link is no longer valid. Please contact the admissions desk and ask them to
-            send you a new link.
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="mx-auto max-w-lg p-8 text-center">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Link invalid or expired</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          Ask your admissions desk for a new joining form link.
-        </p>
-      </div>
-    );
-  }
-
-  if (isPublicEdit && !isLoading && !joiningRecord) {
-    return (
-      <div className="mx-auto max-w-lg p-8 text-center">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Link invalid or expired</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          This joining form is no longer available at this address.
-        </p>
       </div>
     );
   }

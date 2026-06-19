@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { JoiningLeadFormWorkspace } from '@/components/joining/JoiningLeadFormWorkspace';
+import { PublicJoiningGate } from '@/components/joining/PublicJoiningGate';
 
 function PublicJoiningByQuery() {
   const searchParams = useSearchParams();
@@ -15,7 +15,7 @@ function PublicJoiningByQuery() {
       </div>
     );
   }
-  return <JoiningLeadFormWorkspace publicToken={token} />;
+  return <PublicJoiningGate token={token} />;
 }
 
 export default function PublicJoiningQueryPage() {
