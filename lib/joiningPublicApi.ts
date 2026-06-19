@@ -18,7 +18,9 @@ async function parseJsonResponse(res: Response) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = (body as { message?: string })?.message || res.statusText || 'Request failed';
-    throw new Error(msg);
+    const err = new Error(msg) as Error & { statusCode?: number };
+    err.statusCode = res.status;
+    throw err;
   }
   return body as { success?: boolean; data?: JoiningPublicBootstrapData; message?: string };
 }
