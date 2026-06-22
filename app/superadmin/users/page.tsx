@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userAPI, managerAPI, leadAPI } from '@/lib/api';
+import { useInstitutions } from '@/lib/useInstitutions';
 import type { User, ModulePermission, RoleName } from '@/types';
 import * as XLSX from 'xlsx';
 import { Card } from '@/components/ui/Card';
@@ -154,6 +155,11 @@ const UserManagementPage = () => {
   >(createEmptyPermissions());
   const [allowedSourcesState, setAllowedSourcesState] = useState<string[]>([]);
   const [editAllowedSourcesState, setEditAllowedSourcesState] = useState<string[]>([]);
+  const { colleges } = useInstitutions();
+  const collegeOptions = useMemo(
+    () => colleges.map((college) => ({ id: college.id, name: college.name })),
+    [colleges]
+  );
 
   const { data: filterOptionsData } = useQuery({
     queryKey: ['leadFilterOptions'],
@@ -1290,6 +1296,9 @@ const UserManagementPage = () => {
                                     permission,
                                     ...admissionTabsFromStored(entry),
                                     ...(permission === 'write' ? joiningExtrasFromStored(entry) : {}),
+                                    allowedColleges: Array.isArray(entry.allowedColleges)
+                                      ? entry.allowedColleges.filter((id) => typeof id === 'string')
+                                      : [],
                                   }
                                 : { access: true, permission };
                           }
@@ -1629,6 +1638,7 @@ const UserManagementPage = () => {
                                 {module.key === JOINING_PERMISSION_KEY && (
                                   <JoiningModulePermissionExtras
                                     moduleState={moduleState}
+                                    collegeOptions={collegeOptions}
                                     onChange={(patch) =>
                                       setPermissionState((prev) => ({
                                         ...prev,
@@ -2055,6 +2065,7 @@ const UserManagementPage = () => {
                                 {module.key === JOINING_PERMISSION_KEY && (
                                   <JoiningModulePermissionExtras
                                     moduleState={moduleState}
+                                    collegeOptions={collegeOptions}
                                     onChange={(patch) =>
                                       setEditPermissionState((prev) => ({
                                         ...prev,

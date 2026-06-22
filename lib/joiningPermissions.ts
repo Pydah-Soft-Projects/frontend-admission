@@ -191,8 +191,9 @@ export function joiningExtrasFromStored(entry?: ModulePermission): JoiningPermis
 export function joiningPermissionForSave(value: ModulePermission): ModulePermission {
   const permission = value.permission === 'write' ? 'write' : 'read';
   const tabFlags = admissionTabFlagsForSave(value);
+  const collegeScope = Array.isArray(value.allowedColleges) ? value.allowedColleges.filter((id) => typeof id === 'string') : [];
   if (permission === 'read') {
-    return { access: true, permission: 'read', ...tabFlags };
+    return { access: true, permission: 'read', allowedColleges: collegeScope, ...tabFlags };
   }
   return {
     access: true,
@@ -200,6 +201,7 @@ export function joiningPermissionForSave(value: ModulePermission): ModulePermiss
     editReference: false,
     editAdmission: Boolean(value.editAdmission),
     approveFeeRequest: Boolean(value.approveFeeRequest),
+    allowedColleges: collegeScope,
     ...tabFlags,
   };
 }

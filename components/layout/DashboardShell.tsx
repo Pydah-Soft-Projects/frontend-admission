@@ -148,6 +148,7 @@ type PermissionContextValue = {
   permissions: Record<string, ModulePermission>;
   hasAccess: (moduleKey: string) => boolean;
   canWrite: (moduleKey: string) => boolean;
+  getModulePermission: (moduleKey: string) => ModulePermission | undefined;
   canJoiningEditReference: () => boolean;
   canJoiningEditAdmission: () => boolean;
   canSubmitFeeRequest: () => boolean;
@@ -173,6 +174,11 @@ export const useModulePermission = (moduleKey: string) => {
     hasAccess: ctx.hasAccess(moduleKey),
     canWrite: ctx.canWrite(moduleKey),
   };
+};
+
+export const useModulePermissionRaw = (moduleKey: string) => {
+  const ctx = useContext(PermissionContext);
+  return ctx?.getModulePermission(moduleKey);
 };
 
 export const useAdmissionTabPermissions = () => {
@@ -416,6 +422,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     (tab: AdmissionTabKey) =>
       resolveAdmissionTabAccess(tab, joiningPermissionEntry, isSuperAdminRole),
     [joiningPermissionEntry, isSuperAdminRole]
+  );
+
+  const getModulePermission = useCallback(
+    (moduleKey: string) => normalizedPermissions[moduleKey],
+    [normalizedPermissions]
   );
 
   const getAllowedAdmissionTabs = useCallback(
@@ -778,6 +789,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       permissions: normalizedPermissions,
       hasAccess: hasAccessForKey,
       canWrite: canWriteForKey,
+      getModulePermission,
       canJoiningEditReference,
       canJoiningEditAdmission,
       canSubmitFeeRequest,

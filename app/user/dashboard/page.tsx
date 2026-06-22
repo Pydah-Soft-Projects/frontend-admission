@@ -25,6 +25,7 @@ import {
   LabelList,
 } from 'recharts';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { AddJoiningFormModal } from '@/components/joining/AddJoiningFormModal';
 
 interface Analytics {
   totalLeads: number;
@@ -88,6 +89,7 @@ export default function UserDashboard() {
   const [isAuthorising, setIsAuthorising] = useState(true);
   const [dashboardAcademicYear, setDashboardAcademicYear] = useState<number | ''>(currentYear);
   const [dashboardStudentGroup, setDashboardStudentGroup] = useState<string>('');
+  const [isAddJoiningModalOpen, setIsAddJoiningModalOpen] = useState(false);
 
   useEffect(() => {
     const currentUser = auth.getUser();
@@ -107,6 +109,10 @@ export default function UserDashboard() {
     router.push('/user/leads');
   }, [router]);
 
+  const handleOpenAdmissionLink = useCallback(() => {
+    setIsAddJoiningModalOpen(true);
+  }, []);
+
   useEffect(() => {
     setHeaderContent(
       <div className="flex flex-col items-end gap-2 text-right">
@@ -117,6 +123,9 @@ export default function UserDashboard() {
           Snapshot of your assigned leads{user?.designation ? ` · ${user.designation}` : user?.name ? ` · ${user.name}` : ''}
         </p>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={handleOpenAdmissionLink}>
+            Send Admission Link
+          </Button>
           <Button size="sm" variant="primary" onClick={handleGoToLeads}>
             View My Leads
           </Button>
@@ -125,7 +134,7 @@ export default function UserDashboard() {
     );
 
     return () => clearHeaderContent();
-  }, [setHeaderContent, clearHeaderContent, handleGoToLeads, user?.name]);
+  }, [setHeaderContent, clearHeaderContent, handleGoToLeads, handleOpenAdmissionLink, user?.name]);
 
   useEffect(() => {
     const isPro = user?.roleName === 'PRO';
@@ -436,6 +445,16 @@ export default function UserDashboard() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 sm:space-y-6 px-0 sm:px-2 pt-1 pb-2 sm:pt-0 sm:pb-0">
+      {/* Mobile-only Actions: These are hidden in the DashboardShell header on mobile */}
+      <div className="flex lg:hidden gap-2 w-full px-1">
+        <Button size="sm" variant="outline" className="flex-1 whitespace-nowrap text-xs px-2" onClick={handleOpenAdmissionLink}>
+          Send Admission Link
+        </Button>
+        <Button size="sm" variant="primary" className="flex-1 whitespace-nowrap text-xs px-2" onClick={handleGoToLeads}>
+          View My Leads
+        </Button>
+      </div>
+
       {/* Filters: full width, single row, compact, no background */}
       <div className="w-full flex flex-nowrap items-center gap-2 sm:gap-4">
         <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
@@ -833,6 +852,13 @@ export default function UserDashboard() {
           </Card>
         )}
       </div>
+
+      <AddJoiningFormModal
+        open={isAddJoiningModalOpen}
+        onClose={() => setIsAddJoiningModalOpen(false)}
+        defaultReference1={user?.name || ''}
+        readOnlyReference={true}
+      />
     </div>
   );
 }

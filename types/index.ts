@@ -12,6 +12,8 @@ export interface ModulePermission {
   editAdmission?: boolean;
   /** Joining desk: approve or reject fee requests on the Fee Requests page. */
   approveFeeRequest?: boolean;
+  /** Limit joining admission edit scope by college id. */
+  allowedColleges?: string[];
   /** Admissions page (`/joining/completed`) tab access (requires joining module access). */
   admissionTabAbstract?: boolean;
   admissionTabDetailed?: boolean;
@@ -1004,6 +1006,7 @@ export interface LeadFilters {
   needsUpdate?: boolean | number;
   cycleNumber?: number | string;
   targetDate?: string;
+  scheduledOn?: string;
 }
 
 export interface LeadPagination {

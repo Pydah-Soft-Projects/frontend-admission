@@ -111,6 +111,7 @@ import {
   useDashboardHeader,
   useJoiningDeskPermissions,
   useModulePermission,
+  useModulePermissionRaw,
 } from '@/components/layout/DashboardShell';
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
@@ -640,6 +641,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const effectiveAdminLeadId = (adminLeadId ?? routeLeadFromParams) as string | undefined;
 
   const joiningPerm = useModulePermission('joining');
+  const joiningPermData = useModulePermissionRaw('joining');
   const { canEditAdmission, canApproveFeeRequest, canEditReference } = useJoiningDeskPermissions();
   const paymentsPerm = useModulePermission('payments');
   const canAccessJoiningModule = isPublicEdit || joiningPerm.hasAccess;
@@ -1181,6 +1183,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     ).trim();
   }, [colleges, selectedCollegeId, registrationExtras]);
 
+  const joiningAllowedCollegeIds = useMemo(() => {
+    if (!joiningPermData?.allowedColleges) return undefined;
+    const ids = joiningPermData.allowedColleges
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => String(id).trim())
+      .filter(Boolean);
+    return ids.length ? ids : [];
+  }, [joiningPermData?.allowedColleges]);
+
+  const visibleColleges = useMemo(() => {
+    if (!Array.isArray(joiningAllowedCollegeIds)) return colleges;
+    const allowedSet = new Set(joiningAllowedCollegeIds);
+    const filtered = colleges.filter((college) => allowedSet.has(college.id));
+    if (!selectedCollegeId) return filtered;
+    if (filtered.some((college) => college.id === selectedCollegeId)) return filtered;
+    const selectedCollege = colleges.find((college) => college.id === selectedCollegeId);
+    return selectedCollege ? [...filtered, selectedCollege] : filtered;
+  }, [colleges, joiningAllowedCollegeIds, selectedCollegeId]);
+
   const handleCollegeSelect = useCallback(
     (collegeId: string) => {
       setRegistrationExtras((prev) => ({
@@ -1690,6 +1711,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             : '';
         return cid === collegeKey;
       });
+    } else if (Array.isArray(joiningAllowedCollegeIds)) {
+      const allowedCollegeSet = new Set(joiningAllowedCollegeIds);
+      list = list.filter((item) => {
+        const cid =
+          item.course.collegeId !== undefined && item.course.collegeId !== null
+            ? String(item.course.collegeId).trim()
+            : '';
+        return cid !== '' && allowedCollegeSet.has(cid);
+      });
     }
     const pl = (formState.courseInfo.programLevel || '').trim();
     if (programLevels.length > 0 && !pl) {
@@ -1702,7 +1732,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const lv = item.course.level != null ? String(item.course.level).trim() : '';
       return lv === pl;
     });
-  }, [courseSettings, formState.courseInfo.programLevel, programLevels, selectedCollegeId]);
+  }, [courseSettings, formState.courseInfo.programLevel, programLevels, selectedCollegeId, joiningAllowedCollegeIds]);
 
   /** Managed course IDs must belong to the selected secondary college (`courses.college_id`). */
   useEffect(() => {
@@ -2098,6 +2128,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               ? String(item.course.collegeId).trim()
               : '';
           return c === collegeKey;
+        })
+      : Array.isArray(joiningAllowedCollegeIds)
+      ? courseSettings.filter((item) => {
+          const c =
+            item.course.collegeId !== undefined && item.course.collegeId !== null
+              ? String(item.course.collegeId).trim()
+              : '';
+          return c !== '' && joiningAllowedCollegeIds.includes(c);
         })
       : courseSettings;
     if (collegeKey && catalogForMatch.length === 0) return;
@@ -4884,7 +4922,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           className={JOINING_FORM_CONTROL_CLASS}
                         >
                           <option value="">Select college</option>
-                          {colleges.map((item) => (
+                          {visibleColleges.map((item) => (
                             <option key={item.id} value={item.id}>
                               {item.name}
                             </option>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { joiningAPI, paymentSettingsAPI, courseAPI } from '@/lib/api';
+import { joiningAPI, courseAPI } from '@/lib/api';
 import { REFERENCE_NAMES_QUERY_KEY } from '@/components/admission/ReferenceUserSelect';
 import {
   mergeQuotaSelectOptions,
@@ -15,7 +15,7 @@ import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect'
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
-import type { CoursePaymentSettings } from '@/types';
+import type { Branch, Course, CoursePaymentSettings } from '@/types';
 
 const JOINING_FORM_DIRECT_SOURCE = 'Direct';
 const JOINING_FORM_DEFAULT_SOURCE = 'Joining Form';
@@ -40,9 +40,19 @@ type FormState = {
   reference1: string;
 };
 
+type CourseSelection = Course & {
+  branches: Branch[];
+};
+
+type CourseCatalog = CourseSelection[];
+
 type Props = {
   open: boolean;
   onClose: () => void;
+  /** Pre-fill reference1 when opening (e.g. counsellor's own name from their dashboard). */
+  defaultReference1?: string;
+  /** If true, the reference cannot be edited. */
+  readOnlyReference?: boolean;
 };
 
 const initialForm: FormState = {
@@ -61,7 +71,7 @@ const onlyDigits = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 function applyExistingLeadToForm(
   prev: FormState,
   lead: NonNullable<ExistingLeadPreview>,
-  courseSettings: CoursePaymentSettings[]
+  courseSettings: CourseCatalog
 ): FormState {
   const next = { ...prev };
 
@@ -81,10 +91,10 @@ function applyExistingLeadToForm(
 
   if (!courseId && courseInterested && courseSettings.length > 0) {
     const matchedCourse = courseSettings.find(
-      (item) => String(item.course.name ?? '').trim().toLowerCase() === courseInterested.toLowerCase()
+      (item) => String(item.name ?? '').trim().toLowerCase() === courseInterested.toLowerCase()
     );
     if (matchedCourse) {
-      courseId = String(matchedCourse.course._id ?? '').trim();
+      courseId = String(matchedCourse._id ?? '').trim();
     }
   }
 
@@ -99,10 +109,10 @@ function applyExistingLeadToForm(
       next.courseInterested = courseInterested;
     } else if (next.courseId) {
       const matchedCourse = courseSettings.find(
-        (item) => String(item.course._id ?? '').trim() === next.courseId
+        (item) => String(item._id ?? '').trim() === next.courseId
       );
-      if (matchedCourse?.course.name) {
-        next.courseInterested = matchedCourse.course.name;
+      if (matchedCourse?.name) {
+        next.courseInterested = matchedCourse.name;
       }
     }
   }
@@ -117,11 +127,14 @@ function applyExistingLeadToForm(
 }
 
 const selectClassName =
-  'w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100';
+  'w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium text-slate-900 shadow-sm transition hover:bg-white hover:border-slate-300 focus:border-orange-500/50 focus:outline-none focus:ring-4 focus:ring-orange-500/10 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-900 dark:hover:border-slate-700 dark:focus:border-orange-500/50 dark:focus:ring-orange-900/20';
 
-export function AddJoiningFormModal({ open, onClose }: Props) {
+export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', readOnlyReference = false }: Props) {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(() => ({
+    ...initialForm,
+    reference1: defaultReference1,
+  }));
   const [debouncedPhones, setDebouncedPhones] = useState({ studentPhone: '', fatherPhone: '' });
   const [debouncedReference1, setDebouncedReference1] = useState('');
   const appliedLeadKeyRef = useRef<string | null>(null);
@@ -130,10 +143,22 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
     admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
   } | null>(null);
 
+  // When the modal reopens (e.g. from a different button), re-apply defaultReference1
+  // if the user hasn't already typed something in reference1.
+  useEffect(() => {
+    if (!open) return;
+    if (defaultReference1) {
+      setForm((prev) => ({
+        ...prev,
+        reference1: prev.reference1 || defaultReference1,
+      }));
+    }
+  }, [open, defaultReference1]);
+
   const { data: courseSettingsResponse, isLoading: isLoadingCourses } = useQuery({
-    queryKey: ['payment-settings', 'courses', 'add-joining'],
-    queryFn: async () => paymentSettingsAPI.listCourseSettings(),
-    enabled: open,
+    queryKey: ['courses', 'catalog', 'add-joining'],
+    queryFn: async () => courseAPI.list({ includeBranches: true, showInactive: true }),
+    staleTime: 5 * 60_000,
   });
 
   const { data: studentQuotasResponse, isLoading: isLoadingQuotas } = useQuery({
@@ -152,17 +177,39 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
     [studentQuotasResponse, form.quota]
   );
 
-  const courseSettings: CoursePaymentSettings[] = useMemo(() => {
-    const raw = courseSettingsResponse?.data;
-    return Array.isArray(raw) ? raw : [];
+  const courseSettings: CourseCatalog = useMemo(() => {
+    // API returns: { success, message, data: [...] }  → axios unwraps to .data → so payload = the array
+    const payload = courseSettingsResponse?.data;
+    let settings: CourseCatalog = [];
+
+    if (Array.isArray(payload)) {
+      settings = payload as CourseCatalog;
+    } else if (payload && Array.isArray((payload as any).data)) {
+      settings = (payload as any).data as CourseCatalog;
+    } else if (Array.isArray(courseSettingsResponse)) {
+      settings = courseSettingsResponse as CourseCatalog;
+    }
+
+    return settings.map((setting) => {
+      const uniqueBranchesMap = new Map<string, Branch>();
+      (setting.branches || []).forEach((branch) => {
+        const branchId = String(branch._id ?? '').trim();
+        if (branchId && !uniqueBranchesMap.has(branchId)) {
+          uniqueBranchesMap.set(branchId, branch);
+        }
+      });
+
+      return {
+        ...setting,
+        branches: Array.from(uniqueBranchesMap.values()),
+      };
+    });
   }, [courseSettingsResponse]);
 
   const selectedCourse = useMemo(() => {
     const target = String(form.courseId ?? '').trim();
     if (!target) return undefined;
-    return courseSettings.find(
-      (item) => String(item.course._id ?? '').trim() === target
-    );
+    return courseSettings.find((item) => String(item._id ?? '').trim() === target);
   }, [courseSettings, form.courseId]);
 
   const selectedBranch = useMemo(() => {
@@ -242,7 +289,7 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
 
   const createDraftMutation = useMutation({
     mutationFn: async () => {
-      const courseName = selectedCourse?.course.name || form.courseInterested.trim();
+      const courseName = selectedCourse?.name || form.courseInterested.trim();
       const branchName = selectedBranch?.name?.trim() || undefined;
       const quotaValue = form.quota.trim();
       return joiningAPI.createDraftAndPublicLink({
@@ -250,12 +297,11 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
         studentPhone: onlyDigits(form.studentPhone),
         fatherPhone: onlyDigits(form.fatherPhone),
         courseInterested: courseName,
-        courseId: selectedCourse?.course._id,
+        courseId: selectedCourse?._id,
         branchId: selectedBranch?._id,
         branch: branchName,
         quota: quotaValue,
-        programLevel:
-          selectedCourse?.course.level != null ? String(selectedCourse.course.level) : undefined,
+        programLevel: selectedCourse?.level != null ? String(selectedCourse.level) : undefined,
         reference1: form.reference1.trim() || undefined,
       });
     },
@@ -281,7 +327,7 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
           pathToken: parsed.pathToken,
         },
       });
-      setForm(initialForm);
+      setForm({ ...initialForm, reference1: defaultReference1 });
       onClose();
       showToast.success(`Joining draft created with enquiry ${data.enquiryNumber}`);
     },
@@ -308,16 +354,13 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
   return (
     <>
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4 backdrop-blur-sm">
+          <div className="max-h-[95vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-4 sm:mb-6 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+                <h2 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100">
                   Add Joining Form
                 </h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Create a draft application with an enquiry number.
-                </p>
               </div>
               <Button
                 variant="light"
@@ -329,14 +372,16 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
             </div>
 
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <Input
+                  compact
                   label="Student Name"
                   value={form.studentName}
                   onChange={(event) => setForm((prev) => ({ ...prev, studentName: event.target.value }))}
                   placeholder="Enter student name"
                 />
                 <Input
+                  compact
                   label="Student Mobile Number"
                   value={form.studentPhone}
                   onChange={(event) => setForm((prev) => ({ ...prev, studentPhone: onlyDigits(event.target.value) }))}
@@ -344,6 +389,7 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
                   maxLength={10}
                 />
                 <Input
+                  compact
                   label="Parent Mobile Number"
                   value={form.fatherPhone}
                   onChange={(event) => setForm((prev) => ({ ...prev, fatherPhone: onlyDigits(event.target.value) }))}
@@ -351,7 +397,7 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
                   maxLength={10}
                 />
                 <div className="flex flex-col justify-end">
-                  <p className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <p className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                     Lead source
                   </p>
                   <div
@@ -400,23 +446,21 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                     College / course <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={form.courseId}
                     onChange={(event) => {
                       const target = String(event.target.value ?? '').trim();
-                      const course = courseSettings.find(
-                        (item) => String(item.course._id ?? '').trim() === target
-                      );
+                      const course = courseSettings.find((item) => String(item._id ?? '').trim() === target);
                       setForm((prev) => ({
                         ...prev,
                         courseId: event.target.value,
                         branchId: '',
-                        courseInterested: course?.course.name || '',
+                        courseInterested: course?.name || '',
                       }));
                     }}
                     className={selectClassName}
@@ -424,23 +468,16 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
                   >
                     <option value="">{isLoadingCourses ? 'Loading courses...' : 'Select college / course'}</option>
                     {courseSettings.map((item) => (
-                      <option key={item.course._id} value={item.course._id}>
-                        {item.course.name}
+                      <option key={item._id} value={item._id}>
+                        {item.name}
+                        {item.code ? ` (${item.code})` : ''}
                       </option>
                     ))}
                   </select>
-                  {courseSettings.length === 0 && !isLoadingCourses ? (
-                    <Input
-                      className="mt-3"
-                      label="College / course name"
-                      value={form.courseInterested}
-                      onChange={(event) => setForm((prev) => ({ ...prev, courseInterested: event.target.value }))}
-                      placeholder="Type college or course name"
-                    />
-                  ) : null}
+
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                     Branch {hasBranches ? <span className="text-red-500">*</span> : null}
                   </label>
                   <select
@@ -455,12 +492,13 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
                     {(selectedCourse?.branches ?? []).map((branch) => (
                       <option key={branch._id} value={branch._id}>
                         {branch.name}
+                        {branch.code ? ` (${branch.code})` : ''}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ml-1">
                     Quota <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -481,29 +519,44 @@ export function AddJoiningFormModal({ open, onClose }: Props) {
                 </div>
               </div>
 
-              <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
-                <ReferenceUserSelect
-                  label="Reference"
-                  value={form.reference1}
-                  onChange={(reference1) => setForm((prev) => ({ ...prev, reference1 }))}
-                  showAddUserButton
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  Final step: pick staff, use Add for a custom name, or leave as No reference.
-                </p>
+              <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
+                {readOnlyReference ? (
+                  <Input
+                    compact
+                    label="Reference"
+                    value={form.reference1}
+                    disabled
+                    readOnly
+                    className="bg-slate-50 opacity-75"
+                  />
+                ) : (
+                  <>
+                    <ReferenceUserSelect
+                      label="Reference"
+                      value={form.reference1}
+                      onChange={(reference1) => setForm((prev) => ({ ...prev, reference1 }))}
+                      showAddUserButton
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                      Final step: pick staff, use Add for a custom name, or leave as No reference.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+            <div className="mt-4 flex flex-row items-center justify-between gap-3">
               <Button
                 variant="secondary"
-                onClick={() => setForm(initialForm)}
+                className="flex-1 sm:flex-none whitespace-nowrap"
+                onClick={() => setForm({ ...initialForm, reference1: defaultReference1 })}
                 disabled={createDraftMutation.isPending}
               >
                 Reset
               </Button>
               <Button
                 variant="primary"
+                className="flex-1 sm:flex-none whitespace-nowrap"
                 disabled={!canSubmit || createDraftMutation.isPending}
                 onClick={() => createDraftMutation.mutate()}
               >

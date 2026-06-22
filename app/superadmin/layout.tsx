@@ -122,6 +122,9 @@ const sanitizeSubAdminPermissions = (
       if (module.key === 'joining') {
         const typedEntry = entry as import('@/types').ModulePermission;
         const joiningExtras = joiningExtrasFromStored(typedEntry);
+        const allowedColleges = Array.isArray(typedEntry.allowedColleges)
+          ? typedEntry.allowedColleges.filter((id) => typeof id === 'string')
+          : undefined;
         sanitized[module.key] = {
           access: true,
           permission,
@@ -133,6 +136,7 @@ const sanitizeSubAdminPermissions = (
                 approveFeeRequest: joiningExtras.approveFeeRequest,
               }
             : {}),
+          ...(allowedColleges ? { allowedColleges } : {}),
         };
       } else {
         sanitized[module.key] = {
