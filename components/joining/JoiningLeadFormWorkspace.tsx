@@ -1189,7 +1189,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       .filter((id): id is string => typeof id === 'string')
       .map((id) => String(id).trim())
       .filter(Boolean);
-    return ids.length ? ids : [];
+    // Empty array means no restriction (all-college access) — same as undefined
+    return ids.length ? ids : undefined;
   }, [joiningPermData?.allowedColleges]);
 
   const visibleColleges = useMemo(() => {
@@ -4424,14 +4425,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       return (
         <WorkflowStickyActionBar
           id="joining-wizard-step-4-actions"
-          stepLabel="Step 4 — Fee configuration & payments"
-          hint={
-            status === 'approved'
-              ? hasRevisedFeeLines
-                ? 'Revised fees require approval before syncing to the fee portal. Submit the fee request when ready.'
-                : 'Unchanged fees sync automatically when you click Update Admission (fee portal, bus passenger request, and hostel).'
-              : 'Review configured fee heads and save certificate or fee line updates on Step 2 before collecting payments.'
-          }
           className={stickyClass}
         >
           <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(3)} />
@@ -6089,6 +6082,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 canUseCashfree={canUseCashfree}
                 feeDetailsEditable={canWriteJoining && status === 'approved'}
                 showActualAndRevisedFees
+                pivotView
                 studentFeeDetails={studentFeeDetails}
                 onStudentFeeDetailsChange={
                   canWriteJoining && status === 'approved' ? setStudentFeeDetails : undefined

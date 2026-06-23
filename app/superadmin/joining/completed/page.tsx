@@ -343,12 +343,15 @@ const CompletedAdmissionsPage = () => {
   // Derive college access scope from the joining module permission (mirrors JoiningLeadFormWorkspace logic).
   const joiningPermData = useModulePermissionRaw('joining');
   const joiningAllowedCollegeIds = useMemo(() => {
-    if (!joiningPermData?.allowedColleges) return undefined; // undefined = no restriction
+    // undefined or null → no restriction (show all colleges)
+    if (!joiningPermData?.allowedColleges) return undefined;
     const ids = (joiningPermData.allowedColleges as string[])
       .filter((id): id is string => typeof id === 'string')
       .map((id) => String(id).trim())
       .filter(Boolean);
-    return ids.length ? ids : [];
+    // Empty array also means no restriction — user has all-college access
+    // (an empty allowedColleges list is stored when no specific colleges are scoped)
+    return ids.length ? ids : undefined;
   }, [joiningPermData?.allowedColleges]);
 
   /** Colleges visible in the filter dropdown — restricted to the user's scope when set. */

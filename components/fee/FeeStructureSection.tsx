@@ -131,6 +131,13 @@ export type FeeStructureSectionProps = {
   injectedFeeRows?: FeeStructure[];
   /** When true, show separate Actual Fee and Revised Fee columns (Step 4). */
   showActualAndRevisedFees?: boolean;
+  /**
+   * When true, renders a single pivoted summary table instead of per-year grouped sub-tables.
+   * Format matches the print application page 3 fee structure:
+   *   Year | Fee Head 1 | Fee Head 2 | … | Total
+   * Dual-fee mode (actual vs revised) is supported — each fee head column shows both amounts.
+   */
+  pivotView?: boolean;
 };
 
 /**
@@ -157,6 +164,7 @@ export function FeeStructureSection({
   onStudentFeeDetailsChange,
   injectedFeeRows,
   showActualAndRevisedFees = false,
+  pivotView = false,
 }: FeeStructureSectionProps) {
   const resolvedCategory = useMemo(() => {
     return (category && category.trim()) || mapQuotaToCategory(quota);
@@ -447,6 +455,93 @@ export function FeeStructureSection({
     [items, effectiveRowAmount]
   );
 
+  // ---------------------------------------------------------------------------
+  // Pivot table data (used when pivotView = true)
+  // ---------------------------------------------------------------------------
+  /**
+   * Build pivot data: rows keyed by year, columns keyed by fee head identity.
+   *
+   * IMPORTANT: The column key must be the fee head's own identity (feeHead ObjectId
+   * or feeHeadCode), NOT the structure row's _id — because each year has its own
+   * separate structure document even though the fee head is the same. Keying by
+   * row._id would create duplicate columns (one per year) for the same fee head.
+   *
+   * Key priority: row.feeHead (the linked feeheads._id) → row.feeHeadCode → row.feeHeadName
+   */
+  const pivotData = useMemo(() => {
+    if (!pivotView) return null;
+
+    // Derive a stable column key that is shared across all years for the same fee head.
+    const getFeeHeadKey = (row: FeeStructure): string => {
+      const byRef = String(row.feeHead ?? '').trim();
+      if (byRef) return byRef;
+      const byCode = String(row.feeHeadCode ?? '').trim();
+      if (byCode) return byCode;
+      const byName = String(row.feeHeadName ?? '').trim();
+      if (byName) return byName;
+      // Last resort — fall back to structure _id (means the head has no identity metadata)
+      return String(row._id);
+    };
+
+    /**
+     * Returns true for fee heads that should be excluded from the pivot table.
+     * Application fee (APPL01) is a one-time row that only appears for Year 1
+     * and has no meaningful cross-year comparison — hide it from the summary view.
+     */
+    const isExcludedFromPivot = (row: FeeStructure): boolean => {
+      const code = String(row.feeHeadCode ?? '').trim().toUpperCase();
+      const name = String(row.feeHeadName ?? '').trim().toLowerCase();
+      if (code === 'APPL01' || /^appl/.test(code)) return true;
+      if (/\bapplication\s+fee\b/.test(name)) return true;
+      return false;
+    };
+
+    // Collect distinct fee heads in first-seen insertion order
+    const headOrder: string[] = [];
+    const headMeta = new Map<string, { name: string; code: string; key: string }>();
+    // year → feeHeadKey → { catalog, revised }
+    const yearHeadMap = new Map<number | string, Map<string, { catalog: number; revised: number }>>();
+    // year → individual FeeStructure rows (for the edit panel)
+    const yearRowsMap = new Map<number | string, FeeStructure[]>();
+
+    for (const row of items) {
+      if (isExcludedFromPivot(row)) continue;
+      const year = row.studentYear ?? 'all';
+      const hkey = getFeeHeadKey(row);
+
+      if (!headMeta.has(hkey)) {
+        headOrder.push(hkey);
+        headMeta.set(hkey, {
+          key: hkey,
+          name: row.feeHeadName || row.feeHeadCode || hkey,
+          code: row.feeHeadCode || '',
+        });
+      }
+
+      if (!yearHeadMap.has(year)) {
+        yearHeadMap.set(year, new Map());
+      }
+      const yearMap = yearHeadMap.get(year)!;
+      const existing = yearMap.get(hkey) || { catalog: 0, revised: 0 };
+      existing.catalog += Number(row.amount) || 0;
+      existing.revised += effectiveRowAmount(row);
+      yearMap.set(hkey, existing);
+
+      if (!yearRowsMap.has(year)) yearRowsMap.set(year, []);
+      yearRowsMap.get(year)!.push(row);
+    }
+
+    // Sort years: numeric ascending, then 'all'
+    const sortedYears = Array.from(yearHeadMap.keys()).sort((a, b) => {
+      if (typeof a === 'number' && typeof b === 'number') return a - b;
+      if (typeof a === 'number') return -1;
+      if (typeof b === 'number') return 1;
+      return 0;
+    });
+
+    return { headOrder, headMeta, yearHeadMap, yearRowsMap, sortedYears };
+  }, [pivotView, items, effectiveRowAmount]);
+
   return (
     <div
       className={`rounded-2xl border border-emerald-200 bg-white p-6 shadow-lg dark:border-emerald-900/40 dark:bg-slate-900/70 ${className}`}
@@ -546,6 +641,264 @@ export function FeeStructureSection({
             Ask the finance team to add a row to <span className="font-mono">feestructures</span>{' '}
             with the matching course, branch, category and batch.
           </p>
+        ) : pivotView && pivotData ? (
+          /* ------------------------------------------------------------------ */
+          /* PIVOT TABLE — matches print application page 3 fee structure layout */
+          /* Row per year × column per fee head, with a Total column + row.      */
+          /* Pencil on each year row expands an inline edit panel for that year. */
+          /* ------------------------------------------------------------------ */
+          <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm dark:border-slate-700">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-emerald-700 text-left text-xs font-semibold uppercase tracking-wide text-white dark:bg-emerald-800">
+                  <th className="px-4 py-3 whitespace-nowrap">Year</th>
+                  {pivotData.headOrder.map((hid) => {
+                    const meta = pivotData.headMeta.get(hid)!;
+                    return (
+                      <th key={hid} className="px-4 py-3 whitespace-nowrap text-right">
+                        <div>{meta.name}</div>
+                        {meta.code && (
+                          <div className="text-[10px] font-normal opacity-75 normal-case tracking-normal">
+                            {meta.code}
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
+                  <th className="px-4 py-3 whitespace-nowrap text-right">Total</th>
+                  {hasEditableFees && (
+                    <th className="px-4 py-3 whitespace-nowrap text-center w-12" aria-label="Edit" />
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {pivotData.sortedYears.map((year, rowIdx) => {
+                  const yearMap = pivotData.yearHeadMap.get(year)!;
+                  const yearRows = pivotData.yearRowsMap.get(year) ?? [];
+                  const yearLabel = typeof year === 'number' ? `Year ${year}` : 'All Years';
+                  const rowYearTotal = Array.from(yearMap.values()).reduce(
+                    (s, cell) => s + (showDualFeeColumns ? cell.revised : cell.catalog),
+                    0
+                  );
+                  const isEven = rowIdx % 2 === 0;
+                  const yearKey = String(year);
+                  const isEditingYear = editingRowId === `pivot-year-${yearKey}`;
+                  // Total columns = Year + fee head columns + Total + optional pencil
+                  const pivotColSpan =
+                    1 + pivotData.headOrder.length + 1 + (hasEditableFees ? 1 : 0);
+                  // Check if any row in this year has been revised
+                  const yearHasRevised = yearRows.some((r) => isRowRevised(r));
+
+                  return (
+                    <Fragment key={yearKey}>
+                      <tr
+                        className={`border-t border-slate-100 dark:border-slate-800 ${
+                          isEditingYear
+                            ? 'bg-slate-50/90 dark:bg-slate-800/50'
+                            : isEven
+                            ? 'bg-white dark:bg-slate-900/60'
+                            : 'bg-slate-50/60 dark:bg-slate-800/40'
+                        }`}
+                      >
+                        <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {yearLabel}
+                            {yearHasRevised && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                Revised
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {pivotData.headOrder.map((hid) => {
+                          const cell = yearMap.get(hid);
+                          const catalogAmt = cell?.catalog ?? null;
+                          const revisedAmt = cell?.revised ?? null;
+                          const displayAmt = showDualFeeColumns ? revisedAmt : catalogAmt;
+                          const isChanged =
+                            showDualFeeColumns &&
+                            catalogAmt !== null &&
+                            revisedAmt !== null &&
+                            revisedAmt !== catalogAmt;
+                          return (
+                            <td key={hid} className="px-4 py-3 text-right text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                              {displayAmt !== null && displayAmt > 0 ? (
+                                <div className="inline-flex flex-col items-end gap-0.5">
+                                  <span className="font-semibold">{formatCurrency(displayAmt)}</span>
+                                  {isChanged && catalogAmt !== null && (
+                                    <span className="text-[10px] text-slate-400 line-through">
+                                      {formatCurrency(catalogAmt)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-4 py-3 text-right font-bold text-emerald-800 dark:text-emerald-200 whitespace-nowrap">
+                          {formatCurrency(rowYearTotal)}
+                        </td>
+                        {hasEditableFees && (
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const panelKey = `pivot-year-${yearKey}`;
+                                if (editingRowId === panelKey) {
+                                  setEditingRowId(null);
+                                } else {
+                                  setEditingRowId(panelKey);
+                                }
+                              }}
+                              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-200"
+                              aria-label={`Edit fees for ${yearLabel}`}
+                              title={`Edit revised fees for ${yearLabel}`}
+                            >
+                              <Pencil className="h-4 w-4" aria-hidden />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+
+                      {/* Inline edit panel — expands below the year row */}
+                      {hasEditableFees && isEditingYear && yearRows.length > 0 && (
+                        <tr className="border-t border-emerald-100 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                          <td colSpan={pivotColSpan} className="px-4 py-4">
+                            <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-inner dark:border-emerald-900/50 dark:bg-slate-900/80">
+                              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                                Edit revised fees — {yearLabel}
+                              </p>
+                              <div className="space-y-3">
+                                {yearRows.map((row) => {
+                                  const sid = String(row._id);
+                                  const catalogAmt = catalogRowAmount(row);
+                                  const o = lineOverrideByStructureId.get(sid);
+                                  const currentRevised = effectiveRowAmount(row);
+                                  const hasOverride = isRowRevised(row);
+                                  return (
+                                    <div
+                                      key={sid}
+                                      className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60"
+                                    >
+                                      <div className="min-w-[10rem] flex-1">
+                                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                          {row.feeHeadName || row.feeHeadCode || '—'}
+                                          {row.feeHeadCode && (
+                                            <span className="ml-1.5 font-mono text-[10px] text-slate-400">
+                                              {row.feeHeadCode}
+                                            </span>
+                                          )}
+                                        </p>
+                                        <p className="text-[11px] text-slate-400">
+                                          Catalog: {formatCurrency(catalogAmt)}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <label
+                                          htmlFor={`pivot-fee-amt-${sid}`}
+                                          className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                                        >
+                                          Revised (₹)
+                                        </label>
+                                        <input
+                                          id={`pivot-fee-amt-${sid}`}
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          className="w-32 rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-slate-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 dark:border-emerald-900/50 dark:bg-slate-900/80 dark:text-slate-100"
+                                          defaultValue={currentRevised}
+                                          key={`${sid}-${currentRevised}`}
+                                          onBlur={(e) => {
+                                            const v = e.target.value.trim();
+                                            const n = v === '' ? catalogAmt : Number(v);
+                                            if (Number.isFinite(n) && n >= 0) {
+                                              patchStudentFeeLine(row, {
+                                                amount: n,
+                                                remarks: o?.remarks ?? '',
+                                              });
+                                            }
+                                          }}
+                                          aria-label={`Revised fee for ${row.feeHeadName || 'fee head'}`}
+                                        />
+                                        {hasOverride && (
+                                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                            Changed
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex min-w-[10rem] flex-1 items-center gap-2">
+                                        <label
+                                          htmlFor={`pivot-fee-notes-${sid}`}
+                                          className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                                        >
+                                          Notes
+                                        </label>
+                                        <input
+                                          id={`pivot-fee-notes-${sid}`}
+                                          type="text"
+                                          className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100"
+                                          defaultValue={o?.remarks ?? ''}
+                                          key={`${sid}-notes-${o?.remarks ?? ''}`}
+                                          onBlur={(e) => {
+                                            patchStudentFeeLine(row, {
+                                              amount: currentRevised,
+                                              remarks: e.target.value,
+                                            });
+                                          }}
+                                          placeholder="Concession / note"
+                                          aria-label={`Notes for ${row.feeHeadName || 'fee head'}`}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="mt-3 flex justify-end border-t border-slate-100 pt-3 dark:border-slate-700">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRowId(null)}
+                                  className="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400/50 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                                >
+                                  Close
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+                  <td className="px-4 py-3 font-bold text-emerald-900 dark:text-emerald-100 whitespace-nowrap">
+                    Total
+                  </td>
+                  {pivotData.headOrder.map((hid) => {
+                    const colTotal = Array.from(pivotData.yearHeadMap.values()).reduce(
+                      (s, yearMap) => {
+                        const cell = yearMap.get(hid);
+                        return s + (cell ? (showDualFeeColumns ? cell.revised : cell.catalog) : 0);
+                      },
+                      0
+                    );
+                    return (
+                      <td key={hid} className="px-4 py-3 text-right font-bold text-emerald-900 dark:text-emerald-100 whitespace-nowrap">
+                        {colTotal > 0 ? formatCurrency(colTotal) : <span className="text-slate-400">—</span>}
+                      </td>
+                    );
+                  })}
+                  <td className="px-4 py-3 text-right text-lg font-bold text-emerald-900 dark:text-emerald-100 whitespace-nowrap">
+                    {formatCurrency(grandTotal)}
+                  </td>
+                  {hasEditableFees && <td />}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         ) : (
           <div className="space-y-6">
             {grouped.map(([year, rows]) => {
