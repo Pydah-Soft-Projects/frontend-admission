@@ -15,7 +15,8 @@ import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect'
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { showToast } from '@/lib/toast';
-import type { Branch, Course, CoursePaymentSettings } from '@/types';
+import { useModulePermissionRaw } from '@/components/layout/DashboardShell';
+import type { Branch, Course } from '@/types';
 
 const JOINING_FORM_DIRECT_SOURCE = 'Direct';
 const JOINING_FORM_DEFAULT_SOURCE = 'Joining Form';
@@ -131,6 +132,7 @@ const selectClassName =
 
 export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', readOnlyReference = false }: Props) {
   const queryClient = useQueryClient();
+  const joiningPermData = useModulePermissionRaw('joining');
   const [form, setForm] = useState<FormState>(() => ({
     ...initialForm,
     reference1: defaultReference1,
@@ -206,11 +208,35 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
     });
   }, [courseSettingsResponse]);
 
+  // Derive college access scope from the joining module permission.
+  const joiningAllowedCollegeIds = useMemo(() => {
+    if (!joiningPermData?.allowedColleges) return undefined; // undefined = no restriction
+    const ids = (joiningPermData.allowedColleges as string[])
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => String(id).trim())
+      .filter(Boolean);
+    return ids.length ? ids : [];
+  }, [joiningPermData?.allowedColleges]);
+
+  /** Course list filtered to the user's college access scope (mirrors JoiningLeadFormWorkspace). */
+  const visibleCourseSettings = useMemo(() => {
+    if (!Array.isArray(joiningAllowedCollegeIds)) return courseSettings; // no restriction
+    if (joiningAllowedCollegeIds.length === 0) return []; // scoped but no colleges assigned
+    const allowedSet = new Set(joiningAllowedCollegeIds);
+    return courseSettings.filter((item) => {
+      const cid =
+        (item as any).collegeId !== undefined && (item as any).collegeId !== null
+          ? String((item as any).collegeId).trim()
+          : '';
+      return cid !== '' && allowedSet.has(cid);
+    });
+  }, [courseSettings, joiningAllowedCollegeIds]);
+
   const selectedCourse = useMemo(() => {
     const target = String(form.courseId ?? '').trim();
     if (!target) return undefined;
-    return courseSettings.find((item) => String(item._id ?? '').trim() === target);
-  }, [courseSettings, form.courseId]);
+    return visibleCourseSettings.find((item) => String(item._id ?? '').trim() === target);
+  }, [visibleCourseSettings, form.courseId]);
 
   const selectedBranch = useMemo(() => {
     const target = String(form.branchId ?? '').trim();
@@ -283,7 +309,7 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
     }
     const applyKey = `${lead.id}:${debouncedPhones.studentPhone}:${debouncedPhones.fatherPhone}`;
     if (appliedLeadKeyRef.current === applyKey) return;
-    setForm((prev) => applyExistingLeadToForm(prev, lead, courseSettings));
+    setForm((prev) => applyExistingLeadToForm(prev, lead, visibleCourseSettings));
     appliedLeadKeyRef.current = applyKey;
   }, [open, matchedLead, debouncedPhones.studentPhone, debouncedPhones.fatherPhone, courseSettings]);
 
@@ -339,7 +365,7 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
   const hasBranches = Boolean(selectedCourse?.branches?.length);
   const courseOk =
     String(form.courseId || '').trim() !== '' ||
-    (courseSettings.length === 0 && form.courseInterested.trim() !== '');
+    (visibleCourseSettings.length === 0 && form.courseInterested.trim() !== '');
   const branchOk = !hasBranches || String(form.branchId || '').trim() !== '';
   const quotaOk = String(form.quota || '').trim() !== '';
 
@@ -467,7 +493,7 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
                     disabled={isLoadingCourses}
                   >
                     <option value="">{isLoadingCourses ? 'Loading courses...' : 'Select college / course'}</option>
-                    {courseSettings.map((item) => (
+                    {visibleCourseSettings.map((item) => (
                       <option key={item._id} value={item._id}>
                         {item.name}
                         {item.code ? ` (${item.code})` : ''}

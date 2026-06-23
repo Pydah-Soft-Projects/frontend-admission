@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -23,6 +23,7 @@ import {
   useAdmissionTabPermissions,
   useDashboardHeader,
   useJoiningDeskPermissions,
+  useModulePermissionRaw,
 } from '@/components/layout/DashboardShell';
 import { ADMISSION_PAGE_TABS, type AdmissionTabKey } from '@/lib/joiningPermissions';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
@@ -338,14 +339,44 @@ const CompletedAdmissionsPage = () => {
 
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
   const { colleges, isLoading: collegesLoading } = useInstitutions();
+  // Derive college access scope from the joining module permission (mirrors JoiningLeadFormWorkspace logic).
+  const joiningPermData = useModulePermissionRaw('joining');
+  const joiningAllowedCollegeIds = useMemo(() => {
+    if (!joiningPermData?.allowedColleges) return undefined; // undefined = no restriction
+    const ids = (joiningPermData.allowedColleges as string[])
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => String(id).trim())
+      .filter(Boolean);
+    return ids.length ? ids : [];
+  }, [joiningPermData?.allowedColleges]);
+
+  /** Colleges visible in the filter dropdown — restricted to the user's scope when set. */
+  const visibleColleges = useMemo(() => {
+    if (!Array.isArray(joiningAllowedCollegeIds)) return colleges;
+    const allowedSet = new Set(joiningAllowedCollegeIds);
+    return colleges.filter((c) => allowedSet.has(c.id));
+  }, [colleges, joiningAllowedCollegeIds]);
+
+  /**
+   * Effective college scope for API calls: the explicit filter the user picked, OR (when the
+   * user has exactly one allowed college and no filter selected) that college automatically.
+   * This ensures scoped users never inadvertently fetch data outside their allowed colleges.
+   */
+  const effectiveCollegeFilter = useMemo(() => {
+    if (collegeFilter) return collegeFilter;
+    if (Array.isArray(joiningAllowedCollegeIds) && joiningAllowedCollegeIds.length === 1) {
+      return joiningAllowedCollegeIds[0];
+    }
+    return '';
+  }, [collegeFilter, joiningAllowedCollegeIds]);
 
   // Fetch courses for dropdown (scoped by college when selected)
   const { data: coursesData } = useQuery({
-    queryKey: ['courses', 'list', collegeFilter],
+    queryKey: ['courses', 'list', effectiveCollegeFilter],
     queryFn: async () => {
       const response = await courseAPI.list({
         showInactive: false,
-        collegeId: collegeFilter || undefined,
+        collegeId: effectiveCollegeFilter || undefined,
       });
       return response.data || response;
     },
@@ -354,12 +385,12 @@ const CompletedAdmissionsPage = () => {
   const courses = Array.isArray(coursesData) ? coursesData : (coursesData as any)?.data || [];
 
   const coursesForCollegeFilter = useMemo(() => {
-    if (!collegeFilter) return courses;
+    if (!effectiveCollegeFilter) return courses;
     return courses.filter(
       (c: { collegeId?: string | null }) =>
-        c.collegeId != null && String(c.collegeId).trim() === collegeFilter
+        c.collegeId != null && String(c.collegeId).trim() === effectiveCollegeFilter
     );
-  }, [courses, collegeFilter]);
+  }, [courses, effectiveCollegeFilter]);
 
   // Fetch branches for dropdown
   const { data: branchesData } = useQuery({
@@ -406,7 +437,7 @@ const CompletedAdmissionsPage = () => {
       'stats',
       dateRange.from,
       statsThroughDate,
-      collegeFilter,
+      effectiveCollegeFilter,
       courseFilter,
       branchFilter,
     ],
@@ -414,7 +445,7 @@ const CompletedAdmissionsPage = () => {
       admissionAPI.getStats({
         startDate: dateRange.from || undefined,
         endDate: statsThroughDate,
-        collegeId: collegeFilter || undefined,
+        collegeId: effectiveCollegeFilter || undefined,
         courseId: courseFilter || undefined,
         branchId: branchFilter || undefined,
         courseName: getCourseName(courseFilter) || undefined,
@@ -561,7 +592,7 @@ const CompletedAdmissionsPage = () => {
     () => ({
       startDate: dateRange.from || undefined,
       endDate: statsThroughDate,
-      collegeId: collegeFilter || undefined,
+      collegeId: effectiveCollegeFilter || undefined,
       courseId: courseFilter || undefined,
       branchId: branchFilter || undefined,
       courseName: getCourseName(courseFilter) || undefined,
@@ -571,7 +602,7 @@ const CompletedAdmissionsPage = () => {
     [
       dateRange.from,
       statsThroughDate,
-      collegeFilter,
+      effectiveCollegeFilter,
       courseFilter,
       branchFilter,
       statusFilter,
@@ -705,12 +736,12 @@ const CompletedAdmissionsPage = () => {
       limit,
       debouncedSearchTerm,
       statusFilter,
-      collegeFilter,
+      effectiveCollegeFilter,
       courseFilter,
       branchFilter,
       dateRange,
     ],
-    [page, limit, debouncedSearchTerm, statusFilter, collegeFilter, courseFilter, branchFilter, dateRange]
+    [page, limit, debouncedSearchTerm, statusFilter, effectiveCollegeFilter, courseFilter, branchFilter, dateRange]
   );
 
   const { data, isLoading, isFetching } = useQuery<AdmissionListResponse>({
@@ -722,7 +753,7 @@ const CompletedAdmissionsPage = () => {
         limit,
         search: debouncedSearchTerm || undefined,
         status: statusFilter === 'all' ? undefined : statusFilter,
-        collegeId: collegeFilter || undefined,
+        collegeId: effectiveCollegeFilter || undefined,
         courseId: courseFilter || undefined,
         branchId: branchFilter || undefined,
         courseName: getCourseName(courseFilter) || undefined,
@@ -809,7 +840,7 @@ const CompletedAdmissionsPage = () => {
       const blob = await admissionAPI.exportAdmissions({
         search: searchTerm || undefined,
         status: statusFilter === 'all' ? undefined : statusFilter,
-        collegeId: collegeFilter || undefined,
+        collegeId: effectiveCollegeFilter || undefined,
         courseId: courseFilter || undefined,
         branchId: branchFilter || undefined,
         courseName: getCourseName(courseFilter) || undefined,
@@ -1532,7 +1563,7 @@ const CompletedAdmissionsPage = () => {
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
                   >
                     <option value="">All Colleges</option>
-                    {colleges.map((c) => (
+                    {visibleColleges.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
