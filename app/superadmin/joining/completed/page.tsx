@@ -32,7 +32,8 @@ import {
   resolveAdmissionStatCourseLabel,
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
-import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone } from 'lucide-react';
+import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer } from 'lucide-react';
+import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -867,6 +868,221 @@ const CompletedAdmissionsPage = () => {
     }
   };
 
+  const handlePrintAbstract = () => {
+    const flatRows = stats.flatMap((c: any) => {
+      const branchRows =
+        Array.isArray(c.branches) && c.branches.length > 0
+          ? c.branches
+          : [
+              {
+                branchId: '',
+                branchName: '—',
+                cqIntake: null,
+                mqIntake: null,
+                cqAdmitted: 0,
+                cqCancelled: 0,
+                mqAdmitted: 0,
+                mqCancelled: 0,
+                spotAdmitted: 0,
+                spotCancelled: 0,
+                meritYes: 0,
+                meritNo: 0,
+                totalAdmissions: Number(c.totalAdmissions) || 0,
+                totalCancelled: Number(c.totalCancelled) || 0,
+              },
+            ];
+      return branchRows.map((b: any) => ({
+        courseName: resolveStatCourseLabel({ courseId: c.courseId, courseName: c.courseName, lateralTrack: c.lateralTrack ?? b.lateralTrack }),
+        branchName: getBranchName(b.branchId) || b.branchName || '—',
+        totalAdmissions: b.totalAdmissions ?? 0,
+        totalCancelled: b.totalCancelled ?? 0,
+        cqIntake: b.cqIntake,
+        cqAdmitted: b.cqAdmitted ?? 0,
+        cqCancelled: b.cqCancelled ?? 0,
+        mqIntake: b.mqIntake,
+        mqAdmitted: b.mqAdmitted ?? 0,
+        mqCancelled: b.mqCancelled ?? 0,
+        spotAdmitted: b.spotAdmitted ?? 0,
+        spotCancelled: b.spotCancelled ?? 0,
+        meritYes: b.meritYes ?? 0,
+        meritNo: b.meritNo ?? 0,
+      }));
+    });
+
+    const dateLabel = dateRange.from
+      ? `${dateRange.from} → ${statsThroughDate}`
+      : `Through ${statsThroughDate}`;
+
+    const esc = escapePrintHtml;
+    const fmtIntake = (v: number | null | undefined) => (v === null || v === undefined ? '—' : String(v));
+
+    const bodyRows = flatRows
+      .map(
+        (row) => `
+      <tr>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;font-weight:700;font-size:12px;white-space:nowrap;">${esc(row.courseName)}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;font-size:11px;background:#f8fafc;white-space:nowrap;">${esc(row.branchName)}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;font-weight:700;color:#2563eb;text-align:center;">${esc(String(row.totalAdmissions))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#dc2626;text-align:center;">${esc(String(row.totalCancelled))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;font-weight:600;color:#475569;text-align:center;">${esc(fmtIntake(row.cqIntake))}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;border-left:none;font-weight:700;color:#2563eb;text-align:center;">${esc(String(row.cqAdmitted))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#dc2626;text-align:center;">${esc(String(row.cqCancelled))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;font-weight:600;color:#475569;text-align:center;">${esc(fmtIntake(row.mqIntake))}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;border-left:none;font-weight:700;color:#d97706;text-align:center;">${esc(String(row.mqAdmitted))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#dc2626;text-align:center;">${esc(String(row.mqCancelled))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;font-weight:700;color:#7c3aed;text-align:center;">${esc(String(row.spotAdmitted))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#dc2626;text-align:center;">${esc(String(row.spotCancelled))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;font-weight:700;color:#059669;text-align:center;">${esc(String(row.meritYes))}</td>
+        <td style="padding:8px 10px;border:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#475569;text-align:center;">${esc(String(row.meritNo))}</td>
+      </tr>`
+      )
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Admission Abstract</title>
+  <style>
+    @page { size: A3 landscape; margin: 14mm 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; color: #0f172a; }
+
+    /* ── Page header ── */
+    .page-header {
+      text-align: center;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 3px solid #0f172a;
+    }
+    .page-header .doc-title {
+      margin: 0 0 4px;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0f172a;
+    }
+    .page-header .doc-subtitle {
+      margin: 0;
+      font-size: 13px;
+      color: #475569;
+      font-weight: 500;
+    }
+    .page-header .doc-meta {
+      margin: 6px 0 0;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+    /* Group header row */
+    .th-group {
+      padding: 10px 12px;
+      border: 2px solid #cbd5e1;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: center;
+      white-space: nowrap;
+    }
+    /* Sub-header row */
+    .th-sub {
+      padding: 9px 10px;
+      border: 1px solid #e2e8f0;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      text-align: center;
+      white-space: nowrap;
+    }
+    /* Row/label cells */
+    .th-label {
+      padding: 10px 12px;
+      border: 2px solid #cbd5e1;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: left;
+      background: #f1f5f9;
+      white-space: nowrap;
+    }
+
+    tbody tr:nth-child(even) { background: #f8fafc; }
+
+    /* Group colours */
+    .group-total      { background: #e2e8f0 !important; border: 2px solid #94a3b8 !important; color: #1e293b; }
+    .group-convenor   { background: #dbeafe !important; border: 2px solid #93c5fd !important; color: #1e40af; }
+    .group-management { background: #fef3c7 !important; border: 2px solid #fcd34d !important; color: #92400e; }
+    .group-spot       { background: #ede9fe !important; border: 2px solid #c4b5fd !important; color: #5b21b6; }
+    .group-merit      { background: #d1fae5 !important; border: 2px solid #6ee7b7 !important; color: #065f46; }
+
+    /* Sub-header colours */
+    .sub-blue   { color: #2563eb; border-color: #93c5fd !important; }
+    .sub-red    { color: #dc2626; border-color: #fca5a5 !important; }
+    .sub-slate  { color: #475569; }
+    .sub-amber  { color: #d97706; border-color: #fcd34d !important; }
+    .sub-violet { color: #7c3aed; border-color: #c4b5fd !important; }
+    .sub-green  { color: #059669; border-color: #6ee7b7 !important; }
+
+    .footer { margin-top: 14px; font-size: 10px; color: #94a3b8; text-align: right; }
+  </style>
+</head>
+<body>
+
+  <!-- ══ PAGE HEADER ══ -->
+  <div class="page-header">
+    <h1 class="doc-title">Abstract</h1>
+    <p class="doc-subtitle">Admissions Desk &mdash; Course &amp; Branch Summary</p>
+    <p class="doc-meta">Date range: ${esc(dateLabel)} &nbsp;&bull;&nbsp; Printed on ${esc(new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }))}</p>
+  </div>
+
+  <!-- ══ ABSTRACT TABLE ══ -->
+  <table>
+    <thead>
+      <!-- Group header row -->
+      <tr>
+        <th rowspan="2" class="th-label">Course</th>
+        <th rowspan="2" class="th-label">Branch</th>
+        <th colspan="2" class="th-group group-total">Total Admissions</th>
+        <th colspan="3" class="th-group group-convenor">Convenor</th>
+        <th colspan="3" class="th-group group-management">Management</th>
+        <th colspan="2" class="th-group group-spot">Spot</th>
+        <th colspan="2" class="th-group group-merit">Merit</th>
+      </tr>
+      <!-- Sub-header row -->
+      <tr>
+        <th class="th-sub sub-blue">Active</th>
+        <th class="th-sub sub-red">Cancelled</th>
+        <th class="th-sub sub-slate">Intake</th>
+        <th class="th-sub sub-blue">Admitted</th>
+        <th class="th-sub sub-red">Cancelled</th>
+        <th class="th-sub sub-slate">Intake</th>
+        <th class="th-sub sub-amber">Admitted</th>
+        <th class="th-sub sub-red">Cancelled</th>
+        <th class="th-sub sub-violet">Admitted</th>
+        <th class="th-sub sub-red">Cancelled</th>
+        <th class="th-sub sub-green">Yes</th>
+        <th class="th-sub sub-slate">No</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${bodyRows || `<tr><td colspan="14" style="text-align:center;padding:40px;color:#94a3b8;font-size:13px;">No data available.</td></tr>`}
+    </tbody>
+  </table>
+
+  <div class="footer">Generated from Admissions CRM &mdash; for office records only.</div>
+</body>
+</html>`;
+
+    printHtmlDocument(html, 'Admission Abstract');
+  };
+
   const totalAdmissionsCount = useMemo(() => {
     return stats.reduce((acc, curr) => acc + (Number(curr.totalAdmissions) || 0), 0);
   }, [stats]);
@@ -1488,6 +1704,18 @@ const CompletedAdmissionsPage = () => {
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
+              {activeTab === 'abstract' && !statsLoading && stats.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2 sm:w-auto"
+                  onClick={handlePrintAbstract}
+                >
+                  <Printer className="h-4 w-4" />
+                  <span className="sm:hidden">Print</span>
+                  <span className="hidden sm:inline">Print PDF</span>
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
