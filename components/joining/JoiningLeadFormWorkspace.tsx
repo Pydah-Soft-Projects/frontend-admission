@@ -58,6 +58,8 @@ import {
   buildAccommodationInjectedRows,
   canProceedFromAccommodationStep,
   hasRevisedStudentFeeLineOverrides,
+  isAccommodationChoiceLocked,
+  joiningTransportDetailsCompletenessScore,
 } from '@/lib/joiningBusFeeSync';
 import {
   computeScholarshipRegistrationPatches,
@@ -140,6 +142,7 @@ import {
 } from '@/components/admission/AdmissionWorkflowSteps';
 import {
   AdmissionStepThreeBusHostelPanel,
+  mergeJoiningTransportDetails,
   parseJoiningTransportDetails,
 } from '@/components/admission/AdmissionStepThreeBusHostelPanel';
 import { ApplicationInfoCard } from '@/components/admission/ApplicationInfoCard';
@@ -1064,16 +1067,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       setStudentFeeDetails({ lines: [] });
     }
   }, [joiningRecord?._id, joiningRecord?.updatedAt]);
-
-  useEffect(() => {
-    if (!joiningRecord?._id) return;
-    const saved =
-      joiningRecord.registrationFormData &&
-      typeof joiningRecord.registrationFormData === 'object'
-        ? (joiningRecord.registrationFormData as Record<string, unknown>).transport_details
-        : undefined;
-    setTransportDetails(parseJoiningTransportDetails(saved));
-  }, [joiningRecord?._id, joiningRecord?.updatedAt, joiningRecord?.registrationFormData]);
 
   const registrationLocationState = useMemo(
     () =>
@@ -2744,6 +2737,57 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     },
   });
 
+  const pendingFeeRequestQuery = useQuery({
+    queryKey: ['fee-request-pending', joiningRecord?._id],
+    queryFn: async () => {
+      if (!joiningRecord?._id) return null;
+      const res = await feeRequestAPI.getPendingForJoining(joiningRecord._id);
+      return (res?.data ?? null) as import('@/types').FeeRequest | null;
+    },
+    enabled: Boolean(joiningRecord?._id) && status === 'approved' && !isPublicEdit,
+    staleTime: 15_000,
+  });
+  const pendingFeeRequest = pendingFeeRequestQuery.data;
+
+  useEffect(() => {
+    const joiningTransport =
+      joiningRecord?.registrationFormData && typeof joiningRecord.registrationFormData === 'object'
+        ? (joiningRecord.registrationFormData as Record<string, unknown>).transport_details
+        : undefined;
+    const admissionTransport =
+      admissionRecord?.registrationFormData && typeof admissionRecord.registrationFormData === 'object'
+        ? (admissionRecord.registrationFormData as Record<string, unknown>).transport_details
+        : undefined;
+    const merged = mergeJoiningTransportDetails(
+      pendingFeeRequest?.transportDetails,
+      joiningTransport,
+      admissionTransport
+    );
+    setTransportDetails((prev) => {
+      const prevScore = joiningTransportDetailsCompletenessScore(prev);
+      const mergedScore = joiningTransportDetailsCompletenessScore(merged);
+      if (prevScore > mergedScore) return prev;
+      if (prevScore === mergedScore && isAccommodationChoiceLocked(prev)) return prev;
+      return merged;
+    });
+  }, [
+    pendingFeeRequest?.transportDetails,
+    pendingFeeRequest?.id,
+    joiningRecord?._id,
+    joiningRecord?.updatedAt,
+    joiningRecord?.registrationFormData,
+    admissionRecord?._id,
+    admissionRecord?.updatedAt,
+    admissionRecord?.registrationFormData,
+  ]);
+
+  const step3AccommodationReadOnly =
+    !canWriteJoining ||
+    (Boolean(pendingFeeRequest) &&
+      isAccommodationChoiceLocked(
+        mergeJoiningTransportDetails(pendingFeeRequest?.transportDetails, transportDetails)
+      ));
+
   const applyAdmissionRecordToWorkspace = useCallback(
     (record: Admission) => {
       setAdmissionRecord(record);
@@ -2762,11 +2806,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           stripJoiningRedundantRegistrationExtras({
             ...(record.registrationFormData as Record<string, unknown>),
           })
-        );
-        setTransportDetails(
-          parseJoiningTransportDetails(
-            (record.registrationFormData as Record<string, unknown>).transport_details
-          )
         );
       }
 
@@ -4193,18 +4232,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ),
     [studentFeeDetails.lines, accommodationInjectedRows]
   );
-
-  const pendingFeeRequestQuery = useQuery({
-    queryKey: ['fee-request-pending', joiningRecord?._id],
-    queryFn: async () => {
-      if (!joiningRecord?._id) return null;
-      const res = await feeRequestAPI.getPendingForJoining(joiningRecord._id);
-      return (res?.data ?? null) as import('@/types').FeeRequest | null;
-    },
-    enabled: Boolean(joiningRecord?._id) && status === 'approved' && !isPublicEdit,
-    staleTime: 15_000,
-  });
-  const pendingFeeRequest = pendingFeeRequestQuery.data;
 
   const allFeeStructuresQuery = useQuery({
     queryKey: ['all-fee-structures-dropdown'],
@@ -6486,10 +6513,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             >
               {(useWizard ? applicationWizardStep === 3 : showAdminPostAdmissionStep3) ? (
                 <>
+                  {step3AccommodationReadOnly && pendingFeeRequest ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                      Bus or hostel selection is locked while a fee request is awaiting approval. The saved
+                      accommodation below will apply after approval.
+                    </div>
+                  ) : null}
                   <AdmissionStepThreeBusHostelPanel
                     value={transportDetails}
-                    onChange={canWriteJoining ? setTransportDetails : undefined}
-                    disabled={!canWriteJoining}
+                    onChange={step3AccommodationReadOnly ? undefined : canWriteJoining ? setTransportDetails : undefined}
+                    disabled={step3AccommodationReadOnly || !canWriteJoining}
                     courseName={formState.courseInfo.course}
                     programTotalYears={programTotalYears}
                     joiningAcademicYear={stepOneAcademicYear}

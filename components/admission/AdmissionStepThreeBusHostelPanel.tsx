@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hostelAPI, transportAPI } from '@/lib/api';
-import { normalizeHostelFeesByYear, isAccommodationChoiceLocked } from '@/lib/joiningBusFeeSync';
+import {
+  isAccommodationChoiceLocked,
+  joiningTransportDetailsCompletenessScore,
+  normalizeHostelFeesByYear,
+} from '@/lib/joiningBusFeeSync';
 import { calendarYearToAcademicYearRange } from '@/lib/joiningAcademicYearRegistration';
 import { cn } from '@/lib/utils';
 import type {
@@ -128,6 +132,21 @@ export function parseJoiningTransportDetails(raw: unknown): JoiningTransportDeta
           .filter((row) => Number.isFinite(row.studentYear) && row.studentYear > 0)
       : undefined,
   };
+}
+
+/** Pick the richest non-empty transport snapshot across joining, admission, and fee-request sources. */
+export function mergeJoiningTransportDetails(...sources: unknown[]): JoiningTransportDetails {
+  const parsed = sources.map(parseJoiningTransportDetails);
+  let best = emptyTransportDetails();
+  let bestScore = -1;
+  for (const candidate of parsed) {
+    const score = joiningTransportDetailsCompletenessScore(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 const unwrapList = <T,>(response: unknown): T[] => {

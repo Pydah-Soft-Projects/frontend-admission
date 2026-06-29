@@ -148,6 +148,24 @@ export function canProceedFromAccommodationStep(transport: JoiningTransportDetai
   return isAccommodationChoiceLocked(transport);
 }
 
+/** Higher score = more complete persisted bus/hostel selection. */
+export function joiningTransportDetailsCompletenessScore(
+  transport: JoiningTransportDetails
+): number {
+  if (!isAccommodationChoiceLocked(transport)) return 0;
+  let score = 10;
+  if (transport.accommodationType === 'bus') {
+    if (transport.routeId) score += 2;
+    if (transport.stageId) score += 2;
+    if (transport.busNumber || transport.busId) score += 1;
+  } else if (transport.accommodationType === 'hostel') {
+    if (transport.hostelId) score += 2;
+    if (transport.categoryId) score += 2;
+    if (transport.roomId || transport.roomNumber) score += 1;
+  }
+  return score;
+}
+
 function buildSyntheticFeeStructureRows(params: {
   prefix: typeof BUS_FEE_STRUCTURE_ID_PREFIX | typeof HOSTEL_FEE_STRUCTURE_ID_PREFIX;
   feeHead: typeof BUS_FEE_HEAD | typeof HOSTEL_FEE_HEAD;

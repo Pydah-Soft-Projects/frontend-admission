@@ -336,6 +336,17 @@ const CompletedAdmissionsPage = () => {
     return () => window.clearTimeout(timer);
   }, [searchTerm]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm]);
+
+  useEffect(() => {
+    const term = debouncedSearchTerm.trim();
+    if (term.length > 0 && activeTab !== 'detailed' && activeTab !== 'student-info') {
+      setActiveTab('detailed');
+    }
+  }, [debouncedSearchTerm, activeTab]);
+
   const listTabsActive = activeTab === 'detailed' || activeTab === 'student-info';
 
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
@@ -767,7 +778,7 @@ const CompletedAdmissionsPage = () => {
       });
       return response.data || response;
     },
-    placeholderData: (previousData) => previousData,
+    placeholderData: debouncedSearchTerm.trim() ? undefined : (previousData) => previousData,
     staleTime: 30_000,
   });
 
