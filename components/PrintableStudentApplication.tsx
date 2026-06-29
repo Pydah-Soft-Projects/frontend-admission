@@ -288,6 +288,27 @@ function extractFeeMongoTransactions(response: unknown): PrintPaidTransaction[] 
   return [];
 }
 
+function mergePrintFeeAdjustments(
+  primary: PrintFeeAdjustment[],
+  fallback: PrintFeeAdjustment[]
+): PrintFeeAdjustment[] {
+  const keyFor = (row: PrintFeeAdjustment) => {
+    const head = String(row.feeHeadId || row.feeHeadCode || '').trim().toUpperCase();
+    const year = Number(row.studentYear) || 1;
+    return `${head}::${year}`;
+  };
+  const map = new Map<string, PrintFeeAdjustment>();
+  for (const row of primary) {
+    const key = keyFor(row);
+    if (key !== '::1') map.set(key, row);
+  }
+  for (const row of fallback) {
+    const key = keyFor(row);
+    if (key !== '::1') map.set(key, row);
+  }
+  return Array.from(map.values());
+}
+
 async function resolvePrintFeeStructureTableHtml(
   application: ApplicationData,
   courseName?: string,
@@ -347,18 +368,17 @@ async function resolvePrintFeeStructureTableHtml(
   const totalYears = resolveProgramTotalYears(catalog, courseId, branchId, feeStructures);
   const resolvedAdmissionNumber =
     String(admissionNumber || (application as Admission).admissionNumber || '').trim();
-  let adjustments: PrintFeeAdjustment[] = [];
+  let overallAdjustments: PrintFeeAdjustment[] = [];
   if (resolvedAdmissionNumber) {
-    adjustments = extractOverallConcessionLines(
+    overallAdjustments = extractOverallConcessionLines(
       await paymentAPI.getOverallConcessions(resolvedAdmissionNumber).catch(() => null)
     );
   }
-  if (adjustments.length === 0) {
-    adjustments = buildPrintFeeAdjustmentsFromStudentFeeDetails(
-      application.studentFeeDetails?.lines || [],
-      feeStructures
-    );
-  }
+  const embeddedAdjustments = buildPrintFeeAdjustmentsFromStudentFeeDetails(
+    application.studentFeeDetails?.lines || [],
+    feeStructures
+  );
+  const adjustments = mergePrintFeeAdjustments(overallAdjustments, embeddedAdjustments);
   const detailedTable = buildPrintFeeStructureDetailedTable(feeStructures, totalYears, adjustments);
 
   return renderPrintFeeStructureDetailedTableHtml(detailedTable);

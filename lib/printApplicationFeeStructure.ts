@@ -191,8 +191,12 @@ const feeColumnKeyForAdjustment = (row: PrintFeeAdjustment): string => {
   return '';
 };
 
-const normalizeAdjustmentType = (value?: string | null): 'REVISED_FEE' | 'CONCESSION' | undefined =>
-  value === 'CONCESSION' || value === 'REVISED_FEE' ? value : undefined;
+const normalizeAdjustmentType = (value?: string | null): 'REVISED_FEE' | 'CONCESSION' | undefined => {
+  const raw = String(value || '').trim().toUpperCase();
+  if (raw === 'CONCESSION') return 'CONCESSION';
+  if (raw === 'REVISED_FEE' || raw === 'REVISED') return 'REVISED_FEE';
+  return undefined;
+};
 
 export function buildPrintFeeAdjustmentsFromStudentFeeDetails(
   lines: JoiningStudentFeeLineOverride[] = [],
@@ -220,13 +224,19 @@ export function buildPrintFeeStructureDetailedTable(
   adjustments: PrintFeeAdjustment[] = []
 ): PrintFeeStructureDetailedTable {
   const columnMap = new Map<string, PrintFeeStructureColumn>();
+  const columnAliasMap = new Map<string, string>();
   const amountMap = new Map<string, number>();
   const adjustmentMap = new Map<string, PrintFeeAdjustment>();
+  const adjustmentTypeByColumn = new Map<string, 'REVISED_FEE' | 'CONCESSION'>();
 
   for (const row of structures) {
     const year = Number(row.studentYear);
     if (!Number.isFinite(year) || year < 1) continue;
     const key = feeColumnKeyForStructure(row);
+    const idAlias = normalizeFeeKeyPart(row.feeHead) ? `id:${normalizeFeeKeyPart(row.feeHead)}` : '';
+    const codeAlias = normalizeFeeKeyPart(row.feeHeadCode)
+      ? `code:${normalizeFeeKeyPart(row.feeHeadCode).toUpperCase()}`
+      : '';
     if (!columnMap.has(key)) {
       columnMap.set(key, {
         key,
@@ -234,20 +244,40 @@ export function buildPrintFeeStructureDetailedTable(
         code: row.feeHeadCode || '',
       });
     }
+    if (idAlias) columnAliasMap.set(idAlias, key);
+    if (codeAlias) columnAliasMap.set(codeAlias, key);
     const mapKey = `${key}::${year}`;
     amountMap.set(mapKey, (amountMap.get(mapKey) || 0) + (Number(row.amount) || 0));
   }
 
   for (const adjustment of adjustments) {
     const type = normalizeAdjustmentType(adjustment.concessionType);
-    const key = feeColumnKeyForAdjustment(adjustment);
+    const rawKey = feeColumnKeyForAdjustment(adjustment);
+    const codeAlias = normalizeFeeKeyPart(adjustment.feeHeadCode)
+      ? `code:${normalizeFeeKeyPart(adjustment.feeHeadCode).toUpperCase()}`
+      : '';
+    const key = columnAliasMap.get(rawKey) || (codeAlias ? columnAliasMap.get(codeAlias) : '') || rawKey;
     const year = Number(adjustment.studentYear) || 1;
     if (!type || !key) continue;
-    adjustmentMap.set(`${key}::${year}`, adjustment);
-    const col = columnMap.get(key);
-    if (col) {
-      col.adjustmentType = col.adjustmentType || type;
+    const adjustmentKey = `${key}::${year}`;
+    const existing = adjustmentMap.get(adjustmentKey);
+    const existingType = normalizeAdjustmentType(existing?.concessionType);
+    if (!existing || existingType !== 'REVISED_FEE' || type === 'REVISED_FEE') {
+      adjustmentMap.set(adjustmentKey, {
+        ...adjustment,
+        concessionType: type,
+      });
     }
+    const currentType = adjustmentTypeByColumn.get(key);
+    adjustmentTypeByColumn.set(
+      key,
+      currentType === 'REVISED_FEE' || type === 'REVISED_FEE' ? 'REVISED_FEE' : 'CONCESSION'
+    );
+  }
+
+  for (const [key, type] of adjustmentTypeByColumn.entries()) {
+    const col = columnMap.get(key);
+    if (col) col.adjustmentType = type;
   }
 
   const maxFromData = Math.max(
@@ -272,7 +302,10 @@ export function buildPrintFeeStructureDetailedTable(
               ? Number(adjustment?.revisedAmount)
               : 0)
           : type === 'REVISED_FEE'
-            ? Number(adjustment?.revisedAmount) || 0
+            ? Number(adjustment?.revisedAmount) > 0 &&
+              Number(adjustment?.revisedAmount) !== actual
+              ? Number(adjustment?.revisedAmount)
+              : 0
             : 0;
       cells[column.key] = {
         actual: actual > 0 ? actual : null,
