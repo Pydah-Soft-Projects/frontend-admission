@@ -1,4 +1,4 @@
-import type { Admission, Course, FeeStructure, Joining } from '@/types';
+import type { Admission, Course, FeeStructure, Joining, JoiningStudentFeeLineOverride } from '@/types';
 import { deriveAdmissionSeriesYear } from '@/lib/joiningAcademicYearRegistration';
 import { resolveTotalYearsFromCourseSettings } from '@/lib/joiningAcademicYearRegistration';
 import type { CoursePaymentSettings } from '@/types';
@@ -12,6 +12,38 @@ export interface PrintFeeStructureYearRow {
   tuition: number | null;
   transport: number | null;
   other: number | null;
+}
+
+export interface PrintFeeAdjustment {
+  feeHeadId?: string | null;
+  feeHeadCode?: string;
+  studentYear?: number | string;
+  actualAmount?: number | string;
+  revisedAmount?: number | string;
+  concessionAmount?: number | string;
+  concessionType?: 'REVISED_FEE' | 'CONCESSION' | string;
+}
+
+export interface PrintFeeStructureColumn {
+  key: string;
+  label: string;
+  code: string;
+  adjustmentType?: 'REVISED_FEE' | 'CONCESSION';
+}
+
+export interface PrintFeeStructureCell {
+  actual: number | null;
+  adjustment: number | null;
+}
+
+export interface PrintFeeStructureDetailedYearRow {
+  year: number;
+  cells: Record<string, PrintFeeStructureCell>;
+}
+
+export interface PrintFeeStructureDetailedTable {
+  columns: PrintFeeStructureColumn[];
+  rows: PrintFeeStructureDetailedYearRow[];
 }
 
 export function mapQuotaToFeeCategory(quota?: string | null): string {
@@ -139,6 +171,118 @@ export function buildPrintFeeStructureYearRows(
   }
 
   return rows;
+}
+
+const normalizeFeeKeyPart = (value?: string | null) => String(value || '').trim();
+
+const feeColumnKeyForStructure = (row: FeeStructure): string => {
+  const id = normalizeFeeKeyPart(row.feeHead);
+  if (id) return `id:${id}`;
+  const code = normalizeFeeKeyPart(row.feeHeadCode).toUpperCase();
+  if (code) return `code:${code}`;
+  return `name:${normalizeFeeKeyPart(row.feeHeadName).toUpperCase()}`;
+};
+
+const feeColumnKeyForAdjustment = (row: PrintFeeAdjustment): string => {
+  const id = normalizeFeeKeyPart(row.feeHeadId);
+  if (id) return `id:${id}`;
+  const code = normalizeFeeKeyPart(row.feeHeadCode).toUpperCase();
+  if (code) return `code:${code}`;
+  return '';
+};
+
+const normalizeAdjustmentType = (value?: string | null): 'REVISED_FEE' | 'CONCESSION' | undefined =>
+  value === 'CONCESSION' || value === 'REVISED_FEE' ? value : undefined;
+
+export function buildPrintFeeAdjustmentsFromStudentFeeDetails(
+  lines: JoiningStudentFeeLineOverride[] = [],
+  structures: FeeStructure[] = []
+): PrintFeeAdjustment[] {
+  return lines
+    .filter((line) => line.concessionType === 'CONCESSION' || line.concessionType === 'REVISED_FEE')
+    .map((line) => {
+      const catalog = structures.find((row) => String(row._id) === String(line.structureId));
+      return {
+        feeHeadId: line.feeHeadId || catalog?.feeHead || null,
+        feeHeadCode: line.feeHeadCode || catalog?.feeHeadCode || '',
+        studentYear: line.studentYear ?? catalog?.studentYear ?? 1,
+        actualAmount: catalog?.amount ?? 0,
+        revisedAmount: line.amount ?? 0,
+        concessionAmount: line.concessionType === 'CONCESSION' ? line.amount ?? 0 : 0,
+        concessionType: line.concessionType,
+      };
+    });
+}
+
+export function buildPrintFeeStructureDetailedTable(
+  structures: FeeStructure[],
+  totalYears: number,
+  adjustments: PrintFeeAdjustment[] = []
+): PrintFeeStructureDetailedTable {
+  const columnMap = new Map<string, PrintFeeStructureColumn>();
+  const amountMap = new Map<string, number>();
+  const adjustmentMap = new Map<string, PrintFeeAdjustment>();
+
+  for (const row of structures) {
+    const year = Number(row.studentYear);
+    if (!Number.isFinite(year) || year < 1) continue;
+    const key = feeColumnKeyForStructure(row);
+    if (!columnMap.has(key)) {
+      columnMap.set(key, {
+        key,
+        label: row.feeHeadName || row.feeHeadCode || 'Fee Head',
+        code: row.feeHeadCode || '',
+      });
+    }
+    const mapKey = `${key}::${year}`;
+    amountMap.set(mapKey, (amountMap.get(mapKey) || 0) + (Number(row.amount) || 0));
+  }
+
+  for (const adjustment of adjustments) {
+    const type = normalizeAdjustmentType(adjustment.concessionType);
+    const key = feeColumnKeyForAdjustment(adjustment);
+    const year = Number(adjustment.studentYear) || 1;
+    if (!type || !key) continue;
+    adjustmentMap.set(`${key}::${year}`, adjustment);
+    const col = columnMap.get(key);
+    if (col) {
+      col.adjustmentType = col.adjustmentType || type;
+    }
+  }
+
+  const maxFromData = Math.max(
+    0,
+    ...Array.from(amountMap.keys()).map((key) => Number(key.split('::')[1]) || 0),
+    ...Array.from(adjustmentMap.keys()).map((key) => Number(key.split('::')[1]) || 0)
+  );
+  const yearCount = Math.max(1, totalYears, maxFromData);
+  const columns = Array.from(columnMap.values());
+  const rows: PrintFeeStructureDetailedYearRow[] = [];
+
+  for (let year = 1; year <= yearCount; year += 1) {
+    const cells: Record<string, PrintFeeStructureCell> = {};
+    for (const column of columns) {
+      const actual = amountMap.get(`${column.key}::${year}`) || 0;
+      const adjustment = adjustmentMap.get(`${column.key}::${year}`);
+      const type = normalizeAdjustmentType(adjustment?.concessionType);
+      const adjustedValue =
+        type === 'CONCESSION'
+          ? Number(adjustment?.concessionAmount) ||
+            (Number(adjustment?.revisedAmount) > 0 && Number(adjustment?.revisedAmount) < actual
+              ? Number(adjustment?.revisedAmount)
+              : 0)
+          : type === 'REVISED_FEE'
+            ? Number(adjustment?.revisedAmount) || 0
+            : 0;
+      cells[column.key] = {
+        actual: actual > 0 ? actual : null,
+        adjustment: adjustedValue > 0 ? adjustedValue : null,
+      };
+    }
+    rows.push({ year, cells });
+  }
+
+  return { columns, rows };
 }
 
 export function courseCatalogFromCourseList(

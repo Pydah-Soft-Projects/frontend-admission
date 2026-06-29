@@ -3,12 +3,11 @@
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatCollegeAddressForPrint } from '@/components/joining/PrintableAdmitCard';
-import { courseAPI, feeStructureAPI } from '@/lib/api';
+import { courseAPI, feeStructureAPI, paymentAPI } from '@/lib/api';
 import type {
   Joining,
   Admission,
   PaymentSummary,
-  PaymentTransaction,
   JoiningDocuments,
   JoiningQualifications,
   JoiningCommunicationAddress,
@@ -17,13 +16,15 @@ import type {
   Branch,
 } from '@/types';
 import {
-  buildPrintFeeStructureYearRows,
+  buildPrintFeeAdjustmentsFromStudentFeeDetails,
+  buildPrintFeeStructureDetailedTable,
   courseCatalogFromCourseList,
   mapQuotaToFeeCategory,
   resolvePrintFeeBatch,
   resolveProgramTotalYears,
   unwrapFeeStructureListPayload,
-  type PrintFeeStructureYearRow,
+  type PrintFeeAdjustment,
+  type PrintFeeStructureDetailedTable,
 } from '@/lib/printApplicationFeeStructure';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { normalizeJoiningDateOfBirthInput } from '@/lib/joiningRegistrationFieldMap';
@@ -31,6 +32,24 @@ import { normalizeAddressFieldForDisplay } from '@/lib/formatJoiningAddressDispl
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 
 type ApplicationData = Joining | Admission;
+
+type PrintPaidTransaction = {
+  _id?: string;
+  amount: number;
+  mode?: string;
+  paymentMode?: string;
+  status?: string;
+  remarks?: string;
+  receiptNumber?: string;
+  referenceId?: string;
+  referenceNo?: string;
+  cashfreeOrderId?: string;
+  transactionId?: string;
+  feeHeadName?: string;
+  feeHeadCode?: string;
+  createdAt?: string;
+  paymentDate?: string;
+};
 
 function escapeHtml(text: string | undefined): string {
   const s = text ?? '';
@@ -185,30 +204,53 @@ function formatPrintFeeAmount(amount?: number | null): string {
   }
 }
 
-function renderPrintFeeStructureTableHtml(rows: PrintFeeStructureYearRow[]): string {
-  if (!rows.length) return '';
+function renderPrintFeeStructureDetailedTableHtml(table: PrintFeeStructureDetailedTable): string {
+  if (!table.columns.length || !table.rows.length) return '';
 
+  const secondHeader = table.columns.some((column) => column.adjustmentType);
   return `
     <div class="print-fee-structure-block">
       <div class="print-fee-structure-title">Fee Structure</div>
       <table class="data-table print-fee-structure-table">
         <thead>
           <tr>
-            <th>Year</th>
-            <th>Tuition Fee</th>
-            <th>Other Fee</th>
-            <th>Transport Fee</th>
+            <th${secondHeader ? ' rowspan="2"' : ''}>Year</th>
+            ${table.columns
+              .map((column) => {
+                const label = column.label;
+                return `<th${column.adjustmentType ? ' colspan="2"' : secondHeader ? ' rowspan="2"' : ''}>${escapeHtml(label)}</th>`;
+              })
+              .join('')}
           </tr>
+          ${
+            secondHeader
+              ? `<tr>${table.columns
+                  .map((column) =>
+                    column.adjustmentType
+                      ? `<th>Actual</th><th>${column.adjustmentType === 'CONCESSION' ? 'Concession' : 'Revised Fee'}</th>`
+                      : ''
+                  )
+                  .join('')}</tr>`
+              : ''
+          }
         </thead>
         <tbody>
-          ${rows
+          ${table.rows
             .map(
               (row) => `
             <tr>
               <td>Year ${row.year}</td>
-              <td>${escapeHtml(formatPrintFeeAmount(row.tuition))}</td>
-              <td>${escapeHtml(formatPrintFeeAmount(row.other))}</td>
-              <td>${escapeHtml(formatPrintFeeAmount(row.transport))}</td>
+              ${table.columns
+                .map((column) => {
+                  const cell = row.cells[column.key] || { actual: null, adjustment: null };
+                  const actualText =
+                    cell.actual != null && cell.actual > 0 ? escapeHtml(formatPrintFeeAmount(cell.actual)) : '-';
+                  if (column.adjustmentType) {
+                    return `<td>${actualText}</td><td>${cell.adjustment != null && cell.adjustment > 0 ? escapeHtml(formatPrintFeeAmount(cell.adjustment)) : '-'}</td>`;
+                  }
+                  return `<td>${actualText}</td>`;
+                })
+                .join('')}
             </tr>
           `
             )
@@ -219,10 +261,38 @@ function renderPrintFeeStructureTableHtml(rows: PrintFeeStructureYearRow[]): str
   `;
 }
 
+function extractOverallConcessionLines(response: unknown): PrintFeeAdjustment[] {
+  const root = response as { data?: unknown } | null | undefined;
+  const payload = root?.data && typeof root.data === 'object' ? root.data : response;
+  const revisedFees = (payload as { revisedFees?: unknown } | null | undefined)?.revisedFees;
+  return Array.isArray(revisedFees) ? (revisedFees as PrintFeeAdjustment[]) : [];
+}
+
+function extractFeeMongoTransactions(response: unknown): PrintPaidTransaction[] {
+  if (Array.isArray(response)) return response as PrintPaidTransaction[];
+  const root = response as
+    | {
+        transactions?: unknown;
+        data?: unknown;
+      }
+    | null
+    | undefined;
+  if (Array.isArray(root?.transactions)) return root.transactions as PrintPaidTransaction[];
+  const payload = root?.data;
+  if (Array.isArray(payload)) return payload as PrintPaidTransaction[];
+  if (payload && typeof payload === 'object') {
+    const nested = payload as { transactions?: unknown; data?: unknown };
+    if (Array.isArray(nested.transactions)) return nested.transactions as PrintPaidTransaction[];
+    if (Array.isArray(nested.data)) return nested.data as PrintPaidTransaction[];
+  }
+  return [];
+}
+
 async function resolvePrintFeeStructureTableHtml(
   application: ApplicationData,
   courseName?: string,
-  branchName?: string
+  branchName?: string,
+  admissionNumber?: string
 ): Promise<string> {
   const courseId = String(application.courseInfo?.courseId ?? '').trim();
   const branchId = String(application.courseInfo?.branchId ?? '').trim();
@@ -275,9 +345,23 @@ async function resolvePrintFeeStructureTableHtml(
 
   const catalog = courseCatalogFromCourseList(courseList);
   const totalYears = resolveProgramTotalYears(catalog, courseId, branchId, feeStructures);
-  const rows = buildPrintFeeStructureYearRows(feeStructures, totalYears);
+  const resolvedAdmissionNumber =
+    String(admissionNumber || (application as Admission).admissionNumber || '').trim();
+  let adjustments: PrintFeeAdjustment[] = [];
+  if (resolvedAdmissionNumber) {
+    adjustments = extractOverallConcessionLines(
+      await paymentAPI.getOverallConcessions(resolvedAdmissionNumber).catch(() => null)
+    );
+  }
+  if (adjustments.length === 0) {
+    adjustments = buildPrintFeeAdjustmentsFromStudentFeeDetails(
+      application.studentFeeDetails?.lines || [],
+      feeStructures
+    );
+  }
+  const detailedTable = buildPrintFeeStructureDetailedTable(feeStructures, totalYears, adjustments);
 
-  return renderPrintFeeStructureTableHtml(rows);
+  return renderPrintFeeStructureDetailedTableHtml(detailedTable);
 }
 
 type EducationTableRowKey = 'ssc' | 'inter_diploma' | 'ug';
@@ -418,7 +502,7 @@ export interface PrintableStudentApplicationProps {
   /** Payment summary if available */
   paymentSummary?: PaymentSummary | null;
   /** Recent transactions for print */
-  transactions?: PaymentTransaction[];
+  transactions?: PrintPaidTransaction[];
   /** College display name (e.g. from course lookup); replaces generic header text. */
   collegeName?: string;
   /** College address for print header; fetched from admit-card assets when omitted. */
@@ -453,7 +537,7 @@ function getPrintApplicationHtml(props: {
   courseName?: string;
   branchName?: string;
   paymentSummary?: PaymentSummary | null;
-  transactions?: PaymentTransaction[];
+  transactions?: PrintPaidTransaction[];
   printedDate: string;
   collegeName?: string;
   collegeAddress?: string;
@@ -567,13 +651,14 @@ function getPrintApplicationHtml(props: {
   // Receipt number resolution for the Fee Paid Details table. The previous
   // logic showed only the last 6 chars of the internal _id which is not
   // meaningful to staff. Prefer human references in this order.
-  const getReceiptNumber = (tx?: PaymentTransaction): string => {
+  const getReceiptNumber = (tx?: PrintPaidTransaction): string => {
     if (!tx) return '';
     const candidate =
-      (tx as PaymentTransaction & { receiptNumber?: string }).receiptNumber ||
+      tx.receiptNumber ||
+      tx.referenceNo ||
       tx.referenceId ||
       tx.cashfreeOrderId ||
-      (tx as PaymentTransaction & { transactionId?: string }).transactionId ||
+      tx.transactionId ||
       '';
     if (candidate) return String(candidate);
     return tx._id ? String(tx._id).slice(-6) : '';
@@ -1379,13 +1464,14 @@ function getPrintApplicationHtml(props: {
       width: 100%;
       margin-bottom: 4px;
     }
-    .print-fee-structure-table th,
-    .print-fee-structure-table td {
+    table.print-fee-structure-table th,
+    table.print-fee-structure-table td {
       text-align: center;
+      white-space: nowrap;
     }
-    .print-fee-structure-table th:first-child,
-    .print-fee-structure-table td:first-child {
-      text-align: left;
+    table.print-fee-structure-table th:first-child,
+    table.print-fee-structure-table td:first-child {
+      text-align: center;
       width: 72px;
     }
     .fee-print-page .office-label-tag {
@@ -2037,10 +2123,10 @@ function getPrintApplicationHtml(props: {
                   <tr style="height: 24px;">
                     <td>${i + 1}</td>
                     <td>${escapeHtml(getReceiptNumber(tx))}</td>
-                    <td>${escapeHtml(formatTxDate(tx?.createdAt))}</td>
-                    <td>${escapeHtml(tx?.mode || '')}</td>
+                    <td>${escapeHtml(formatTxDate(tx?.paymentDate || tx?.createdAt))}</td>
+                    <td>${escapeHtml(tx?.paymentMode === 'Net Banking' ? 'Bank' : tx?.paymentMode || tx?.mode || '')}</td>
                     <td>${tx ? formatCurrency(tx.amount) : ''}</td>
-                    <td>${escapeHtml(tx?.status || '')}</td>
+                    <td>${escapeHtml(tx?.remarks || tx?.feeHeadName || tx?.status || '')}</td>
                   </tr>
                 `;
               }).join('');
@@ -2116,8 +2202,22 @@ export function PrintableStudentApplication({
     const feeStructureTableHtml = await resolvePrintFeeStructureTableHtml(
       application,
       courseName,
-      branchName
+      branchName,
+      admissionNumber
     );
+    const resolvedAdmissionNumber =
+      String(admissionNumber || (application as Admission).admissionNumber || '').trim();
+    let feePaidTransactions: PrintPaidTransaction[] = transactions ?? [];
+    if (resolvedAdmissionNumber) {
+      const feeMongoTransactions = extractFeeMongoTransactions(
+        await paymentAPI
+          .listFeeManagementTransactions({ admissionNumber: resolvedAdmissionNumber })
+          .catch(() => null)
+      );
+      if (feeMongoTransactions.length > 0) {
+        feePaidTransactions = feeMongoTransactions;
+      }
+    }
     const html = getPrintApplicationHtml({
       application,
       title,
@@ -2126,7 +2226,7 @@ export function PrintableStudentApplication({
       courseName,
       branchName,
       paymentSummary: paymentSummary ?? null,
-      transactions: transactions ?? [],
+      transactions: feePaidTransactions,
       printedDate: formatPrintDate(),
       collegeName,
       collegeAddress: collegeAddress || undefined,
