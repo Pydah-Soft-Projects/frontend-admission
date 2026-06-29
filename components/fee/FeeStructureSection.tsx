@@ -483,19 +483,6 @@ export function FeeStructureSection({
       return String(row._id);
     };
 
-    /**
-     * Returns true for fee heads that should be excluded from the pivot table.
-     * Application fee (APPL01) is a one-time row that only appears for Year 1
-     * and has no meaningful cross-year comparison — hide it from the summary view.
-     */
-    const isExcludedFromPivot = (row: FeeStructure): boolean => {
-      const code = String(row.feeHeadCode ?? '').trim().toUpperCase();
-      const name = String(row.feeHeadName ?? '').trim().toLowerCase();
-      if (code === 'APPL01' || /^appl/.test(code)) return true;
-      if (/\bapplication\s+fee\b/.test(name)) return true;
-      return false;
-    };
-
     // Collect distinct fee heads in first-seen insertion order
     const headOrder: string[] = [];
     const headMeta = new Map<string, { name: string; code: string; key: string }>();
@@ -505,7 +492,6 @@ export function FeeStructureSection({
     const yearRowsMap = new Map<number | string, FeeStructure[]>();
 
     for (const row of items) {
-      if (isExcludedFromPivot(row)) continue;
       const year = row.studentYear ?? 'all';
       const hkey = getFeeHeadKey(row);
 

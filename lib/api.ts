@@ -1761,6 +1761,10 @@ export const feeStructureAPI = {
     const response = await api.get(`/fee-structures/options`);
     return response.data;
   },
+  feeHeads: async () => {
+    const response = await api.get(`/fee-structures/fee-heads`);
+    return response.data;
+  },
 };
 
 export const transportAPI = {
@@ -1891,6 +1895,44 @@ export const paymentAPI = {
   },
   reconcilePendingTransactions: async () => {
     const response = await api.post(`/payments/cashfree/reconcile`);
+    return response.data;
+  },
+  getOverallConcessions: async (admissionNumber: string) => {
+    const response = await api.get(
+      `/payments/overall-concessions?admissionNumber=${encodeURIComponent(admissionNumber)}`
+    );
+    return response.data;
+  },
+  listFeeManagementTransactions: async (params: {
+    admissionNumber?: string;
+    joiningId?: string;
+    admissionId?: string;
+    studentYear?: number | string | null;
+  }) => {
+    const query = new URLSearchParams();
+    if (params.admissionNumber) query.set('admissionNumber', params.admissionNumber);
+    if (params.joiningId) query.set('joiningId', params.joiningId);
+    if (params.admissionId) query.set('admissionId', params.admissionId);
+    if (params.studentYear != null && String(params.studentYear).trim() !== '') {
+      query.set('studentYear', String(params.studentYear));
+    }
+    const response = await api.get(`/payments/fee-management/transactions?${query.toString()}`);
+    return response.data?.data || response.data;
+  },
+  recordFeeManagementTransaction: async (data: {
+    joiningId: string;
+    admissionId?: string;
+    feeHead: string;
+    feeHeadName?: string;
+    feeHeadCode?: string;
+    amount: number;
+    paymentMode: 'Cash' | 'Bank';
+    receiptNumber?: string;
+    remarks?: string;
+    semester?: number | string | null;
+    studentYear?: number | string | null;
+  }) => {
+    const response = await api.post('/payments/fee-management/transactions', data);
     return response.data;
   },
 };

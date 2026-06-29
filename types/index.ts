@@ -528,6 +528,11 @@ export interface JoiningStudentFeeLineOverride {
   /** Student-specific amount; omit or null to use the catalog (Fee Management) amount. */
   amount?: number | null;
   remarks?: string;
+  concessionType?: 'REVISED_FEE' | 'CONCESSION';
+  feeHeadId?: string;
+  feeHeadCode?: string;
+  feeHeadName?: string;
+  studentYear?: number;
 }
 
 export interface JoiningStudentFeeDetails {
@@ -1126,6 +1131,16 @@ export interface FeeStructure {
   feeHeadCode: string;
   feeHeadDescription: string;
   terms: FeeStructureTerm[];
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface FeeHead {
+  _id: string;
+  id: string;
+  name: string;
+  code: string;
+  description: string;
   createdAt: string | null;
   updatedAt: string | null;
 }

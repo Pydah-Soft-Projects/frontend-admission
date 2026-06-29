@@ -10,6 +10,7 @@ import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect'
 import {
   joiningAPI,
   feeRequestAPI,
+  feeStructureAPI,
   admissionAPI,
   paymentAPI,
   paymentSettingsAPI,
@@ -97,6 +98,7 @@ import {
   JoiningSibling,
   JoiningStatus,
   JoiningStudentFeeDetails,
+  JoiningStudentFeeLineOverride,
   JoiningTransportDetails,
   Admission,
   Branch,
@@ -105,6 +107,8 @@ import {
   PaymentTransaction,
   CashfreeConfigPreview,
   CertificateGuidance,
+  FeeHead,
+  FeeStructure,
   Lead,
 } from '@/types';
 import {
@@ -116,7 +120,6 @@ import {
 import { PrintableDocumentChecklist } from '@/components/PrintableDocumentChecklist';
 import { FeeStructureSection, type FeeHeadSelection } from '@/components/fee/FeeStructureSection';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
-import { JoiningStepTwoPaymentsPanel } from '@/components/joining/JoiningStepTwoPaymentsPanel';
 import {
   PrintablePaymentReceipt,
   buildPaymentReceiptDetailsFromForm,
@@ -158,6 +161,33 @@ const formatCurrency = (amount?: number | null) => {
   } catch {
     return amount.toString();
   }
+};
+
+const extractFeeStructureRows = (response: unknown): FeeStructure[] => {
+  const topLevel = response;
+  if (Array.isArray(topLevel)) return topLevel as FeeStructure[];
+  if (!topLevel || typeof topLevel !== 'object') return [];
+
+  const data = (topLevel as { data?: unknown }).data;
+  if (Array.isArray(data)) return data as FeeStructure[];
+  if (data && typeof data === 'object') {
+    const nested = (data as { data?: unknown }).data;
+    if (Array.isArray(nested)) return nested as FeeStructure[];
+  }
+  return [];
+};
+
+const extractFeeHeadRows = (response: unknown): FeeHead[] => {
+  if (Array.isArray(response)) return response as FeeHead[];
+  if (!response || typeof response !== 'object') return [];
+
+  const data = (response as { data?: unknown }).data;
+  if (Array.isArray(data)) return data as FeeHead[];
+  if (data && typeof data === 'object') {
+    const nested = (data as { data?: unknown }).data;
+    if (Array.isArray(nested)) return nested as FeeHead[];
+  }
+  return [];
 };
 
 const formatDateTime = (value?: string) => {
@@ -616,6 +646,17 @@ const normalizeStudentFeeDetailsFromRecord = (
           structureId: String(line.structureId || '').trim(),
           amount,
           remarks: typeof line.remarks === 'string' ? line.remarks : '',
+          concessionType:
+            line.concessionType === 'CONCESSION' || line.concessionType === 'REVISED_FEE'
+              ? line.concessionType
+              : undefined,
+          feeHeadId: line.feeHeadId ? String(line.feeHeadId).trim() : undefined,
+          feeHeadCode: line.feeHeadCode ? String(line.feeHeadCode).trim() : undefined,
+          feeHeadName: line.feeHeadName ? String(line.feeHeadName).trim() : undefined,
+          studentYear:
+            line.studentYear != null && Number.isFinite(Number(line.studentYear))
+              ? Number(line.studentYear)
+              : undefined,
         };
       })
       .filter((l) => l.structureId),
@@ -700,6 +741,32 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   );
   /** Per–fee-head student amounts/notes; persisted in joinings.lead_data._joiningStudentFeeDetails on Save Draft. */
   const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({ lines: [] });
+  const [selectedBuilderFeeHeadId, setSelectedBuilderFeeHeadId] = useState<string>('');
+  const [isBuilderPaymentDialogOpen, setIsBuilderPaymentDialogOpen] = useState(false);
+  const [builderPaymentTab, setBuilderPaymentTab] = useState<'collect' | 'transactions'>('collect');
+  const [builderPaymentTargets, setBuilderPaymentTargets] = useState<Array<{
+    structureId: string;
+    feeHeadId: string;
+    feeHeadName: string;
+    feeHeadCode: string;
+    studentYear: number;
+    semester?: number | string | null;
+    amount: string;
+  }>>([]);
+  const [builderPaymentYear, setBuilderPaymentYear] = useState<number>(1);
+  const [builderPaymentForm, setBuilderPaymentForm] = useState<{
+    amount: string;
+    paymentMode: 'Cash' | 'Bank';
+    receiptNumber: string;
+    remarks: string;
+    isProcessing: boolean;
+  }>({
+    amount: '',
+    paymentMode: 'Cash',
+    receiptNumber: '',
+    remarks: '',
+    isProcessing: false,
+  });
   const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({});
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
@@ -992,29 +1059,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     if (!joiningRecord?._id) return;
     const sfd = joiningRecord.studentFeeDetails;
     if (sfd && typeof sfd === 'object' && Array.isArray(sfd.lines)) {
-      setStudentFeeDetails({
-        batch: typeof sfd.batch === 'string' && sfd.batch.trim() ? sfd.batch.trim() : undefined,
-        lines: sfd.lines
-          .map((line) => {
-            const rawAmount = line.amount as unknown;
-            let amount: number | null = null;
-            if (rawAmount !== undefined && rawAmount !== null) {
-              if (typeof rawAmount === 'string' && rawAmount.trim() === '') {
-                amount = null;
-              } else {
-                const n =
-                  typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
-                amount = Number.isFinite(n) ? n : null;
-              }
-            }
-            return {
-              structureId: String(line.structureId || '').trim(),
-              amount,
-              remarks: typeof line.remarks === 'string' ? line.remarks : '',
-            };
-          })
-          .filter((l) => l.structureId),
-      });
+      setStudentFeeDetails(normalizeStudentFeeDetailsFromRecord(sfd));
     } else {
       setStudentFeeDetails({ lines: [] });
     }
@@ -1953,6 +1998,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const admissionNumberDisplay =
     meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
+  const feeMongoAdmissionNumber =
+    admissionRecord?.admissionNumber || meta.admissionNumber || lead?.admissionNumber || null;
 
   const courseQuotaIntakeFields = useMemo(() => {
     if (!registrationIntakeYearField && !registrationIntakeSemesterField && !admissionNumberDisplay) {
@@ -4064,9 +4111,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     selectedCourseSetting,
     lead?.courseInterested,
   ]);
-  /** Step 2 payment UI: available once joining is saved (draft, pending, or approved). */
-  const showStepTwoPaymentUi =
-    !isPublicEdit && Boolean(joiningRecord?._id) && canAccessPaymentsModule;
   const paymentReceiptPrintDetails = useMemo(
     () =>
       buildPaymentReceiptDetailsFromForm({
@@ -4142,6 +4186,500 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     staleTime: 15_000,
   });
   const pendingFeeRequest = pendingFeeRequestQuery.data;
+
+  const allFeeStructuresQuery = useQuery({
+    queryKey: ['all-fee-structures-dropdown'],
+    queryFn: async () => {
+      const res = await feeStructureAPI.list({});
+      return res;
+    },
+    enabled: status === 'approved' && !isPublicEdit,
+    staleTime: 60_000,
+  });
+
+  const feeStructuresQuery = useQuery({
+    queryKey: [
+      'fee-structures-catalog-map',
+      formState.courseInfo.course || null,
+      formState.courseInfo.branch || null,
+      formState.courseInfo.quota || null,
+      stepOneAcademicYear || feeConfigurationBatch || null,
+    ],
+    queryFn: async () => {
+      const res = await feeStructureAPI.list({
+        course: formState.courseInfo.course || undefined,
+        branch: formState.courseInfo.branch || undefined,
+        quota: formState.courseInfo.quota || undefined,
+        batch: stepOneAcademicYear || feeConfigurationBatch || undefined,
+      });
+      return res;
+    },
+    enabled: status === 'approved' && !isPublicEdit,
+    staleTime: 60_000,
+  });
+
+  const feeHeadsQuery = useQuery({
+    queryKey: ['fee-heads-master'],
+    queryFn: async () => {
+      const res = await feeStructureAPI.feeHeads();
+      return res;
+    },
+    enabled: status === 'approved' && !isPublicEdit,
+    staleTime: 60_000,
+  });
+
+  const allFeeStructureRows = useMemo(
+    () => extractFeeStructureRows(allFeeStructuresQuery.data),
+    [allFeeStructuresQuery.data]
+  );
+
+  const feeStructureCatalogRows = useMemo(
+    () => extractFeeStructureRows(feeStructuresQuery.data),
+    [feeStructuresQuery.data]
+  );
+
+  const feeHeadRows = useMemo(() => extractFeeHeadRows(feeHeadsQuery.data), [feeHeadsQuery.data]);
+
+  const overallConcessionsQuery = useQuery({
+    queryKey: ['overall-concessions', admissionNumberDisplay || null],
+    queryFn: async () => {
+      const res = await paymentAPI.getOverallConcessions(String(admissionNumberDisplay || ''));
+      return res;
+    },
+    enabled: status === 'approved' && !isPublicEdit && Boolean(admissionNumberDisplay),
+    staleTime: 30_000,
+  });
+
+  const overallConcessionLines = useMemo(() => {
+    const data = (overallConcessionsQuery.data as { data?: { revisedFees?: unknown } } | undefined)?.data;
+    return Array.isArray(data?.revisedFees) ? data.revisedFees : [];
+  }, [overallConcessionsQuery.data]);
+
+  const feeMongoTransactionsQuery = useQuery({
+    queryKey: [
+      'fee-mongo-transactions',
+      'v2',
+      joiningRecord?._id || null,
+      admissionRecord?._id || null,
+      feeMongoAdmissionNumber || null,
+    ],
+    queryFn: async () => {
+      const res = await paymentAPI.listFeeManagementTransactions({
+        joiningId: joiningRecord?._id,
+        admissionId: admissionRecord?._id,
+        admissionNumber: feeMongoAdmissionNumber || undefined,
+      });
+      return res;
+    },
+    enabled:
+      isBuilderPaymentDialogOpen &&
+      Boolean(joiningRecord?._id || admissionRecord?._id || feeMongoAdmissionNumber),
+    staleTime: 15_000,
+    refetchOnMount: 'always',
+  });
+
+  const feeMongoTransactions = useMemo(() => {
+    const response = feeMongoTransactionsQuery.data as
+      | { transactions?: unknown[]; data?: { data?: unknown[]; transactions?: unknown[] } | unknown[] }
+      | unknown[]
+      | undefined;
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.transactions)) return response.transactions;
+    const payload = response?.data;
+    if (Array.isArray(payload)) return payload;
+    if (payload && typeof payload === 'object' && 'transactions' in payload && Array.isArray(payload.transactions)) {
+      return payload.transactions;
+    }
+    if (payload && typeof payload === 'object' && 'data' in payload && Array.isArray(payload.data)) {
+      return payload.data;
+    }
+    return [];
+  }, [feeMongoTransactionsQuery.data]);
+
+  const feeMongoTransactionFilters = useMemo(() => {
+    const response = feeMongoTransactionsQuery.data as
+      | { filters?: { studentId?: string }; data?: { filters?: { studentId?: string } } }
+      | undefined;
+    return response?.filters || response?.data?.filters || null;
+  }, [feeMongoTransactionsQuery.data]);
+
+  const feeMongoPaidByHeadYear = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const tx of feeMongoTransactions) {
+      if (!tx || typeof tx !== 'object') continue;
+      const row = tx as {
+        feeHead?: string;
+        feeHeadCode?: string;
+        studentYear?: string | number | null;
+        amount?: string | number | null;
+        transactionType?: string;
+      };
+      const year = Number(row.studentYear) || 1;
+      const amount = Number(row.amount) || 0;
+      if (amount <= 0) continue;
+      const multiplier = row.transactionType === 'CREDIT' ? -1 : 1;
+      const add = (key: string) => {
+        map.set(key, (map.get(key) || 0) + amount * multiplier);
+      };
+      if (row.feeHead) add(`${String(row.feeHead)}::${year}`);
+      if (row.feeHeadCode) add(`code:${String(row.feeHeadCode).toUpperCase()}::${year}`);
+    }
+    return map;
+  }, [feeMongoTransactions]);
+
+  const overallConcessionByHeadYear = useMemo(() => {
+    const map = new Map<string, {
+      feeHeadId?: string | null;
+      feeHeadCode?: string;
+      studentYear?: number;
+      actualAmount?: number;
+      revisedAmount?: number;
+      concessionAmount?: number;
+      concessionType?: string;
+    }>();
+    for (const line of overallConcessionLines) {
+      if (!line || typeof line !== 'object') continue;
+      const row = line as {
+        feeHeadId?: string | null;
+        feeHeadCode?: string;
+        studentYear?: number | string;
+        actualAmount?: number | string;
+        revisedAmount?: number | string;
+        concessionAmount?: number | string;
+        concessionType?: string;
+      };
+      const year = Number(row.studentYear) || 1;
+      const normalized = {
+        feeHeadId: row.feeHeadId || null,
+        feeHeadCode: row.feeHeadCode || '',
+        studentYear: year,
+        actualAmount: Number(row.actualAmount) || 0,
+        revisedAmount: Number(row.revisedAmount) || 0,
+        concessionAmount: Number(row.concessionAmount) || 0,
+        concessionType: row.concessionType || '',
+      };
+      if (normalized.feeHeadId) {
+        map.set(`${String(normalized.feeHeadId)}::${year}`, normalized);
+      }
+      if (normalized.feeHeadCode) {
+        map.set(`code:${String(normalized.feeHeadCode).toUpperCase()}::${year}`, normalized);
+      }
+    }
+    return map;
+  }, [overallConcessionLines]);
+
+  const allUniqueFeeHeads = useMemo(() => {
+    const savedList = studentFeeDetails.lines || [];
+
+    const map = new Map<string, { id: string; name: string; code: string }>();
+
+    const addToMap = (item: {
+      feeHead?: string | null;
+      feeHeadId?: string | null;
+      feeHeadName?: string;
+      feeHeadCode?: string;
+    }) => {
+      const headId = String(item.feeHead || item.feeHeadId || '').trim();
+      if (headId && !map.has(headId)) {
+        map.set(headId, {
+          id: headId,
+          name: item.feeHeadName || item.feeHeadCode || headId,
+          code: item.feeHeadCode || '',
+        });
+      }
+    };
+
+    for (const item of feeHeadRows) {
+      addToMap({
+        feeHead: item._id || item.id,
+        feeHeadName: item.name,
+        feeHeadCode: item.code,
+      });
+    }
+    for (const item of allFeeStructureRows) addToMap(item);
+    for (const item of feeStructureCatalogRows) addToMap(item);
+    for (const item of savedList) addToMap(item);
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [feeHeadRows, allFeeStructureRows, feeStructureCatalogRows, studentFeeDetails.lines]);
+
+  const currentBuilderHeads = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; code: string }>();
+
+    for (const line of studentFeeDetails.lines || []) {
+      if (line.concessionType !== 'CONCESSION' && line.concessionType !== 'REVISED_FEE') {
+        continue;
+      }
+      let feeHeadId = line.feeHeadId;
+      let feeHeadCode = line.feeHeadCode;
+      let feeHeadName = line.feeHeadName;
+
+      if (!feeHeadId) {
+        const matchingCatalog = feeStructureCatalogRows.find((c) => String(c._id) === String(line.structureId));
+        if (matchingCatalog) {
+          feeHeadId = matchingCatalog.feeHead || undefined;
+          feeHeadCode = matchingCatalog.feeHeadCode;
+          feeHeadName = matchingCatalog.feeHeadName;
+        }
+      }
+
+      if (feeHeadId && !map.has(feeHeadId)) {
+        map.set(feeHeadId, {
+          id: feeHeadId,
+          name: feeHeadName || feeHeadCode || feeHeadId,
+          code: feeHeadCode || '',
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [studentFeeDetails.lines, feeStructureCatalogRows]);
+
+  const builderPaymentRows = useMemo(() => {
+    return feeStructureCatalogRows.flatMap((row) => {
+      const feeHeadId = String(row.feeHead || '').trim();
+      const feeHeadCode = String(row.feeHeadCode || '').trim();
+      const year = Number(row.studentYear) || 1;
+      const catalogAmount = Number(row.amount) || 0;
+      const structureId = String(row._id);
+      const overallLine =
+        (feeHeadId ? overallConcessionByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ||
+        (feeHeadCode
+          ? overallConcessionByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
+          : undefined);
+      const localLine = (studentFeeDetails.lines || []).find((line) => String(line.structureId) === structureId);
+      const localAmount =
+        localLine?.amount !== undefined && localLine?.amount !== null ? Number(localLine.amount) || 0 : null;
+      const localType = localLine?.concessionType || undefined;
+
+      const concessionType = overallLine?.concessionType
+        ? overallLine.concessionType === 'CONCESSION'
+          ? 'CONCESSION'
+          : 'REVISED_FEE'
+        : localType || 'CONFIGURED_FEE';
+      let adjustmentAmount: number | null = null;
+      let payableAmount = catalogAmount;
+      if (overallLine?.concessionType === 'CONCESSION') {
+        adjustmentAmount =
+          overallLine.concessionAmount && overallLine.concessionAmount > 0
+            ? overallLine.concessionAmount
+            : overallLine.revisedAmount && overallLine.revisedAmount > 0
+              ? overallLine.revisedAmount
+              : null;
+        payableAmount = Math.max(catalogAmount - (adjustmentAmount || 0), 0);
+      } else if (overallLine?.revisedAmount && overallLine.revisedAmount > 0) {
+        payableAmount = overallLine.revisedAmount;
+      } else if (localAmount !== null) {
+        if (localType === 'CONCESSION') {
+          adjustmentAmount = localAmount;
+          payableAmount = Math.max(catalogAmount - localAmount, 0);
+        } else {
+          payableAmount = localAmount;
+        }
+      }
+      const paidAmount =
+        (feeHeadId ? feeMongoPaidByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ??
+        (feeHeadCode
+          ? feeMongoPaidByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
+          : undefined) ??
+        0;
+
+      if (catalogAmount <= 0 && payableAmount <= 0) return [];
+      return [
+        {
+          structureId,
+          feeHeadId,
+          feeHeadName: row.feeHeadName || feeHeadCode || feeHeadId,
+          feeHeadCode,
+          studentYear: year,
+          semester: row.semester ?? null,
+          catalogAmount,
+          adjustmentAmount,
+          payableAmount,
+          paidAmount,
+          concessionType,
+        },
+      ];
+    });
+  }, [feeMongoPaidByHeadYear, feeStructureCatalogRows, overallConcessionByHeadYear, studentFeeDetails.lines]);
+
+  const builderPaymentYearRows = useMemo(
+    () => builderPaymentRows.filter((row) => row.studentYear === builderPaymentYear),
+    [builderPaymentRows, builderPaymentYear]
+  );
+
+  const builderPaymentSelectedTotal = useMemo(
+    () => builderPaymentTargets.reduce((sum, target) => sum + (Number(target.amount) || 0), 0),
+    [builderPaymentTargets]
+  );
+
+  const handleAddBuilderFeeHead = () => {
+    if (!selectedBuilderFeeHeadId) return;
+    const targetHead = allUniqueFeeHeads.find((h) => h.id === selectedBuilderFeeHeadId);
+    if (!targetHead) return;
+
+    if (currentBuilderHeads.some((h) => h.id === targetHead.id)) {
+      showToast.error('This fee head is already added to the builder.');
+      return;
+    }
+
+    const newLines = [...(studentFeeDetails.lines || [])];
+    let addedLines = 0;
+
+    for (let year = 1; year <= programTotalYears; year++) {
+      const matchingCatalog = feeStructureCatalogRows.find(
+        (c) => String(c.feeHead) === String(targetHead.id) && c.studentYear === year
+      );
+
+      if (!matchingCatalog) {
+        continue;
+      }
+
+      const structureId = matchingCatalog ? String(matchingCatalog._id) : `custom-${targetHead.id}-${year}`;
+
+      newLines.push({
+        structureId,
+        amount: null,
+        remarks: 'Revised',
+        concessionType: 'REVISED_FEE',
+        feeHeadId: targetHead.id,
+        feeHeadCode: targetHead.code,
+        feeHeadName: targetHead.name,
+        studentYear: year,
+      });
+      addedLines += 1;
+    }
+
+    if (addedLines === 0) {
+      newLines.push({
+        structureId: `custom-${targetHead.id}-1`,
+        amount: null,
+        remarks: 'Revised',
+        concessionType: 'REVISED_FEE',
+        feeHeadId: targetHead.id,
+        feeHeadCode: targetHead.code,
+        feeHeadName: targetHead.name,
+        studentYear: 1,
+      });
+    }
+
+    setStudentFeeDetails({
+      ...studentFeeDetails,
+      lines: newLines,
+    });
+    setSelectedBuilderFeeHeadId('');
+  };
+
+  const openBuilderPaymentDialog = (target?: {
+    structureId: string;
+    feeHeadId: string;
+    feeHeadName: string;
+    feeHeadCode: string;
+    studentYear: number;
+    semester?: number | string | null;
+    amount: number;
+  }) => {
+    if (!canWritePayments) {
+      showToast.error('You have read-only access to payments');
+      return;
+    }
+    if (!joiningRecord?._id) {
+      showToast.error('Save the joining form before recording payments');
+      return;
+    }
+    if (!admissionRecord?._id) {
+      showToast.error('Admission record is required before recording payments');
+      return;
+    }
+    setIsBuilderPaymentDialogOpen(true);
+    if (target) {
+      setBuilderPaymentYear(target.studentYear);
+      setBuilderPaymentTargets([target]);
+      setBuilderPaymentForm({
+        amount: target.amount > 0 ? String(target.amount) : '',
+        paymentMode: 'Cash',
+        receiptNumber: '',
+        remarks: target.feeHeadName || target.feeHeadCode || 'Fee payment',
+        isProcessing: false,
+      });
+    } else {
+      setBuilderPaymentYear(1);
+      setBuilderPaymentTargets([]);
+      setBuilderPaymentForm({
+        amount: '',
+        paymentMode: 'Cash',
+        receiptNumber: '',
+        remarks: '',
+        isProcessing: false,
+      });
+    }
+  };
+
+  const closeBuilderPaymentDialog = () => {
+    if (builderPaymentForm.isProcessing) return;
+    setIsBuilderPaymentDialogOpen(false);
+    setBuilderPaymentTargets([]);
+  };
+
+  const handleBuilderPaymentSubmit = async () => {
+    if (!joiningRecord?._id) return;
+    const joiningId = joiningRecord._id;
+    const admissionId = admissionRecord?._id;
+    if (builderPaymentTargets.length === 0) {
+      showToast.error('Select at least one fee head');
+      return;
+    }
+    const payableTargets = builderPaymentTargets.filter(
+      (target) => Number.isFinite(Number(target.amount)) && Number(target.amount) > 0
+    );
+    if (payableTargets.length !== builderPaymentTargets.length) {
+      showToast.error('Selected fee heads must have a payable amount');
+      return;
+    }
+    setBuilderPaymentForm((prev) => ({ ...prev, isProcessing: true }));
+    try {
+      await Promise.all(
+        payableTargets.map((target) =>
+          paymentAPI.recordFeeManagementTransaction({
+            joiningId,
+            admissionId,
+            feeHead: target.feeHeadId,
+            feeHeadName: target.feeHeadName,
+            feeHeadCode: target.feeHeadCode,
+            amount: Number(target.amount),
+            paymentMode: builderPaymentForm.paymentMode,
+            receiptNumber: builderPaymentForm.receiptNumber.trim() || undefined,
+            remarks:
+              builderPaymentForm.remarks.trim() ||
+              target.feeHeadName ||
+              target.feeHeadCode ||
+              'Fee payment',
+            semester: target.semester ?? null,
+            studentYear: target.studentYear,
+          })
+        )
+      );
+      showToast.success(
+        payableTargets.length === 1
+          ? 'Fee payment transaction recorded'
+          : `${payableTargets.length} fee payment transactions recorded`
+      );
+      setIsBuilderPaymentDialogOpen(false);
+      setBuilderPaymentTargets([]);
+      void queryClient.invalidateQueries({ queryKey: ['fee-mongo-transactions'] });
+      setBuilderPaymentForm((prev) => ({
+        ...prev,
+        amount: '',
+        receiptNumber: '',
+        remarks: '',
+        isProcessing: false,
+      }));
+    } catch (error) {
+      const apiError = error as { response?: { data?: { message?: string } }; message?: string };
+      showToast.error(apiError.response?.data?.message || apiError.message || 'Failed to record fee payment');
+      setBuilderPaymentForm((prev) => ({ ...prev, isProcessing: false }));
+    }
+  };
 
   const handleSaveAdmissionRecord = async () => {
     if (!canEditApprovedAdmission) {
@@ -4285,35 +4823,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       if (admissionRecord?._id) {
         await queryClient.invalidateQueries({ queryKey: ['admission', admissionRecord._id] });
       }
+      if (admissionNumberDisplay) {
+        await queryClient.invalidateQueries({ queryKey: ['overall-concessions', admissionNumberDisplay] });
+      }
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
       showToast.error(error.response?.data?.message || 'Failed to save fee configuration');
-    },
-  });
-
-  const submitFeeRequestMutation = useMutation({
-    mutationFn: async () => {
-      if (!joiningRecord?._id) {
-        throw new Error('Save the joining form first');
-      }
-      return feeRequestAPI.submit({
-        joiningId: joiningRecord._id,
-        registrationFormData: joiningRegistrationPatch,
-        studentFeeDetails: {
-          batch: studentFeeDetails.batch || feeConfigurationBatch,
-          lines: studentFeeDetails.lines || [],
-        },
-      });
-    },
-    onSuccess: async () => {
-      showToast.success(
-        'Revised fee request submitted for approval — it will appear under Joining Desk → Fee Requests'
-      );
-      await refetch();
-      await pendingFeeRequestQuery.refetch();
-    },
-    onError: (error: { response?: { data?: { message?: string } } }) => {
-      showToast.error(error.response?.data?.message || 'Failed to submit fee request');
     },
   });
 
@@ -4429,21 +4944,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         >
           <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(3)} />
           {status === 'approved' && canWriteJoining && canEditAdmission ? (
-            pendingFeeRequest ? (
-              <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                Fee request pending approval
-              </span>
-            ) : hasRevisedFeeLines ? (
-              <Button
-                variant="primary"
-                size="sm"
-                className={JOINING_ACTION_BTN_CLASS}
-                disabled={submitFeeRequestMutation.isPending || isBusy}
-                onClick={() => submitFeeRequestMutation.mutate()}
-              >
-                {submitFeeRequestMutation.isPending ? 'Submitting…' : 'Submit fee request for approval'}
-              </Button>
-            ) : null
+            <Button
+              variant="primary"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              disabled={saveStepFourMutation.isPending || isBusy || !workflowJoiningId}
+              onClick={() => saveStepFourMutation.mutate()}
+            >
+              {saveStepFourMutation.isPending ? 'Saving…' : 'Save fee configuration'}
+            </Button>
           ) : null}
           {isAdmissionEditable && (
             <Button
@@ -5942,63 +6451,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </p>
                 )}
 
-                {showStepTwoPaymentUi ? (
-                  <JoiningStepTwoPaymentsPanel
-                    courseName={formState.courseInfo.course}
-                    branchName={formState.courseInfo.branch}
-                    quota={formState.courseInfo.quota}
-                    paymentSummary={paymentSummary}
-                    transactions={transactions}
-                    isLoadingTransactions={isLoadingTransactions}
-                    formatCurrency={formatCurrency}
-                    formatDateTime={formatDateTime}
-                    baseFeeTarget={baseFeeTarget}
-                    baseFeePaid={baseFeePaid}
-                    outstandingBalance={outstandingBalance}
-                    additionalFeePaid={additionalFeePaid}
-                    totalAmountPaid={totalAmountPaid}
-                    configuredFee={configuredFee}
-                    paymentStatusBadgeClass={paymentStatusBadgeClass}
-                    paymentStatusLabel={paymentStatusLabel}
-                    cashfreeConfig={cashfreeConfig}
-                    canAccessPaymentsModule={canAccessPaymentsModule}
-                    canWritePayments={canWritePayments}
-                    canUseCashfree={canUseCashfree}
-                    paymentActionsDisabled={paymentActionsDisabled}
-                    isAdditionalFeeMode={isAdditionalFeeMode}
-                    shouldShowAdditionalFeeButton={shouldShowAdditionalFeeButton}
-                    isProcessingPayment={paymentFormState.isProcessing}
-                    onOpenCash={() => openPaymentModal('cash')}
-                    onOpenOnline={() => openPaymentModal('online')}
-                    onToggleAdditionalFeeMode={() => {
-                      if (paymentFormState.isProcessing) return;
-                      setIsAdditionalFeeMode((prev) => {
-                        if (prev) resetPaymentForm();
-                        return !prev;
-                      });
-                    }}
-                    paymentAmount={paymentFormState.amount}
-                    paymentReferenceId={paymentFormState.referenceId}
-                    onPaymentAmountChange={(value) =>
-                      setPaymentFormState((prev) => ({ ...prev, amount: value }))
-                    }
-                    onPaymentReferenceChange={(value) =>
-                      setPaymentFormState((prev) => ({ ...prev, referenceId: value }))
-                    }
-                    onRecordCashPayment={handleCashPaymentSubmit}
-                    paymentRecordDisabled={paymentFormState.isProcessing || !canWritePayments}
-                  />
-                ) : !isPublicEdit && !joiningRecord?._id ? (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                    Save the joining form with <span className="font-semibold">Save Draft</span> on Step 1 or Step 4
-                    first — then you can record cash and online payments here.
-                  </p>
-                ) : !isPublicEdit && !canAccessPaymentsModule ? (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                    Your role does not have access to the Payments module. Ask an admin to grant Payments
-                    permission to record fees.
-                  </p>
-                ) : null}
               </section>
               {renderWizardStepFooter(2)}
             </div>
@@ -6047,15 +6499,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
                     {status === 'approved' ? (
                       <>
-                        Review fee configuration and payment status. Collect fees on{' '}
-                        <button
-                          type="button"
-                          className="font-semibold text-emerald-700 underline underline-offset-2 dark:text-emerald-300"
-                          onClick={() => handleJoiningWizardStepSelect(2)}
-                        >
-                          Step 2 — Admission fee workflow
-                        </button>
-                        .
+                        Review configured fee heads, save revised/concession amounts directly, and use the separate
+                        collection panel below to record payments.
                       </>
                     ) : (
                       <>
@@ -6074,21 +6519,310 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 title="Fee configuration (Fee Management database)"
                 description={
                   status === 'approved'
-                    ? 'Actual fees from Fee Management plus bus/hostel rows from Step 3. Revised fees are pushed to the fee portal on save; bus/hostel selections sync to their databases.'
+                    ? 'Original configured fees from Fee Management plus bus/hostel rows from Step 3. Concessions are managed separately below and applied in Collect Payment.'
                     : 'Preview configured fee heads. Bus or hostel fees from Step 3 appear here for each program year.'
                 }
                 onSelectFeeHead={undefined}
                 activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
                 canUseCashfree={canUseCashfree}
-                feeDetailsEditable={canWriteJoining && status === 'approved'}
-                showActualAndRevisedFees
+                feeDetailsEditable={false}
                 pivotView
-                studentFeeDetails={studentFeeDetails}
-                onStudentFeeDetailsChange={
-                  canWriteJoining && status === 'approved' ? setStudentFeeDetails : undefined
-                }
+                studentFeeDetails={undefined}
+                onStudentFeeDetailsChange={undefined}
                 injectedFeeRows={accommodationInjectedRows}
               />
+
+              {status === 'approved' && (
+                <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-lg dark:border-emerald-900/40 dark:bg-slate-900/70">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-emerald-700 dark:text-emerald-200">
+                        Collect Payment
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Open the fee collection modal, review the year-wise configured fee heads with revised/concession
+                        amounts, select one fee head/year, then record Cash or Bank payment.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => openBuilderPaymentDialog()}
+                      disabled={
+                        !canWritePayments ||
+                        !joiningRecord?._id ||
+                        !admissionRecord?._id ||
+                        builderPaymentRows.length === 0
+                      }
+                    >
+                      Collect Payment
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Concessions / Revised Fees Builder Section */}
+              {status === 'approved' && canWriteJoining && canEditAdmission && (
+                <div className="mt-8 rounded-2xl border border-blue-200 bg-white p-6 shadow-lg dark:border-blue-900/40 dark:bg-slate-900/70">
+                  <h3 className="text-lg font-bold text-blue-700 dark:text-blue-200 flex items-center gap-2">
+                    <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-300" />
+                    Revised Fee & Concessions Builder
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Add fee heads, choose whether each head is a revised fee or concession, and configure year-wise
+                    amounts. Saving here updates the joining fee configuration directly.
+                  </p>
+
+                  {/* Dropdown to add fee head */}
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <select
+                      value={selectedBuilderFeeHeadId}
+                      onChange={(e) => setSelectedBuilderFeeHeadId(e.target.value)}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 min-w-[200px]"
+                    >
+                      <option value="">Select Fee Head...</option>
+                      {allUniqueFeeHeads.map((head) => (
+                        <option key={head.id} value={head.id}>
+                          {head.name} ({head.code})
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleAddBuilderFeeHead}
+                      disabled={!selectedBuilderFeeHeadId}
+                    >
+                      Add Fee Head
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => saveStepFourMutation.mutate()}
+                      disabled={saveStepFourMutation.isPending || isBusy || !workflowJoiningId}
+                    >
+                      {saveStepFourMutation.isPending ? 'Saving...' : 'Save Configuration'}
+                    </Button>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {feeHeadsQuery.isLoading
+                        ? 'Loading all Fee Management heads...'
+                        : feeHeadsQuery.isError
+                          ? 'Master fee-head list failed; showing configured/saved heads only.'
+                          : `${feeHeadRows.length} Fee Management heads loaded.`}
+                    </span>
+                  </div>
+
+                  {/* Grid of configured concessions */}
+                  {currentBuilderHeads.length > 0 ? (
+                    <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 shadow-sm dark:border-slate-700">
+                      <table className="w-full text-sm text-left">
+                        <thead>
+                          <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            <th className="px-4 py-3">Fee Head</th>
+                            <th className="px-4 py-3">Type</th>
+                            {Array.from({ length: programTotalYears }).map((_, idx) => (
+                              <th key={idx} className="px-4 py-3 text-right">Year {idx + 1}</th>
+                            ))}
+                            <th className="px-4 py-3 text-center w-16">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {currentBuilderHeads.map((head) => {
+                            const headLines = (studentFeeDetails.lines || []).filter((line) => {
+                              if (line.feeHeadId && String(line.feeHeadId) === String(head.id)) return true;
+                              return feeStructureCatalogRows.some(
+                                (item) =>
+                                  String(item._id) === String(line.structureId) &&
+                                  String(item.feeHead) === String(head.id)
+                              );
+                            });
+                            const headConcessionType = headLines.some(
+                              (line) => line.concessionType === 'CONCESSION'
+                            )
+                              ? 'CONCESSION'
+                              : 'REVISED_FEE';
+                            const setBuilderHeadConcessionType = (nextType: 'REVISED_FEE' | 'CONCESSION') => {
+                              const newLines = [...(studentFeeDetails.lines || [])];
+                              for (let year = 1; year <= programTotalYears; year++) {
+                                const matchingCatalog = feeStructureCatalogRows.find(
+                                  (c) => String(c.feeHead) === String(head.id) && c.studentYear === year
+                                );
+                                const structureId = matchingCatalog
+                                  ? String(matchingCatalog._id)
+                                  : `custom-${head.id}-${year}`;
+                                const catalogAmount = matchingCatalog ? Number(matchingCatalog.amount) || 0 : 0;
+                                const lineIdx = newLines.findIndex((l) => String(l.structureId) === structureId);
+                                const existing = lineIdx >= 0 ? newLines[lineIdx] : null;
+                                if (!existing && catalogAmount <= 0) {
+                                  continue;
+                                }
+                                const existingAmount =
+                                  existing?.amount !== undefined && existing?.amount !== null
+                                    ? Number(existing.amount) || 0
+                                    : null;
+                                const nextAmount = existingAmount;
+                                const nextLine = {
+                                  ...(existing || {}),
+                                  structureId,
+                                  amount: nextAmount,
+                                  remarks: nextType === 'CONCESSION' ? 'Concession' : 'Revised',
+                                  concessionType: nextType,
+                                  feeHeadId: head.id,
+                                  feeHeadCode: head.code,
+                                  feeHeadName: head.name,
+                                  studentYear: year,
+                                };
+                                if (lineIdx >= 0) {
+                                  newLines[lineIdx] = nextLine;
+                                } else {
+                                  newLines.push(nextLine);
+                                }
+                              }
+                              setStudentFeeDetails({
+                                ...studentFeeDetails,
+                                lines: newLines,
+                              });
+                            };
+                            return (
+                              <tr key={head.id} className="border-t border-slate-100 hover:bg-slate-50/50 dark:border-slate-800 dark:hover:bg-slate-800/40">
+                                <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
+                                  <div>{head.name}</div>
+                                  <div className="text-[10px] font-normal text-slate-400 font-mono">{head.code}</div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <select
+                                    value={headConcessionType}
+                                    onChange={(e) =>
+                                      setBuilderHeadConcessionType(
+                                        e.target.value === 'CONCESSION' ? 'CONCESSION' : 'REVISED_FEE'
+                                      )
+                                    }
+                                    className="min-w-[8.5rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    <option value="REVISED_FEE">Revised Fee</option>
+                                    <option value="CONCESSION">Concession</option>
+                                  </select>
+                                </td>
+                                {Array.from({ length: programTotalYears }).map((_, idx) => {
+                                  const year = idx + 1;
+                                  const matchingCatalog = feeStructureCatalogRows.find(
+                                    (c) => String(c.feeHead) === String(head.id) && c.studentYear === year
+                                  );
+                                  const catalogAmount = matchingCatalog ? Number(matchingCatalog.amount) || 0 : 0;
+                                  
+                                  const structureId = matchingCatalog ? String(matchingCatalog._id) : `custom-${head.id}-${year}`;
+                                  
+                                  const line = studentFeeDetails.lines?.find(l => String(l.structureId) === structureId);
+                                  const currentAmount =
+                                    line?.amount !== undefined && line?.amount !== null
+                                      ? Number(line.amount) || 0
+                                      : null;
+
+                                  const patchBuilderLine = (patch: {
+                                    amount?: number | null;
+                                  }) => {
+                                    const newLines = [...(studentFeeDetails.lines || [])];
+                                    const lineIdx = newLines.findIndex(l => String(l.structureId) === structureId);
+                                    const nextAmount =
+                                      patch.amount !== undefined ? patch.amount : currentAmount;
+                                    if (nextAmount === null || !Number.isFinite(Number(nextAmount)) || Number(nextAmount) <= 0) {
+                                      if (lineIdx >= 0) {
+                                        newLines.splice(lineIdx, 1);
+                                        setStudentFeeDetails({
+                                          ...studentFeeDetails,
+                                          lines: newLines,
+                                        });
+                                      }
+                                      return;
+                                    }
+                                    const nextLine: JoiningStudentFeeLineOverride = {
+                                      structureId,
+                                      amount: Number(nextAmount),
+                                      remarks: headConcessionType === 'CONCESSION' ? 'Concession' : 'Revised',
+                                      concessionType: headConcessionType,
+                                      feeHeadId: head.id,
+                                      feeHeadCode: head.code,
+                                      feeHeadName: head.name,
+                                      studentYear: year,
+                                    };
+                                    if (lineIdx >= 0) {
+                                      newLines[lineIdx] = { ...newLines[lineIdx], ...nextLine };
+                                    } else {
+                                      newLines.push(nextLine);
+                                    }
+                                    setStudentFeeDetails({
+                                      ...studentFeeDetails,
+                                      lines: newLines,
+                                    });
+                                  };
+
+                                  return (
+                                    <td key={idx} className="px-4 py-3 text-right whitespace-nowrap">
+                                      <div className="inline-flex w-32 flex-col items-end gap-1">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-slate-900 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                          value={currentAmount ?? ''}
+                                          onChange={(e) => {
+                                            const val = e.target.value === '' ? '' : Number(e.target.value);
+                                            if (val !== '' && (!Number.isFinite(val) || val < 0)) return;
+                                            patchBuilderLine({ amount: val === '' ? null : val });
+                                          }}
+                                        />
+                                        {matchingCatalog && (
+                                          <span className="text-[10px] text-slate-400">
+                                            Catalog: {formatCurrency(catalogAmount)}
+                                          </span>
+                                        )}
+                                        {headConcessionType === 'CONCESSION' && currentAmount !== null && catalogAmount > 0 ? (
+                                          <span className="text-[10px] text-emerald-600 dark:text-emerald-300">
+                                            Payable: {formatCurrency(Math.max(catalogAmount - currentAmount, 0))}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-4 py-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const structureIds = Array.from({ length: programTotalYears }).map((_, idx) => {
+                                        const year = idx + 1;
+                                        const matchingCatalog = feeStructureCatalogRows.find(
+                                          (c) => String(c.feeHead) === String(head.id) && c.studentYear === year
+                                        );
+                                        return matchingCatalog ? String(matchingCatalog._id) : `custom-${head.id}-${year}`;
+                                      });
+
+                                      const newLines = (studentFeeDetails.lines || []).filter(
+                                        (line) => !structureIds.includes(String(line.structureId))
+                                      );
+                                      setStudentFeeDetails({
+                                        ...studentFeeDetails,
+                                        lines: newLines,
+                                      });
+                                    }}
+                                    className="text-xs font-semibold text-red-600 hover:text-red-800"
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-xs text-slate-500 italic">No revised heads configured yet.</p>
+                  )}
+                </div>
+              )}
 
               {status === 'approved' && pendingFeeRequest ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
@@ -6118,6 +6852,433 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           </div>
         )}
       </div>
+      {isBuilderPaymentDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-white/40 bg-white/95 p-6 shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900/95">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Collect fee payment
+                </h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Select configured fee heads for the chosen year, record manual Cash or Bank payments, or review Fee
+                  Management transactions.
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Year
+                  <select
+                    value={builderPaymentYear}
+                    onChange={(event) => {
+                      const nextYear = Number(event.target.value) || 1;
+                      setBuilderPaymentYear(nextYear);
+                      setBuilderPaymentTargets([]);
+                      setBuilderPaymentForm((prev) => ({
+                        ...prev,
+                        amount: '',
+                        remarks: '',
+                      }));
+                    }}
+                    className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    disabled={builderPaymentForm.isProcessing}
+                  >
+                    {Array.from({ length: programTotalYears }).map((_, idx) => (
+                      <option key={idx + 1} value={idx + 1}>
+                        Year {idx + 1}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  onClick={closeBuilderPaymentDialog}
+                  aria-label="Close payment dialog"
+                  disabled={builderPaymentForm.isProcessing}
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setBuilderPaymentTab('collect')}
+                  className={cn(
+                    'rounded-lg px-4 py-2 transition',
+                    builderPaymentTab === 'collect'
+                      ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-900 dark:text-blue-300'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
+                  )}
+                >
+                  Collect
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBuilderPaymentTab('transactions');
+                    void queryClient.invalidateQueries({ queryKey: ['fee-mongo-transactions'] });
+                  }}
+                  className={cn(
+                    'rounded-lg px-4 py-2 transition',
+                    builderPaymentTab === 'transactions'
+                      ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-900 dark:text-blue-300'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
+                  )}
+                >
+                  Transactions
+                </button>
+              </div>
+
+              {builderPaymentTab === 'collect' ? (
+              <>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                    <tr>
+                      <th className="px-4 py-3">
+                        <span className="sr-only">Select</span>
+                      </th>
+                      <th className="px-4 py-3">Fee Head</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3 text-right">Actual</th>
+                      <th className="px-4 py-3 text-right">Payable</th>
+                      <th className="px-4 py-3 text-right">Paid</th>
+                      <th className="px-4 py-3 text-right">Collect Amount</th>
+                      <th className="px-4 py-3">Year</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {builderPaymentYearRows.map((row) => {
+                      const selected = builderPaymentTargets.some(
+                        (target) =>
+                          target.structureId === row.structureId && target.studentYear === row.studentYear
+                      );
+                      return (
+                        <tr
+                          key={`${row.structureId}-${row.studentYear}`}
+                          className={selected ? 'bg-blue-50/70 dark:bg-blue-950/30' : undefined}
+                        >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(event) => {
+                                const nextTarget = {
+                                  structureId: row.structureId,
+                                  feeHeadId: row.feeHeadId,
+                                  feeHeadName: row.feeHeadName,
+                                  feeHeadCode: row.feeHeadCode,
+                                  studentYear: row.studentYear,
+                                  semester: row.semester,
+                                  amount: row.payableAmount > 0 ? String(row.payableAmount) : '',
+                                };
+                                setBuilderPaymentTargets((prev) => {
+                                  const withoutCurrent = prev.filter(
+                                    (target) =>
+                                      !(
+                                        target.structureId === row.structureId &&
+                                        target.studentYear === row.studentYear
+                                      )
+                                  );
+                                  const next = event.target.checked
+                                    ? [...withoutCurrent, nextTarget]
+                                    : withoutCurrent;
+                                  const nextTotal = next.reduce(
+                                    (sum, target) => sum + (Number(target.amount) || 0),
+                                    0
+                                  );
+                                  setBuilderPaymentForm((form) => ({
+                                    ...form,
+                                    amount: nextTotal > 0 ? String(nextTotal) : '',
+                                    remarks:
+                                      next.length === 1
+                                        ? next[0].feeHeadName || next[0].feeHeadCode || 'Fee payment'
+                                        : next.length > 1
+                                          ? `Multiple fee heads - Year ${builderPaymentYear}`
+                                          : '',
+                                  }));
+                                  return next;
+                                });
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              disabled={builderPaymentForm.isProcessing}
+                              aria-label={`Select ${row.feeHeadName || row.feeHeadCode || 'fee head'}`}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-slate-800 dark:text-slate-100">
+                              {row.feeHeadName || 'Fee head'}
+                            </div>
+                            {row.feeHeadCode ? (
+                              <div className="font-mono text-[10px] text-slate-400">{row.feeHeadCode}</div>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              {row.concessionType === 'CONCESSION'
+                                ? 'Concession'
+                                : row.concessionType === 'REVISED_FEE'
+                                  ? 'Revised Fee'
+                                  : 'Configured Head'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-500">
+                            {formatCurrency(row.catalogAmount)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-slate-100">
+                            <div className="inline-flex flex-col items-end gap-0.5">
+                              <span>{formatCurrency(row.payableAmount)}</span>
+                              {row.adjustmentAmount !== null && row.concessionType === 'CONCESSION' ? (
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-300">
+                                  Less {formatCurrency(row.adjustmentAmount)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="inline-flex flex-col items-end gap-0.5">
+                              <span className="font-semibold text-blue-700 dark:text-blue-300">
+                                {formatCurrency(row.paidAmount)}
+                              </span>
+                              {row.paidAmount > 0 ? (
+                                <span className="text-[10px] text-slate-400">
+                                  Balance {formatCurrency(Math.max(row.payableAmount - row.paidAmount, 0))}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={
+                                builderPaymentTargets.find(
+                                  (target) =>
+                                    target.structureId === row.structureId &&
+                                    target.studentYear === row.studentYear
+                                )?.amount || ''
+                              }
+                              onChange={(event) => {
+                                const nextAmount = event.target.value;
+                                setBuilderPaymentTargets((prev) => {
+                                  const next = prev.map((target) =>
+                                    target.structureId === row.structureId &&
+                                    target.studentYear === row.studentYear
+                                      ? { ...target, amount: nextAmount }
+                                      : target
+                                  );
+                                  const nextTotal = next.reduce(
+                                    (sum, target) => sum + (Number(target.amount) || 0),
+                                    0
+                                  );
+                                  setBuilderPaymentForm((form) => ({
+                                    ...form,
+                                    amount: nextTotal > 0 ? String(nextTotal) : '',
+                                  }));
+                                  return next;
+                                });
+                              }}
+                              className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
+                              placeholder="0"
+                              disabled={!selected || builderPaymentForm.isProcessing}
+                              aria-label={`Collect amount for ${row.feeHeadName || row.feeHeadCode || 'fee head'}`}
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                            Year {row.studentYear}
+                            {row.semester ? ` · Sem ${row.semester}` : ''}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {builderPaymentYearRows.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No configured fee heads found for Year {builderPaymentYear}.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Total amount (INR)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={builderPaymentSelectedTotal > 0 ? String(builderPaymentSelectedTotal) : builderPaymentForm.amount}
+                    readOnly
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    placeholder="Select fee heads"
+                    disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Payment mode
+                  </label>
+                  <select
+                    value={builderPaymentForm.paymentMode}
+                    onChange={(event) =>
+                      setBuilderPaymentForm((prev) => ({
+                        ...prev,
+                        paymentMode: event.target.value === 'Bank' ? 'Bank' : 'Cash',
+                        receiptNumber: event.target.value === 'Bank' ? prev.receiptNumber : '',
+                      }))
+                    }
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Bank">Bank</option>
+                  </select>
+                </div>
+              </div>
+
+              {builderPaymentForm.paymentMode === 'Bank' ? (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Bank reference number
+                  </label>
+                  <input
+                    type="text"
+                    value={builderPaymentForm.receiptNumber}
+                    onChange={(event) =>
+                      setBuilderPaymentForm((prev) => ({ ...prev, receiptNumber: event.target.value }))
+                    }
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    placeholder="UTR, bank reference, or transaction ID"
+                    disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                  />
+                </div>
+              ) : null}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Remarks
+                </label>
+                <input
+                  type="text"
+                  value={builderPaymentForm.remarks}
+                  onChange={(event) =>
+                    setBuilderPaymentForm((prev) => ({ ...prev, remarks: event.target.value }))
+                  }
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                  placeholder="Fee head / payment remarks"
+                  disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                />
+              </div>
+              </>
+              ) : (
+                <div className="space-y-3">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Showing Fee Management transactions for Admission #
+                  {feeMongoTransactionFilters?.studentId || feeMongoAdmissionNumber || '—'}.
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                      <tr>
+                        <th className="px-4 py-3">Receipt</th>
+                        <th className="px-4 py-3">Fee Head</th>
+                        <th className="px-4 py-3 text-right">Amount</th>
+                        <th className="px-4 py-3">Mode</th>
+                        <th className="px-4 py-3">Year</th>
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Collected By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {feeMongoTransactions.map((tx) => {
+                        const row = tx as {
+                          _id?: string;
+                          receiptNumber?: string;
+                          feeHeadName?: string;
+                          feeHeadCode?: string;
+                          amount?: number;
+                          paymentMode?: string;
+                          studentYear?: string | number | null;
+                          paymentDate?: string | Date | null;
+                          collectedByName?: string;
+                          remarks?: string;
+                        };
+                        return (
+                          <tr key={row._id || row.receiptNumber}>
+                            <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">
+                              {row.receiptNumber || '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-slate-800 dark:text-slate-100">
+                                {row.feeHeadName || row.remarks || 'Fee head'}
+                              </div>
+                              {row.feeHeadCode ? (
+                                <div className="font-mono text-[10px] text-slate-400">{row.feeHeadCode}</div>
+                              ) : null}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-slate-100">
+                              {formatCurrency(Number(row.amount) || 0)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                              {row.paymentMode === 'Net Banking' ? 'Bank' : row.paymentMode || '—'}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                              Year {row.studentYear || builderPaymentYear}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                              {row.paymentDate ? new Date(row.paymentDate).toLocaleString('en-IN') : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                              {row.collectedByName || '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {feeMongoTransactionsQuery.isLoading ? (
+                    <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                      Loading Fee Management transactions...
+                    </p>
+                  ) : feeMongoTransactions.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                      No Fee Management transactions found for this admission number.
+                    </p>
+                  ) : null}
+                </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={closeBuilderPaymentDialog}
+                disabled={builderPaymentForm.isProcessing}
+              >
+                Cancel
+              </Button>
+              {builderPaymentTab === 'collect' ? (
+                <Button
+                  variant="primary"
+                  onClick={handleBuilderPaymentSubmit}
+                  disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                >
+                  {builderPaymentForm.isProcessing ? 'Recording…' : 'Record payment'}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
       {openPaymentMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl border border-white/40 bg-white/95 p-6 shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900/95">

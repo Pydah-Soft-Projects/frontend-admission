@@ -23,6 +23,11 @@ interface ForgotPasswordModalProps {
     onClose: () => void;
 }
 
+
+
+
+
+
 export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProps) {
     const [step, setStep] = useState<'input' | 'confirm' | 'success'>('input');
     const [isLoading, setIsLoading] = useState(false);
