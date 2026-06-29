@@ -3620,6 +3620,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     [transportDetails, programTotalYears, stepOneAcademicYear]
   );
 
+  const portraitRegistrationPatch = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(registrationExtras).filter(([k, v]) => {
+          const n = k.toLowerCase();
+          return (
+            (n.includes('photo') || n.includes('portrait') || n.includes('picture')) &&
+            typeof v === 'string' &&
+            v.trim() !== ''
+          );
+        })
+      ),
+    [registrationExtras]
+  );
+
   const feeConfigurationBatch = useMemo(() => {
     const fromDetails = studentFeeDetails.batch != null ? String(studentFeeDetails.batch).trim() : '';
     if (fromDetails) return fromDetails;
@@ -3711,7 +3726,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ...(!isSelfRegistrationRecord ? { reference1: reference1.trim() } : {}),
       ...(isApprovedAdmission
         ? {
-            registrationFormData: joiningRegistrationPatch,
+            registrationFormData: {
+              ...joiningRegistrationPatch,
+              ...portraitRegistrationPatch,
+            },
             studentFeeDetails: {
               batch: studentFeeDetails.batch || feeConfigurationBatch,
               lines: studentFeeDetails.lines || [],
@@ -3751,6 +3769,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     isPublicEdit,
     studentFeeDetails,
     joiningRegistrationPatch,
+    portraitRegistrationPatch,
     status,
     feeConfigurationBatch,
     reference1,
@@ -4709,7 +4728,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     try {
       if (canSyncExternalSystems) {
         await joiningAPI.patchStepTwo(workflowJoiningId, {
-          registrationFormData: joiningRegistrationPatch,
+          registrationFormData: {
+            ...joiningRegistrationPatch,
+            ...portraitRegistrationPatch,
+          },
           ...(shouldSyncFeesDirectly
             ? {
                 studentFeeDetails: {
