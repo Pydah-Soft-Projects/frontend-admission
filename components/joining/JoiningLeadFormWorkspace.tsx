@@ -224,6 +224,11 @@ const JOINING_FORM_CONTROL_CLASS =
 
 const JOINING_FORM_LABEL_CLASS = 'mb-0.5 block text-xs font-medium text-gray-700 dark:text-slate-200';
 
+/** Step 4 fee tables — solid black/white headers (no accent colors). */
+const STEP_FOUR_TABLE_HEAD_ROW =
+  'border-b border-slate-800 bg-slate-900 text-left text-xs font-semibold uppercase tracking-wide text-white dark:border-slate-200 dark:bg-slate-100 dark:text-slate-900';
+const STEP_FOUR_TABLE_HEAD_CELL = 'px-4 py-3 text-white dark:text-slate-900';
+
 /** Compact toolbar buttons — match form control text size. */
 const JOINING_ACTION_BTN_CLASS = 'h-8 min-h-8 px-3 py-1 text-xs font-medium';
 
@@ -2371,7 +2376,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const selected = setting?.branches.find((b) => String(b._id ?? '').trim() === branchId);
     if (!selected) return;
 
-    const catalogLabel = String(selected.code || selected.name || '').trim();
+    const catalogLabel = String(selected.name || selected.code || '').trim();
     if (!catalogLabel) return;
 
     const branchLabel = String(formState.courseInfo.branch || '').trim();
@@ -2951,7 +2956,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       courseInfo: {
         ...prev.courseInfo,
         branchId: bidTarget,
-        branch: String(branch?.code || branch?.name || '').trim(),
+        branch: String(branch?.name || branch?.code || '').trim(),
       },
     }));
   };
@@ -3738,7 +3743,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       );
       if (selectedBranch) {
         courseInfo.branch =
-          String(selectedBranch.code || selectedBranch.name || '').trim() ||
+          String(selectedBranch.name || selectedBranch.code || '').trim() ||
           courseInfo.branch;
       }
     }
@@ -6675,13 +6680,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 shadow-sm dark:border-slate-700">
                       <table className="w-full text-sm text-left">
                         <thead>
-                          <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                            <th className="px-4 py-3">Fee Head</th>
-                            <th className="px-4 py-3">Type</th>
+                          <tr className={STEP_FOUR_TABLE_HEAD_ROW}>
+                            <th className={STEP_FOUR_TABLE_HEAD_CELL}>Fee Head</th>
+                            <th className={STEP_FOUR_TABLE_HEAD_CELL}>Type</th>
                             {Array.from({ length: programTotalYears }).map((_, idx) => (
-                              <th key={idx} className="px-4 py-3 text-right">Year {idx + 1}</th>
+                              <th key={idx} className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>
+                                Year {idx + 1}
+                              </th>
                             ))}
-                            <th className="px-4 py-3 text-center w-16">Action</th>
+                            <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-center w-16`}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -6993,18 +7000,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               <>
               <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
                 <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                    <tr>
-                      <th className="px-4 py-3">
+                  <thead>
+                    <tr className={STEP_FOUR_TABLE_HEAD_ROW}>
+                      <th className={STEP_FOUR_TABLE_HEAD_CELL}>
                         <span className="sr-only">Select</span>
                       </th>
-                      <th className="px-4 py-3">Fee Head</th>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3 text-right">Actual</th>
-                      <th className="px-4 py-3 text-right">Payable</th>
-                      <th className="px-4 py-3 text-right">Paid</th>
-                      <th className="px-4 py-3 text-right">Collect Amount</th>
-                      <th className="px-4 py-3">Year</th>
+                      <th className={STEP_FOUR_TABLE_HEAD_CELL}>Fee Head</th>
+                      <th className={STEP_FOUR_TABLE_HEAD_CELL}>Type</th>
+                      <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Actual</th>
+                      <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Payable</th>
+                      <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Paid</th>
+                      <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Collect Amount</th>
+                      <th className={STEP_FOUR_TABLE_HEAD_CELL}>Year</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -7241,15 +7248,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 </p>
                 <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
                   <table className="min-w-full text-sm">
-                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                      <tr>
-                        <th className="px-4 py-3">Receipt</th>
-                        <th className="px-4 py-3">Fee Head</th>
-                        <th className="px-4 py-3 text-right">Amount</th>
-                        <th className="px-4 py-3">Mode</th>
-                        <th className="px-4 py-3">Year</th>
-                        <th className="px-4 py-3">Date</th>
-                        <th className="px-4 py-3">Collected By</th>
+                    <thead>
+                      <tr className={STEP_FOUR_TABLE_HEAD_ROW}>
+                        <th className={STEP_FOUR_TABLE_HEAD_CELL}>Receipt</th>
+                        <th className={STEP_FOUR_TABLE_HEAD_CELL}>Fee Head</th>
+                        <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Amount</th>
+                        <th className={STEP_FOUR_TABLE_HEAD_CELL}>Mode</th>
+                        <th className={STEP_FOUR_TABLE_HEAD_CELL}>Year</th>
+                        <th className={STEP_FOUR_TABLE_HEAD_CELL}>Date</th>
+                        <th className={STEP_FOUR_TABLE_HEAD_CELL}>Collected By</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

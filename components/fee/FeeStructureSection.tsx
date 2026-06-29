@@ -56,6 +56,14 @@ const buildCategoryLabel = (category?: string | null) => {
   return QUOTA_TO_CATEGORY_LABEL[category] || category;
 };
 
+/** Solid black/white header row — high contrast, no accent colors. */
+const FEE_TABLE_HEAD_ROW =
+  'border-b border-slate-800 bg-slate-900 text-left text-xs font-semibold uppercase tracking-wide text-white dark:border-slate-200 dark:bg-slate-100 dark:text-slate-900';
+const FEE_TABLE_HEAD_CELL = 'px-4 py-3 whitespace-nowrap text-white dark:text-slate-900';
+const FEE_TABLE_HEAD_CELL_RIGHT = `${FEE_TABLE_HEAD_CELL} text-right`;
+const FEE_TABLE_HEAD_CELL_CENTER = `${FEE_TABLE_HEAD_CELL} text-center`;
+const FEE_TABLE_HEAD_SUBTEXT = 'text-[10px] font-normal normal-case tracking-normal text-slate-300 dark:text-slate-600';
+
 const mapQuotaToCategory = (quota?: string | null): string | null => {
   if (!quota) return null;
   const key = quota.trim().toLowerCase();
@@ -636,24 +644,24 @@ export function FeeStructureSection({
           <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm dark:border-slate-700">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-emerald-700 text-left text-xs font-semibold uppercase tracking-wide text-white dark:bg-emerald-800">
-                  <th className="px-4 py-3 whitespace-nowrap">Year</th>
+                <tr className={FEE_TABLE_HEAD_ROW}>
+                  <th className={FEE_TABLE_HEAD_CELL}>Year</th>
                   {pivotData.headOrder.map((hid) => {
                     const meta = pivotData.headMeta.get(hid)!;
                     return (
-                      <th key={hid} className="px-4 py-3 whitespace-nowrap text-right">
+                      <th key={hid} className={FEE_TABLE_HEAD_CELL_RIGHT}>
                         <div>{meta.name}</div>
                         {meta.code && (
-                          <div className="text-[10px] font-normal opacity-75 normal-case tracking-normal">
+                          <div className={FEE_TABLE_HEAD_SUBTEXT}>
                             {meta.code}
                           </div>
                         )}
                       </th>
                     );
                   })}
-                  <th className="px-4 py-3 whitespace-nowrap text-right">Total</th>
+                  <th className={FEE_TABLE_HEAD_CELL_RIGHT}>Total</th>
                   {hasEditableFees && (
-                    <th className="px-4 py-3 whitespace-nowrap text-center w-12" aria-label="Edit" />
+                    <th className={`${FEE_TABLE_HEAD_CELL_CENTER} w-12`} aria-label="Edit" />
                   )}
                 </tr>
               </thead>
@@ -907,25 +915,25 @@ export function FeeStructureSection({
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50/60 dark:bg-slate-800/40">
-                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          <th className="px-4 py-2">Fee Head</th>
-                          <th className="px-4 py-2">Code</th>
-                          <th className="px-4 py-2 text-right">
+                      <thead>
+                        <tr className={FEE_TABLE_HEAD_ROW}>
+                          <th className={FEE_TABLE_HEAD_CELL}>Fee Head</th>
+                          <th className={FEE_TABLE_HEAD_CELL}>Code</th>
+                          <th className={FEE_TABLE_HEAD_CELL_RIGHT}>
                             {showDualFeeColumns ? 'Actual Fee' : hasEditableFees ? 'Catalog' : 'Amount'}
                           </th>
                           {showDualFeeColumns && (
-                            <th className="px-4 py-2 text-right">Revised Fee</th>
+                            <th className={FEE_TABLE_HEAD_CELL_RIGHT}>Revised Fee</th>
                           )}
                           {showDualFeeColumns && hasEditableFees && !hideNotesAndScholarship ? (
-                            <th className="px-4 py-2 min-w-[140px]">Notes</th>
+                            <th className={`${FEE_TABLE_HEAD_CELL} min-w-[140px]`}>Notes</th>
                           ) : null}
-                          {hasAnyTerms && <th className="px-4 py-2">Terms</th>}
+                          {hasAnyTerms && <th className={FEE_TABLE_HEAD_CELL}>Terms</th>}
                           {!hideNotesAndScholarship && (
-                            <th className="px-4 py-2 text-center">Scholarship?</th>
+                            <th className={FEE_TABLE_HEAD_CELL_CENTER}>Scholarship?</th>
                           )}
                           {(onSelectFeeHead || hasEditableFees) && !useInlineRevisedFeeEdit && (
-                            <th className="px-4 py-2 text-right">
+                            <th className={FEE_TABLE_HEAD_CELL_RIGHT}>
                               {paymentViaEditPanel
                                 ? 'Edit / pay'
                                 : hasEditableFees
