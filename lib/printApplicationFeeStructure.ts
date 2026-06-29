@@ -1,6 +1,7 @@
 import type { Admission, Course, FeeStructure, Joining, JoiningStudentFeeLineOverride } from '@/types';
 import { deriveAdmissionSeriesYear } from '@/lib/joiningAcademicYearRegistration';
 import { resolveTotalYearsFromCourseSettings } from '@/lib/joiningAcademicYearRegistration';
+import { resolveOverallConcessionPrintAdjustment } from '@/lib/overallConcessions';
 import type { CoursePaymentSettings } from '@/types';
 
 type ApplicationData = Joining | Admission;
@@ -18,6 +19,9 @@ export interface PrintFeeAdjustment {
   feeHeadId?: string | null;
   feeHeadCode?: string;
   studentYear?: number | string;
+  /** New storage: raw builder / overall_concessions value. */
+  amount?: number | string;
+  /** Legacy overall_concessions fields — ignored when `amount` is set. */
   actualAmount?: number | string;
   revisedAmount?: number | string;
   concessionAmount?: number | string;
@@ -210,9 +214,7 @@ export function buildPrintFeeAdjustmentsFromStudentFeeDetails(
         feeHeadId: line.feeHeadId || catalog?.feeHead || null,
         feeHeadCode: line.feeHeadCode || catalog?.feeHeadCode || '',
         studentYear: line.studentYear ?? catalog?.studentYear ?? 1,
-        actualAmount: catalog?.amount ?? 0,
-        revisedAmount: line.amount ?? 0,
-        concessionAmount: line.concessionType === 'CONCESSION' ? line.amount ?? 0 : 0,
+        amount: line.amount ?? 0,
         concessionType: line.concessionType,
       };
     });
@@ -294,19 +296,7 @@ export function buildPrintFeeStructureDetailedTable(
     for (const column of columns) {
       const actual = amountMap.get(`${column.key}::${year}`) || 0;
       const adjustment = adjustmentMap.get(`${column.key}::${year}`);
-      const type = normalizeAdjustmentType(adjustment?.concessionType);
-      const adjustedValue =
-        type === 'CONCESSION'
-          ? Number(adjustment?.concessionAmount) ||
-            (Number(adjustment?.revisedAmount) > 0 && Number(adjustment?.revisedAmount) < actual
-              ? Number(adjustment?.revisedAmount)
-              : 0)
-          : type === 'REVISED_FEE'
-            ? Number(adjustment?.revisedAmount) > 0 &&
-              Number(adjustment?.revisedAmount) !== actual
-              ? Number(adjustment?.revisedAmount)
-              : 0
-            : 0;
+      const adjustedValue = resolveOverallConcessionPrintAdjustment(adjustment, actual);
       cells[column.key] = {
         actual: actual > 0 ? actual : null,
         adjustment: adjustedValue > 0 ? adjustedValue : null,

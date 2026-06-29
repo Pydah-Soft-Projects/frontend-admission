@@ -75,6 +75,17 @@ import {
 } from '@/lib/studentQuotaCatalog';
 import { isManagementQuotaLabel } from '@/lib/joiningScholarshipQuotaDefault';
 import {
+  findBranchInCatalog,
+  resolveFeePortalBranchFromCatalog,
+  resolveFeePortalBranchLabel,
+} from '@/lib/feePortalBranchLabel';
+import {
+  filterPersistableBuilderConcessionLines,
+  overallConcessionLinesToBuilderLines,
+  resolveOverallConcessionLine,
+  type OverallConcessionLine,
+} from '@/lib/overallConcessions';
+import {
   buildBtechIntakeAutoRemark,
   buildBtechJoiningYearOptions,
   buildJoiningRegistrationFixedGate,
@@ -637,37 +648,39 @@ const normalizeStudentFeeDetailsFromRecord = (
   }
   return {
     batch: typeof sfd.batch === 'string' && sfd.batch.trim() ? sfd.batch.trim() : undefined,
-    lines: sfd.lines
-      .map((line) => {
-        const rawAmount = line.amount as unknown;
-        let amount: number | null = null;
-        if (rawAmount !== undefined && rawAmount !== null) {
-          if (typeof rawAmount === 'string' && rawAmount.trim() === '') {
-            amount = null;
-          } else {
-            const n =
-              typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
-            amount = Number.isFinite(n) ? n : null;
+    lines: filterPersistableBuilderConcessionLines(
+      sfd.lines
+        .map((line) => {
+          const rawAmount = line.amount as unknown;
+          let amount: number | null = null;
+          if (rawAmount !== undefined && rawAmount !== null) {
+            if (typeof rawAmount === 'string' && rawAmount.trim() === '') {
+              amount = null;
+            } else {
+              const n =
+                typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
+              amount = Number.isFinite(n) ? n : null;
+            }
           }
-        }
-        return {
-          structureId: String(line.structureId || '').trim(),
-          amount,
-          remarks: typeof line.remarks === 'string' ? line.remarks : '',
-          concessionType:
-            line.concessionType === 'CONCESSION' || line.concessionType === 'REVISED_FEE'
-              ? line.concessionType
-              : undefined,
-          feeHeadId: line.feeHeadId ? String(line.feeHeadId).trim() : undefined,
-          feeHeadCode: line.feeHeadCode ? String(line.feeHeadCode).trim() : undefined,
-          feeHeadName: line.feeHeadName ? String(line.feeHeadName).trim() : undefined,
-          studentYear:
-            line.studentYear != null && Number.isFinite(Number(line.studentYear))
-              ? Number(line.studentYear)
-              : undefined,
-        };
-      })
-      .filter((l) => l.structureId),
+          return {
+            structureId: String(line.structureId || '').trim(),
+            amount,
+            remarks: typeof line.remarks === 'string' ? line.remarks : '',
+            concessionType:
+              line.concessionType === 'CONCESSION' || line.concessionType === 'REVISED_FEE'
+                ? line.concessionType
+                : undefined,
+            feeHeadId: line.feeHeadId ? String(line.feeHeadId).trim() : undefined,
+            feeHeadCode: line.feeHeadCode ? String(line.feeHeadCode).trim() : undefined,
+            feeHeadName: line.feeHeadName ? String(line.feeHeadName).trim() : undefined,
+            studentYear:
+              line.studentYear != null && Number.isFinite(Number(line.studentYear))
+                ? Number(line.studentYear)
+                : undefined,
+          };
+        })
+        .filter((l) => l.structureId)
+    ),
   };
 };
 
@@ -749,6 +762,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   );
   /** Per–fee-head student amounts/notes; persisted in joinings.lead_data._joiningStudentFeeDetails on Save Draft. */
   const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({ lines: [] });
+  /** Fee heads added to builder UI before any year amount is entered. */
+  const [builderAddedHeadIds, setBuilderAddedHeadIds] = useState<string[]>([]);
+  /** Per-head Revised Fee vs Concession — persists before year amounts are entered. */
+  const [builderHeadConcessionTypes, setBuilderHeadConcessionTypes] = useState<
+    Record<string, 'REVISED_FEE' | 'CONCESSION'>
+  >({});
+  /** Approved builder edits in session — skip re-hydrate from overall_concessions while dirty. */
+  const builderConcessionsDirtyRef = useRef(false);
+  const builderConcessionsHydratedForRef = useRef<string | null>(null);
+  const markBuilderConcessionsDirty = useCallback(() => {
+    builderConcessionsDirtyRef.current = true;
+  }, []);
   const [selectedBuilderFeeHeadId, setSelectedBuilderFeeHeadId] = useState<string>('');
   const [isBuilderPaymentDialogOpen, setIsBuilderPaymentDialogOpen] = useState(false);
   const [builderPaymentTab, setBuilderPaymentTab] = useState<'collect' | 'transactions'>('collect');
@@ -1066,12 +1091,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   useEffect(() => {
     if (!joiningRecord?._id) return;
     const sfd = joiningRecord.studentFeeDetails;
+    const batch =
+      sfd && typeof sfd === 'object' && typeof sfd.batch === 'string' && sfd.batch.trim()
+        ? sfd.batch.trim()
+        : undefined;
+    if (status === 'approved') {
+      // Approved concessions builder reads only from overall_concessions — not lead_data lines.
+      setStudentFeeDetails((prev) => ({ ...(batch ? { batch } : {}), lines: prev.lines }));
+      return;
+    }
     if (sfd && typeof sfd === 'object' && Array.isArray(sfd.lines)) {
       setStudentFeeDetails(normalizeStudentFeeDetailsFromRecord(sfd));
     } else {
-      setStudentFeeDetails({ lines: [] });
+      setStudentFeeDetails({ lines: [], ...(batch ? { batch } : {}) });
     }
-  }, [joiningRecord?._id, joiningRecord?.updatedAt]);
+    setBuilderAddedHeadIds([]);
+  }, [joiningRecord?._id, joiningRecord?.updatedAt, status]);
 
   const registrationLocationState = useMemo(
     () =>
@@ -2341,9 +2376,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
       if (!(next.branchId || '').toString().trim() && bestCandidate.branch) {
         next.branchId = String(bestCandidate.branch._id);
-        if (!next.branch || !norm(next.branch)) {
-          next.branch = bestCandidate.branch.name;
-        }
+        const matchedBranchRow = bestCandidate.setting.branches.find(
+          (branch) => String(branch._id ?? '').trim() === String(bestCandidate.branch?._id ?? '').trim()
+        );
+        next.branch = resolveFeePortalBranchLabel(matchedBranchRow, bestCandidate.branch.name);
         changed = true;
       }
       if (!(next.programLevel || '').trim() && inferredLevel) {
@@ -2363,7 +2399,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     formState.courseInfo.programLevel,
   ]);
 
-  /** When branchId is set, sync stale branch text (e.g. old DMEC) from the catalog (e.g. DCSE). */
+  /** When branchId is set, sync branch text to the Fee Management display name (not roll code). */
   useEffect(() => {
     if (courseSettings.length === 0) return;
     const courseId = String(formState.courseInfo.courseId || '').trim();
@@ -2373,24 +2409,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const setting = courseSettings.find(
       (item) => String(item.course._id ?? '').trim() === courseId
     );
-    const selected = setting?.branches.find((b) => String(b._id ?? '').trim() === branchId);
+    const selected = findBranchInCatalog(setting?.branches, branchId);
     if (!selected) return;
 
-    const catalogLabel = String(selected.name || selected.code || '').trim();
-    if (!catalogLabel) return;
+    const feePortalBranch = resolveFeePortalBranchLabel(selected, formState.courseInfo.branch);
+    if (!feePortalBranch) return;
 
     const branchLabel = String(formState.courseInfo.branch || '').trim();
-    const norm = (v?: string | null) =>
-      String(v ?? '')
-        .trim()
-        .toUpperCase()
-        .replace(/[\s._\-/&,]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
     if (
-      norm(branchLabel) === norm(catalogLabel) ||
-      norm(branchLabel) === norm(selected.name) ||
-      norm(branchLabel) === norm(selected.code || '')
+      branchLabel.localeCompare(feePortalBranch, undefined, { sensitivity: 'accent' }) === 0
     ) {
       return;
     }
@@ -2399,7 +2426,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ...prev,
       courseInfo: {
         ...prev.courseInfo,
-        branch: catalogLabel,
+        branch: feePortalBranch,
       },
     }));
   }, [
@@ -2615,6 +2642,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     );
   }, [selectedCourseSetting, formState.courseInfo.branchId]);
 
+  /** Fee Management feestructures use catalog display name (CSE), not roll code (BCSE). */
+  const feePortalBranchLabel = useMemo(
+    () =>
+      resolveFeePortalBranchFromCatalog(
+        selectedCourseSetting?.branches,
+        formState.courseInfo.branchId,
+        formState.courseInfo.branch
+      ),
+    [
+      selectedCourseSetting?.branches,
+      formState.courseInfo.branchId,
+      formState.courseInfo.branch,
+    ]
+  );
+
   const configuredFee = useMemo(() => {
     if (selectedBranchSetting?.amount) return selectedBranchSetting.amount;
     if (selectedCourseSetting?.payment.defaultFee?.amount) {
@@ -2818,7 +2860,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const sfd =
         record.studentFeeDetails ??
         (leadData?._joiningStudentFeeDetails as JoiningStudentFeeDetails | undefined);
-      setStudentFeeDetails(normalizeStudentFeeDetailsFromRecord(sfd));
+      const batch =
+        sfd && typeof sfd.batch === 'string' && sfd.batch.trim() ? sfd.batch.trim() : undefined;
+      // Approved builder uses overall_concessions only — do not hydrate lines from lead_data.
+      setStudentFeeDetails((prev) => ({ ...(batch ? { batch } : {}), lines: prev.lines }));
+      setBuilderAddedHeadIds([]);
       setReference1(resolveJoiningReference1(record, joiningRecord ?? undefined, lead as LeadLike));
     },
     [lead, joiningRecord]
@@ -2956,7 +3002,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       courseInfo: {
         ...prev.courseInfo,
         branchId: bidTarget,
-        branch: String(branch?.name || branch?.code || '').trim(),
+        branch: resolveFeePortalBranchLabel(branch, branch?.name || branch?.code || ''),
       },
     }));
   };
@@ -3694,7 +3740,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         totalYears: programTotalYears,
         batch: feeConfigurationBatch,
         course: formState.courseInfo.course || '',
-        branch: formState.courseInfo.branch || '',
+        branch: feePortalBranchLabel || '',
         quota: formState.courseInfo.quota,
       }),
     [
@@ -3702,7 +3748,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       programTotalYears,
       feeConfigurationBatch,
       formState.courseInfo.course,
-      formState.courseInfo.branch,
+      feePortalBranchLabel,
       formState.courseInfo.quota,
     ]
   );
@@ -3742,9 +3788,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         (branch) => String(branch._id ?? '').trim() === branchTarget
       );
       if (selectedBranch) {
-        courseInfo.branch =
-          String(selectedBranch.name || selectedBranch.code || '').trim() ||
-          courseInfo.branch;
+        courseInfo.branch = resolveFeePortalBranchLabel(selectedBranch, courseInfo.branch);
       }
     }
 
@@ -3776,7 +3820,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             },
             studentFeeDetails: {
               batch: studentFeeDetails.batch || feeConfigurationBatch,
-              lines: studentFeeDetails.lines || [],
+              lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
             },
           }
         : {
@@ -3799,7 +3843,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               ? {
                   studentFeeDetails: {
                     batch: studentFeeDetails.batch,
-                    lines: studentFeeDetails.lines || [],
+                    lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
                   },
                 }
               : {}),
@@ -4252,14 +4296,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     queryKey: [
       'fee-structures-catalog-map',
       formState.courseInfo.course || null,
-      formState.courseInfo.branch || null,
+      feePortalBranchLabel || null,
       formState.courseInfo.quota || null,
       stepOneAcademicYear || feeConfigurationBatch || null,
     ],
     queryFn: async () => {
       const res = await feeStructureAPI.list({
         course: formState.courseInfo.course || undefined,
-        branch: formState.courseInfo.branch || undefined,
+        branch: feePortalBranchLabel || undefined,
         quota: formState.courseInfo.quota || undefined,
         batch: stepOneAcademicYear || feeConfigurationBatch || undefined,
       });
@@ -4299,12 +4343,57 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     },
     enabled: status === 'approved' && !isPublicEdit && Boolean(admissionNumberDisplay),
     staleTime: 30_000,
+    refetchOnMount: 'always',
   });
 
   const overallConcessionLines = useMemo(() => {
     const data = (overallConcessionsQuery.data as { data?: { revisedFees?: unknown } } | undefined)?.data;
     return Array.isArray(data?.revisedFees) ? data.revisedFees : [];
   }, [overallConcessionsQuery.data]);
+
+  useEffect(() => {
+    builderConcessionsDirtyRef.current = false;
+    builderConcessionsHydratedForRef.current = null;
+    setBuilderAddedHeadIds([]);
+    setBuilderHeadConcessionTypes({});
+  }, [admissionNumberDisplay, joiningRecord?._id]);
+
+  useEffect(() => {
+    if (status !== 'approved' || isPublicEdit || !admissionNumberDisplay) return;
+    if (!overallConcessionsQuery.isFetched) return;
+    if (builderConcessionsDirtyRef.current) return;
+
+    const hydrateKey = `${admissionNumberDisplay}::${overallConcessionsQuery.dataUpdatedAt}::${feeStructureCatalogRows.length}`;
+    if (builderConcessionsHydratedForRef.current === hydrateKey) return;
+
+    const lines = overallConcessionLinesToBuilderLines<JoiningStudentFeeLineOverride>(
+      overallConcessionLines as OverallConcessionLine[],
+      feeStructureCatalogRows,
+      feeHeadRows
+    );
+    const typeMap: Record<string, 'REVISED_FEE' | 'CONCESSION'> = {};
+    for (const line of lines) {
+      const headId = line.feeHeadId ? String(line.feeHeadId).trim() : '';
+      if (!headId || !line.concessionType) continue;
+      typeMap[headId] = line.concessionType;
+    }
+    setStudentFeeDetails((prev) => ({
+      ...prev,
+      lines: filterPersistableBuilderConcessionLines(lines),
+    }));
+    setBuilderHeadConcessionTypes(typeMap);
+    setBuilderAddedHeadIds([]);
+    builderConcessionsHydratedForRef.current = hydrateKey;
+  }, [
+    status,
+    isPublicEdit,
+    admissionNumberDisplay,
+    overallConcessionsQuery.isFetched,
+    overallConcessionsQuery.dataUpdatedAt,
+    overallConcessionLines,
+    feeStructureCatalogRows,
+    feeHeadRows,
+  ]);
 
   const feeMongoTransactionsQuery = useQuery({
     queryKey: [
@@ -4379,49 +4468,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   }, [feeMongoTransactions]);
 
   const overallConcessionByHeadYear = useMemo(() => {
-    const map = new Map<string, {
-      feeHeadId?: string | null;
-      feeHeadCode?: string;
-      studentYear?: number;
-      actualAmount?: number;
-      revisedAmount?: number;
-      concessionAmount?: number;
-      concessionType?: string;
-    }>();
+    const map = new Map<string, OverallConcessionLine>();
     for (const line of overallConcessionLines) {
       if (!line || typeof line !== 'object') continue;
-      const row = line as {
-        feeHeadId?: string | null;
-        feeHeadCode?: string;
-        studentYear?: number | string;
-        actualAmount?: number | string;
-        revisedAmount?: number | string;
-        concessionAmount?: number | string;
-        concessionType?: string;
-      };
+      const row = line as OverallConcessionLine;
       const year = Number(row.studentYear) || 1;
-      const normalized = {
-        feeHeadId: row.feeHeadId || null,
-        feeHeadCode: row.feeHeadCode || '',
-        studentYear: year,
-        actualAmount: Number(row.actualAmount) || 0,
-        revisedAmount: Number(row.revisedAmount) || 0,
-        concessionAmount: Number(row.concessionAmount) || 0,
-        concessionType: row.concessionType || '',
-      };
-      if (normalized.feeHeadId) {
-        map.set(`${String(normalized.feeHeadId)}::${year}`, normalized);
+      if (row.feeHeadId) {
+        map.set(`${String(row.feeHeadId)}::${year}`, row);
       }
-      if (normalized.feeHeadCode) {
-        map.set(`code:${String(normalized.feeHeadCode).toUpperCase()}::${year}`, normalized);
+      if (row.feeHeadCode) {
+        map.set(`code:${String(row.feeHeadCode).toUpperCase()}::${year}`, row);
       }
     }
     return map;
   }, [overallConcessionLines]);
 
   const allUniqueFeeHeads = useMemo(() => {
-    const savedList = studentFeeDetails.lines || [];
-
     const map = new Map<string, { id: string; name: string; code: string }>();
 
     const addToMap = (item: {
@@ -4449,10 +4511,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
     for (const item of allFeeStructureRows) addToMap(item);
     for (const item of feeStructureCatalogRows) addToMap(item);
-    for (const item of savedList) addToMap(item);
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [feeHeadRows, allFeeStructureRows, feeStructureCatalogRows, studentFeeDetails.lines]);
+  }, [feeHeadRows, allFeeStructureRows, feeStructureCatalogRows]);
+
+  const persistableBuilderLines = useMemo(
+    () => filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
+    [studentFeeDetails.lines]
+  );
 
   const currentBuilderHeads = useMemo(() => {
     const map = new Map<string, { id: string; name: string; code: string }>();
@@ -4483,8 +4549,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
     }
 
+    for (const headId of builderAddedHeadIds) {
+      if (map.has(headId)) continue;
+      const head = allUniqueFeeHeads.find((item) => item.id === headId);
+      if (head) {
+        map.set(headId, head);
+      }
+    }
+
     return Array.from(map.values());
-  }, [studentFeeDetails.lines, feeStructureCatalogRows]);
+  }, [studentFeeDetails.lines, feeStructureCatalogRows, builderAddedHeadIds, allUniqueFeeHeads]);
 
   const builderPaymentRows = useMemo(() => {
     return feeStructureCatalogRows.flatMap((row) => {
@@ -4493,41 +4567,35 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const year = Number(row.studentYear) || 1;
       const catalogAmount = Number(row.amount) || 0;
       const structureId = String(row._id);
-      const overallLine =
-        (feeHeadId ? overallConcessionByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ||
-        (feeHeadCode
-          ? overallConcessionByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
-          : undefined);
       const localLine = (studentFeeDetails.lines || []).find((line) => String(line.structureId) === structureId);
       const localAmount =
         localLine?.amount !== undefined && localLine?.amount !== null ? Number(localLine.amount) || 0 : null;
       const localType = localLine?.concessionType || undefined;
 
-      const concessionType = overallLine?.concessionType
-        ? overallLine.concessionType === 'CONCESSION'
-          ? 'CONCESSION'
-          : 'REVISED_FEE'
+      const overallLine =
+        (feeHeadId ? overallConcessionByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ||
+        (feeHeadCode
+          ? overallConcessionByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
+          : undefined);
+
+      const resolvedFromLocal =
+        localType && localAmount !== null && localAmount > 0
+          ? resolveOverallConcessionLine(
+              { concessionType: localType, amount: localAmount },
+              catalogAmount
+            )
+          : null;
+      const resolvedFromOverall = overallLine
+        ? resolveOverallConcessionLine(overallLine, catalogAmount)
+        : null;
+      const resolved = resolvedFromLocal || resolvedFromOverall;
+
+      const concessionType = resolved
+        ? resolved.concessionType
         : localType || 'CONFIGURED_FEE';
-      let adjustmentAmount: number | null = null;
-      let payableAmount = catalogAmount;
-      if (overallLine?.concessionType === 'CONCESSION') {
-        adjustmentAmount =
-          overallLine.concessionAmount && overallLine.concessionAmount > 0
-            ? overallLine.concessionAmount
-            : overallLine.revisedAmount && overallLine.revisedAmount > 0
-              ? overallLine.revisedAmount
-              : null;
-        payableAmount = Math.max(catalogAmount - (adjustmentAmount || 0), 0);
-      } else if (overallLine?.revisedAmount && overallLine.revisedAmount > 0) {
-        payableAmount = overallLine.revisedAmount;
-      } else if (localAmount !== null) {
-        if (localType === 'CONCESSION') {
-          adjustmentAmount = localAmount;
-          payableAmount = Math.max(catalogAmount - localAmount, 0);
-        } else {
-          payableAmount = localAmount;
-        }
-      }
+      const adjustmentAmount =
+        resolved && resolved.concessionType === 'CONCESSION' ? resolved.adjustmentAmount : null;
+      const payableAmount = resolved ? resolved.payableAmount : catalogAmount;
       const paidAmount =
         (feeHeadId ? feeMongoPaidByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ??
         (feeHeadCode
@@ -4574,50 +4642,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       return;
     }
 
-    const newLines = [...(studentFeeDetails.lines || [])];
-    let addedLines = 0;
-
-    for (let year = 1; year <= programTotalYears; year++) {
-      const matchingCatalog = feeStructureCatalogRows.find(
-        (c) => String(c.feeHead) === String(targetHead.id) && c.studentYear === year
-      );
-
-      if (!matchingCatalog) {
-        continue;
-      }
-
-      const structureId = matchingCatalog ? String(matchingCatalog._id) : `custom-${targetHead.id}-${year}`;
-
-      newLines.push({
-        structureId,
-        amount: null,
-        remarks: 'Revised',
-        concessionType: 'REVISED_FEE',
-        feeHeadId: targetHead.id,
-        feeHeadCode: targetHead.code,
-        feeHeadName: targetHead.name,
-        studentYear: year,
-      });
-      addedLines += 1;
-    }
-
-    if (addedLines === 0) {
-      newLines.push({
-        structureId: `custom-${targetHead.id}-1`,
-        amount: null,
-        remarks: 'Revised',
-        concessionType: 'REVISED_FEE',
-        feeHeadId: targetHead.id,
-        feeHeadCode: targetHead.code,
-        feeHeadName: targetHead.name,
-        studentYear: 1,
-      });
-    }
-
-    setStudentFeeDetails({
-      ...studentFeeDetails,
-      lines: newLines,
-    });
+    setBuilderAddedHeadIds((prev) =>
+      prev.includes(targetHead.id) ? prev : [...prev, targetHead.id]
+    );
+    setBuilderHeadConcessionTypes((prev) =>
+      prev[targetHead.id] ? prev : { ...prev, [targetHead.id]: 'REVISED_FEE' }
+    );
+    markBuilderConcessionsDirty();
     setSelectedBuilderFeeHeadId('');
   };
 
@@ -4768,7 +4799,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             ? {
                 studentFeeDetails: {
                   batch: studentFeeDetails.batch || feeConfigurationBatch,
-                  lines: studentFeeDetails.lines || [],
+                  lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
                 },
               }
             : {}),
@@ -4865,11 +4896,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         registrationFormData: joiningRegistrationPatch,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
-          lines: studentFeeDetails.lines || [],
+          lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
         },
       });
     },
     onSuccess: async () => {
+      builderConcessionsDirtyRef.current = false;
+      builderConcessionsHydratedForRef.current = null;
       showToast.success(
         'Fee configuration saved — fee portal, bus, and hostel systems updated where applicable'
       );
@@ -4908,7 +4941,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           },
           studentFeeDetails: {
             batch: studentFeeDetails.batch,
-            lines: studentFeeDetails.lines || [],
+            lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
           },
         });
       }
@@ -6573,7 +6606,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
               <FeeStructureSection
                 course={formState.courseInfo.course}
-                branch={formState.courseInfo.branch}
+                branch={feePortalBranchLabel}
                 quota={formState.courseInfo.quota}
                 batch={stepOneAcademicYear || feeConfigurationBatch}
                 title="Fee configuration (Fee Management database)"
@@ -6631,7 +6664,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </h3>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     Add fee heads, choose whether each head is a revised fee or concession, and configure year-wise
-                    amounts. Saving here updates the joining fee configuration directly.
+                    amounts. Saved concessions are stored in the overall concessions table and loaded from there on
+                    each visit.
                   </p>
 
                   {/* Dropdown to add fee head */}
@@ -6701,52 +6735,38 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   String(item.feeHead) === String(head.id)
                               );
                             });
-                            const headConcessionType = headLines.some(
-                              (line) => line.concessionType === 'CONCESSION'
-                            )
-                              ? 'CONCESSION'
-                              : 'REVISED_FEE';
+                            const headConcessionType =
+                              builderHeadConcessionTypes[head.id] ??
+                              (headLines.some((line) => line.concessionType === 'CONCESSION')
+                                ? 'CONCESSION'
+                                : 'REVISED_FEE');
                             const setBuilderHeadConcessionType = (nextType: 'REVISED_FEE' | 'CONCESSION') => {
-                              const newLines = [...(studentFeeDetails.lines || [])];
-                              for (let year = 1; year <= programTotalYears; year++) {
-                                const matchingCatalog = feeStructureCatalogRows.find(
-                                  (c) => String(c.feeHead) === String(head.id) && c.studentYear === year
-                                );
-                                const structureId = matchingCatalog
-                                  ? String(matchingCatalog._id)
-                                  : `custom-${head.id}-${year}`;
-                                const catalogAmount = matchingCatalog ? Number(matchingCatalog.amount) || 0 : 0;
-                                const lineIdx = newLines.findIndex((l) => String(l.structureId) === structureId);
-                                const existing = lineIdx >= 0 ? newLines[lineIdx] : null;
-                                if (!existing && catalogAmount <= 0) {
-                                  continue;
-                                }
+                              setBuilderHeadConcessionTypes((prev) => ({ ...prev, [head.id]: nextType }));
+                              const newLines = (studentFeeDetails.lines || []).map((line) => {
+                                const isThisHead =
+                                  (line.feeHeadId && String(line.feeHeadId) === String(head.id)) ||
+                                  feeStructureCatalogRows.some(
+                                    (item) =>
+                                      String(item._id) === String(line.structureId) &&
+                                      String(item.feeHead) === String(head.id)
+                                  );
+                                if (!isThisHead) return line;
                                 const existingAmount =
-                                  existing?.amount !== undefined && existing?.amount !== null
-                                    ? Number(existing.amount) || 0
+                                  line?.amount !== undefined && line?.amount !== null
+                                    ? Number(line.amount) || 0
                                     : null;
-                                const nextAmount = existingAmount;
-                                const nextLine = {
-                                  ...(existing || {}),
-                                  structureId,
-                                  amount: nextAmount,
+                                if (existingAmount === null || existingAmount <= 0) return line;
+                                return {
+                                  ...line,
                                   remarks: nextType === 'CONCESSION' ? 'Concession' : 'Revised',
                                   concessionType: nextType,
-                                  feeHeadId: head.id,
-                                  feeHeadCode: head.code,
-                                  feeHeadName: head.name,
-                                  studentYear: year,
                                 };
-                                if (lineIdx >= 0) {
-                                  newLines[lineIdx] = nextLine;
-                                } else {
-                                  newLines.push(nextLine);
-                                }
-                              }
+                              });
                               setStudentFeeDetails({
                                 ...studentFeeDetails,
                                 lines: newLines,
                               });
+                              markBuilderConcessionsDirty();
                             };
                             return (
                               <tr key={head.id} className="border-t border-slate-100 hover:bg-slate-50/50 dark:border-slate-800 dark:hover:bg-slate-800/40">
@@ -6797,6 +6817,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                           ...studentFeeDetails,
                                           lines: newLines,
                                         });
+                                        markBuilderConcessionsDirty();
                                       }
                                       return;
                                     }
@@ -6819,6 +6840,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                       ...studentFeeDetails,
                                       lines: newLines,
                                     });
+                                    markBuilderConcessionsDirty();
                                   };
 
                                   return (
@@ -6864,10 +6886,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                       const newLines = (studentFeeDetails.lines || []).filter(
                                         (line) => !structureIds.includes(String(line.structureId))
                                       );
+                                      setBuilderAddedHeadIds((prev) =>
+                                        prev.filter((id) => String(id) !== String(head.id))
+                                      );
+                                      setBuilderHeadConcessionTypes((prev) => {
+                                        const next = { ...prev };
+                                        delete next[head.id];
+                                        return next;
+                                      });
                                       setStudentFeeDetails({
                                         ...studentFeeDetails,
                                         lines: newLines,
                                       });
+                                      markBuilderConcessionsDirty();
                                     }}
                                     className="text-xs font-semibold text-red-600 hover:text-red-800"
                                   >
