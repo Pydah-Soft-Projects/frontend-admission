@@ -1744,6 +1744,7 @@ export const feeStructureAPI = {
     category?: string | null;
     quota?: string | null;
     studentYear?: string | number | null;
+    studentStatus?: string | null;
   }) => {
     const queryParams = new URLSearchParams();
     if (params) {

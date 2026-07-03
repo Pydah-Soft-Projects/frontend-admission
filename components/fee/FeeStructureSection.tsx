@@ -112,6 +112,7 @@ export type FeeStructureSectionProps = {
   batch?: string | number | null;
   college?: string | null;
   studentYear?: number | null;
+  studentStatus?: string | null;
   title?: string;
   description?: string;
   className?: string;
@@ -161,6 +162,7 @@ export function FeeStructureSection({
   batch,
   college,
   studentYear,
+  studentStatus,
   title = 'Fee Structure',
   description = 'Pulled live from the Fee Management database. Amounts are per academic year unless terms are configured.',
   className = '',
@@ -175,8 +177,23 @@ export function FeeStructureSection({
   pivotView = false,
 }: FeeStructureSectionProps) {
   const resolvedCategory = useMemo(() => {
-    return (category && category.trim()) || mapQuotaToCategory(quota);
-  }, [category, quota]);
+    if (category && category.trim()) return category.trim();
+
+    const q = String(quota || '').trim().toUpperCase();
+    const cleanBatch = String(batch || '').trim();
+    const isLateral = String(studentStatus || '').trim().toLowerCase() === 'lateral';
+
+    if (isLateral && cleanBatch === '2025') {
+      if (q === 'CQ' || q.includes('CONV') || q.includes('LATER')) {
+        return 'LATER';
+      }
+      if (q === 'SPOT' || q.includes('LSPOT')) {
+        return 'LSPOT';
+      }
+    }
+
+    return mapQuotaToCategory(quota);
+  }, [category, quota, studentStatus, batch]);
 
   const cleanCourse = (course || '').trim();
   const cleanBranch = (branch || '').trim();
@@ -229,6 +246,7 @@ export function FeeStructureSection({
       selectedBatch || null,
       college || null,
       studentYear ?? null,
+      studentStatus || null,
     ],
     enabled: queryEnabled,
     staleTime: 60_000,
@@ -240,6 +258,7 @@ export function FeeStructureSection({
         batch: selectedBatch || undefined,
         college: college || undefined,
         studentYear: studentYear ?? undefined,
+        studentStatus: studentStatus || undefined,
       });
       return response;
     },

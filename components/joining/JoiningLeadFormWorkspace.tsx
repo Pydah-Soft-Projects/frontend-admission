@@ -4292,6 +4292,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     staleTime: 60_000,
   });
 
+  const studentStatus = String(
+    registrationExtras.student_status ??
+    registrationExtras.studentStatus ??
+    (lead as any)?.studentStatus ??
+    ''
+  ).trim();
+
   const feeStructuresQuery = useQuery({
     queryKey: [
       'fee-structures-catalog-map',
@@ -4299,6 +4306,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       feePortalBranchLabel || null,
       formState.courseInfo.quota || null,
       stepOneAcademicYear || feeConfigurationBatch || null,
+      studentStatus || null,
     ],
     queryFn: async () => {
       const res = await feeStructureAPI.list({
@@ -4306,6 +4314,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         branch: feePortalBranchLabel || undefined,
         quota: formState.courseInfo.quota || undefined,
         batch: stepOneAcademicYear || feeConfigurationBatch || undefined,
+        studentStatus: studentStatus || undefined,
       });
       return res;
     },
@@ -6609,6 +6618,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 branch={feePortalBranchLabel}
                 quota={formState.courseInfo.quota}
                 batch={stepOneAcademicYear || feeConfigurationBatch}
+                studentStatus={studentStatus}
                 title="Fee configuration (Fee Management database)"
                 description={
                   status === 'approved'

@@ -323,6 +323,16 @@ async function resolvePrintFeeStructureTableHtml(
   const batch = resolvePrintFeeBatch(application);
   const category = mapQuotaToFeeCategory(quota);
 
+  const leadData = (application as any).leadData || {};
+  const registrationExtras = leadData._joiningRegistrationExtras || {};
+  const studentStatus = String(
+    registrationExtras.student_status ??
+    registrationExtras.studentStatus ??
+    (application as any).studentStatus ??
+    (application as any).student_status ??
+    ''
+  ).trim();
+
   if (!resolvedCourseName && !resolvedBranchName && !courseId) {
     return '';
   }
@@ -348,6 +358,7 @@ async function resolvePrintFeeStructureTableHtml(
         category: category || undefined,
         quota: quota || undefined,
         batch: batch || undefined,
+        studentStatus: studentStatus || undefined,
       })
       .catch(() => null)
   );
