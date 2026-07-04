@@ -238,6 +238,7 @@ export interface Lead {
   assignedTo?: User | string;
   /** PRO field staff assigned to the lead (superadmin / full lead views) */
   assignedToPro?: User | string;
+  confirmedBy?: User | null;
   assignedAt?: string;
   assignedBy?: User | string;
   source?: string;

@@ -173,7 +173,22 @@ const ConfirmedLeadsPage = () => {
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{lead.studentGroup || '—'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{lead.courseInterested || '—'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                      {lead.assignedTo && typeof lead.assignedTo === 'object' ? (
+                      {lead.confirmedBy && typeof lead.confirmedBy === 'object' ? (
+                        <div>
+                          <div>{lead.confirmedBy.name || '—'}</div>
+                          <div className="text-xs text-slate-500">
+                            {lead.confirmedBy.roleName ||
+                              lead.confirmedBy.department ||
+                              lead.confirmedBy.designation ||
+                              '—'}
+                          </div>
+                        </div>
+                      ) : lead.dynamicFields?.reference1 ? (
+                        <div>
+                          <div>{lead.dynamicFields.reference1}</div>
+                          <div className="text-xs text-slate-500">Confirmer</div>
+                        </div>
+                      ) : lead.assignedTo && typeof lead.assignedTo === 'object' ? (
                         <div>
                           <div>{lead.assignedTo.name || '—'}</div>
                           <div className="text-xs text-slate-500">
