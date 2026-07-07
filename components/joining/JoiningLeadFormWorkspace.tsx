@@ -800,6 +800,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     remarks: '',
     isProcessing: false,
   });
+  const [razorpayQrData, setRazorpayQrData] = useState<{
+    qrCodeId: string;
+    imageUrl: string;
+    paymentUrl: string;
+    amount: number;
+  } | null>(null);
+  const [isQrGenerating, setIsQrGenerating] = useState(false);
+  const [isQrVerifying, setIsQrVerifying] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
   const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({});
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
@@ -4710,7 +4719,129 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     if (builderPaymentForm.isProcessing) return;
     setIsBuilderPaymentDialogOpen(false);
     setBuilderPaymentTargets([]);
+    setRazorpayQrData(null);
+    setQrError(null);
   };
+
+  const handleGenerateRazorpayQr = async () => {
+    if (!joiningRecord?._id) return;
+    const joiningId = joiningRecord._id;
+    const admissionId = admissionRecord?._id;
+    
+    if (builderPaymentTargets.length === 0) {
+      showToast.error('Select at least one fee head');
+      return;
+    }
+    const payableTargets = builderPaymentTargets.filter(
+      (target) => Number.isFinite(Number(target.amount)) && Number(target.amount) > 0
+    );
+    if (payableTargets.length !== builderPaymentTargets.length) {
+      showToast.error('Selected fee heads must have a payable amount');
+      return;
+    }
+
+    const payloadTargets = payableTargets.map((t) => ({
+      feeHeadId: t.feeHeadId,
+      feeHeadName: t.feeHeadName,
+      feeHeadCode: t.feeHeadCode,
+      amount: Number(t.amount),
+      studentYear: t.studentYear,
+      semester: t.semester,
+    }));
+
+    setIsQrGenerating(true);
+    setQrError(null);
+
+    try {
+      const primaryTarget = payableTargets[0];
+      const res = await paymentAPI.generateRazorpayQR({
+        joiningId,
+        admissionId,
+        amount: builderPaymentSelectedTotal,
+        feeHeadId: primaryTarget.feeHeadId,
+        feeHeadName: primaryTarget.feeHeadName,
+        feeHeadCode: primaryTarget.feeHeadCode,
+        studentYear: primaryTarget.studentYear,
+        semester: primaryTarget.semester,
+        targets: payloadTargets,
+      });
+
+      const orderResult = res?.data || res;
+      if (!orderResult?.orderId) {
+        throw new Error('Failed to create Razorpay Order');
+      }
+
+      if (!(window as any).Razorpay) {
+        throw new Error('Razorpay Checkout SDK is still loading. Please wait.');
+      }
+
+      const options = {
+        key: orderResult.key,
+        amount: orderResult.amount,
+        currency: orderResult.currency,
+        name: "Pydah Group",
+        description: `Admission Fee Payment - Year ${builderPaymentYear}`,
+        order_id: orderResult.orderId,
+        handler: async function (response: any) {
+          setIsQrVerifying(true);
+          try {
+            await paymentAPI.verifyRazorpayQR({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            showToast.success('UPI/Online Payment collected and verified successfully!');
+            setIsBuilderPaymentDialogOpen(false);
+            setBuilderPaymentTargets([]);
+            void queryClient.invalidateQueries({ queryKey: ['fee-mongo-transactions'] });
+            setBuilderPaymentForm((prev) => ({
+              ...prev,
+              amount: '',
+              receiptNumber: '',
+              remarks: '',
+              isProcessing: false,
+            }));
+          } catch (err: any) {
+            console.error('Verification error:', err);
+            const apiErr = err.response?.data?.message || err.message || 'Signature verification failed';
+            showToast.error(apiErr);
+          } finally {
+            setIsQrVerifying(false);
+          }
+        },
+        prefill: {
+          name: orderResult.studentName,
+          contact: orderResult.studentPhone,
+        },
+        theme: {
+          color: "#4f46e5"
+        }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error('Error generating Order:', err);
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
+      const errMsg = apiErr.response?.data?.message || apiErr.message || 'Failed to start payment checkout';
+      setQrError(errMsg);
+      showToast.error(errMsg);
+    } finally {
+      setIsQrGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
 
   const handleBuilderPaymentSubmit = async () => {
     if (!joiningRecord?._id) return;
@@ -7047,7 +7178,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         <span className="sr-only">Select</span>
                       </th>
                       <th className={STEP_FOUR_TABLE_HEAD_CELL}>Fee Head</th>
-                      <th className={STEP_FOUR_TABLE_HEAD_CELL}>Type</th>
                       <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Actual</th>
                       <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Payable</th>
                       <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>Paid</th>
@@ -7064,12 +7194,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                       return (
                         <tr
                           key={`${row.structureId}-${row.studentYear}`}
-                          className={selected ? 'bg-blue-50/70 dark:bg-blue-950/30' : undefined}
+                          className={
+                            row.paidAmount >= row.payableAmount
+                              ? 'opacity-60 bg-slate-50/50 dark:bg-slate-900/30'
+                              : selected
+                                ? 'bg-blue-50/70 dark:bg-blue-950/30'
+                                : undefined
+                          }
                         >
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
-                              checked={selected}
+                              checked={selected && row.paidAmount < row.payableAmount}
                               onChange={(event) => {
                                 const nextTarget = {
                                   structureId: row.structureId,
@@ -7078,7 +7214,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   feeHeadCode: row.feeHeadCode,
                                   studentYear: row.studentYear,
                                   semester: row.semester,
-                                  amount: row.payableAmount > 0 ? String(row.payableAmount) : '',
+                                  amount: (() => {
+                                    const balance = Math.max(row.payableAmount - row.paidAmount, 0);
+                                    return balance > 0 ? String(balance) : '';
+                                  })(),
                                 };
                                 setBuilderPaymentTargets((prev) => {
                                   const withoutCurrent = prev.filter(
@@ -7109,7 +7248,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                 });
                               }}
                               className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              disabled={builderPaymentForm.isProcessing}
+                              disabled={builderPaymentForm.isProcessing || row.paidAmount >= row.payableAmount}
                               aria-label={`Select ${row.feeHeadName || row.feeHeadCode || 'fee head'}`}
                             />
                           </td>
@@ -7121,15 +7260,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                               <div className="font-mono text-[10px] text-slate-400">{row.feeHeadCode}</div>
                             ) : null}
                           </td>
-                          <td className="px-4 py-3">
-                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                              {row.concessionType === 'CONCESSION'
-                                ? 'Concession'
-                                : row.concessionType === 'REVISED_FEE'
-                                  ? 'Revised Fee'
-                                  : 'Configured Head'}
-                            </span>
-                          </td>
+ 
                           <td className="px-4 py-3 text-right text-slate-500">
                             {formatCurrency(row.catalogAmount)}
                           </td>
@@ -7148,7 +7279,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                               <span className="font-semibold text-blue-700 dark:text-blue-300">
                                 {formatCurrency(row.paidAmount)}
                               </span>
-                              {row.paidAmount > 0 ? (
+                              {row.paidAmount >= row.payableAmount ? (
+                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                  Fully Paid
+                                </span>
+                              ) : row.paidAmount > 0 ? (
                                 <span className="text-[10px] text-slate-400">
                                   Balance {formatCurrency(Math.max(row.payableAmount - row.paidAmount, 0))}
                                 </span>
@@ -7189,7 +7324,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                               }}
                               className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
                               placeholder="0"
-                              disabled={!selected || builderPaymentForm.isProcessing}
+                              disabled={!selected || builderPaymentForm.isProcessing || row.paidAmount >= row.payableAmount}
                               aria-label={`Collect amount for ${row.feeHeadName || row.feeHeadCode || 'fee head'}`}
                             />
                           </td>
@@ -7231,13 +7366,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </label>
                   <select
                     value={builderPaymentForm.paymentMode}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextMode = event.target.value === 'Bank' ? 'Bank' : 'Cash';
                       setBuilderPaymentForm((prev) => ({
                         ...prev,
-                        paymentMode: event.target.value === 'Bank' ? 'Bank' : 'Cash',
-                        receiptNumber: event.target.value === 'Bank' ? prev.receiptNumber : '',
-                      }))
-                    }
+                        paymentMode: nextMode,
+                        receiptNumber: nextMode === 'Bank' ? prev.receiptNumber : '',
+                      }));
+                      setRazorpayQrData(null);
+                      setQrError(null);
+                    }}
                     className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
                     disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
                   >
@@ -7247,21 +7385,80 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 </div>
               </div>
 
-              {builderPaymentForm.paymentMode === 'Bank' ? (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Bank reference number
-                  </label>
-                  <input
-                    type="text"
-                    value={builderPaymentForm.receiptNumber}
-                    onChange={(event) =>
-                      setBuilderPaymentForm((prev) => ({ ...prev, receiptNumber: event.target.value }))
-                    }
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                    placeholder="UTR, bank reference, or transaction ID"
-                    disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
-                  />
+              {builderPaymentForm.paymentMode === 'Bank' && builderPaymentSelectedTotal > 0 ? (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-5 dark:border-slate-800 dark:bg-slate-900/50 space-y-4">
+                  <div className="flex items-center justify-between border-b border-indigo-100/50 pb-3 dark:border-slate-800">
+                    <div>
+                      <h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
+                        Razorpay Secure Gateway
+                      </h4>
+                      <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
+                        Collect payment online using Razorpay (UPI, cards, net banking, or scanning QR)
+                      </p>
+                    </div>
+                  </div>
+
+                  {isQrGenerating && (
+                    <div className="flex flex-col items-center justify-center py-6 gap-2">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+                      <p className="text-xs text-indigo-800 dark:text-indigo-300 font-medium">
+                        Initializing Razorpay Gateway...
+                      </p>
+                    </div>
+                  )}
+
+                  {isQrVerifying && (
+                    <div className="flex flex-col items-center justify-center py-6 gap-2">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                      <p className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
+                        Verifying payment transaction status...
+                      </p>
+                    </div>
+                  )}
+
+                  {qrError && (
+                    <div className="rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/50">
+                      <strong>Checkout Error:</strong> {qrError}
+                    </div>
+                  )}
+
+                  {!isQrGenerating && !isQrVerifying && (
+                    <div className="flex flex-col items-center py-3 gap-3">
+                      <button
+                        type="button"
+                        onClick={handleGenerateRazorpayQr}
+                        className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition duration-200 cursor-pointer shadow-md"
+                      >
+                        💳 Open Razorpay Checkout Gateway
+                      </button>
+                      <p className="text-[10px] text-center text-slate-500">
+                        This opens Razorpay's official secure payment popup. The customer can scan a valid UPI QR code directly using their UPI apps (GPay, PhonePe, Paytm, BHIM) inside the gateway popup.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="border-t border-indigo-100/30 pt-3 dark:border-slate-800/50">
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      — OR Manual Bank Transfer Override —
+                    </p>
+                    <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-200">
+                      Bank reference number / UTR
+                    </label>
+                    <input
+                      type="text"
+                      value={builderPaymentForm.receiptNumber}
+                      onChange={(event) =>
+                        setBuilderPaymentForm((prev) => ({ ...prev, receiptNumber: event.target.value }))
+                      }
+                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                      placeholder="Enter UTR if student paid via direct net banking/DD/NEFT"
+                      disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                    />
+                  </div>
+                </div>
+              ) : builderPaymentForm.paymentMode === 'Bank' ? (
+                <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                  Select fee heads in the table above to configure payment amount.
                 </div>
               ) : null}
 

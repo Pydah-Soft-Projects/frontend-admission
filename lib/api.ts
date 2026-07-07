@@ -1936,6 +1936,25 @@ export const paymentAPI = {
     const response = await api.post('/payments/fee-management/transactions', data);
     return response.data;
   },
+  generateRazorpayQR: async (data: {
+    joiningId: string;
+    admissionId?: string;
+    amount: number;
+    feeHeadId?: string;
+    feeHeadName?: string;
+    feeHeadCode?: string;
+    studentYear?: number | string | null;
+    semester?: number | string | null;
+  }) => {
+    const response = await api.post('/payments/razorpay/qr', data);
+    return response.data;
+  },
+  verifyRazorpayQR: async (data: {
+    qrCodeId: string;
+  }) => {
+    const response = await api.post('/payments/razorpay/verify-qr', data);
+    return response.data;
+  },
 };
 
 // Notification API
