@@ -21,6 +21,7 @@ export function CertificateInformationChecklistBlock({
   onChecklistOptionChange,
   onChecklistStatusChange,
   readOnly = false,
+  title = 'Certificate information checklist',
 }: {
   variant: 'below-documents' | 'post-admission-step' | 'admission-step-two';
   radioNameSuffix?: string;
@@ -36,6 +37,7 @@ export function CertificateInformationChecklistBlock({
     hasCertOptions: boolean
   ) => void;
   readOnly?: boolean;
+  title?: string;
 }) {
   const wrapClass =
     variant === 'below-documents'
@@ -44,7 +46,7 @@ export function CertificateInformationChecklistBlock({
   return (
     <div className={wrapClass}>
       <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">
-        Certificate information checklist
+        {title}
       </h3>
       {derivedCertificationStatus !== null && (
         <p className="mt-2 text-sm text-gray-700 dark:text-slate-300">
