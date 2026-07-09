@@ -71,11 +71,13 @@ const onlyDigits = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 
 function applyExistingLeadToForm(
   prev: FormState,
-  lead: NonNullable<ExistingLeadPreview>,
-  courseSettings: CourseCatalog
+  lead: NonNullable<ExistingLeadPreview>
 ): FormState {
   const next = { ...prev };
 
+  // Only pre-fill name and phone fields from the existing lead — everything else
+  // (course, branch, quota) stays blank so the user freely selects them.
+  // The existing lead is recorded in the Lead Source banner only.
   if (!next.studentName.trim() && lead.name) {
     next.studentName = lead.name.trim();
   }
@@ -86,43 +88,14 @@ function applyExistingLeadToForm(
     next.fatherPhone = onlyDigits(lead.fatherPhone);
   }
 
-  let courseId = String(lead.managedCourseId ?? '').trim();
-  let branchId = String(lead.managedBranchId ?? '').trim();
-  const courseInterested = String(lead.courseInterested ?? '').trim();
-
-  if (!courseId && courseInterested && courseSettings.length > 0) {
-    const matchedCourse = courseSettings.find(
-      (item) => String(item.name ?? '').trim().toLowerCase() === courseInterested.toLowerCase()
-    );
-    if (matchedCourse) {
-      courseId = String(matchedCourse._id ?? '').trim();
-    }
-  }
-
-  if (!next.courseId.trim() && courseId) {
-    next.courseId = courseId;
-  }
-  if (!next.branchId.trim() && branchId) {
-    next.branchId = branchId;
-  }
-  if (!next.courseInterested.trim()) {
-    if (courseInterested) {
-      next.courseInterested = courseInterested;
-    } else if (next.courseId) {
-      const matchedCourse = courseSettings.find(
-        (item) => String(item._id ?? '').trim() === next.courseId
-      );
-      if (matchedCourse?.name) {
-        next.courseInterested = matchedCourse.name;
-      }
-    }
-  }
+  // Pre-fill quota only if it's a meaningful value
   if (!next.quota.trim() && lead.quota && lead.quota !== 'Not Applicable') {
     next.quota = lead.quota.trim();
   }
-  if (!next.reference1.trim() && lead.reference1) {
-    next.reference1 = lead.reference1.trim();
-  }
+
+  // Do NOT pre-fill courseId / branchId / courseInterested from the existing lead.
+  // The dropdowns must remain fully open and interactive regardless of whether
+  // an existing lead was detected.
 
   return next;
 }
@@ -209,19 +182,23 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
   }, [courseSettingsResponse]);
 
   // Derive college access scope from the joining module permission.
-  const joiningAllowedCollegeIds = useMemo(() => {
+  // Mirrors the JoiningLeadFormWorkspace logic exactly:
+  //   undefined / null / empty allowedColleges → no restriction (show all courses)
+  //   non-empty allowedColleges → filter to those college IDs only
+  const joiningAllowedCollegeIds = useMemo((): string[] | undefined => {
     if (!joiningPermData?.allowedColleges) return undefined; // undefined = no restriction
     const ids = (joiningPermData.allowedColleges as string[])
       .filter((id): id is string => typeof id === 'string')
       .map((id) => String(id).trim())
       .filter(Boolean);
-    return ids.length ? ids : [];
+    // Empty array means all-college access — same as no restriction
+    return ids.length ? ids : undefined;
   }, [joiningPermData?.allowedColleges]);
 
   /** Course list filtered to the user's college access scope (mirrors JoiningLeadFormWorkspace). */
   const visibleCourseSettings = useMemo(() => {
-    if (!Array.isArray(joiningAllowedCollegeIds)) return courseSettings; // no restriction
-    if (joiningAllowedCollegeIds.length === 0) return []; // scoped but no colleges assigned
+    // No restriction → show all courses
+    if (!Array.isArray(joiningAllowedCollegeIds)) return courseSettings;
     const allowedSet = new Set(joiningAllowedCollegeIds);
     return courseSettings.filter((item) => {
       const cid =
@@ -235,8 +212,13 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
   const selectedCourse = useMemo(() => {
     const target = String(form.courseId ?? '').trim();
     if (!target) return undefined;
-    return visibleCourseSettings.find((item) => String(item._id ?? '').trim() === target);
-  }, [visibleCourseSettings, form.courseId]);
+    // Search visible list first; fall back to full catalog (covers the case where
+    // course was pre-filled from an existing lead before college-scope filter resolved).
+    return (
+      visibleCourseSettings.find((item) => String(item._id ?? '').trim() === target) ??
+      courseSettings.find((item) => String(item._id ?? '').trim() === target)
+    );
+  }, [visibleCourseSettings, courseSettings, form.courseId]);
 
   const selectedBranch = useMemo(() => {
     const target = String(form.branchId ?? '').trim();
@@ -309,9 +291,9 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
     }
     const applyKey = `${lead.id}:${debouncedPhones.studentPhone}:${debouncedPhones.fatherPhone}`;
     if (appliedLeadKeyRef.current === applyKey) return;
-    setForm((prev) => applyExistingLeadToForm(prev, lead, visibleCourseSettings));
+    setForm((prev) => applyExistingLeadToForm(prev, lead));
     appliedLeadKeyRef.current = applyKey;
-  }, [open, matchedLead, debouncedPhones.studentPhone, debouncedPhones.fatherPhone, courseSettings]);
+  }, [open, matchedLead, debouncedPhones.studentPhone, debouncedPhones.fatherPhone]);
 
   const createDraftMutation = useMutation({
     mutationFn: async () => {
@@ -481,7 +463,7 @@ export function AddJoiningFormModal({ open, onClose, defaultReference1 = '', rea
                     value={form.courseId}
                     onChange={(event) => {
                       const target = String(event.target.value ?? '').trim();
-                      const course = courseSettings.find((item) => String(item._id ?? '').trim() === target);
+                      const course = visibleCourseSettings.find((item) => String(item._id ?? '').trim() === target);
                       setForm((prev) => ({
                         ...prev,
                         courseId: event.target.value,
