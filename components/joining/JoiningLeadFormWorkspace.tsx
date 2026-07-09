@@ -6536,10 +6536,80 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </div>
                 ))}
               </div>
-              </ApplicationInfoCard>
+              </ApplicationInfoCard>            </JoiningStepOneShell>
+
+            {renderWizardStepFooter(1)}
+            </div>
+
+            <div
+              id="joining-wizard-step-2"
+              className={cn(
+                'space-y-10',
+                (useWizard && applicationWizardStep !== 2) || isPublicEdit ? 'hidden' : ''
+              )}
+            >
+              <section
+                className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                      Step 2 — Admission fee workflow
+                    </p>
+                    <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Important Documents &amp; fee lines
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!isPublicEdit && programLevelTrimmed ? (
+                      <PrintableCertificateChecklist
+                        certificateGuidance={certificateGuidance}
+                        certificateChecklistParsed={certificateChecklistParsed}
+                        programLevel={programLevelTrimmed}
+                        certificationStatus={derivedCertificationStatus}
+                        studentName={formState.studentInfo.name || lead?.name}
+                        fatherName={formState.parents.father.name}
+                        course={formState.courseInfo.course}
+                        branch={formState.courseInfo.branch}
+                        enquiryNumber={lead?.enquiryNumber}
+                      />
+                    ) : null}
+                    {canWriteJoining && !isPublicEdit ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        disabled={saveStepTwoMutation.isPending || !programLevelTrimmed}
+                        onClick={() => saveStepTwoMutation.mutate()}
+                      >
+                        {saveStepTwoMutation.isPending ? 'Saving…' : 'Save certificate & fee lines'}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {!isPublicEdit && programLevelTrimmed ? (
+                  <CertificateInformationChecklistBlock
+                    variant="admission-step-two"
+                    radioNameSuffix="-joining-wizard-step2"
+                    derivedCertificationStatus={derivedCertificationStatus}
+                    programLevelTrimmed={programLevelTrimmed}
+                    isLoadingCertificateGuidance={isLoadingCertificateGuidance}
+                    certificateGuidance={certificateGuidance}
+                    certificateChecklistParsed={certificateChecklistParsed}
+                    onChecklistOptionChange={updateCertificateChecklistOption}
+                    onChecklistStatusChange={updateCertificateChecklistStatus}
+                    title="Important Documents"
+                  />
+                ) : (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                    Select a program level under Course &amp; Quota in Step 1 to load certificate rules.
+                  </p>
+                )}
+
+              </section>
 
               <ApplicationInfoCard
-                title="Documents checklist"
+                title="Other Documents to Submit"
                 icon={<FileText className="h-4 w-4" aria-hidden />}
               >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -6547,8 +6617,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   <p className="text-sm text-gray-500 dark:text-slate-400">
                     Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
                     Certificate are tracked under{' '}
-                    <span className="font-medium">Certificate information checklist</span>
-                    {!isPublicEdit ? ' on Step 2' : ''}.
+                    <span className="font-medium">Important Documents</span>.
                     {isManagementQuotaSelected ? (
                       <>
                         {' '}
@@ -6608,77 +6677,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   ))}
               </div>
               </ApplicationInfoCard>
-
-            </JoiningStepOneShell>
-
-            {renderWizardStepFooter(1)}
-            </div>
-
-            <div
-              id="joining-wizard-step-2"
-              className={cn(
-                'space-y-10',
-                (useWizard && applicationWizardStep !== 2) || isPublicEdit ? 'hidden' : ''
-              )}
-            >
-              <section
-                className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
-              >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
-                      Step 2 — Admission fee workflow
-                    </p>
-                    <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                      Certificate checklist &amp; fee lines
-                    </h2>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!isPublicEdit && programLevelTrimmed ? (
-                      <PrintableCertificateChecklist
-                        certificateGuidance={certificateGuidance}
-                        certificateChecklistParsed={certificateChecklistParsed}
-                        programLevel={programLevelTrimmed}
-                        certificationStatus={derivedCertificationStatus}
-                        studentName={formState.studentInfo.name || lead?.name}
-                        fatherName={formState.parents.father.name}
-                        course={formState.courseInfo.course}
-                        branch={formState.courseInfo.branch}
-                        enquiryNumber={lead?.enquiryNumber}
-                      />
-                    ) : null}
-                    {canWriteJoining && !isPublicEdit ? (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        disabled={saveStepTwoMutation.isPending || !programLevelTrimmed}
-                        onClick={() => saveStepTwoMutation.mutate()}
-                      >
-                        {saveStepTwoMutation.isPending ? 'Saving…' : 'Save certificate & fee lines'}
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-
-                {!isPublicEdit && programLevelTrimmed ? (
-                  <CertificateInformationChecklistBlock
-                    variant="admission-step-two"
-                    radioNameSuffix="-joining-wizard-step2"
-                    derivedCertificationStatus={derivedCertificationStatus}
-                    programLevelTrimmed={programLevelTrimmed}
-                    isLoadingCertificateGuidance={isLoadingCertificateGuidance}
-                    certificateGuidance={certificateGuidance}
-                    certificateChecklistParsed={certificateChecklistParsed}
-                    onChecklistOptionChange={updateCertificateChecklistOption}
-                    onChecklistStatusChange={updateCertificateChecklistStatus}
-                  />
-                ) : (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                    Select a program level under Course &amp; Quota in Step 1 to load certificate rules.
-                  </p>
-                )}
-
-              </section>
               {renderWizardStepFooter(2)}
             </div>
 
