@@ -18,6 +18,7 @@ export interface PrintFeeStructureYearRow {
 export interface PrintFeeAdjustment {
   feeHeadId?: string | null;
   feeHeadCode?: string;
+  feeHeadName?: string;
   studentYear?: number | string;
   /** New storage: raw builder / overall_concessions value. */
   amount?: number | string;
@@ -213,6 +214,7 @@ export function buildPrintFeeAdjustmentsFromStudentFeeDetails(
       return {
         feeHeadId: line.feeHeadId || catalog?.feeHead || null,
         feeHeadCode: line.feeHeadCode || catalog?.feeHeadCode || '',
+        feeHeadName: line.feeHeadName || catalog?.feeHeadName || '',
         studentYear: line.studentYear ?? catalog?.studentYear ?? 1,
         amount: line.amount ?? 0,
         concessionType: line.concessionType,
@@ -261,6 +263,15 @@ export function buildPrintFeeStructureDetailedTable(
     const key = columnAliasMap.get(rawKey) || (codeAlias ? columnAliasMap.get(codeAlias) : '') || rawKey;
     const year = Number(adjustment.studentYear) || 1;
     if (!type || !key) continue;
+
+    // Dynamically insert missing builder heads into the columns list so manually added fee heads are printed
+    if (!columnMap.has(key)) {
+      columnMap.set(key, {
+        key,
+        label: adjustment.feeHeadName || adjustment.feeHeadCode || 'Fee Head',
+        code: adjustment.feeHeadCode || '',
+      });
+    }
     const adjustmentKey = `${key}::${year}`;
     const existing = adjustmentMap.get(adjustmentKey);
     const existingType = normalizeAdjustmentType(existing?.concessionType);
@@ -288,7 +299,16 @@ export function buildPrintFeeStructureDetailedTable(
     ...Array.from(adjustmentMap.keys()).map((key) => Number(key.split('::')[1]) || 0)
   );
   const yearCount = Math.max(1, totalYears, maxFromData);
-  const columns = Array.from(columnMap.values());
+  const columns = Array.from(columnMap.values()).filter((col) => {
+    const label = String(col.label || '').trim().toLowerCase();
+    const code = String(col.code || '').trim().toUpperCase();
+    const isDefaultHead = 
+      /tuition|tution/i.test(label) || 
+      /transport|bus/i.test(label) || 
+      /other/i.test(label) ||
+      code === 'TRN01' || /^trn/i.test(code);
+    return isDefaultHead || adjustmentTypeByColumn.has(col.key);
+  });
   const rows: PrintFeeStructureDetailedYearRow[] = [];
 
   for (let year = 1; year <= yearCount; year += 1) {

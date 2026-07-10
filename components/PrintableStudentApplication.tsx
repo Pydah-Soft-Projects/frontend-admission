@@ -27,6 +27,8 @@ import {
   type PrintFeeStructureDetailedTable,
 } from '@/lib/printApplicationFeeStructure';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
+import { buildAccommodationInjectedRows } from '@/lib/joiningBusFeeSync';
+import { parseJoiningTransportDetails } from '@/components/admission/AdmissionStepThreeBusHostelPanel';
 import { normalizeJoiningDateOfBirthInput } from '@/lib/joiningRegistrationFieldMap';
 import { normalizeAddressFieldForDisplay } from '@/lib/formatJoiningAddressDisplay';
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
@@ -207,32 +209,17 @@ function formatPrintFeeAmount(amount?: number | null): string {
 function renderPrintFeeStructureDetailedTableHtml(table: PrintFeeStructureDetailedTable): string {
   if (!table.columns.length || !table.rows.length) return '';
 
-  const secondHeader = table.columns.some((column) => column.adjustmentType);
   return `
     <div class="print-fee-structure-block">
       <div class="print-fee-structure-title">Fee Structure</div>
       <table class="data-table print-fee-structure-table">
         <thead>
           <tr>
-            <th${secondHeader ? ' rowspan="2"' : ''}>Year</th>
+            <th>Year</th>
             ${table.columns
-              .map((column) => {
-                const label = column.label;
-                return `<th${column.adjustmentType ? ' colspan="2"' : secondHeader ? ' rowspan="2"' : ''}>${escapeHtml(label)}</th>`;
-              })
+              .map((column) => `<th>${escapeHtml(column.label)}</th>`)
               .join('')}
           </tr>
-          ${
-            secondHeader
-              ? `<tr>${table.columns
-                  .map((column) =>
-                    column.adjustmentType
-                      ? `<th>Actual</th><th>${column.adjustmentType === 'CONCESSION' ? 'Concession' : 'Revised Fee'}</th>`
-                      : ''
-                  )
-                  .join('')}</tr>`
-              : ''
-          }
         </thead>
         <tbody>
           ${table.rows
@@ -243,12 +230,12 @@ function renderPrintFeeStructureDetailedTableHtml(table: PrintFeeStructureDetail
               ${table.columns
                 .map((column) => {
                   const cell = row.cells[column.key] || { actual: null, adjustment: null };
-                  const actualText =
-                    cell.actual != null && cell.actual > 0 ? escapeHtml(formatPrintFeeAmount(cell.actual)) : '-';
-                  if (column.adjustmentType) {
-                    return `<td>${actualText}</td><td>${cell.adjustment != null && cell.adjustment > 0 ? escapeHtml(formatPrintFeeAmount(cell.adjustment)) : '-'}</td>`;
-                  }
-                  return `<td>${actualText}</td>`;
+                  const valueToDisplay = cell.adjustment != null && cell.adjustment > 0 ? cell.adjustment : cell.actual;
+                  const valueText =
+                    valueToDisplay != null && valueToDisplay > 0
+                      ? escapeHtml(formatPrintFeeAmount(valueToDisplay))
+                      : '-';
+                  return `<td>${valueText}</td>`;
                 })
                 .join('')}
             </tr>
@@ -377,6 +364,23 @@ async function resolvePrintFeeStructureTableHtml(
 
   const catalog = courseCatalogFromCourseList(courseList);
   const totalYears = resolveProgramTotalYears(catalog, courseId, branchId, feeStructures);
+
+  const regData = application.registrationFormData && typeof application.registrationFormData === 'object'
+    ? (application.registrationFormData as Record<string, unknown>)
+    : {};
+  const transportDetails = parseJoiningTransportDetails(
+    regData.transport_details || regData.transportDetails || (application as any).transportDetails || (application as any).transport_details
+  );
+  const accommodationInjected = buildAccommodationInjectedRows(transportDetails, {
+    totalYears,
+    batch,
+    course: resolvedCourseName,
+    branch: resolvedBranchName,
+    quota: quota,
+  });
+
+  const combinedFeeStructures = [...feeStructures, ...accommodationInjected];
+
   const resolvedAdmissionNumber =
     String(admissionNumber || (application as Admission).admissionNumber || '').trim();
   let overallAdjustments: PrintFeeAdjustment[] = [];
@@ -387,10 +391,35 @@ async function resolvePrintFeeStructureTableHtml(
   }
   const embeddedAdjustments = buildPrintFeeAdjustmentsFromStudentFeeDetails(
     application.studentFeeDetails?.lines || [],
-    feeStructures
+    combinedFeeStructures
   );
-  const adjustments = mergePrintFeeAdjustments(overallAdjustments, embeddedAdjustments);
-  const detailedTable = buildPrintFeeStructureDetailedTable(feeStructures, totalYears, adjustments);
+  // Load master fee heads list to resolve names of heads (like TRN01 -> Transport Fee)
+  let feeHeads: any[] = [];
+  try {
+    const res = await feeStructureAPI.feeHeads();
+    const payload = res?.data;
+    feeHeads = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  } catch (err) {
+    console.error('Failed to load fee heads for print lookup:', err);
+  }
+
+  const mergedAdjustments = mergePrintFeeAdjustments(overallAdjustments, embeddedAdjustments).map((adj) => {
+    if (adj.feeHeadName && adj.feeHeadName.trim()) return adj;
+    const matchingHead = feeHeads.find(
+      (h) =>
+        (adj.feeHeadId && String(h._id || h.id) === String(adj.feeHeadId)) ||
+        (adj.feeHeadCode && String(h.code).trim().toUpperCase() === String(adj.feeHeadCode).trim().toUpperCase())
+    );
+    if (matchingHead) {
+      return {
+        ...adj,
+        feeHeadName: matchingHead.name,
+      };
+    }
+    return adj;
+  });
+
+  const detailedTable = buildPrintFeeStructureDetailedTable(combinedFeeStructures, totalYears, mergedAdjustments);
 
   return renderPrintFeeStructureDetailedTableHtml(detailedTable);
 }

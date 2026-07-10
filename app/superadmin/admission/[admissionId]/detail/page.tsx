@@ -278,6 +278,7 @@ export default function AdmissionDetailPage() {
         return null;
       }
     },
+    staleTime: 30_000,
   });
 
   const transactions: PaymentTransaction[] = useMemo(() => {
@@ -303,6 +304,7 @@ export default function AdmissionDetailPage() {
         return null;
       }
     },
+    staleTime: 30_000,
   });
 
   const joiningForReference = joiningForRegistrationData?.data?.joining;
@@ -413,6 +415,7 @@ export default function AdmissionDetailPage() {
     queryKey: ['courses', 'certificate-guidance', programLevelTrimmed, 'admit-card-print'],
     enabled: Boolean(programLevelTrimmed),
     queryFn: async () => courseAPI.getCertificateGuidance(programLevelTrimmed),
+    staleTime: 120_000,
   });
 
   const certificateGuidanceForPrint: CertificateGuidance | null = useMemo(() => {

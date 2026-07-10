@@ -74,8 +74,13 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Don't redirect if it's a login attempt (user is already trying to login)
       const isLoginRequest = error.config?.url?.includes('/auth/login');
+      
+      // Don't auto-logout for print proxy errors - these may be external service auth failures
+      // The print proxy converts external service 401/403 to 422, so genuine print proxy 401s
+      // indicate user session expired, but we want to handle that gracefully without logout
+      const isPrintRequest = error.config?.url?.includes('/print/');
 
-      if (!isLoginRequest) {
+      if (!isLoginRequest && !isPrintRequest) {
         // Unauthorized on other private routes - clear token and redirect to login
         Cookies.remove('token', { path: '/' });
         Cookies.remove('user', { path: '/' });
@@ -1777,6 +1782,32 @@ export const transportAPI = {
     const response = await api.get(`/transport/routes/${encodeURIComponent(routeId)}`);
     return response.data;
   },
+  getNextApplicationNumberPreview: async (params: {
+    academicYear: string;
+    collegeId?: number | null;
+    managedCourseId?: number | null;
+    courseName?: string | null;
+    collegeName?: string | null;
+  }) => {
+    const query = new URLSearchParams();
+    query.append('academicYear', params.academicYear);
+    if (params.collegeId) query.append('collegeId', String(params.collegeId));
+    if (params.managedCourseId) query.append('managedCourseId', String(params.managedCourseId));
+    if (params.courseName) query.append('courseName', params.courseName);
+    if (params.collegeName) query.append('collegeName', params.collegeName);
+    const response = await api.get(`/transport/next-application-number?${query.toString()}`);
+    return response.data;
+  },
+  getStudentTransportRequest: async (params: {
+    admissionNumber: string;
+    academicYear?: string | null;
+  }) => {
+    const query = new URLSearchParams();
+    query.append('admissionNumber', params.admissionNumber);
+    if (params.academicYear) query.append('academicYear', params.academicYear);
+    const response = await api.get(`/transport/requests?${query.toString()}`);
+    return response.data;
+  },
 };
 
 export const hostelAPI = {
@@ -1824,6 +1855,20 @@ export const hostelAPI = {
     if (params.course) query.set('course', params.course);
     if (params.totalYears != null) query.set('totalYears', String(params.totalYears));
     const response = await api.get(`/hostel/fee?${query.toString()}`);
+    return response.data;
+  },
+  getStudentHostelDetails: async (params: {
+    admissionNumber?: string;
+    joiningId?: string;
+    hostelId?: string;
+    academicYear?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params.admissionNumber) query.append('admissionNumber', params.admissionNumber);
+    if (params.joiningId) query.append('joiningId', params.joiningId);
+    if (params.hostelId) query.append('hostelId', params.hostelId);
+    if (params.academicYear) query.append('academicYear', params.academicYear);
+    const response = await api.get(`/hostel/student?${query.toString()}`);
     return response.data;
   },
 };
@@ -2565,6 +2610,29 @@ export const visitorAPI = {
     const response = await api.get('/visitors/recent');
     return response.data;
   },
+};
+
+// Print API proxy consumer
+export const printAPI = {
+  print: async (service: string, params?: Record<string, unknown>, body?: unknown) => {
+    const q = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== '') {
+          q.append(key, String(val));
+        }
+      });
+    }
+    const queryString = q.toString() ? `?${q.toString()}` : '';
+    
+    const response = await api.request({
+      method: body ? 'POST' : 'GET',
+      url: `/print/${service}${queryString}`,
+      data: body,
+      responseType: 'blob',
+    });
+    return response.data;
+  }
 };
 
 export default api;

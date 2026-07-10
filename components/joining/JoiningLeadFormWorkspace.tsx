@@ -124,6 +124,11 @@ import {
   FeeStructure,
   Lead,
 } from '@/types';
+
+type RequiredOverride = JoiningStudentFeeLineOverride & {
+  amount: number;
+  concessionType: 'CONCESSION' | 'REVISED_FEE';
+};
 import {
   useDashboardHeader,
   useJoiningDeskPermissions,
@@ -138,6 +143,7 @@ import {
   buildPaymentReceiptDetailsFromForm,
 } from '@/components/joining/PrintablePaymentReceipt';
 import { PrintableCertificateChecklist } from '@/components/joining/PrintableCertificateChecklist';
+import { handleExternalPrint } from '@/lib/printHtml';
 import {
   PrintableAdmitCard,
   buildAdmitCardStudentFromForm,
@@ -202,6 +208,32 @@ const extractFeeHeadRows = (response: unknown): FeeHead[] => {
     if (Array.isArray(nested)) return nested as FeeHead[];
   }
   return [];
+};
+
+const filterEmptyFeeHeads = (lines: JoiningStudentFeeLineOverride[]): JoiningStudentFeeLineOverride[] => {
+  const headGroups = new Map<string, JoiningStudentFeeLineOverride[]>();
+  for (const line of lines) {
+    const key = String(line.feeHeadId || line.feeHeadCode || '').trim();
+    if (!key) continue;
+    if (!headGroups.has(key)) {
+      headGroups.set(key, []);
+    }
+    headGroups.get(key)!.push(line);
+  }
+  const validLines: JoiningStudentFeeLineOverride[] = [];
+  for (const groupLines of headGroups.values()) {
+    const hasAnyValue = groupLines.some(
+      (line) => line.amount !== undefined && line.amount !== null && Number(line.amount) > 0
+    );
+    if (hasAnyValue) {
+      for (const line of groupLines) {
+        if (line.amount !== undefined && line.amount !== null && Number(line.amount) > 0) {
+          validLines.push(line);
+        }
+      }
+    }
+  }
+  return validLines;
 };
 
 const formatDateTime = (value?: string) => {
@@ -704,7 +736,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const joiningPerm = useModulePermission('joining');
   const joiningPermData = useModulePermissionRaw('joining');
-  const { canEditAdmission, canApproveFeeRequest, canEditReference } = useJoiningDeskPermissions();
+  const { canEditAdmission, canApproveFeeRequest, canEditReference, canSubmitFeeRequest } = useJoiningDeskPermissions();
   const paymentsPerm = useModulePermission('payments');
   const canAccessJoiningModule = isPublicEdit || joiningPerm.hasAccess;
   const canWriteJoining = isPublicEdit || joiningPerm.canWrite;
@@ -858,6 +890,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     queryKey: ['joining', effectiveAdminLeadId],
     enabled: !isPublicEdit && !!effectiveAdminLeadId,
     queryFn: async () => joiningAPI.getByLeadId(effectiveAdminLeadId as string),
+    staleTime: 10_000,
   });
 
   const data = useMemo(() => {
@@ -2530,84 +2563,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   /** Steps 2–4 unlock once the joining is approved (admission number generated). */
   const canProceedFromWizardStep1 = isPublicEdit || status === 'approved';
 
-  useEffect(() => {
-    if (isPublicEdit) {
-      return () => clearHeaderContent();
-    }
-    if (typeof window !== 'undefined') {
-      const scriptId = 'cashfree-sdk-v3';
-      if (!document.getElementById(scriptId)) {
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.async = true;
-        script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
-        document.body.appendChild(script);
-      }
-    }
-
-    if (!lead) {
-      return () => clearHeaderContent();
-    }
-
-    const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
-    const workflowAdmissionId = admissionRecord?._id;
-
-    setHeaderContent(
-      <div className="flex w-full min-w-0 flex-col gap-1.5">
-        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
-          Joining &amp; Admission Workspace
-        </h1>
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:flex-nowrap">
-          <p className="min-w-0 truncate text-sm text-slate-500 dark:text-slate-400">
-            {lead.name}
-            {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
-          </p>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <AdmissionWorkflowStepButtons
-              activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 4 : 1}
-              surface="joining-edit"
-              joiningId={workflowJoiningId}
-              admissionId={workflowAdmissionId}
-              joiningStatus={status}
-              onJoiningWizardStepSelect={useWizard ? handleJoiningWizardStepSelect : undefined}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
-              onClick={() => router.push('/superadmin/joining')}
-            >
-              Back to Joining Desk
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
-              onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
-            >
-              View Lead
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-
-    return () => clearHeaderContent();
-  }, [
-    isPublicEdit,
-    lead,
-    router,
-    setHeaderContent,
-    clearHeaderContent,
-    status,
-    publicLinkRouteKey,
-    joiningRecord?._id,
-    effectiveAdminLeadId,
-    admissionRecord?._id,
-    applicationWizardStep,
-    useWizard,
-    handleJoiningWizardStepSelect,
-  ]);
 
   useEffect(() => {
     if (isPublicEdit) return;
@@ -2791,6 +2746,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
       throw new Error('Admission record not found for this joining');
     },
+    staleTime: 10_000,
   });
 
   const pendingFeeRequestQuery = useQuery({
@@ -2800,7 +2756,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const res = await feeRequestAPI.getPendingForJoining(joiningRecord._id);
       return (res?.data ?? null) as import('@/types').FeeRequest | null;
     },
-    enabled: Boolean(joiningRecord?._id) && status === 'approved' && !isPublicEdit,
+    enabled: Boolean(joiningRecord?._id) && status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 15_000,
   });
   const pendingFeeRequest = pendingFeeRequestQuery.data;
@@ -2843,6 +2799,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       isAccommodationChoiceLocked(
         mergeJoiningTransportDetails(pendingFeeRequest?.transportDetails, transportDetails)
       ));
+
+  const [hasExistingTransportRequest, setHasExistingTransportRequest] = useState(false);
 
   const applyAdmissionRecordToWorkspace = useCallback(
     (record: Admission) => {
@@ -4297,7 +4255,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const res = await feeStructureAPI.list({});
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit,
+    enabled: status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 60_000,
   });
 
@@ -4327,7 +4285,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       });
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit,
+    enabled: status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 60_000,
   });
 
@@ -4337,7 +4295,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const res = await feeStructureAPI.feeHeads();
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit,
+    enabled: status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 60_000,
   });
 
@@ -4359,7 +4317,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const res = await paymentAPI.getOverallConcessions(String(admissionNumberDisplay || ''));
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit && Boolean(admissionNumberDisplay),
+    enabled: status === 'approved' && !isPublicEdit && Boolean(admissionNumberDisplay) && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 30_000,
     refetchOnMount: 'always',
   });
@@ -4368,6 +4326,21 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const data = (overallConcessionsQuery.data as { data?: { revisedFees?: unknown } } | undefined)?.data;
     return Array.isArray(data?.revisedFees) ? data.revisedFees : [];
   }, [overallConcessionsQuery.data]);
+
+  /**
+   * Set of feeHeadId (or feeHeadCode) values that came back from the API tagged
+   * pending:true — i.e. lines from a pending fee_request, not yet approved.
+   * Used to render builder rows as read-only with a "Pending Approval" badge.
+   */
+  const pendingConcessionHeadIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const line of overallConcessionLines as Array<{ feeHeadId?: string; feeHeadCode?: string; pending?: boolean }>) {
+      if (!line.pending) continue;
+      const id = String(line.feeHeadId || line.feeHeadCode || '').trim();
+      if (id) set.add(id);
+    }
+    return set;
+  }, [overallConcessionLines]);
 
   useEffect(() => {
     builderConcessionsDirtyRef.current = false;
@@ -4384,11 +4357,30 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const hydrateKey = `${admissionNumberDisplay}::${overallConcessionsQuery.dataUpdatedAt}::${feeStructureCatalogRows.length}`;
     if (builderConcessionsHydratedForRef.current === hydrateKey) return;
 
-    const lines = overallConcessionLinesToBuilderLines<JoiningStudentFeeLineOverride>(
+    const dbLines = overallConcessionLinesToBuilderLines<RequiredOverride>(
       overallConcessionLines as OverallConcessionLine[],
       feeStructureCatalogRows,
       feeHeadRows
     );
+
+    const draftLines = Array.isArray(joiningRecord?.studentFeeDetails?.lines)
+      ? joiningRecord.studentFeeDetails.lines
+      : [];
+
+    const mergedLinesMap = new Map<string, JoiningStudentFeeLineOverride>();
+    
+    // Draft lines from the joining record
+    for (const line of draftLines) {
+      if (line?.structureId) mergedLinesMap.set(String(line.structureId), line);
+    }
+    
+    // Approved / pending database lines take precedence
+    for (const line of dbLines) {
+      if (line?.structureId) mergedLinesMap.set(String(line.structureId), line);
+    }
+
+    const lines = Array.from(mergedLinesMap.values());
+
     const typeMap: Record<string, 'REVISED_FEE' | 'CONCESSION'> = {};
     for (const line of lines) {
       const headId = line.feeHeadId ? String(line.feeHeadId).trim() : '';
@@ -4411,6 +4403,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     overallConcessionLines,
     feeStructureCatalogRows,
     feeHeadRows,
+    joiningRecord?.studentFeeDetails?.lines,
   ]);
 
   const feeMongoTransactionsQuery = useQuery({
@@ -4530,7 +4523,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     for (const item of allFeeStructureRows) addToMap(item);
     for (const item of feeStructureCatalogRows) addToMap(item);
 
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const sortedList = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return sortedList.filter(h =>
+      /tuition|tution/i.test(h.name) ||
+      /other/i.test(h.name) ||
+      /transport|bus/i.test(h.name)
+    );
   }, [feeHeadRows, allFeeStructureRows, feeStructureCatalogRows]);
 
   const persistableBuilderLines = useMemo(
@@ -4540,6 +4538,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const currentBuilderHeads = useMemo(() => {
     const map = new Map<string, { id: string; name: string; code: string }>();
+
+    // Pre-populate with our 3 primary fee heads by default if they exist
+    const tutionHead = allUniqueFeeHeads.find(h => /tuition|tution/i.test(h.name));
+    const othersHead = allUniqueFeeHeads.find(h => /other/i.test(h.name));
+    const transportHead = allUniqueFeeHeads.find(h => /transport|bus/i.test(h.name));
+
+    if (tutionHead) map.set(tutionHead.id, tutionHead);
+    if (othersHead) map.set(othersHead.id, othersHead);
+    if (transportHead) map.set(transportHead.id, transportHead);
 
     for (const line of studentFeeDetails.lines || []) {
       if (line.concessionType !== 'CONCESSION' && line.concessionType !== 'REVISED_FEE') {
@@ -4575,11 +4582,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
     }
 
-    return Array.from(map.values());
+    return Array.from(map.values()).filter(h =>
+      /tuition|tution/i.test(h.name) ||
+      /other/i.test(h.name) ||
+      /transport|bus/i.test(h.name)
+    );
   }, [studentFeeDetails.lines, feeStructureCatalogRows, builderAddedHeadIds, allUniqueFeeHeads]);
 
   const builderPaymentRows = useMemo(() => {
-    return feeStructureCatalogRows.flatMap((row) => {
+    const combinedRows = [...feeStructureCatalogRows, ...accommodationInjectedRows];
+    return combinedRows.flatMap((row) => {
       const feeHeadId = String(row.feeHead || '').trim();
       const feeHeadCode = String(row.feeHeadCode || '').trim();
       const year = Number(row.studentYear) || 1;
@@ -4638,7 +4650,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         },
       ];
     });
-  }, [feeMongoPaidByHeadYear, feeStructureCatalogRows, overallConcessionByHeadYear, studentFeeDetails.lines]);
+  }, [feeMongoPaidByHeadYear, feeStructureCatalogRows, overallConcessionByHeadYear, studentFeeDetails.lines, accommodationInjectedRows]);
 
   const builderPaymentYearRows = useMemo(
     () => builderPaymentRows.filter((row) => row.studentYear === builderPaymentYear),
@@ -4677,7 +4689,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     feeHeadCode: string;
     studentYear: number;
     semester?: number | string | null;
-    amount: number;
+    amount: string;
   }) => {
     if (!canWritePayments) {
       showToast.error('You have read-only access to payments');
@@ -4696,7 +4708,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       setBuilderPaymentYear(target.studentYear);
       setBuilderPaymentTargets([target]);
       setBuilderPaymentForm({
-        amount: target.amount > 0 ? String(target.amount) : '',
+        amount: target.amount,
         paymentMode: 'Cash',
         receiptNumber: '',
         remarks: target.feeHeadName || target.feeHeadCode || 'Fee payment',
@@ -4886,7 +4898,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           ? 'Fee payment transaction recorded'
           : `${payableTargets.length} fee payment transactions recorded`
       );
-      setIsBuilderPaymentDialogOpen(false);
+      // Switch to transactions tab so the user can see the recorded entry
+      // instead of closing the dialog
+      setBuilderPaymentTab('transactions');
       setBuilderPaymentTargets([]);
       void queryClient.invalidateQueries({ queryKey: ['fee-mongo-transactions'] });
       setBuilderPaymentForm((prev) => ({
@@ -5036,7 +5050,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         registrationFormData: joiningRegistrationPatch,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
-          lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
+          lines: filterEmptyFeeHeads(studentFeeDetails.lines || []),
         },
       });
     },
@@ -5056,6 +5070,38 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
       showToast.error(error.response?.data?.message || 'Failed to save fee configuration');
+    },
+  });
+
+  const submitFeeRequestMutation = useMutation({
+    mutationFn: async () => {
+      const joiningId = joiningRecord?._id || workflowJoiningId;
+      if (!joiningId) {
+        throw new Error('Save the joining form first');
+      }
+      return feeRequestAPI.submit({
+        joiningId,
+        studentFeeDetails: {
+          batch: studentFeeDetails.batch || feeConfigurationBatch,
+          lines: filterEmptyFeeHeads(studentFeeDetails.lines || []),
+        },
+        registrationFormData: {
+          transport_details: transportDetails,
+        },
+      });
+    },
+    onSuccess: async () => {
+      builderConcessionsDirtyRef.current = false;
+      builderConcessionsHydratedForRef.current = null;
+      showToast.success('Fee request submitted for approval');
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ['fee-request-pending', joiningRecord?._id] });
+      if (admissionNumberDisplay) {
+        await queryClient.invalidateQueries({ queryKey: ['overall-concessions', admissionNumberDisplay] });
+      }
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      showToast.error(error.response?.data?.message || 'Failed to submit fee request');
     },
   });
 
@@ -5141,15 +5187,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       return (
         <WorkflowStickyActionBar
           id="joining-wizard-step-3-actions"
-          stepLabel="Step 3 — Bus & hostel"
-          hint={
-            canProceedStep3
-              ? 'Accommodation choice is set. Continue to Step 4 for fee configuration.'
-              : 'Choose bus (route and stage), hostel (category with fee), or None before continuing.'
-          }
           className={stickyClass}
         >
           <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(2)} />
+          {canWriteJoining && !hasExistingTransportRequest ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={saveStepTwoMutation.isPending || !canProceedStep3}
+              onClick={() => saveStepTwoMutation.mutate()}
+            >
+              {saveStepTwoMutation.isPending ? 'Saving…' : 'Save request'}
+            </Button>
+          ) : null}
           <WorkflowNextStepButton
             fromStep={3}
             surface={workflowSurface}
@@ -5181,23 +5232,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               {saveStepFourMutation.isPending ? 'Saving…' : 'Save fee configuration'}
             </Button>
           ) : null}
-          {isAdmissionEditable && (
-            <Button
-              variant="primary"
-              size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
-              disabled={
-                isUpdatingAdmission ||
-                isBusy ||
-                !canWriteJoining ||
-                !hasManagedCourseAndBranch ||
-                !admissionRecord?._id
-              }
-              onClick={handleSaveAdmissionRecord}
-            >
-              {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
-            </Button>
-          )}
         </WorkflowStickyActionBar>
       );
     }
@@ -5425,6 +5459,87 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     </>
   );
 
+  useEffect(() => {
+    if (isPublicEdit) {
+      return () => clearHeaderContent();
+    }
+    if (typeof window !== 'undefined') {
+      const scriptId = 'cashfree-sdk-v3';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.async = true;
+        script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+        document.body.appendChild(script);
+      }
+    }
+
+    if (!lead) {
+      return () => clearHeaderContent();
+    }
+
+    const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
+    const workflowAdmissionId = admissionRecord?._id;
+
+    setHeaderContent(
+      <div className="flex w-full min-w-0 flex-col gap-1.5">
+        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
+          Joining &amp; Admission Workspace
+        </h1>
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:flex-nowrap">
+          <p className="min-w-0 truncate text-sm text-slate-500 dark:text-slate-400">
+            {lead.name}
+            {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
+            {courseBranchSubtitle ? ` · ${courseBranchSubtitle}` : ''}
+          </p>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <AdmissionWorkflowStepButtons
+              activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 4 : 1}
+              surface="joining-edit"
+              joiningId={workflowJoiningId}
+              admissionId={workflowAdmissionId}
+              joiningStatus={status}
+              onJoiningWizardStepSelect={useWizard ? handleJoiningWizardStepSelect : undefined}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              onClick={() => router.push('/superadmin/joining')}
+            >
+              Back to Joining Desk
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
+            >
+              View Lead
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+
+    return () => clearHeaderContent();
+  }, [
+    isPublicEdit,
+    lead,
+    router,
+    setHeaderContent,
+    clearHeaderContent,
+    status,
+    publicLinkRouteKey,
+    joiningRecord?._id,
+    effectiveAdminLeadId,
+    admissionRecord?._id,
+    applicationWizardStep,
+    useWizard,
+    handleJoiningWizardStepSelect,
+    courseBranchSubtitle,
+  ]);
+
   return (
     <div
       className={`w-full space-y-4 pb-20 pt-1 sm:space-y-5 sm:pb-16 sm:pt-2 ${
@@ -5457,58 +5572,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         </div>
       )}
       <div className="rounded-xl border border-white/60 bg-white/95 p-1 shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none sm:p-1.5">
-        {!hideJoiningStepOneRedundantIntro ? (
-        <div className="mb-3 space-y-3">
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-semibold ${statusBadgeClass}`}>
-                <span className="inline-block h-2 w-2 rounded-full bg-current opacity-75" />
-                {statusLabel}
-              </span>
-              {!isNewJoining && lead?.enquiryNumber && (
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600 dark:bg-slate-800/70 dark:text-slate-200">
-                  Enquiry #{lead.enquiryNumber}
-                </span>
-              )}
-              {isNewJoining && (
-                <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-600 dark:bg-blue-900/60 dark:text-blue-200">
-                  New Joining Form
-                </span>
-              )}
-              {admissionNumberDisplay && (
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200">
-                  Admission #{admissionNumberDisplay}
-                </span>
-              )}
-              {meta.updatedAt && (
-                <span>
-                  Last updated: <strong>{new Date(meta.updatedAt).toLocaleString()}</strong>
-                </span>
-              )}
-              {meta.submittedAt && (
-                <span>
-                  Submitted: <strong>{new Date(meta.submittedAt).toLocaleString()}</strong>
-                </span>
-              )}
-              {meta.approvedAt && (
-                <span>
-                  Approved: <strong>{new Date(meta.approvedAt).toLocaleString()}</strong>
-                </span>
-              )}
-            </div>
-            <div className="text-sm text-slate-600 dark:text-slate-300">
-              <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                {formState.studentInfo.name || lead?.name || (isNewJoining ? 'New Student' : '—')}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span>{formState.studentInfo.phone || lead?.phone || 'No phone recorded'}</span>
-                {!isNewJoining && courseBranchSubtitle ? (
-                  <span>· {courseBranchSubtitle}</span>
-                ) : null}
-                {!isNewJoining && lead?.district && <span>· {lead.district}</span>}
-              </div>
-            </div>
-        </div>
-        ) : null}
+
 
         {isBusy ? (
           <div className="rounded-2xl border border-white/60 bg-white/90 p-12 text-center shadow-lg shadow-blue-100/20 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
@@ -6702,6 +6766,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     courseName={formState.courseInfo.course}
                     programTotalYears={programTotalYears}
                     joiningAcademicYear={stepOneAcademicYear}
+                    collegeId={selectedCollegeId ? Number(selectedCollegeId) : null}
+                    managedCourseId={formState.courseInfo.courseId ? Number(formState.courseInfo.courseId) : null}
+                    admissionNumber={admissionNumberDisplay}
+                    joiningId={joiningRecord?._id}
+                    onExistingRequestChange={setHasExistingTransportRequest}
                   />
                   {renderWizardStepFooter(3)}
                 </>
@@ -6716,96 +6785,53 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               )}
             >
             {(useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4) ? (
-              <section
+              <div
                 id="joining-post-admission-payments"
-                className="space-y-8 rounded-2xl border-2 border-emerald-200/80 bg-gradient-to-b from-emerald-50/40 to-white/95 p-6 shadow-lg shadow-emerald-100/30 backdrop-blur dark:border-emerald-900/50 dark:from-emerald-950/20 dark:to-slate-900/70 dark:shadow-none"
+                className="space-y-8"
               >
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                    Step 4 — Fee configuration &amp; payments
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    {status === 'approved' ? 'Post-admission desk' : 'Fee preview & submit'}
-                  </h2>
-                  <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-                    {status === 'approved' ? (
-                      <>
-                        Review configured fee heads, save revised/concession amounts directly, and use the separate
-                        collection panel below to record payments.
-                      </>
-                    ) : (
-                      <>
-                        Review configured fee heads for this course and branch. Save draft or submit for approval when
-                        Steps 1 and 2 are complete.
-                      </>
-                    )}
-                  </p>
-                </div>
-
-              <FeeStructureSection
-                course={formState.courseInfo.course}
-                branch={feePortalBranchLabel}
-                quota={formState.courseInfo.quota}
-                batch={stepOneAcademicYear || feeConfigurationBatch}
-                studentStatus={studentStatus}
-                title="Fee configuration (Fee Management database)"
-                description={
-                  status === 'approved'
-                    ? 'Original configured fees from Fee Management plus bus/hostel rows from Step 3. Concessions are managed separately below and applied in Collect Payment.'
-                    : 'Preview configured fee heads. Bus or hostel fees from Step 3 appear here for each program year.'
-                }
-                onSelectFeeHead={undefined}
-                activeFeeHeadId={selectedFeeHead?.feeHeadId ?? null}
-                canUseCashfree={canUseCashfree}
-                feeDetailsEditable={false}
-                pivotView
-                studentFeeDetails={undefined}
-                onStudentFeeDetailsChange={undefined}
-                injectedFeeRows={accommodationInjectedRows}
-              />
-
-              {status === 'approved' && (
-                <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-lg dark:border-emerald-900/40 dark:bg-slate-900/70">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-emerald-700 dark:text-emerald-200">
-                        Collect Payment
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Open the fee collection modal, review the year-wise configured fee heads with revised/concession
-                        amounts, select one fee head/year, then record Cash or Bank payment.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      onClick={() => openBuilderPaymentDialog()}
-                      disabled={
-                        !canWritePayments ||
-                        !joiningRecord?._id ||
-                        !admissionRecord?._id ||
-                        builderPaymentRows.length === 0
-                      }
-                    >
-                      Collect Payment
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               {/* Concessions / Revised Fees Builder Section */}
               {status === 'approved' && canWriteJoining && canEditAdmission && (
                 <div className="mt-8 rounded-2xl border border-blue-200 bg-white p-6 shadow-lg dark:border-blue-900/40 dark:bg-slate-900/70">
-                  <h3 className="text-lg font-bold text-blue-700 dark:text-blue-200 flex items-center gap-2">
-                    <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-300" />
-                    Revised Fee & Concessions Builder
-                  </h3>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Add fee heads, choose whether each head is a revised fee or concession, and configure year-wise
-                    amounts. Saved concessions are stored in the overall concessions table and loaded from there on
-                    each visit.
-                  </p>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+                    <h3 className="text-lg font-bold text-blue-700 dark:text-blue-200 flex items-center gap-2">
+                      <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-300" />
+                      Revised Fee & Concessions Builder
+                    </h3>
+                    {status === 'approved' && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={() => openBuilderPaymentDialog()}
+                        disabled={
+                          !canWritePayments ||
+                          !joiningRecord?._id ||
+                          !admissionRecord?._id ||
+                          builderPaymentRows.length === 0
+                        }
+                      >
+                        Collect Payment
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Pending approval notice — shown inside builder when a request is awaiting */}
+                  {pendingFeeRequest ? (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                      <span className="font-semibold">Pending approval —</span> a revised fee request was submitted on{' '}
+                      {pendingFeeRequest.submittedAt
+                        ? new Date(pendingFeeRequest.submittedAt).toLocaleString('en-IN')
+                        : '—'}
+                      . Rows highlighted in amber are locked until approved or rejected on the{' '}
+                      {canApproveFeeRequest ? (
+                        <Link href="/superadmin/joining/fee-requests" className="font-semibold underline underline-offset-2">
+                          Fee Requests
+                        </Link>
+                      ) : (
+                        <span className="font-semibold">Fee Requests</span>
+                      )}{' '}desk.
+                    </div>
+                  ) : null}
 
                   {/* Dropdown to add fee head */}
                   <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -6839,6 +6865,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     >
                       {saveStepFourMutation.isPending ? 'Saving...' : 'Save Configuration'}
                     </Button>
+                    {hasRevisedFeeLines && canSubmitFeeRequest && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        className="!bg-amber-600 hover:!bg-amber-700 text-white dark:!bg-amber-700 dark:hover:!bg-amber-800 border-none"
+                        onClick={() => submitFeeRequestMutation.mutate()}
+                        disabled={submitFeeRequestMutation.isPending || isBusy || !workflowJoiningId}
+                      >
+                        {submitFeeRequestMutation.isPending
+                          ? 'Submitting...'
+                          : pendingFeeRequest
+                            ? 'Update Fee Request'
+                            : 'Submit Fee Request'}
+                      </Button>
+                    )}
                     <span className="text-[11px] text-slate-500 dark:text-slate-400">
                       {feeHeadsQuery.isLoading
                         ? 'Loading all Fee Management heads...'
@@ -6866,6 +6908,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         </thead>
                         <tbody>
                           {currentBuilderHeads.map((head) => {
+                            // Is this head locked because it belongs to a pending fee_request?
+                            const isPendingHead =
+                              pendingConcessionHeadIds.has(String(head.id)) ||
+                              pendingConcessionHeadIds.has(String(head.code || ''));
+
                             const headLines = (studentFeeDetails.lines || []).filter((line) => {
                               if (line.feeHeadId && String(line.feeHeadId) === String(head.id)) return true;
                               return feeStructureCatalogRows.some(
@@ -6908,9 +6955,23 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                               markBuilderConcessionsDirty();
                             };
                             return (
-                              <tr key={head.id} className="border-t border-slate-100 hover:bg-slate-50/50 dark:border-slate-800 dark:hover:bg-slate-800/40">
+                              <tr
+                                key={head.id}
+                                className={
+                                  isPendingHead
+                                    ? 'border-t border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20'
+                                    : 'border-t border-slate-100 hover:bg-slate-50/50 dark:border-slate-800 dark:hover:bg-slate-800/40'
+                                }
+                              >
                                 <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
-                                  <div>{head.name}</div>
+                                  <div className="flex items-center gap-2">
+                                    <span>{head.name}</span>
+                                    {isPendingHead && (
+                                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                                        Pending Approval
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="text-[10px] font-normal text-slate-400 font-mono">{head.code}</div>
                                 </td>
                                 <td className="px-4 py-3">
@@ -6921,7 +6982,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                         e.target.value === 'CONCESSION' ? 'CONCESSION' : 'REVISED_FEE'
                                       )
                                     }
-                                    className="min-w-[8.5rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    className="min-w-[8.5rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     <option value="REVISED_FEE">Revised Fee</option>
                                     <option value="CONCESSION">Concession</option>
@@ -6988,7 +7049,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                         <input
                                           type="number"
                                           min={0}
-                                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-slate-900 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-slate-900 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                                           value={currentAmount ?? ''}
                                           onChange={(e) => {
                                             const val = e.target.value === '' ? '' : Number(e.target.value);
@@ -6996,11 +7057,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                             patchBuilderLine({ amount: val === '' ? null : val });
                                           }}
                                         />
-                                        {matchingCatalog && (
-                                          <span className="text-[10px] text-slate-400">
-                                            Catalog: {formatCurrency(catalogAmount)}
-                                          </span>
-                                        )}
                                         {headConcessionType === 'CONCESSION' && currentAmount !== null && catalogAmount > 0 ? (
                                           <span className="text-[10px] text-emerald-600 dark:text-emerald-300">
                                             Payable: {formatCurrency(Math.max(catalogAmount - currentAmount, 0))}
@@ -7056,29 +7112,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 </div>
               )}
 
-              {status === 'approved' && pendingFeeRequest ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                  A revised fee request was submitted on{' '}
-                  {pendingFeeRequest.submittedAt
-                    ? new Date(pendingFeeRequest.submittedAt).toLocaleString('en-IN')
-                    : '—'}
-                  . It is awaiting approval on the{' '}
-                  {canApproveFeeRequest ? (
-                    <Link
-                      href="/superadmin/joining/fee-requests"
-                      className="font-semibold underline underline-offset-2"
-                    >
-                      Fee Requests
-                    </Link>
-                  ) : (
-                    <span className="font-semibold">Fee Requests</span>
-                  )}{' '}
-                  desk. Fee portal sync runs after approval.
-                </div>
-              ) : null}
-
               {renderWizardStepFooter(4)}
-            </section>
+            </div>
             ) : null}
             </div>
           </div>
@@ -7493,6 +7528,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         <th className={STEP_FOUR_TABLE_HEAD_CELL}>Year</th>
                         <th className={STEP_FOUR_TABLE_HEAD_CELL}>Date</th>
                         <th className={STEP_FOUR_TABLE_HEAD_CELL}>Collected By</th>
+                        <th className={STEP_FOUR_TABLE_HEAD_CELL}>Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -7536,6 +7572,38 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                             </td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                               {row.collectedByName || '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              {row.receiptNumber && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const receiptDetails = {
+                                      receiptNumber: row.receiptNumber,
+                                      studentName: formState.studentInfo.name || lead?.name || '—',
+                                      fatherName: formState.parents.father.name || '—',
+                                      course: formState.courseInfo.course || '—',
+                                      branch: formState.courseInfo.branch || '—',
+                                      quota: formState.courseInfo.quota || undefined,
+                                      enquiryNumber: lead?.enquiryNumber,
+                                      admissionNumber: admissionNumberDisplay || undefined,
+                                      amount: String(row.amount || '0'),
+                                      mode: (row.paymentMode === 'Net Banking' || row.paymentMode === 'Bank') ? 'online' : 'cash',
+                                      transactionId: row.receiptNumber,
+                                      feeHeadLabel: row.feeHeadName || row.remarks || 'Fee head',
+                                      collectedAt: row.paymentDate ? new Date(row.paymentDate).toLocaleString('en-IN') : '—',
+                                      collectorName: row.collectedByName,
+                                    };
+                                    void handleExternalPrint('fee', { template: 'fee-receipt' }, { template: 'fee-receipt', data: receiptDetails }, 'Fee Receipt');
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                                >
+                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                  </svg>
+                                  Print
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );

@@ -59,3 +59,86 @@ export function printHtmlDocument(
     if (!printTriggered) triggerPrint();
   }, deferPrintMs);
 }
+
+/** Fetch external print document from API proxy and trigger rendering/print. */
+export async function handleExternalPrint(
+  service: string,
+  params?: Record<string, unknown>,
+  body?: unknown,
+  title = 'Print document'
+): Promise<void> {
+  const { printAPI } = await import('@/lib/api');
+  const { showToast } = await import('@/lib/toast');
+
+  try {
+    showToast.info('Preparing print document...');
+    const blob = await printAPI.print(service, params, body);
+    
+    if (!blob || blob.size === 0) {
+      showToast.error('No content returned from print service');
+      return;
+    }
+
+    if (blob.type === 'application/pdf') {
+      const blobUrl = URL.createObjectURL(blob);
+      try {
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.src = blobUrl;
+        document.body.appendChild(iframe);
+        
+        iframe.onload = () => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            setTimeout(() => {
+              iframe.remove();
+              URL.revokeObjectURL(blobUrl);
+            }, 60000);
+          } catch (e) {
+            console.error('Failed to trigger print on PDF iframe, opening in new tab:', e);
+            window.open(blobUrl, '_blank');
+          }
+        };
+      } catch (err) {
+        console.error('Iframe creation failed for PDF, opening in new tab:', err);
+        window.open(blobUrl, '_blank');
+      }
+    } else {
+      // Treat as HTML
+      const text = await blob.text();
+      if (text.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.message) {
+            showToast.error(parsed.message);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      printHtmlDocument(text, title);
+    }
+  } catch (error: any) {
+    console.error('Print request failed:', error);
+    let message = 'Print service is currently unavailable. Please try again later.';
+    try {
+      if (error.response?.data) {
+        const text = typeof error.response.data.text === 'function' 
+          ? await error.response.data.text()
+          : String(error.response.data);
+        const parsed = JSON.parse(text);
+        if (parsed.message) message = parsed.message;
+      }
+    } catch {
+      // ignore
+    }
+    showToast.error(message);
+  }
+}

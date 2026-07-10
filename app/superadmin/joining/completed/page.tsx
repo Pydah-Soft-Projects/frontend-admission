@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -1427,7 +1427,7 @@ const CompletedAdmissionsPage = () => {
           if (!open) setStudentInfoViewRecord(null);
         }}
       >
-        <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[95vw] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Student information</DialogTitle>
             <DialogDescription>
@@ -1509,7 +1509,7 @@ const CompletedAdmissionsPage = () => {
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference</p>
                   <div className="mt-0.5 flex items-center gap-2">
-                    <p className="text-slate-700 dark:text-slate-300">
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
                       {resolveAdmissionReference1(studentInfoViewRecord) || '—'}
                     </p>
                     {canEditReference &&
@@ -1525,9 +1525,9 @@ const CompletedAdmissionsPage = () => {
                     ) : null}
                   </div>
                 </div>
-                <div>
+                <div className="sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
-                  <p className="mt-0.5 text-slate-700 dark:text-slate-300">
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
                     {resolveAdmissionSource(studentInfoViewRecord) || '—'}
                   </p>
                 </div>
@@ -2107,9 +2107,9 @@ const CompletedAdmissionsPage = () => {
       ) : null}
 
       {activeTab === 'detailed' ? (
-        <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
-          <div className="-mx-1 overflow-x-auto sm:mx-0">
-            <table className="min-w-[640px] w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
+        <div className="space-y-4">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <table className="min-w-[800px] w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
               <thead className="bg-slate-50/80 backdrop-blur-sm dark:bg-slate-900/70">
                 <tr>
                   <th className={tableThClass}>Admission #</th>
@@ -2168,15 +2168,6 @@ const CompletedAdmissionsPage = () => {
                       </td>
                       <td className={`${tableTdClass} text-right`}>
                         <div className="flex flex-wrap justify-end gap-1 sm:gap-2">
-                          {canEditAdmission && record.status !== ADMISSION_CANCELLED_STATUS && (
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              onClick={() => openCancelDialog(record)}
-                            >
-                              Cancel
-                            </Button>
-                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -2184,16 +2175,6 @@ const CompletedAdmissionsPage = () => {
                           >
                             View
                           </Button>
-                          {canEditReference && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openReferenceEditor(record)}
-                              title="Edit Reference 1 on admission, joining, and lead"
-                            >
-                              Ref
-                            </Button>
-                          )}
                           {canEditAdmission && record.joiningId ? (
                             <Link href={`/superadmin/joining/${record.joiningId}`}>
                               <Button variant="outline" size="sm" className="gap-1.5">
@@ -2213,6 +2194,25 @@ const CompletedAdmissionsPage = () => {
                               Edit
                             </Button>
                           ) : null}
+                          {canEditReference && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openReferenceEditor(record)}
+                              title="Edit Reference 1 on admission, joining, and lead"
+                            >
+                              Ref
+                            </Button>
+                          )}
+                          {canEditAdmission && record.status !== ADMISSION_CANCELLED_STATUS && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => openCancelDialog(record)}
+                            >
+                              Cancel
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2223,7 +2223,7 @@ const CompletedAdmissionsPage = () => {
           </div>
 
           {pagination.pages > 1 && (
-            <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 p-3 text-sm text-slate-600 sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4 dark:border-slate-700 dark:text-slate-300">
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4 dark:border-slate-700 dark:text-slate-300">
               <div className="text-center sm:text-left">
                 Page {pagination.page} of {pagination.pages}
               </div>
@@ -2249,11 +2249,11 @@ const CompletedAdmissionsPage = () => {
               </div>
             </div>
           )}
-        </Card>
+        </div>
       ) : activeTab === 'student-info' ? (
-        <Card className="overflow-hidden border-white/60 shadow-lg dark:border-slate-800/70 dark:shadow-none">
-          <div className="-mx-1 overflow-x-auto sm:mx-0">
-            <table className="min-w-[900px] w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
+        <div className="space-y-4">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <table className="min-w-[1200px] w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
               <thead className="bg-slate-50/80 backdrop-blur-sm dark:bg-slate-900/70">
                 <tr>
                   <th className={tableThClass}>Admission #</th>
@@ -2421,7 +2421,7 @@ const CompletedAdmissionsPage = () => {
           </div>
           
           {pagination.pages > 1 && (
-            <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 p-3 text-sm text-slate-600 sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4 dark:border-slate-700 dark:text-slate-300">
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4 dark:border-slate-700 dark:text-slate-300">
               <div className="text-center sm:text-left">
                 Page {pagination.page} of {pagination.pages}
               </div>
@@ -2431,7 +2431,7 @@ const CompletedAdmissionsPage = () => {
               </div>
             </div>
           )}
-        </Card>
+        </div>
       ) : activeTab === 'reference-list' ? (
         <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
           <div className="bg-slate-50 px-3 py-3 sm:px-6 sm:py-4 dark:bg-slate-800/50">
