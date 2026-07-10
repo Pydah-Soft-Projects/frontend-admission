@@ -34,6 +34,7 @@ import {
 } from '@/lib/admissionCourseDisplay';
 import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
+import { cn } from '@/lib/utils';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -1171,6 +1172,10 @@ const CompletedAdmissionsPage = () => {
   const abstractTdClass = 'px-2 py-2 text-center text-xs sm:px-3 sm:py-3 sm:text-sm';
   const pivotThClass =
     'px-2 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-slate-500 sm:px-3 sm:py-3 sm:text-[10px]';
+  const pivotTheadStickyTopClass = 'sticky top-0 z-20 bg-white dark:bg-slate-900';
+  const pivotTheadStickyCornerClass =
+    'sticky top-0 z-30 bg-white shadow-[2px_0_4px_-2px_rgba(15,23,42,0.08)] dark:bg-slate-900 dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.35)]';
+  const pivotTableScrollClass = 'max-h-[min(70vh,calc(100dvh-17rem))] overflow-auto';
   const pivotTdClass = 'px-2 py-2 text-center text-xs font-semibold sm:px-3 sm:py-3 sm:text-sm';
   const pivotMetaTdClass =
     'px-2 py-2 text-left text-xs text-slate-600 sm:px-3 sm:py-3 sm:text-sm dark:text-slate-300';
@@ -2433,27 +2438,30 @@ const CompletedAdmissionsPage = () => {
           )}
         </div>
       ) : activeTab === 'reference-list' ? (
-        <Card className="overflow-hidden border-none p-0 shadow-lg dark:shadow-none">
-          <div className="bg-slate-50 px-3 py-3 sm:px-6 sm:py-4 dark:bg-slate-800/50">
-            <h3 className="text-sm font-semibold text-slate-900 sm:text-base dark:text-slate-100">Reference list</h3>
-            <p className="mt-1 text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">
-              Admissions grouped by Reference 1 (admission record, then linked joining or CRM lead when
-              missing), broken down by course. Uses the course, branch, status, and admission date filters
-              above. Filter by Dept and Designation from the column headers. Click a reference row to view
-              its admissions.
-            </p>
-          </div>
-          <div className="-mx-1 overflow-x-auto sm:mx-0">
+        <Card className="border-none p-0 shadow-lg dark:shadow-none">
+          <div className={cn('-mx-1 sm:mx-0', pivotTableScrollClass)}>
             <table className="min-w-[480px] w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead>
-                <tr className="bg-white dark:bg-slate-900">
-                  <th className={`sticky left-0 z-10 bg-white ${pivotThClass} dark:bg-slate-900`}>
+                <tr className="bg-white shadow-[0_1px_0_0_rgba(15,23,42,0.08)] dark:bg-slate-900 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.06)]">
+                  <th
+                    className={cn(
+                      'sticky left-0',
+                      pivotTheadStickyCornerClass,
+                      pivotThClass
+                    )}
+                  >
                     S. No.
                   </th>
-                  <th className={`sticky left-10 z-10 bg-white sm:left-14 ${pivotThClass} dark:bg-slate-900`}>
+                  <th
+                    className={cn(
+                      'sticky left-10 sm:left-14',
+                      pivotTheadStickyCornerClass,
+                      pivotThClass
+                    )}
+                  >
                     Reference
                   </th>
-                  <th className={pivotThClass}>
+                  <th className={cn(pivotTheadStickyTopClass, pivotThClass)}>
                     <div className="flex min-w-[5.5rem] flex-col gap-0.5">
                       <span>Dept</span>
                       <select
@@ -2474,7 +2482,7 @@ const CompletedAdmissionsPage = () => {
                       </select>
                     </div>
                   </th>
-                  <th className={pivotThClass}>
+                  <th className={cn(pivotTheadStickyTopClass, pivotThClass)}>
                     <div className="flex min-w-[5.5rem] flex-col gap-0.5">
                       <span>Designation</span>
                       <select
@@ -2496,12 +2504,22 @@ const CompletedAdmissionsPage = () => {
                     <th
                       key={admissionPivotColumnReactKey(c)}
                       title={resolvePivotCourseLabel(c)}
-                      className={`max-w-[100px] text-center sm:max-w-[160px] ${pivotThClass}`}
+                      className={cn(
+                        'max-w-[100px] text-center sm:max-w-[160px]',
+                        pivotTheadStickyTopClass,
+                        pivotThClass
+                      )}
                     >
                       <span className="line-clamp-2">{resolvePivotCourseLabel(c)}</span>
                     </th>
                   ))}
-                  <th className={`${pivotThClass} text-center text-slate-600 dark:text-slate-300`}>
+                  <th
+                    className={cn(
+                      pivotTheadStickyTopClass,
+                      pivotThClass,
+                      'text-center text-slate-600 dark:text-slate-300'
+                    )}
+                  >
                     Total
                   </th>
                 </tr>
