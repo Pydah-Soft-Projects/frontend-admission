@@ -18,7 +18,7 @@ import { ForgotPasswordModal } from '@/components/auth/ForgotPasswordModal';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email or Mobile Number is required'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(1, 'Password is required'),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
