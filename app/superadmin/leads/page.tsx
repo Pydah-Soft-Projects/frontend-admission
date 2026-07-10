@@ -314,9 +314,20 @@ export default function LeadsPage() {
       clearMobileTopBar();
       return;
     }
-    setMobileTopBar({ title: 'Leads Management', iconKey: 'leads' });
+    const titleMeta =
+      !isError && leadsData != null
+        ? `${pagination.total.toLocaleString()} total leads`
+        : undefined;
+    setMobileTopBar({ title: 'Leads Management', iconKey: 'leads', titleMeta });
     return () => clearMobileTopBar();
-  }, [setMobileTopBar, clearMobileTopBar, isSubSuperAdmin]);
+  }, [
+    setMobileTopBar,
+    clearMobileTopBar,
+    isSubSuperAdmin,
+    isError,
+    leadsData,
+    pagination.total,
+  ]);
 
   const handleSort = useCallback((field: string) => {
     setSortField((prevField) => {
@@ -822,14 +833,16 @@ export default function LeadsPage() {
 
   return (
     <div className={isSubSuperAdmin ? 'mx-auto w-full max-w-7xl space-y-4 px-0 pb-2' : 'w-full space-y-4'}>
-      <div className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3 ${isSubSuperAdmin ? 'hidden sm:flex' : ''}`}>
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Leads Management</h1>
-        {!isError && leadsData != null && (
-          <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
-            {pagination.total.toLocaleString()} total leads
-          </span>
-        )}
-      </div>
+      {!isSubSuperAdmin ? (
+        <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Leads Management</h1>
+          {!isError && leadsData != null && (
+            <span className="text-sm font-semibold tabular-nums text-slate-500 dark:text-slate-400">
+              {pagination.total.toLocaleString()} total leads
+            </span>
+          )}
+        </div>
+      ) : null}
 
       <div className="mb-2">
         {/* Search, Filters, and Action Bar */}

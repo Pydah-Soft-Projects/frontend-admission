@@ -22,7 +22,6 @@ export function flattenNavItemsForMobile(
   for (const item of navItems) {
     if (options.filterBottomNav && item.hideInBottomNav) continue;
     if (item.children && item.children.length > 0) {
-      flat.push({ href: item.href, label: item.label, icon: item.icon });
       for (const child of item.children) {
         if (options.filterBottomNav && child.hideInBottomNav) continue;
         flat.push({ href: child.href, label: child.label, icon: child.icon });

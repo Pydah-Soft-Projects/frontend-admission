@@ -113,6 +113,8 @@ const MOBILE_TOP_BAR_ICONS: Record<string, IconComponent> = {
 
 export type MobileTopBarOptions = {
   title: string;
+  /** Optional secondary line shown beside the title on desktop (e.g. lead totals). */
+  titleMeta?: string;
   showBack?: boolean;
   backHref?: string;
   /** Icon key for mobile top bar: dashboard | leads | lead-details | team | team-member | analytics | team-leads */
@@ -239,6 +241,13 @@ export type DashboardNavItem = {
   joiningCapability?: 'approveFeeRequest';
   hideInBottomNav?: boolean;
 };
+
+/** Exact route or nested path under `href` (avoids `/joining` matching `/joining/confirmed`). */
+function pathMatchesNav(href: string, currentPath: string): boolean {
+  if (currentPath === href) return true;
+  if (href === '/') return currentPath === '/';
+  return currentPath.startsWith(`${href}/`);
+}
 
 /** `/superadmin/leads/:id` (dynamic lead), not the list or static sub-routes */
 function isSuperadminLeadDetailPath(pathname: string): boolean {
@@ -463,12 +472,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const findActiveParents = useCallback((items: DashboardNavItem[], currentPath: string, acc: Set<string>) => {
     items.forEach((item) => {
       if (item.children && item.children.length > 0) {
-        if (currentPath.startsWith(item.href)) {
+        const childActive = item.children.some((child) => pathMatchesNav(child.href, currentPath));
+        if (childActive) {
           acc.add(item.href);
-          findActiveParents(item.children, currentPath, acc);
-        } else {
-          findActiveParents(item.children, currentPath, acc);
         }
+        findActiveParents(item.children, currentPath, acc);
       }
     });
     return acc;
@@ -551,82 +559,126 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       items.map((item) => {
         const hasChildren = !!(item.children && item.children.length > 0);
         const Icon = item.icon;
-        const isActive = pathname.startsWith(item.href);
+        const isActive = hasChildren
+          ? item.children!.some((child) => pathMatchesNav(child.href, pathname))
+          : pathMatchesNav(item.href, pathname);
         const isGroupOpen = openGroups.has(item.href);
         const paddingLeft = isCollapsed ? undefined : level * 16;
+        const rowClassName = cn(
+          'flex w-full min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left transition-all duration-200 outline-none select-none cursor-pointer',
+          isCollapsed && 'justify-center',
+          isActive
+            ? cn(
+                'bg-[#ffedd5] text-[#c2410c] font-semibold dark:bg-[#7c2d12]/30 dark:text-[#fb923c]',
+                !isCollapsed && 'border-l-2 border-[#f97316] dark:border-[#fb923c]'
+              )
+            : 'text-[#000000] hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'
+        );
+        const labelWrapClass = cn(
+          'flex min-w-0 flex-1 items-center gap-3',
+          isCollapsed ? 'hidden' : 'flex'
+        );
 
         return (
-          <div key={item.href} className="space-y-1">
+          <div key={item.href} className="space-y-0.5">
             <div
               className={cn(
-                'group relative flex items-center',
+                'group relative flex w-full items-center',
                 isCollapsed ? 'justify-center px-2' : 'px-0'
               )}
               style={paddingLeft ? { paddingLeft } : undefined}
             >
-              <Link
-                href={item.href}
-                className={cn(
-                  'flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 outline-none select-none cursor-pointer',
-                  isCollapsed && 'justify-center',
-                  isActive
-                    ? cn('bg-[#ffedd5] text-[#c2410c] font-semibold dark:bg-[#7c2d12]/30 dark:text-[#fb923c]', !isCollapsed && 'border-l-2 border-[#f97316] dark:border-[#fb923c]')
-                    : 'text-[#000000] hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'
-                )}
-                title={isCollapsed ? item.label : undefined}
-              >
-                {Icon && (
-                  <Icon
-                    className={cn(
-                      'h-5 w-5 flex-shrink-0 transition-colors duration-200',
-                      isActive ? 'text-[#ea580c] dark:text-[#fb923c]' : 'text-slate-500 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
-                    )}
-                  />
-                )}
-
-                <div
-                  className={cn(
-                    'flex min-w-0 flex-1 items-center gap-3',
-                    isCollapsed ? 'hidden' : 'block'
-                  )}
-                >
-                  <span className="truncate">{item.label}</span>
-                  {item.badge && (
-                    <span
-                      className={cn(
-                        'ml-auto inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full',
-                        isActive
-                          ? 'bg-[#ffedd5] text-[#c2410c] dark:bg-[#7c2d12]/40 dark:text-[#fdba74]'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                      )}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-              </Link>
-
-              {hasChildren && !isCollapsed && (
+              {hasChildren ? (
                 <button
                   type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
+                  onClick={() => {
+                    if (isCollapsed) {
+                      setIsCollapsed(false);
+                      setOpenGroups((prev) => new Set(prev).add(item.href));
+                      return;
+                    }
                     toggleGroup(item.href);
                   }}
-                  className={cn(
-                    "absolute right-1 p-1.5 rounded-md transition-colors cursor-pointer",
-                    isActive
-                      ? "text-[#ea580c] hover:bg-[#ffedd5]/50 dark:text-[#fb923c]"
-                      : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800"
-                  )}
+                  className={rowClassName}
+                  title={isCollapsed ? item.label : undefined}
+                  aria-expanded={isGroupOpen}
                 >
-                  <ChevronDownIcon className={cn('h-3.5 w-3.5 transition-transform duration-200', isGroupOpen ? 'rotate-180' : 'rotate-0')} />
+                  {Icon && (
+                    <Icon
+                      className={cn(
+                        'h-5 w-5 shrink-0 transition-colors duration-200',
+                        isActive
+                          ? 'text-[#ea580c] dark:text-[#fb923c]'
+                          : 'text-slate-500 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
+                      )}
+                    />
+                  )}
+
+                  <div className={labelWrapClass}>
+                    <span className="truncate">{item.label}</span>
+                    {item.badge && (
+                      <span
+                        className={cn(
+                          'ml-auto inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full',
+                          isActive
+                            ? 'bg-[#ffedd5] text-[#c2410c] dark:bg-[#7c2d12]/40 dark:text-[#fdba74]'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        )}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  {!isCollapsed && (
+                    <ChevronDownIcon
+                      className={cn(
+                        'ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-200',
+                        isActive
+                          ? 'text-[#ea580c] dark:text-[#fb923c]'
+                          : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300',
+                        isGroupOpen ? 'rotate-180' : 'rotate-0'
+                      )}
+                    />
+                  )}
                 </button>
+              ) : (
+                <Link
+                  href={item.href}
+                  className={rowClassName}
+                  title={isCollapsed ? item.label : undefined}
+                >
+                  {Icon && (
+                    <Icon
+                      className={cn(
+                        'h-5 w-5 shrink-0 transition-colors duration-200',
+                        isActive
+                          ? 'text-[#ea580c] dark:text-[#fb923c]'
+                          : 'text-slate-500 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'
+                      )}
+                    />
+                  )}
+
+                  <div className={labelWrapClass}>
+                    <span className="truncate">{item.label}</span>
+                    {item.badge && (
+                      <span
+                        className={cn(
+                          'ml-auto inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full',
+                          isActive
+                            ? 'bg-[#ffedd5] text-[#c2410c] dark:bg-[#7c2d12]/40 dark:text-[#fdba74]'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        )}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                </Link>
               )}
             </div>
             {hasChildren && isGroupOpen && (
-              <div className={cn('space-y-1 relative', isCollapsed ? 'hidden' : 'pl-4')}>
+              <div className={cn('space-y-0.5 relative', isCollapsed ? 'hidden' : 'pl-4')}>
                 {/* Connection line for nested items */}
                 <div className="absolute left-[26px] top-0 bottom-0 w-px bg-slate-200 dark:bg-slate-800" />
                 {renderNavItems(item.children!, level + 1)}
@@ -700,7 +752,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
       <nav
         className={cn(
-          'flex-1 min-h-0 space-y-1 px-3 py-4',
+          'flex-1 min-h-0 space-y-0.5 px-3 py-3',
           variant === 'desktop' ? 'overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700' : 'overflow-y-auto pb-4'
         )}
       >
@@ -945,13 +997,20 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               >
                 {/* Desktop heading for user / manager (custom headerContent or title) */}
                 {useMobileBottomNav && (
-                  <div className="hidden lg:block mb-8 px-1">
+                  <div className="mb-8 hidden px-1 lg:flex lg:flex-wrap lg:items-baseline lg:gap-x-3 lg:gap-y-1">
                     {headerContent ? (
                       headerContent
                     ) : (
-                      <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-                        {mobileTopBar?.title || title}
-                      </h1>
+                      <>
+                        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                          {mobileTopBar?.title || title}
+                        </h1>
+                        {mobileTopBar?.titleMeta ? (
+                          <span className="text-sm font-semibold tabular-nums text-slate-500 dark:text-slate-400">
+                            {mobileTopBar.titleMeta}
+                          </span>
+                        ) : null}
+                      </>
                     )}
                   </div>
                 )}
