@@ -6881,13 +6881,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                             : 'Submit Fee Request'}
                       </Button>
                     )}
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {feeHeadsQuery.isLoading
-                        ? 'Loading all Fee Management heads...'
-                        : feeHeadsQuery.isError
-                          ? 'Master fee-head list failed; showing configured/saved heads only.'
-                          : `${feeHeadRows.length} Fee Management heads loaded.`}
-                    </span>
+                    
                   </div>
 
                   {/* Grid of configured concessions */}

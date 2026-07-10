@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hostelAPI, transportAPI } from '@/lib/api';
 import {
@@ -193,14 +193,19 @@ export function AdmissionStepThreeBusHostelPanel({
   const canEdit = Boolean(onChange) && !disabled;
   const choiceLocked = isAccommodationChoiceLocked(value);
   const selectedTab: AccommodationTab | null =
-    value.accommodationType === 'hostel'
+    value.hostelId != null && String(value.hostelId).trim() !== ''
       ? 'hostel'
-      : value.accommodationType === 'bus'
+      : value.routeId != null && String(value.routeId).trim() !== ''
         ? 'bus'
-        : value.accommodationType === 'none'
-          ? 'none'
-          : null;
+        : value.accommodationType === 'hostel'
+          ? 'hostel'
+          : value.accommodationType === 'bus'
+            ? 'bus'
+            : value.accommodationType === 'none'
+              ? 'none'
+              : null;
   const [activeTab, setActiveTab] = useState<AccommodationTab>(selectedTab || 'bus');
+  const tabAutoInitializedRef = useRef(false);
 
   useEffect(() => {
     if (selectedTab) {
@@ -208,12 +213,18 @@ export function AdmissionStepThreeBusHostelPanel({
     }
   }, [selectedTab]);
 
+  const displayTab: AccommodationTab = selectedTab ?? activeTab;
+
   const joiningAcademicYearSession = useMemo(
     () => calendarYearToAcademicYearRange(joiningAcademicYear),
     [joiningAcademicYear]
   );
 
   const effectiveAcademicYear = joiningAcademicYearSession || value.academicYear || '';
+
+  useEffect(() => {
+    tabAutoInitializedRef.current = false;
+  }, [admissionNumber, joiningId, effectiveAcademicYear]);
 
   const { data: nextAppNoResponse, isLoading: isLoadingNextAppNo } = useQuery({
     queryKey: [
@@ -232,13 +243,16 @@ export function AdmissionStepThreeBusHostelPanel({
         courseName,
         collegeName,
       }),
-    enabled: activeTab === 'bus' && Boolean(effectiveAcademicYear) && (Boolean(collegeId) || Boolean(managedCourseId) || Boolean(courseName) || Boolean(collegeName)),
+    enabled: displayTab === 'bus' && Boolean(effectiveAcademicYear) && (Boolean(collegeId) || Boolean(managedCourseId) || Boolean(courseName) || Boolean(collegeName)),
     staleTime: 60_000,
   });
 
   const nextAppNo = nextAppNoResponse?.data?.application_number || null;
 
-  const { data: existingRequestResponse } = useQuery({
+  const {
+    data: existingRequestResponse,
+    isFetched: transportRequestFetched,
+  } = useQuery({
     queryKey: ['student-transport-request', admissionNumber, effectiveAcademicYear],
     queryFn: () =>
       transportAPI.getStudentTransportRequest({
@@ -251,7 +265,11 @@ export function AdmissionStepThreeBusHostelPanel({
 
   const existingRequest = existingRequestResponse?.data || null;
 
-  const { data: hostelStudentResponse, isLoading: isLoadingHostelStudent } = useQuery({
+  const {
+    data: hostelStudentResponse,
+    isLoading: isLoadingHostelStudent,
+    isFetched: hostelStudentFetched,
+  } = useQuery({
     queryKey: [
       'hostel-student-details',
       admissionNumber,
@@ -266,11 +284,58 @@ export function AdmissionStepThreeBusHostelPanel({
         hostelId: value.hostelId || undefined,
         academicYear: effectiveAcademicYear || undefined,
       }),
-    enabled: activeTab === 'hostel' && (Boolean(admissionNumber) || Boolean(joiningId)),
+    enabled: Boolean(admissionNumber) || Boolean(joiningId),
     staleTime: 60_000,
   });
 
   const hostelStudentDetails = hostelStudentResponse?.data || null;
+
+  useEffect(() => {
+    if (tabAutoInitializedRef.current) return;
+
+    const needsTransportProbe = Boolean(admissionNumber) && Boolean(effectiveAcademicYear);
+    const needsHostelProbe = Boolean(admissionNumber) || Boolean(joiningId);
+    if (needsTransportProbe && !transportRequestFetched) return;
+    if (needsHostelProbe && !hostelStudentFetched) return;
+
+    tabAutoInitializedRef.current = true;
+
+    if (selectedTab) {
+      setActiveTab(selectedTab);
+      return;
+    }
+
+    let inferredTab: AccommodationTab = 'bus';
+    if (hostelStudentDetails?.isAssigned) {
+      inferredTab = 'hostel';
+    } else if (existingRequest) {
+      inferredTab = 'bus';
+    } else if (value.accommodationType === 'none') {
+      inferredTab = 'none';
+    }
+
+    setActiveTab(inferredTab);
+
+    if (canEdit && onChange && !value.accommodationType && inferredTab !== 'none') {
+      onChange({
+        ...value,
+        accommodationType: inferredTab,
+        ...(effectiveAcademicYear ? { academicYear: effectiveAcademicYear } : {}),
+      });
+    }
+  }, [
+    admissionNumber,
+    canEdit,
+    effectiveAcademicYear,
+    existingRequest,
+    hostelStudentDetails?.isAssigned,
+    hostelStudentFetched,
+    joiningId,
+    onChange,
+    selectedTab,
+    transportRequestFetched,
+    value,
+  ]);
 
   useEffect(() => {
     onExistingRequestChange?.(Boolean(existingRequest));
@@ -309,7 +374,7 @@ export function AdmissionStepThreeBusHostelPanel({
   } = useQuery({
     queryKey: ['transport', 'route', selectedRouteId],
     queryFn: async () => transportAPI.getRouteDetail(selectedRouteId),
-    enabled: activeTab === 'bus' && Boolean(selectedRouteId),
+    enabled: displayTab === 'bus' && Boolean(selectedRouteId),
     staleTime: 120_000,
   });
 
@@ -331,7 +396,7 @@ export function AdmissionStepThreeBusHostelPanel({
   const { data: categoriesResponse, isLoading: isLoadingCategories } = useQuery({
     queryKey: ['hostel', 'categories', value.hostelId],
     queryFn: async () => hostelAPI.listCategories(value.hostelId as string),
-    enabled: activeTab === 'hostel' && Boolean(value.hostelId),
+    enabled: displayTab === 'hostel' && Boolean(value.hostelId),
     staleTime: 120_000,
   });
 
@@ -359,7 +424,7 @@ export function AdmissionStepThreeBusHostelPanel({
         totalYears: programTotalYears,
       }),
     enabled:
-      activeTab === 'hostel' &&
+      displayTab === 'hostel' &&
       Boolean(value.hostelId) &&
       Boolean(value.categoryId) &&
       Boolean(effectiveAcademicYear),
@@ -377,7 +442,7 @@ export function AdmissionStepThreeBusHostelPanel({
   );
 
   useEffect(() => {
-    if (!canEdit || !onChange || activeTab !== 'hostel') return;
+    if (!canEdit || !onChange || displayTab !== 'hostel') return;
     if (!value.categoryId || resolvedHostelFeesByYear.length === 0) return;
 
     const nextFirstFee = resolvedHostelFeesByYear[0]?.amount ?? null;
@@ -391,7 +456,7 @@ export function AdmissionStepThreeBusHostelPanel({
       hostelFee: nextFirstFee,
     });
   }, [
-    activeTab,
+    displayTab,
     canEdit,
     onChange,
     resolvedHostelFeesByYear,
@@ -519,7 +584,7 @@ export function AdmissionStepThreeBusHostelPanel({
   const selectedBusNumber = String(value.busId || value.busNumber || '').trim();
 
   useEffect(() => {
-    if (!canEdit || !onChange || activeTab !== 'bus') return;
+    if (!canEdit || !onChange || displayTab !== 'bus') return;
     if (!selectedRouteId || buses.length === 0) return;
 
     const numberedBuses = buses
@@ -541,7 +606,7 @@ export function AdmissionStepThreeBusHostelPanel({
     if (!preferredNumber || preferredNumber === selectedBusNumber) return;
     onChange({ ...value, busId: preferredNumber, busNumber: preferredNumber });
   }, [
-    activeTab,
+    displayTab,
     buses,
     canEdit,
     onChange,
@@ -591,7 +656,7 @@ export function AdmissionStepThreeBusHostelPanel({
 
         <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900/80">
           {(['bus', 'hostel', 'none'] as AccommodationTab[]).map((tab) => {
-            const isActive = (selectedTab || activeTab) === tab;
+            const isActive = displayTab === tab;
             const tabLocked = choiceLocked && selectedTab != null && tab !== selectedTab;
             if (tabLocked) return null;
             return (
@@ -615,13 +680,16 @@ export function AdmissionStepThreeBusHostelPanel({
         </div>
       </div>
 
-      {!selectedTab && canEdit ? (
+      {!value.accommodationType &&
+      !existingRequest &&
+      !hostelStudentDetails?.isAssigned &&
+      canEdit ? (
         <p className="text-sm text-slate-600 dark:text-slate-400">
           Select Bus, Hostel, or None above to configure accommodation.
         </p>
       ) : null}
 
-      {selectedTab === 'none' ? (
+      {displayTab === 'none' ? (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             No bus or hostel
@@ -631,7 +699,7 @@ export function AdmissionStepThreeBusHostelPanel({
             hostel fee rows are added in Step 4.
           </p>
         </div>
-      ) : selectedTab === 'bus' ? (
+      ) : displayTab === 'bus' ? (
         <div className="space-y-5">
           {existingRequest && (
             <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900/50 dark:bg-blue-950/20 text-slate-800 dark:text-slate-200">
@@ -825,7 +893,7 @@ export function AdmissionStepThreeBusHostelPanel({
 
           {/* Route stages & fees table removed as boarding stage can be selected from the dropdown above */}
         </div>
-      ) : selectedTab === 'hostel' ? (
+      ) : displayTab === 'hostel' ? (
         <div className="space-y-5">
           {hostelStudentDetails && hostelStudentDetails.isAssigned && (
             <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
