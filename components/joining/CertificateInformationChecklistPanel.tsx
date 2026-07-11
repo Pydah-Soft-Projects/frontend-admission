@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import type { CertificateGuidance, JoiningDocumentStatus } from '@/types';
 import { listCertificateItemOptions } from '@/lib/certificateChecklistEntry';
 
@@ -22,6 +23,7 @@ export function CertificateInformationChecklistBlock({
   onChecklistStatusChange,
   readOnly = false,
   title = 'Certificate information checklist',
+  headerActions,
 }: {
   variant: 'below-documents' | 'post-admission-step' | 'admission-step-two';
   radioNameSuffix?: string;
@@ -38,31 +40,39 @@ export function CertificateInformationChecklistBlock({
   ) => void;
   readOnly?: boolean;
   title?: string;
+  headerActions?: ReactNode;
 }) {
   const wrapClass =
     variant === 'below-documents'
       ? 'mt-10 border-t border-slate-200 pt-8 dark:border-slate-700'
-      : 'mt-8 border-t border-slate-200 pt-8 dark:border-slate-700';
+      : variant === 'admission-step-two'
+        ? ''
+        : 'mt-8 border-t border-slate-200 pt-8 dark:border-slate-700';
   return (
     <div className={wrapClass}>
-      <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">
-        {title}
-      </h3>
-      {derivedCertificationStatus !== null && (
-        <p className="mt-2 text-sm text-gray-700 dark:text-slate-300">
-          <span className="font-medium text-gray-900 dark:text-slate-100">Certification status</span>
-          {': '}
-          <span
-            className={
-              derivedCertificationStatus === 'Verified'
-                ? 'ml-1 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
-                : 'ml-1 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200'
-            }
-          >
-            {derivedCertificationStatus}
-          </span>
-        </p>
-      )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">{title}</h3>
+          {derivedCertificationStatus !== null && (
+            <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
+              <span className="font-medium text-gray-900 dark:text-slate-100">Certification status</span>
+              {': '}
+              <span
+                className={
+                  derivedCertificationStatus === 'Verified'
+                    ? 'ml-1 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                    : 'ml-1 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200'
+                }
+              >
+                {derivedCertificationStatus}
+              </span>
+            </p>
+          )}
+        </div>
+        {headerActions ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{headerActions}</div>
+        ) : null}
+      </div>
       {!programLevelTrimmed ? (
         <p className="mt-4 text-sm text-amber-700 dark:text-amber-300">
           Select a program level in Course &amp; Quota on the joining workspace to load this checklist.

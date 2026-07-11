@@ -2,7 +2,10 @@
 
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { formatCollegeAddressForPrint } from '@/components/joining/PrintableAdmitCard';
+import {
+  buildAdmitCardCertificateChecklistFromRegistration,
+  formatCollegeAddressForPrint,
+} from '@/components/joining/PrintableAdmitCard';
 import { courseAPI, feeStructureAPI, paymentAPI } from '@/lib/api';
 import type {
   Joining,
@@ -14,6 +17,7 @@ import type {
   JoiningRelativeAddress,
   Course,
   Branch,
+  CertificateGuidance,
 } from '@/types';
 import {
   buildPrintFeeAdjustmentsFromStudentFeeDetails,
@@ -517,6 +521,86 @@ function resolveRelativesForPrint(application: ApplicationData): JoiningRelative
   return application.address?.relatives ?? [];
 }
 
+type PrintDocumentSummary = {
+  received: string[];
+  notReceived: string[];
+};
+
+function parseCertificateGuidanceResponse(response: unknown): CertificateGuidance | null {
+  const envelope = (response as { data?: unknown })?.data ?? response;
+  const inner =
+    envelope && typeof envelope === 'object' && 'data' in envelope
+      ? (envelope as { data: unknown }).data
+      : envelope;
+  if (!inner || typeof inner !== 'object') return null;
+  return inner as CertificateGuidance;
+}
+
+async function inferProgramLevelFromCourseId(courseId: string): Promise<string> {
+  const cid = String(courseId ?? '').trim();
+  if (!cid) return '';
+  try {
+    const response = await courseAPI.list({ includeBranches: true, showInactive: true });
+    const payload = (response as { data?: unknown })?.data ?? response;
+    const list = Array.isArray(payload)
+      ? payload
+      : Array.isArray((payload as { data?: unknown })?.data)
+        ? ((payload as { data: unknown[] }).data)
+        : [];
+    const match = list.find(
+      (course) => String((course as { _id?: string })._id ?? '').trim() === cid
+    ) as { level?: string } | undefined;
+    return String(match?.level ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Step 2 saves certificate status in registrationFormData; legacy print used application.documents only. */
+async function resolvePrintDocumentSummary(
+  application: ApplicationData
+): Promise<PrintDocumentSummary | null> {
+  const reg =
+    application.registrationFormData &&
+    typeof application.registrationFormData === 'object' &&
+    !Array.isArray(application.registrationFormData)
+      ? (application.registrationFormData as Record<string, unknown>)
+      : null;
+  const rawChecklist = reg?.certificate_checklist;
+  if (
+    !rawChecklist ||
+    typeof rawChecklist !== 'object' ||
+    Array.isArray(rawChecklist) ||
+    Object.keys(rawChecklist).length === 0
+  ) {
+    return null;
+  }
+
+  let programLevel = resolveEducationProgramLevel(application, application.courseInfo?.programLevel);
+  if (!programLevel) {
+    programLevel = await inferProgramLevelFromCourseId(String(application.courseInfo?.courseId ?? ''));
+  }
+  if (!programLevel) return null;
+
+  try {
+    const response = await courseAPI.getCertificateGuidance(programLevel);
+    const guidance = parseCertificateGuidanceResponse(response);
+    const built = buildAdmitCardCertificateChecklistFromRegistration(guidance, reg);
+    if (!built?.rows?.length) return null;
+
+    const received: string[] = [];
+    const notReceived: string[] = [];
+    for (const row of built.rows) {
+      const label = row.optionLabel ? `${row.name} — ${row.optionLabel}` : row.name;
+      if (row.status === 'Received') received.push(label);
+      else notReceived.push(label);
+    }
+    return { received, notReceived };
+  } catch {
+    return null;
+  }
+}
+
 function resolveEducationProgramLevel(
   application: ApplicationData,
   courseProgramLevel?: string
@@ -602,6 +686,8 @@ function getPrintApplicationHtml(props: {
   collegeName?: string;
   collegeAddress?: string;
   feeStructureTableHtml?: string;
+  /** When Step 2 certificate checklist is saved, overrides legacy application.documents. */
+  documentSummary?: PrintDocumentSummary | null;
 }): string {
   const {
     application,
@@ -616,6 +702,7 @@ function getPrintApplicationHtml(props: {
     collegeName,
     collegeAddress,
     feeStructureTableHtml = '',
+    documentSummary = null,
   } = props;
 
   const student = application.studentInfo;
@@ -778,12 +865,12 @@ function getPrintApplicationHtml(props: {
     isJoiningDocumentChecklistKeyVisible(d.id, course?.quota, { paperChecklist: false })
   );
 
-  const receivedDocLabels = docList
-    .filter((d) => documents[d.id] === 'received')
-    .map((d) => d.label);
-  const notReceivedDocLabels = docList
-    .filter((d) => documents[d.id] !== 'received')
-    .map((d) => d.label);
+  const receivedDocLabels = documentSummary
+    ? documentSummary.received
+    : docList.filter((d) => documents[d.id] === 'received').map((d) => d.label);
+  const notReceivedDocLabels = documentSummary
+    ? documentSummary.notReceived
+    : docList.filter((d) => documents[d.id] !== 'received').map((d) => d.label);
 
   const displayGenderText = (() => {
     const g = String(student?.gender || '').trim().toLowerCase();
@@ -2278,6 +2365,7 @@ export function PrintableStudentApplication({
         feePaidTransactions = feeMongoTransactions;
       }
     }
+    const documentSummary = await resolvePrintDocumentSummary(application);
     const html = getPrintApplicationHtml({
       application,
       title,
@@ -2291,6 +2379,7 @@ export function PrintableStudentApplication({
       collegeName,
       collegeAddress: collegeAddress || undefined,
       feeStructureTableHtml,
+      documentSummary,
     });
     const iframe = document.createElement('iframe');
     iframe.setAttribute('style', 'position:absolute;width:0;height:0;border:0;overflow:hidden;');

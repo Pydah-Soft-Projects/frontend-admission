@@ -952,6 +952,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     return '';
   }, [joiningRecord?._id, leadId]);
 
+  const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
+  const workflowSurface = isPublicEdit ? 'joining-public' : 'joining-edit';
+
   useEffect(() => {
     setApplicationWizardStep(1);
   }, [leadId, joiningRecord?._id]);
@@ -4977,70 +4980,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
   };
 
-  if (!isPublicEdit && !canAccessJoiningModule) {
-    return null;
-  }
-
-  if (!isPublicEdit && !leadId) {
-    return (
-      <div className="p-6">
-        <p className="text-sm text-red-500">Invalid URL. Lead identifier is missing.</p>
-      </div>
-    );
-  }
-
-  const publicExpiresAt = (publicBootstrapQuery.data?.data as { expiresAt?: string } | undefined)?.expiresAt;
-
-  if (
-    isPublicEdit &&
-    (publicSubmitted || (isSelfRegistrationPublic && status !== 'draft'))
-  ) {
-    return (
-      <div className="mx-auto max-w-lg px-4 py-20 text-center">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-10 dark:border-emerald-900/50 dark:bg-emerald-950/40">
-          {isSelfRegistrationPublic ? (
-            <>
-              <h1 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Thank you</h1>
-              <p className="mt-3 text-sm leading-relaxed text-emerald-800 dark:text-emerald-200">
-                Your application has been submitted successfully. Our admissions team will review it and contact you
-                soon. You may close this window.
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Submitted for approval</h1>
-              <p className="mt-3 text-sm text-emerald-800 dark:text-emerald-200">
-                Your joining form has been sent to the admissions team. It will appear in their{' '}
-                <strong>Joining Pipeline</strong> under <strong>Pending Approvals</strong>. You can close this window.
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const statusBadgeClass =
-    status === 'approved'
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
-      : status === 'pending_approval'
-        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
-        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200';
-
-  const statusLabel = status.replace('_', ' ');
-
-  const stepOneCourseHint =
-    !isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval')
-      ? 'Complete course, college, branch, and quota before submit or approve.'
-      : undefined;
-
-  const canSaveJoiningDraft =
-    canWriteJoining &&
-    (isPublicEdit ? status === 'draft' : status === 'draft' || status === 'pending_approval');
-
-  const workflowSurface = isPublicEdit ? 'joining-public' : 'joining-edit';
-  const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
-
   const saveStepFourMutation = useMutation({
     mutationFn: async () => {
       if (!workflowJoiningId) {
@@ -5129,6 +5068,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             batch: studentFeeDetails.batch,
             lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
           },
+          documents: formState.documents,
         });
       }
       return joiningAPI.saveDraft(leadId as string, {
@@ -5138,9 +5078,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     },
     onSuccess: async () => {
       showToast.success(
-        status === 'approved'
-          ? 'Certificate checklist and admission fee lines saved'
-          : 'Admission fee workflow saved as draft'
+        status === 'approved' ? 'Important documents saved' : 'Step 2 documents saved as draft'
       );
       await refetch();
       if (status === 'approved' && admissionRecord?._id) {
@@ -5148,9 +5086,148 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
-      showToast.error(error.response?.data?.message || 'Failed to save admission fee workflow');
+      showToast.error(error.response?.data?.message || 'Failed to save documents');
     },
   });
+
+  useEffect(() => {
+    if (isPublicEdit) {
+      return () => clearHeaderContent();
+    }
+    if (typeof window !== 'undefined') {
+      const scriptId = 'cashfree-sdk-v3';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.async = true;
+        script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+        document.body.appendChild(script);
+      }
+    }
+
+    if (!lead) {
+      return () => clearHeaderContent();
+    }
+
+    const workflowAdmissionId = admissionRecord?._id;
+
+    setHeaderContent(
+      <div className="flex w-full min-w-0 flex-col gap-1.5">
+        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
+          Joining &amp; Admission Workspace
+        </h1>
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:flex-nowrap">
+          <p className="min-w-0 truncate text-sm text-slate-500 dark:text-slate-400">
+            {lead.name}
+            {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
+            {courseBranchSubtitle ? ` · ${courseBranchSubtitle}` : ''}
+          </p>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <AdmissionWorkflowStepButtons
+              activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 4 : 1}
+              surface="joining-edit"
+              joiningId={workflowJoiningId}
+              admissionId={workflowAdmissionId}
+              joiningStatus={status}
+              onJoiningWizardStepSelect={useWizard ? handleJoiningWizardStepSelect : undefined}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              onClick={() => router.push('/superadmin/joining')}
+            >
+              Back to Joining Desk
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
+            >
+              View Lead
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+
+    return () => clearHeaderContent();
+  }, [
+    isPublicEdit,
+    lead,
+    router,
+    setHeaderContent,
+    clearHeaderContent,
+    status,
+    workflowJoiningId,
+    admissionRecord?._id,
+    applicationWizardStep,
+    useWizard,
+    handleJoiningWizardStepSelect,
+    courseBranchSubtitle,
+  ]);
+
+  if (!isPublicEdit && !canAccessJoiningModule) {
+    return null;
+  }
+
+  if (!isPublicEdit && !leadId) {
+    return (
+      <div className="p-6">
+        <p className="text-sm text-red-500">Invalid URL. Lead identifier is missing.</p>
+      </div>
+    );
+  }
+
+  const publicExpiresAt = (publicBootstrapQuery.data?.data as { expiresAt?: string } | undefined)?.expiresAt;
+
+  if (
+    isPublicEdit &&
+    (publicSubmitted || (isSelfRegistrationPublic && status !== 'draft'))
+  ) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-20 text-center">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-10 dark:border-emerald-900/50 dark:bg-emerald-950/40">
+          {isSelfRegistrationPublic ? (
+            <>
+              <h1 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Thank you</h1>
+              <p className="mt-3 text-sm leading-relaxed text-emerald-800 dark:text-emerald-200">
+                Your application has been submitted successfully. Our admissions team will review it and contact you
+                soon. You may close this window.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">Submitted for approval</h1>
+              <p className="mt-3 text-sm text-emerald-800 dark:text-emerald-200">
+                Your joining form has been sent to the admissions team. It will appear in their{' '}
+                <strong>Joining Pipeline</strong> under <strong>Pending Approvals</strong>. You can close this window.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const statusBadgeClass =
+    status === 'approved'
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
+      : status === 'pending_approval'
+        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
+        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200';
+
+  const statusLabel = status.replace('_', ' ');
+
+  const stepOneCourseHint =
+    !isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval')
+      ? 'Complete course, college, branch, and quota before submit or approve.'
+      : undefined;
+
+  const canSaveJoiningDraft =
+    canWriteJoining &&
+    (isPublicEdit ? status === 'draft' : status === 'draft' || status === 'pending_approval');
 
   const renderWizardStepFooter = (panelStep: AdmissionWorkflowStep) => {
     // All public token links (staff invite + self-registration) are Step 1 only.
@@ -5458,87 +5535,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ) : null}
     </>
   );
-
-  useEffect(() => {
-    if (isPublicEdit) {
-      return () => clearHeaderContent();
-    }
-    if (typeof window !== 'undefined') {
-      const scriptId = 'cashfree-sdk-v3';
-      if (!document.getElementById(scriptId)) {
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.async = true;
-        script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
-        document.body.appendChild(script);
-      }
-    }
-
-    if (!lead) {
-      return () => clearHeaderContent();
-    }
-
-    const workflowJoiningId = publicLinkRouteKey || joiningRecord?._id || effectiveAdminLeadId;
-    const workflowAdmissionId = admissionRecord?._id;
-
-    setHeaderContent(
-      <div className="flex w-full min-w-0 flex-col gap-1.5">
-        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
-          Joining &amp; Admission Workspace
-        </h1>
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:flex-nowrap">
-          <p className="min-w-0 truncate text-sm text-slate-500 dark:text-slate-400">
-            {lead.name}
-            {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
-            {courseBranchSubtitle ? ` · ${courseBranchSubtitle}` : ''}
-          </p>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <AdmissionWorkflowStepButtons
-              activeStep={useWizard ? applicationWizardStep : status === 'approved' ? 4 : 1}
-              surface="joining-edit"
-              joiningId={workflowJoiningId}
-              admissionId={workflowAdmissionId}
-              joiningStatus={status}
-              onJoiningWizardStepSelect={useWizard ? handleJoiningWizardStepSelect : undefined}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
-              onClick={() => router.push('/superadmin/joining')}
-            >
-              Back to Joining Desk
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
-              onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
-            >
-              View Lead
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-
-    return () => clearHeaderContent();
-  }, [
-    isPublicEdit,
-    lead,
-    router,
-    setHeaderContent,
-    clearHeaderContent,
-    status,
-    publicLinkRouteKey,
-    joiningRecord?._id,
-    effectiveAdminLeadId,
-    admissionRecord?._id,
-    applicationWizardStep,
-    useWizard,
-    handleJoiningWizardStepSelect,
-    courseBranchSubtitle,
-  ]);
 
   return (
     <div
@@ -6615,42 +6611,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               <section
                 className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
               >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
-                      Step 2 — Admission fee workflow
-                    </p>
-                    <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                      Important Documents &amp; fee lines
-                    </h2>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!isPublicEdit && programLevelTrimmed ? (
-                      <PrintableCertificateChecklist
-                        certificateGuidance={certificateGuidance}
-                        certificateChecklistParsed={certificateChecklistParsed}
-                        programLevel={programLevelTrimmed}
-                        certificationStatus={derivedCertificationStatus}
-                        studentName={formState.studentInfo.name || lead?.name}
-                        fatherName={formState.parents.father.name}
-                        course={formState.courseInfo.course}
-                        branch={formState.courseInfo.branch}
-                        enquiryNumber={lead?.enquiryNumber}
-                      />
-                    ) : null}
-                    {canWriteJoining && !isPublicEdit ? (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        disabled={saveStepTwoMutation.isPending || !programLevelTrimmed}
-                        onClick={() => saveStepTwoMutation.mutate()}
-                      >
-                        {saveStepTwoMutation.isPending ? 'Saving…' : 'Save certificate & fee lines'}
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-
                 {!isPublicEdit && programLevelTrimmed ? (
                   <CertificateInformationChecklistBlock
                     variant="admission-step-two"
@@ -6663,6 +6623,31 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     onChecklistOptionChange={updateCertificateChecklistOption}
                     onChecklistStatusChange={updateCertificateChecklistStatus}
                     title="Important Documents"
+                    headerActions={
+                      <>
+                        <PrintableCertificateChecklist
+                          certificateGuidance={certificateGuidance}
+                          certificateChecklistParsed={certificateChecklistParsed}
+                          programLevel={programLevelTrimmed}
+                          certificationStatus={derivedCertificationStatus}
+                          studentName={formState.studentInfo.name || lead?.name}
+                          fatherName={formState.parents.father.name}
+                          course={formState.courseInfo.course}
+                          branch={formState.courseInfo.branch}
+                          enquiryNumber={lead?.enquiryNumber}
+                        />
+                        {canWriteJoining ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            disabled={saveStepTwoMutation.isPending}
+                            onClick={() => saveStepTwoMutation.mutate()}
+                          >
+                            {saveStepTwoMutation.isPending ? 'Saving…' : 'Save documents'}
+                          </Button>
+                        ) : null}
+                      </>
+                    }
                   />
                 ) : (
                   <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
