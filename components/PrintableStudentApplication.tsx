@@ -2332,13 +2332,6 @@ function getPrintApplicationHtml(props: {
     <div class="office-use-bottom">
       <div class="office-use-bottom-left">
         <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">Fee Paid Details</div>
-        ${paymentSummary ? `
-          <div style="font-size: 11px; margin-bottom: 4px; display: flex; gap: 12px; justify-content: center;">
-            <span><strong>Total:</strong> ${formatCurrency(paymentSummary.totalFee)}</span>
-            <span><strong>Paid:</strong> ${formatCurrency(paymentSummary.totalPaid)}</span>
-            <span><strong>Balance:</strong> ${formatCurrency(paymentSummary.balance)}</span>
-          </div>
-        ` : ''}
         <table class="data-table" style="font-size: 10px;">
           <thead>
             <tr>
