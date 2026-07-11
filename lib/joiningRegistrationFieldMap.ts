@@ -1,17 +1,82 @@
-/** Normalize various date strings to `YYYY-MM-DD` for joining date inputs. */
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+function isValidCalendarDay(year: number, month: number, day: number): boolean {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return false;
+  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const dt = new Date(year, month - 1, day);
+  return dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
+}
+
+function toYmd(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * Normalize various date strings to `YYYY-MM-DD` for joining date inputs.
+ * Prefer explicit DD-MM-YYYY / DD/MM/YYYY (DB storage) before `Date` parsing —
+ * `new Date('11-01-2007')` is treated as Nov 1 in JS and can also shift via UTC.
+ */
 export function normalizeJoiningDateOfBirthInput(value?: string): string {
   if (!value) return '';
   const v = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
-  const isoCandidate = new Date(v);
-  if (!Number.isNaN(isoCandidate.getTime())) {
-    return isoCandidate.toISOString().slice(0, 10);
+  if (!v) return '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [y, m, d] = v.split('-').map((part) => Number(part));
+    return isValidCalendarDay(y, m, d) ? v : '';
   }
-  const ddMmYyMatch = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (ddMmYyMatch) {
-    return `${ddMmYyMatch[3]}-${ddMmYyMatch[2]}-${ddMmYyMatch[1]}`;
+
+  // DB / SSC style: DD-MM-YYYY or DD/MM/YYYY (must run before Date())
+  const dmy = v.match(/^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    return isValidCalendarDay(year, month, day) ? toYmd(year, month, day) : '';
   }
+
+  // ISO datetime — take the calendar date part only (avoid timezone day-shift)
+  const isoPrefix = v.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (isoPrefix) {
+    const year = Number(isoPrefix[1]);
+    const month = Number(isoPrefix[2]);
+    const day = Number(isoPrefix[3]);
+    return isValidCalendarDay(year, month, day) ? toYmd(year, month, day) : '';
+  }
+
+  // "11 Jan 2007" / "11 January 2007"
+  const named = v.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/);
+  if (named) {
+    const day = Number(named[1]);
+    const year = Number(named[3]);
+    const monRaw = named[2].slice(0, 3).toLowerCase();
+    const month = SHORT_MONTHS.findIndex((m) => m.toLowerCase() === monRaw) + 1;
+    return month > 0 && isValidCalendarDay(year, month, day) ? toYmd(year, month, day) : '';
+  }
+
   return '';
+}
+
+/** Print / SSC-style display: `11 Jan 2007`. */
+export function formatJoiningDateOfBirthDisplay(value?: string): string {
+  const ymd = normalizeJoiningDateOfBirthInput(value);
+  if (!ymd) return '';
+  const [y, m, d] = ymd.split('-').map((part) => Number(part));
+  if (!isValidCalendarDay(y, m, d)) return '';
+  return `${d} ${SHORT_MONTHS[m - 1]} ${y}`;
 }
 
 /** Subset of joining draft state used for registration ↔ joining field sync. */

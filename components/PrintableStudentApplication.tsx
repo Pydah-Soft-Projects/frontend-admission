@@ -33,7 +33,14 @@ import {
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { buildAccommodationInjectedRows } from '@/lib/joiningBusFeeSync';
 import { parseJoiningTransportDetails } from '@/components/admission/AdmissionStepThreeBusHostelPanel';
-import { normalizeJoiningDateOfBirthInput } from '@/lib/joiningRegistrationFieldMap';
+import { hasPersistableOverallConcessionAmounts } from '@/lib/overallConcessions';
+import {
+  formatJoiningDateOfBirthDisplay,
+  normalizeJoiningDateOfBirthInput,
+} from '@/lib/joiningRegistrationFieldMap';
+import {
+  normalizeJoiningDocumentsFromApi,
+} from '@/lib/joiningDocumentsNormalize';
 import { normalizeAddressFieldForDisplay } from '@/lib/formatJoiningAddressDisplay';
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 
@@ -210,8 +217,12 @@ function formatPrintFeeAmount(amount?: number | null): string {
   }
 }
 
-function renderPrintFeeStructureDetailedTableHtml(table: PrintFeeStructureDetailedTable): string {
+function renderPrintFeeStructureDetailedTableHtml(
+  table: PrintFeeStructureDetailedTable,
+  options?: { emptyCellText?: string }
+): string {
   if (!table.columns.length || !table.rows.length) return '';
+  const emptyCellText = options?.emptyCellText ?? '-';
 
   return `
     <div class="print-fee-structure-block">
@@ -238,7 +249,7 @@ function renderPrintFeeStructureDetailedTableHtml(table: PrintFeeStructureDetail
                   const valueText =
                     valueToDisplay != null && valueToDisplay > 0
                       ? escapeHtml(formatPrintFeeAmount(valueToDisplay))
-                      : '-';
+                      : emptyCellText;
                   return `<td>${valueText}</td>`;
                 })
                 .join('')}
@@ -423,9 +434,17 @@ async function resolvePrintFeeStructureTableHtml(
     return adj;
   });
 
-  const detailedTable = buildPrintFeeStructureDetailedTable(combinedFeeStructures, totalYears, mergedAdjustments);
+  const hasBuilderAmounts = hasPersistableOverallConcessionAmounts(mergedAdjustments);
+  const detailedTable = buildPrintFeeStructureDetailedTable(
+    combinedFeeStructures,
+    totalYears,
+    hasBuilderAmounts ? mergedAdjustments : [],
+    { fillAmounts: hasBuilderAmounts }
+  );
 
-  return renderPrintFeeStructureDetailedTableHtml(detailedTable);
+  return renderPrintFeeStructureDetailedTableHtml(detailedTable, {
+    emptyCellText: hasBuilderAmounts ? '-' : '',
+  });
 }
 
 type EducationTableRowKey = 'ssc' | 'inter_diploma' | 'ug';
@@ -556,6 +575,34 @@ async function inferProgramLevelFromCourseId(courseId: string): Promise<string> 
   }
 }
 
+/** Step 2 "Other Documents to Submit" labels for print (certificate checklist covers the rest). */
+const OTHER_DOCUMENTS_PRINT: Array<{ id: keyof JoiningDocuments; label: string }> = [
+  { id: 'aadhaarCard', label: 'Aadhar Card' },
+  { id: 'photos', label: 'Photos(5)' },
+  { id: 'incomeCertificate', label: 'Income Certificate' },
+  { id: 'casteCertificate', label: 'Caste Certificate' },
+  { id: 'cetRankCard', label: 'CET Rank Card' },
+  { id: 'cetHallTicket', label: 'CET Hall Ticket' },
+  { id: 'allotmentLetter', label: 'Allotment Letter' },
+  { id: 'joiningReport', label: 'Joining Report' },
+  { id: 'bankPassBook', label: 'Bank Pass Book' },
+  { id: 'rationCard', label: 'Ration Card' },
+];
+
+function appendOtherDocumentsToPrintSummary(
+  application: ApplicationData,
+  received: string[],
+  notReceived: string[]
+): void {
+  const docs = normalizeJoiningDocumentsFromApi(application.documents);
+  const quota = application.courseInfo?.quota;
+  for (const item of OTHER_DOCUMENTS_PRINT) {
+    if (!isJoiningDocumentChecklistKeyVisible(item.id, quota, { paperChecklist: true })) continue;
+    if (docs[item.id] === 'received') received.push(item.label);
+    else notReceived.push(item.label);
+  }
+}
+
 /** Step 2 saves certificate status in registrationFormData; legacy print used application.documents only. */
 async function resolvePrintDocumentSummary(
   application: ApplicationData
@@ -567,38 +614,49 @@ async function resolvePrintDocumentSummary(
       ? (application.registrationFormData as Record<string, unknown>)
       : null;
   const rawChecklist = reg?.certificate_checklist;
-  if (
-    !rawChecklist ||
-    typeof rawChecklist !== 'object' ||
-    Array.isArray(rawChecklist) ||
-    Object.keys(rawChecklist).length === 0
-  ) {
-    return null;
-  }
+  const hasChecklist =
+    rawChecklist &&
+    typeof rawChecklist === 'object' &&
+    !Array.isArray(rawChecklist) &&
+    Object.keys(rawChecklist).length > 0;
 
-  let programLevel = resolveEducationProgramLevel(application, application.courseInfo?.programLevel);
-  if (!programLevel) {
-    programLevel = await inferProgramLevelFromCourseId(String(application.courseInfo?.courseId ?? ''));
-  }
-  if (!programLevel) return null;
+  const received: string[] = [];
+  const notReceived: string[] = [];
 
-  try {
-    const response = await courseAPI.getCertificateGuidance(programLevel);
-    const guidance = parseCertificateGuidanceResponse(response);
-    const built = buildAdmitCardCertificateChecklistFromRegistration(guidance, reg);
-    if (!built?.rows?.length) return null;
-
-    const received: string[] = [];
-    const notReceived: string[] = [];
-    for (const row of built.rows) {
-      const label = row.optionLabel ? `${row.name} — ${row.optionLabel}` : row.name;
-      if (row.status === 'Received') received.push(label);
-      else notReceived.push(label);
+  if (hasChecklist) {
+    let programLevel = resolveEducationProgramLevel(application, application.courseInfo?.programLevel);
+    if (!programLevel) {
+      programLevel = await inferProgramLevelFromCourseId(String(application.courseInfo?.courseId ?? ''));
     }
-    return { received, notReceived };
-  } catch {
+    if (programLevel) {
+      try {
+        const response = await courseAPI.getCertificateGuidance(programLevel);
+        const guidance = parseCertificateGuidanceResponse(response);
+        const built = buildAdmitCardCertificateChecklistFromRegistration(guidance, reg);
+        if (built?.rows?.length) {
+          for (const row of built.rows) {
+            const label = row.optionLabel ? `${row.name} — ${row.optionLabel}` : row.name;
+            if (row.status === 'Received') received.push(label);
+            else notReceived.push(label);
+          }
+        }
+      } catch {
+        /* fall through — still include other documents below */
+      }
+    }
+  }
+
+  appendOtherDocumentsToPrintSummary(application, received, notReceived);
+
+  if (!hasChecklist) {
     return null;
   }
+
+  if (received.length === 0 && notReceived.length === 0) {
+    return null;
+  }
+
+  return { received, notReceived };
 }
 
 function resolveEducationProgramLevel(
@@ -706,12 +764,44 @@ function getPrintApplicationHtml(props: {
   } = props;
 
   const student = application.studentInfo;
+  const resolveDobRawForPrint = (): string => {
+    const fromStudent = String(student?.dateOfBirth || '').trim();
+    if (normalizeJoiningDateOfBirthInput(fromStudent)) return fromStudent;
+    const reg =
+      application.registrationFormData &&
+      typeof application.registrationFormData === 'object' &&
+      !Array.isArray(application.registrationFormData)
+        ? (application.registrationFormData as Record<string, unknown>)
+        : null;
+    if (reg) {
+      const dobKeys = new Set([
+        'date_of_birth',
+        'dateofbirth',
+        'dob',
+        'student_dob',
+        'student_date_of_birth',
+        'birth_date',
+        'birthdate',
+      ]);
+      for (const [key, value] of Object.entries(reg)) {
+        const n = String(key || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '_');
+        if (!dobKeys.has(n)) continue;
+        const raw = String(value ?? '').trim();
+        if (normalizeJoiningDateOfBirthInput(raw)) return raw;
+      }
+    }
+    return fromStudent;
+  };
+  const studentDobForPrint = resolveDobRawForPrint();
   const course = application.courseInfo;
   const parents = application.parents;
   const reservation = application.reservation;
   const qualifications = application.qualifications;
   const educationHistory = application.educationHistory ?? [];
-  const documents = application.documents ?? {};
+  const documents = normalizeJoiningDocumentsFromApi(application.documents ?? {});
   const siblings = (application as Joining).siblings ?? (application as Admission).siblings ?? [];
   const communicationAddress = resolveCommunicationAddressForPrint(application);
   const relatives = resolveRelativesForPrint(application);
@@ -819,19 +909,21 @@ function getPrintApplicationHtml(props: {
 
 
   const parseDobDigitsForPrint = (dob?: string): string => {
-    const raw = String(dob ?? '').trim();
-    if (!raw) return '';
-    const normalized = normalizeJoiningDateOfBirthInput(raw);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-      const [y, m, d] = normalized.split('-');
-      return `${d}${m}${y}`;
-    }
-    const ddMmYyyy = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
-    if (ddMmYyyy) return `${ddMmYyyy[1]}${ddMmYyyy[2]}${ddMmYyyy[3]}`;
-    return '';
+    const normalized = normalizeJoiningDateOfBirthInput(dob);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return '';
+    const [y, m, d] = normalized.split('-');
+    return `${d}${m}${y}`;
+  };
+
+  const formatDobAsPerSsc = (dob?: string): string => {
+    return formatJoiningDateOfBirthDisplay(dob);
   };
 
   const renderDobBoxes = (dob?: string) => {
+    const display = formatDobAsPerSsc(dob);
+    if (display) {
+      return `<span class="form-field-line bold">${escapeHtml(display)}</span>`;
+    }
     const emptyBoxes = '<div class="dob-grid">' + Array(8).fill('<span></span>').join('') + '</div>';
     const str = parseDobDigitsForPrint(dob);
     if (str.length !== 8) return emptyBoxes;
@@ -1922,7 +2014,7 @@ function getPrintApplicationHtml(props: {
           </div>
           <div class="form-row form-row-sub">
             <span class="form-label form-label-wide">Date of Birth (As Per SSC) :</span>
-            ${renderDobBoxes(student?.dateOfBirth)}
+            ${renderDobBoxes(studentDobForPrint)}
           </div>
           <div class="form-row form-row-sub">
             <span class="form-label form-label-wide">Reservation Category :</span>

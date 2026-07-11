@@ -119,6 +119,23 @@ export function filterPersistableBuilderConcessionLines<
   });
 }
 
+/** True when at least one concession/revised-fee line has an entered amount (builder or overall_concessions). */
+export function hasPersistableOverallConcessionAmounts(
+  lines: OverallConcessionLine[] = []
+): boolean {
+  return lines.some((line) => {
+    const type = normalizeOverallConcessionType(line.concessionType);
+    if (!type) return false;
+    if (readPositive(line.amount) !== null) return true;
+    if (type === 'CONCESSION') {
+      return (
+        readPositive(line.concessionAmount) !== null || readPositive(line.revisedAmount) !== null
+      );
+    }
+    return readPositive(line.revisedAmount) !== null;
+  });
+}
+
 export function isPersistableBuilderConcessionLine(line: {
   concessionType?: string;
   amount?: number | null | string;

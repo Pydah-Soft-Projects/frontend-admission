@@ -34,8 +34,14 @@ import {
   applyMappedRegistrationField,
   isJoiningRegistrationFieldMapped,
   mergeJoiningStudentInfoFromExtras,
+  normalizeJoiningDateOfBirthInput,
   readMappedRegistrationField,
 } from '@/lib/joiningRegistrationFieldMap';
+import {
+  defaultJoiningDocuments,
+  normalizeJoiningDocumentsFromApi,
+  serializeJoiningDocumentsForApi,
+} from '@/lib/joiningDocumentsNormalize';
 import {
   filterJoiningRegistrationDisplayFields,
   stripJoiningRedundantRegistrationExtras,
@@ -351,20 +357,6 @@ const mediumOptionValues = new Set(mediumOptions.map((option) => option.value));
 
 const documentStatusOptions: JoiningDocumentStatus[] = ['pending', 'received'];
 
-const normalizeDateInput = (value?: string) => {
-  if (!value) return '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const isoCandidate = new Date(value);
-  if (!Number.isNaN(isoCandidate.getTime())) {
-    return isoCandidate.toISOString().slice(0, 10);
-  }
-  const ddMmYyMatch = value.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (ddMmYyMatch) {
-    return `${ddMmYyMatch[3]}-${ddMmYyMatch[2]}-${ddMmYyMatch[1]}`;
-  }
-  return '';
-};
-
 const normalizeMediumSelections = (
   qualifications?: Joining['qualifications']
 ): Array<'english' | 'telugu' | 'other'> => {
@@ -516,23 +508,7 @@ type JoiningFormState = {
   documents: JoiningDocuments;
 };
 
-const defaultDocuments: JoiningDocuments = {
-  ssc: 'pending',
-  inter: 'pending',
-  ugOrPgCmm: 'pending',
-  transferCertificate: 'pending',
-  studyCertificate: 'pending',
-  aadhaarCard: 'pending',
-  photos: 'pending',
-  incomeCertificate: 'pending',
-  casteCertificate: 'pending',
-  cetRankCard: 'pending',
-  cetHallTicket: 'pending',
-  allotmentLetter: 'pending',
-  joiningReport: 'pending',
-  bankPassBook: 'pending',
-  rationCard: 'pending',
-};
+const defaultDocuments = defaultJoiningDocuments();
 
 const buildInitialState = (joining?: Joining): JoiningFormState => {
   const resolvedMediums = normalizeMediumSelections(joining?.qualifications);
@@ -552,7 +528,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       phone: joining?.studentInfo?.phone || '',
       preferredMobileNumber: joining?.studentInfo?.preferredMobileNumber || '',
       gender: joining?.studentInfo?.gender || '',
-      dateOfBirth: normalizeDateInput(joining?.studentInfo?.dateOfBirth),
+      dateOfBirth: normalizeJoiningDateOfBirthInput(joining?.studentInfo?.dateOfBirth),
     },
     parents: {
       father: {
@@ -632,10 +608,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
         institutionName: sibling.institutionName || '',
       }))
       : [],
-    documents: {
-      ...defaultDocuments,
-      ...(joining?.documents || {}),
-    },
+    documents: normalizeJoiningDocumentsFromApi(joining?.documents),
   };
 };
 
@@ -3780,7 +3753,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       qualifications: formState.qualifications,
       educationHistory: formState.educationHistory,
       siblings: formState.siblings,
-      documents: formState.documents,
+      documents: serializeJoiningDocumentsForApi(formState.documents),
       ...(!isSelfRegistrationRecord ? { reference1: reference1.trim() } : {}),
       ...(isApprovedAdmission
         ? {
@@ -5068,7 +5041,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             batch: studentFeeDetails.batch,
             lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
           },
-          documents: formState.documents,
+          documents: serializeJoiningDocumentsForApi(formState.documents),
         });
       }
       return joiningAPI.saveDraft(leadId as string, {
@@ -5080,9 +5053,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       showToast.success(
         status === 'approved' ? 'Important documents saved' : 'Step 2 documents saved as draft'
       );
-      await refetch();
-      if (status === 'approved' && admissionRecord?._id) {
-        await queryClient.invalidateQueries({ queryKey: ['admission', admissionRecord._id] });
+      const { data: refetchedJoining } = await refetch();
+      if (status === 'approved') {
+        await queryClient.invalidateQueries({ queryKey: ['admission', leadId, status] });
+        if (admissionRecord?._id) {
+          await queryClient.invalidateQueries({ queryKey: ['admission', admissionRecord._id] });
+        }
+        const { data: refetchedAdmission } = await refetchAdmission();
+        const freshAdmission = refetchedAdmission?.data?.admission as Admission | undefined;
+        if (freshAdmission) {
+          applyAdmissionRecordToWorkspace(freshAdmission);
+        } else if (refetchedJoining?.data?.joining) {
+          setFormState((prev) => ({
+            ...prev,
+            documents: normalizeJoiningDocumentsFromApi(refetchedJoining.data.joining.documents),
+          }));
+        }
       }
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {

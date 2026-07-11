@@ -1,7 +1,7 @@
 import type { Admission, Course, FeeStructure, Joining, JoiningStudentFeeLineOverride } from '@/types';
 import { deriveAdmissionSeriesYear } from '@/lib/joiningAcademicYearRegistration';
 import { resolveTotalYearsFromCourseSettings } from '@/lib/joiningAcademicYearRegistration';
-import { resolveOverallConcessionPrintAdjustment } from '@/lib/overallConcessions';
+import { resolveOverallConcessionPrintAdjustment, hasPersistableOverallConcessionAmounts } from '@/lib/overallConcessions';
 import type { CoursePaymentSettings } from '@/types';
 
 type ApplicationData = Joining | Admission;
@@ -50,6 +50,17 @@ export interface PrintFeeStructureDetailedTable {
   columns: PrintFeeStructureColumn[];
   rows: PrintFeeStructureDetailedYearRow[];
 }
+
+export interface BuildPrintFeeStructureDetailedTableOptions {
+  /** When false, render fee head columns but leave all amount cells empty (no catalog defaults). */
+  fillAmounts?: boolean;
+}
+
+const DEFAULT_PRINT_FEE_HEAD_COLUMNS: PrintFeeStructureColumn[] = [
+  { key: 'default:tuition', label: 'Tuition Fee', code: '' },
+  { key: 'default:transport', label: 'Transport Fee', code: '' },
+  { key: 'default:other', label: 'Other Fee', code: '' },
+];
 
 export function mapQuotaToFeeCategory(quota?: string | null): string {
   if (!quota) return '';
@@ -225,8 +236,10 @@ export function buildPrintFeeAdjustmentsFromStudentFeeDetails(
 export function buildPrintFeeStructureDetailedTable(
   structures: FeeStructure[],
   totalYears: number,
-  adjustments: PrintFeeAdjustment[] = []
+  adjustments: PrintFeeAdjustment[] = [],
+  options: BuildPrintFeeStructureDetailedTableOptions = {}
 ): PrintFeeStructureDetailedTable {
+  const fillAmounts = options.fillAmounts !== false;
   const columnMap = new Map<string, PrintFeeStructureColumn>();
   const columnAliasMap = new Map<string, string>();
   const amountMap = new Map<string, number>();
@@ -250,70 +263,87 @@ export function buildPrintFeeStructureDetailedTable(
     }
     if (idAlias) columnAliasMap.set(idAlias, key);
     if (codeAlias) columnAliasMap.set(codeAlias, key);
-    const mapKey = `${key}::${year}`;
-    amountMap.set(mapKey, (amountMap.get(mapKey) || 0) + (Number(row.amount) || 0));
+    if (fillAmounts) {
+      const mapKey = `${key}::${year}`;
+      amountMap.set(mapKey, (amountMap.get(mapKey) || 0) + (Number(row.amount) || 0));
+    }
   }
 
-  for (const adjustment of adjustments) {
-    const type = normalizeAdjustmentType(adjustment.concessionType);
-    const rawKey = feeColumnKeyForAdjustment(adjustment);
-    const codeAlias = normalizeFeeKeyPart(adjustment.feeHeadCode)
-      ? `code:${normalizeFeeKeyPart(adjustment.feeHeadCode).toUpperCase()}`
-      : '';
-    const key = columnAliasMap.get(rawKey) || (codeAlias ? columnAliasMap.get(codeAlias) : '') || rawKey;
-    const year = Number(adjustment.studentYear) || 1;
-    if (!type || !key) continue;
+  if (fillAmounts) {
+    for (const adjustment of adjustments) {
+      const type = normalizeAdjustmentType(adjustment.concessionType);
+      const rawKey = feeColumnKeyForAdjustment(adjustment);
+      const codeAlias = normalizeFeeKeyPart(adjustment.feeHeadCode)
+        ? `code:${normalizeFeeKeyPart(adjustment.feeHeadCode).toUpperCase()}`
+        : '';
+      const key = columnAliasMap.get(rawKey) || (codeAlias ? columnAliasMap.get(codeAlias) : '') || rawKey;
+      const year = Number(adjustment.studentYear) || 1;
+      if (!type || !key) continue;
 
-    // Dynamically insert missing builder heads into the columns list so manually added fee heads are printed
-    if (!columnMap.has(key)) {
-      columnMap.set(key, {
+      // Dynamically insert missing builder heads into the columns list so manually added fee heads are printed
+      if (!columnMap.has(key)) {
+        columnMap.set(key, {
+          key,
+          label: adjustment.feeHeadName || adjustment.feeHeadCode || 'Fee Head',
+          code: adjustment.feeHeadCode || '',
+        });
+      }
+      const adjustmentKey = `${key}::${year}`;
+      const existing = adjustmentMap.get(adjustmentKey);
+      const existingType = normalizeAdjustmentType(existing?.concessionType);
+      if (!existing || existingType !== 'REVISED_FEE' || type === 'REVISED_FEE') {
+        adjustmentMap.set(adjustmentKey, {
+          ...adjustment,
+          concessionType: type,
+        });
+      }
+      const currentType = adjustmentTypeByColumn.get(key);
+      adjustmentTypeByColumn.set(
         key,
-        label: adjustment.feeHeadName || adjustment.feeHeadCode || 'Fee Head',
-        code: adjustment.feeHeadCode || '',
-      });
+        currentType === 'REVISED_FEE' || type === 'REVISED_FEE' ? 'REVISED_FEE' : 'CONCESSION'
+      );
     }
-    const adjustmentKey = `${key}::${year}`;
-    const existing = adjustmentMap.get(adjustmentKey);
-    const existingType = normalizeAdjustmentType(existing?.concessionType);
-    if (!existing || existingType !== 'REVISED_FEE' || type === 'REVISED_FEE') {
-      adjustmentMap.set(adjustmentKey, {
-        ...adjustment,
-        concessionType: type,
-      });
+
+    for (const [key, type] of adjustmentTypeByColumn.entries()) {
+      const col = columnMap.get(key);
+      if (col) col.adjustmentType = type;
     }
-    const currentType = adjustmentTypeByColumn.get(key);
-    adjustmentTypeByColumn.set(
-      key,
-      currentType === 'REVISED_FEE' || type === 'REVISED_FEE' ? 'REVISED_FEE' : 'CONCESSION'
-    );
   }
 
-  for (const [key, type] of adjustmentTypeByColumn.entries()) {
-    const col = columnMap.get(key);
-    if (col) col.adjustmentType = type;
-  }
-
-  const maxFromData = Math.max(
-    0,
-    ...Array.from(amountMap.keys()).map((key) => Number(key.split('::')[1]) || 0),
-    ...Array.from(adjustmentMap.keys()).map((key) => Number(key.split('::')[1]) || 0)
-  );
+  const maxFromData = fillAmounts
+    ? Math.max(
+        0,
+        ...Array.from(amountMap.keys()).map((key) => Number(key.split('::')[1]) || 0),
+        ...Array.from(adjustmentMap.keys()).map((key) => Number(key.split('::')[1]) || 0)
+      )
+    : 0;
   const yearCount = Math.max(1, totalYears, maxFromData);
-  const columns = Array.from(columnMap.values()).filter((col) => {
+  let columns = Array.from(columnMap.values()).filter((col) => {
     const label = String(col.label || '').trim().toLowerCase();
     const code = String(col.code || '').trim().toUpperCase();
-    const isDefaultHead = 
-      /tuition|tution/i.test(label) || 
-      /transport|bus/i.test(label) || 
+    const isDefaultHead =
+      /tuition|tution/i.test(label) ||
+      /transport|bus/i.test(label) ||
       /other/i.test(label) ||
-      code === 'TRN01' || /^trn/i.test(code);
+      code === 'TRN01' ||
+      /^trn/i.test(code);
+    if (!fillAmounts) {
+      return isDefaultHead;
+    }
     return isDefaultHead || adjustmentTypeByColumn.has(col.key);
   });
+  if (columns.length === 0) {
+    columns = [...DEFAULT_PRINT_FEE_HEAD_COLUMNS];
+  }
   const rows: PrintFeeStructureDetailedYearRow[] = [];
 
   for (let year = 1; year <= yearCount; year += 1) {
     const cells: Record<string, PrintFeeStructureCell> = {};
     for (const column of columns) {
+      if (!fillAmounts) {
+        cells[column.key] = { actual: null, adjustment: null };
+        continue;
+      }
       const actual = amountMap.get(`${column.key}::${year}`) || 0;
       const adjustment = adjustmentMap.get(`${column.key}::${year}`);
       const adjustedValue = resolveOverallConcessionPrintAdjustment(adjustment, actual);

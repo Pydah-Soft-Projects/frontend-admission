@@ -25,6 +25,7 @@ import {
   PaymentTransaction,
 } from '@/types';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
+import { normalizeJoiningDocumentsFromApi } from '@/lib/joiningDocumentsNormalize';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { AdmissionReferenceEditor } from '@/components/admission/AdmissionReferenceEditor';
@@ -344,6 +345,10 @@ export default function AdmissionDetailPage() {
     return {
       ...admission,
       registrationFormData: mergedRegistration,
+      documents: normalizeJoiningDocumentsFromApi({
+        ...(joiningForReference.documents || {}),
+        ...(admission.documents || {}),
+      } as Partial<JoiningDocuments>),
       address: {
         communication: mergedCommunication,
         relatives: mergedRelatives,
