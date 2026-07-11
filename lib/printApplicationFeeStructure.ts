@@ -60,11 +60,39 @@ export interface BuildPrintFeeStructureDetailedTableOptions {
 
 const DEFAULT_PRINT_FEE_HEAD_COLUMNS: PrintFeeStructureColumn[] = [
   { key: 'default:tuition', label: 'Tuition Fee', code: '' },
-  { key: 'default:transport', label: 'Transport Fee', code: '' },
   { key: 'default:other', label: 'Other Fee', code: '' },
+  { key: 'default:transport', label: 'Transport Fee', code: '' },
 ];
 
-const BLANK_MODE_HEAD_PATTERNS = [/tuition|tution/i, /transport|bus/i, /other/i] as const;
+/** Print column order: Tuition → Other → Transport. */
+const BLANK_MODE_HEAD_PATTERNS = [/tuition|tution/i, /other/i, /transport|bus/i] as const;
+
+const PRINT_FEE_COLUMN_SORT_ORDER: Record<PrintFeeColumn, number> = {
+  tuition: 0,
+  other: 1,
+  transport: 2,
+};
+
+function classifyPrintFeeStructureColumn(col: PrintFeeStructureColumn): PrintFeeColumn {
+  if (col.key === 'default:tuition') return 'tuition';
+  if (col.key === 'default:other') return 'other';
+  if (col.key === 'default:transport') return 'transport';
+  return classifyPrintFeeColumn({
+    feeHeadCode: col.code,
+    feeHeadName: col.label,
+    feeHeadDescription: '',
+  } as FeeStructure);
+}
+
+function sortPrintFeeStructureColumns(columns: PrintFeeStructureColumn[]): PrintFeeStructureColumn[] {
+  return [...columns].sort((a, b) => {
+    const orderDiff =
+      PRINT_FEE_COLUMN_SORT_ORDER[classifyPrintFeeStructureColumn(a)] -
+      PRINT_FEE_COLUMN_SORT_ORDER[classifyPrintFeeStructureColumn(b)];
+    if (orderDiff !== 0) return orderDiff;
+    return String(a.label || '').localeCompare(String(b.label || ''));
+  });
+}
 
 function resolveBlankModePrintFeeColumns(
   columnMap: Map<string, PrintFeeStructureColumn>,
@@ -362,6 +390,7 @@ export function buildPrintFeeStructureDetailedTable(
       columns = resolveBlankModePrintFeeColumns(columnMap, options.feeHeads);
     }
   }
+  columns = sortPrintFeeStructureColumns(columns);
   const rows: PrintFeeStructureDetailedYearRow[] = [];
 
   for (let year = 1; year <= yearCount; year += 1) {
