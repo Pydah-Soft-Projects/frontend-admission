@@ -54,6 +54,8 @@ export interface PrintFeeStructureDetailedTable {
 export interface BuildPrintFeeStructureDetailedTableOptions {
   /** When false, render fee head columns but leave all amount cells empty (no catalog defaults). */
   fillAmounts?: boolean;
+  /** Master fee heads list — used to label Tuition / Transport / Other when amounts are blank. */
+  feeHeads?: Array<{ name?: string; code?: string }>;
 }
 
 const DEFAULT_PRINT_FEE_HEAD_COLUMNS: PrintFeeStructureColumn[] = [
@@ -61,6 +63,29 @@ const DEFAULT_PRINT_FEE_HEAD_COLUMNS: PrintFeeStructureColumn[] = [
   { key: 'default:transport', label: 'Transport Fee', code: '' },
   { key: 'default:other', label: 'Other Fee', code: '' },
 ];
+
+const BLANK_MODE_HEAD_PATTERNS = [/tuition|tution/i, /transport|bus/i, /other/i] as const;
+
+function resolveBlankModePrintFeeColumns(
+  columnMap: Map<string, PrintFeeStructureColumn>,
+  feeHeads: Array<{ name?: string; code?: string }> = []
+): PrintFeeStructureColumn[] {
+  const catalogColumns = Array.from(columnMap.values());
+  return DEFAULT_PRINT_FEE_HEAD_COLUMNS.map((defaultCol, index) => {
+    const pattern = BLANK_MODE_HEAD_PATTERNS[index];
+    const fromCatalog = catalogColumns.find(
+      (col) =>
+        pattern.test(String(col.label || '')) ||
+        pattern.test(String(col.code || ''))
+    );
+    const fromMaster = feeHeads.find((head) => pattern.test(String(head.name || '')));
+    return {
+      key: defaultCol.key,
+      label: fromCatalog?.label || fromMaster?.name || defaultCol.label,
+      code: fromCatalog?.code || fromMaster?.code || '',
+    };
+  });
+}
 
 export function mapQuotaToFeeCategory(quota?: string | null): string {
   if (!quota) return '';
@@ -318,22 +343,24 @@ export function buildPrintFeeStructureDetailedTable(
       )
     : 0;
   const yearCount = Math.max(1, totalYears, maxFromData);
-  let columns = Array.from(columnMap.values()).filter((col) => {
-    const label = String(col.label || '').trim().toLowerCase();
-    const code = String(col.code || '').trim().toUpperCase();
-    const isDefaultHead =
-      /tuition|tution/i.test(label) ||
-      /transport|bus/i.test(label) ||
-      /other/i.test(label) ||
-      code === 'TRN01' ||
-      /^trn/i.test(code);
-    if (!fillAmounts) {
-      return isDefaultHead;
+  let columns: PrintFeeStructureColumn[];
+  if (!fillAmounts) {
+    columns = resolveBlankModePrintFeeColumns(columnMap, options.feeHeads);
+  } else {
+    columns = Array.from(columnMap.values()).filter((col) => {
+      const label = String(col.label || '').trim().toLowerCase();
+      const code = String(col.code || '').trim().toUpperCase();
+      const isDefaultHead =
+        /tuition|tution/i.test(label) ||
+        /transport|bus/i.test(label) ||
+        /other/i.test(label) ||
+        code === 'TRN01' ||
+        /^trn/i.test(code);
+      return isDefaultHead || adjustmentTypeByColumn.has(col.key);
+    });
+    if (columns.length === 0) {
+      columns = resolveBlankModePrintFeeColumns(columnMap, options.feeHeads);
     }
-    return isDefaultHead || adjustmentTypeByColumn.has(col.key);
-  });
-  if (columns.length === 0) {
-    columns = [...DEFAULT_PRINT_FEE_HEAD_COLUMNS];
   }
   const rows: PrintFeeStructureDetailedYearRow[] = [];
 

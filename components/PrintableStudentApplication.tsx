@@ -439,7 +439,7 @@ async function resolvePrintFeeStructureTableHtml(
     combinedFeeStructures,
     totalYears,
     hasBuilderAmounts ? mergedAdjustments : [],
-    { fillAmounts: hasBuilderAmounts }
+    { fillAmounts: hasBuilderAmounts, feeHeads }
   );
 
   return renderPrintFeeStructureDetailedTableHtml(detailedTable, {
