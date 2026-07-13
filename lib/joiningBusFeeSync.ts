@@ -92,6 +92,18 @@ export function normalizeHostelFeesByYear(
     .filter((row) => Number.isFinite(row.studentYear) && row.studentYear > 0);
 }
 
+export function resolveHostelFeeRowForYear(
+  fees: Array<{ studentYear: number; amount: number | null }>,
+  studentYear: number
+): { studentYear: number; amount: number | null } | null {
+  if (!fees.length) return null;
+  const targetYear = Math.max(1, Math.trunc(studentYear) || 1);
+  const exact = fees.find((row) => row.studentYear === targetYear);
+  if (exact) return exact;
+  const sorted = [...fees].sort((a, b) => a.studentYear - b.studentYear);
+  return sorted.find((row) => row.studentYear >= targetYear) ?? sorted[sorted.length - 1] ?? null;
+}
+
 export function getHostelFeeAmountForYear(
   transport: JoiningTransportDetails,
   studentYear: number
@@ -128,6 +140,7 @@ export function shouldApplyBusFee(transport: JoiningTransportDetails): boolean {
 export function shouldApplyHostelFee(transport: JoiningTransportDetails): boolean {
   if (transport.accommodationType !== 'hostel') return false;
   if (!transport.academicYear || !transport.hostelId || !transport.categoryId) return false;
+  if (!transport.roomId && !transport.roomNumber) return false;
 
   const byYear = transport.hostelFeesByYear;
   if (byYear?.length) {

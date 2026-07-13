@@ -101,6 +101,7 @@ import {
   normalizeBtechIntakeYearString,
   resolveBtechSemesterFromLateral,
   resolveJoiningStepOneAcademicYear,
+  resolveJoiningStudentYearOfStudy,
   resolveTotalYearsFromCourseSettings,
   sanitizeJoiningRegistrationBatchFieldValue,
   type JoiningRegistrationFixedGate,
@@ -2777,6 +2778,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ));
 
   const [hasExistingTransportRequest, setHasExistingTransportRequest] = useState(false);
+  const [step3AccommodationUiLocked, setStep3AccommodationUiLocked] = useState(false);
+
+  useEffect(() => {
+    if (!isAccommodationChoiceLocked(transportDetails)) {
+      setStep3AccommodationUiLocked(false);
+    }
+  }, [transportDetails]);
+
+  const step3SelectionUiLocked = step3AccommodationReadOnly || step3AccommodationUiLocked;
 
   const applyAdmissionRecordToWorkspace = useCallback(
     (record: Admission) => {
@@ -3640,6 +3650,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         leadAcademicYear: (lead as LeadLike | undefined)?.academicYear,
       }),
     [registrationExtras, joiningRegistrationCourseContext, lead]
+  );
+
+  const studentYearOfStudy = useMemo(
+    () =>
+      resolveJoiningStudentYearOfStudy({
+        registrationExtras,
+        admissionNumber: admissionNumberDisplay,
+      }),
+    [registrationExtras, admissionNumberDisplay]
   );
 
   const joiningRegistrationPatch = useMemo(
@@ -5089,6 +5108,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       });
     },
     onSuccess: async () => {
+      if (applicationWizardStep === 3 && isAccommodationChoiceLocked(transportDetails)) {
+        setStep3AccommodationUiLocked(true);
+      }
       showToast.success(
         status === 'approved' ? 'Important documents saved' : 'Step 2 documents saved as draft'
       );
@@ -5310,7 +5332,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             admissionId={admissionRecord?._id}
             onWizardAdvance={() => advanceApplicationWizard(4)}
             disabled={!canProceedStep3}
-            disabledTitle="Complete bus, hostel, or None selection before continuing to Step 4."
+            disabledTitle="Complete bus route + stage, hostel room, or None before continuing to Step 4."
           />
         </WorkflowStickyActionBar>
       );
@@ -6804,11 +6826,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     disabled={step3AccommodationReadOnly || !canWriteJoining}
                     courseName={formState.courseInfo.course}
                     programTotalYears={programTotalYears}
+                    studentYearOfStudy={studentYearOfStudy}
                     joiningAcademicYear={stepOneAcademicYear}
                     collegeId={selectedCollegeId ? Number(selectedCollegeId) : null}
                     managedCourseId={formState.courseInfo.courseId ? Number(formState.courseInfo.courseId) : null}
                     admissionNumber={admissionNumberDisplay}
                     joiningId={joiningRecord?._id}
+                    selectionUiLocked={step3SelectionUiLocked}
                     onExistingRequestChange={setHasExistingTransportRequest}
                   />
                   {renderWizardStepFooter(3)}

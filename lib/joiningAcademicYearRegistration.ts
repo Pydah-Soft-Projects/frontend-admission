@@ -189,6 +189,33 @@ export function buildBtechIntakeAutoRemark(args: {
   return `B.Tech regular intake — academic year ${y}, semester ${sem}.`;
 }
 
+/** First number in semester token (e.g. 2-1 → 2, 1-1 → 1). */
+export function parseSemesterYearOfStudy(semesterToken: unknown): number | null {
+  const sem = String(semesterToken ?? '').trim();
+  const match = sem.match(/^(\d+)\s*[-/]\s*(\d+)/);
+  if (!match) return null;
+  const yearOfStudy = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(yearOfStudy) || yearOfStudy < 1 || yearOfStudy > 12) return null;
+  return yearOfStudy;
+}
+
+/** Program year for fee display (1 for regular intake; 2 for B.Tech lateral, etc.). */
+export function resolveJoiningStudentYearOfStudy(args: {
+  registrationExtras?: Record<string, unknown> | null;
+  admissionNumber?: string | null;
+}): number {
+  const extras = args.registrationExtras;
+  const fromSemester = parseSemesterYearOfStudy(
+    extras?.semester ??
+      extras?.current_semester ??
+      extras?.currentSemester ??
+      extras?.semister
+  );
+  if (fromSemester != null) return fromSemester;
+  if (isLateralRegistrationExtras(extras, args.admissionNumber)) return 2;
+  return 1;
+}
+
 /** Student-DB registration field names that look like free-text remarks (auto-filled for B.Tech intake). */
 export function listRegistrationRemarkFieldNames(
   fields: Array<{ fieldName?: string; fieldLabel?: string }>
