@@ -2778,6 +2778,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ));
 
   const [hasExistingTransportRequest, setHasExistingTransportRequest] = useState(false);
+  const [hasExistingHostelRequest, setHasExistingHostelRequest] = useState(false);
   const [step3AccommodationUiLocked, setStep3AccommodationUiLocked] = useState(false);
 
   useEffect(() => {
@@ -2787,6 +2788,28 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   }, [transportDetails]);
 
   const step3SelectionUiLocked = step3AccommodationReadOnly || step3AccommodationUiLocked;
+
+  const accommodationTransportDetails = useMemo(() => {
+    if (hasExistingTransportRequest && !hasExistingHostelRequest) {
+      return { ...transportDetails, accommodationType: 'bus' as const };
+    }
+    if (hasExistingHostelRequest && !hasExistingTransportRequest) {
+      return { ...transportDetails, accommodationType: 'hostel' as const };
+    }
+    return transportDetails;
+  }, [transportDetails, hasExistingTransportRequest, hasExistingHostelRequest]);
+
+  const refreshAccommodationQueries = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['student-transport-request'] }),
+      queryClient.invalidateQueries({ queryKey: ['hostel-student-details'] }),
+      queryClient.invalidateQueries({ queryKey: ['next-transport-app-no'] }),
+    ]);
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ['student-transport-request'], type: 'active' }),
+      queryClient.refetchQueries({ queryKey: ['hostel-student-details'], type: 'active' }),
+    ]);
+  }, [queryClient]);
 
   const applyAdmissionRecordToWorkspace = useCallback(
     (record: Admission) => {
@@ -3698,7 +3721,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const accommodationInjectedRows = useMemo(
     () =>
-      buildAccommodationInjectedRows(transportDetails, {
+      buildAccommodationInjectedRows(accommodationTransportDetails, {
         totalYears: programTotalYears,
         batch: feeConfigurationBatch,
         course: formState.courseInfo.course || '',
@@ -3706,7 +3729,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         quota: formState.courseInfo.quota,
       }),
     [
-      transportDetails,
+      accommodationTransportDetails,
       programTotalYears,
       feeConfigurationBatch,
       formState.courseInfo.course,
@@ -3719,12 +3742,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     setStudentFeeDetails((prev) =>
       applyAccommodationFeesToStudentFeeDetails(
         prev,
-        transportDetails,
+        accommodationTransportDetails,
         programTotalYears,
         feeConfigurationBatch
       )
     );
-  }, [transportDetails, programTotalYears, feeConfigurationBatch]);
+  }, [accommodationTransportDetails, programTotalYears, feeConfigurationBatch]);
 
   const payloadForSave = useMemo(() => {
     // Ensure course and branch names are stored when IDs are present
@@ -5027,6 +5050,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         'Fee configuration saved — fee portal, bus, and hostel systems updated where applicable'
       );
       await refetch();
+      if (isAccommodationChoiceLocked(transportDetails)) {
+        await refreshAccommodationQueries();
+      }
       if (admissionRecord?._id) {
         await queryClient.invalidateQueries({ queryKey: ['admission', admissionRecord._id] });
       }
@@ -5061,6 +5087,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       builderConcessionsHydratedForRef.current = null;
       showToast.success('Fee request submitted for approval');
       await refetch();
+      await refreshAccommodationQueries();
       await queryClient.invalidateQueries({ queryKey: ['fee-request-pending', joiningRecord?._id] });
       if (admissionNumberDisplay) {
         await queryClient.invalidateQueries({ queryKey: ['overall-concessions', admissionNumberDisplay] });
@@ -5108,13 +5135,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       });
     },
     onSuccess: async () => {
-      if (applicationWizardStep === 3 && isAccommodationChoiceLocked(transportDetails)) {
+      const savedAccommodation =
+        applicationWizardStep === 3 && isAccommodationChoiceLocked(transportDetails);
+      if (savedAccommodation) {
         setStep3AccommodationUiLocked(true);
       }
       showToast.success(
-        status === 'approved' ? 'Important documents saved' : 'Step 2 documents saved as draft'
+        savedAccommodation
+          ? 'Accommodation request saved successfully'
+          : status === 'approved'
+            ? 'Important documents saved'
+            : 'Step 2 documents saved as draft'
       );
       const { data: refetchedJoining } = await refetch();
+      if (savedAccommodation) {
+        await refreshAccommodationQueries();
+      }
       if (status === 'approved') {
         await queryClient.invalidateQueries({ queryKey: ['admission', leadId, status] });
         if (admissionRecord?._id) {
@@ -5314,7 +5350,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           className={stickyClass}
         >
           <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(2)} />
-          {canWriteJoining && !hasExistingTransportRequest ? (
+          {canWriteJoining &&
+          !hasExistingTransportRequest &&
+          !hasExistingHostelRequest &&
+          !step3AccommodationUiLocked ? (
             <Button
               type="button"
               variant="secondary"
@@ -6834,6 +6873,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     joiningId={joiningRecord?._id}
                     selectionUiLocked={step3SelectionUiLocked}
                     onExistingRequestChange={setHasExistingTransportRequest}
+                    onExistingHostelRequestChange={setHasExistingHostelRequest}
                   />
                   {renderWizardStepFooter(3)}
                 </>
