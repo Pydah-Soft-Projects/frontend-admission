@@ -119,6 +119,8 @@ export function mapQuotaToFeeCategory(quota?: string | null): string {
   if (!quota) return '';
   const key = quota.trim().toLowerCase();
   if (!key) return '';
+  if (key.includes('lateral') && key.includes('entry')) return 'LATER';
+  if (key === 'lateral spot' || (key.includes('lateral') && key.includes('spot'))) return 'LSPOT';
   if (key.includes('conv')) return 'CONV';
   if (key.includes('mang') || key.includes('management')) return 'MANG';
   if (key.includes('spot')) return 'SPOT';

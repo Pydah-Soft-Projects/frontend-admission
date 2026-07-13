@@ -68,6 +68,8 @@ const mapQuotaToCategory = (quota?: string | null): string | null => {
   if (!quota) return null;
   const key = quota.trim().toLowerCase();
   if (!key) return null;
+  if (key.includes('lateral') && key.includes('entry')) return 'LATER';
+  if (key === 'lateral spot' || (key.includes('lateral') && key.includes('spot'))) return 'LSPOT';
   if (key.includes('conv')) return 'CONV';
   if (key.includes('mang') || key.includes('management')) return 'MANG';
   if (key.includes('spot')) return 'SPOT';

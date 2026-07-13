@@ -4073,6 +4073,41 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     !isPublicEdit &&
     canEditReference &&
     (status === 'approved' ? isAdmissionEditable : canWriteJoining);
+
+  const referenceFieldReadOnlyReason = useMemo(() => {
+    if (canEditReferenceField && !isUpdatingAdmission && !isSaving) {
+      return null;
+    }
+    if (isSaving || isUpdatingAdmission) {
+      return 'Please wait — a save is in progress.';
+    }
+    if (isSelfRegistrationRecord) {
+      return 'Reference is not used for self-registration leads. Lead source stays as Self Registration.';
+    }
+    if (isPublicEdit) {
+      return 'Reference is not editable on public joining links.';
+    }
+    if (!canEditReference) {
+      return 'Only Super Admin can edit reference on the joining desk.';
+    }
+    if (status === 'approved' && !isAdmissionEditable) {
+      return 'This admission is approved. You need Edit Admission permission to change reference.';
+    }
+    if (!canWriteJoining) {
+      return 'You have read-only access to the joining desk.';
+    }
+    return 'Reference cannot be edited in the current form state.';
+  }, [
+    canEditReferenceField,
+    isUpdatingAdmission,
+    isSaving,
+    isSelfRegistrationRecord,
+    isPublicEdit,
+    canEditReference,
+    status,
+    isAdmissionEditable,
+    canWriteJoining,
+  ]);
   /** Student / father / mother numbers for the preferred-mobile dropdown (form + lead snapshot). */
   const preferredMobileSources = useMemo(
     () =>
@@ -5032,7 +5067,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             }
           : stripped;
       if (status === 'approved') {
-        return joiningAPI.patchStepTwo(workflowJoiningId, {
+        await joiningAPI.patchStepTwo(workflowJoiningId, {
           registrationFormData: {
             ...registrationFormData,
             ...joiningRegistrationPatch,
@@ -5043,6 +5078,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           },
           documents: serializeJoiningDocumentsForApi(formState.documents),
         });
+        if (!isSelfRegistrationRecord && admissionRecord?._id) {
+          await admissionAPI.patchReferenceById(String(admissionRecord._id), reference1.trim());
+        }
+        return null;
       }
       return joiningAPI.saveDraft(leadId as string, {
         ...payloadForSave,
@@ -5977,17 +6016,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           </label>
                         </div>
                       </div>
-                      {!isSelfRegistrationRecord ? (
-                        <div className="min-w-0">
-                          <ReferenceUserSelect
-                            label="Reference"
-                            value={reference1}
-                            onChange={setReference1}
-                            disabled={!canEditReferenceField || isUpdatingAdmission || isSaving}
-                            showAddUserButton={canEditReferenceField && !isUpdatingAdmission && !isSaving}
-                          />
-                        </div>
-                      ) : null}
                     </div>
                     );
                   })()}
@@ -6594,6 +6622,46 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 (useWizard && applicationWizardStep !== 2) || isPublicEdit ? 'hidden' : ''
               )}
             >
+              <ApplicationInfoCard
+                title="Reference"
+                icon={<UserPlus className="h-4 w-4" aria-hidden />}
+                description="Staff or referral contact linked to this lead (saved with Step 2)"
+              >
+                <div className="flex flex-row items-center gap-3">
+                  <div className="w-full max-w-[17rem] shrink-0">
+                    <ReferenceUserSelect
+                      label=""
+                      value={isSelfRegistrationRecord ? '' : reference1}
+                      onChange={setReference1}
+                      disabled={
+                        isSelfRegistrationRecord ||
+                        !canEditReferenceField ||
+                        isUpdatingAdmission ||
+                        isSaving
+                      }
+                      showAddUserButton={
+                        !isSelfRegistrationRecord &&
+                        canEditReferenceField &&
+                        !isUpdatingAdmission &&
+                        !isSaving
+                      }
+                    />
+                  </div>
+                  {referenceFieldReadOnlyReason ? (
+                    <p
+                      className={cn(
+                        'flex min-w-0 flex-1 items-center rounded-lg border px-3 py-2 text-sm leading-snug',
+                        isSelfRegistrationRecord
+                          ? 'border-slate-200/90 bg-slate-50/90 text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300'
+                          : 'border-amber-200/90 bg-amber-50/90 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100'
+                      )}
+                      role="status"
+                    >
+                      {referenceFieldReadOnlyReason}
+                    </p>
+                  ) : null}
+                </div>
+              </ApplicationInfoCard>
               <section
                 className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
               >
