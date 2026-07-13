@@ -14,6 +14,7 @@ import { showToast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { handleExternalPrint } from '@/lib/printHtml';
 import { Button } from '@/components/ui/Button';
+import { PrintActionButton } from '@/components/ui/PrintActionButton';
 import {
   Dialog,
   DialogContent,
@@ -876,14 +877,14 @@ export function AdmissionStepThreeBusHostelPanel({
                     <button
                       type="button"
                       onClick={() => setCancelDialogOpen(true)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
                     >
                       Cancel transport
                     </button>
                   ) : null}
                   {!isCancelledTransportRequest ? (
-                  <button
-                    type="button"
+                  <PrintActionButton
+                    label="Print Transport Admit"
                     onClick={() => {
                       void handleExternalPrint('transport', {
                         template: 'transport-admit',
@@ -891,13 +892,7 @@ export function AdmissionStepThreeBusHostelPanel({
                         academicYear: existingRequest.academic_year || ''
                       }, undefined, 'Transport Admit Card');
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Print Transport Admit
-                  </button>
+                  />
                   ) : null}
                 </div>
               </div>
@@ -1076,25 +1071,20 @@ export function AdmissionStepThreeBusHostelPanel({
                   <span className="text-slate-500">Academic Year:</span> <strong className="text-slate-900 dark:text-slate-100">{effectiveAcademicYear}</strong>
                 </div>
                 <div className="col-span-2 sm:col-span-4 mt-3 flex justify-end">
-                  <button
-                    type="button"
+                  <PrintActionButton
+                    label="Print Hostel Admit"
+                    disabled={!hostelStudentDetails || !(hostelStudentDetails as { _id?: string })._id}
                     onClick={() => {
-                      if (hostelStudentDetails && (hostelStudentDetails as any)._id) {
-                        void handleExternalPrint(
-                          'hostel',
-                          { template: 'hostel-admit' },
-                          { template: 'hostel-admit', data: { studentId: (hostelStudentDetails as any)._id } },
-                          'Hostel Admit Card'
-                        );
-                      }
+                      const studentId = (hostelStudentDetails as { _id?: string } | null)?._id;
+                      if (!studentId) return;
+                      void handleExternalPrint(
+                        'hostel',
+                        { template: 'hostel-admit' },
+                        { template: 'hostel-admit', data: { studentId } },
+                        'Hostel Admit Card'
+                      );
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Print Hostel Admit
-                  </button>
+                  />
                 </div>
               </div>
             </div>

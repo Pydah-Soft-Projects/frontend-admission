@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Button } from '@/components/ui/Button';
+import { PrintActionButton } from '@/components/ui/PrintActionButton';
 import { handleExternalPrint } from '@/lib/printHtml';
 
 export type PaymentReceiptPrintDetails = {
@@ -25,11 +25,11 @@ export function PrintablePaymentReceipt({
   details,
   printButtonLabel = 'Print payment details',
   className,
-  size = 'sm',
 }: {
   details: PaymentReceiptPrintDetails;
   printButtonLabel?: string;
   className?: string;
+  /** @deprecated Size is ignored; compact theme button is always used. */
   size?: 'sm' | 'md';
 }) {
   const handlePrint = useCallback(() => {
@@ -37,9 +37,11 @@ export function PrintablePaymentReceipt({
   }, [details]);
 
   return (
-    <Button type="button" variant="outline" size={size} onClick={handlePrint} className={className}>
-      {printButtonLabel}
-    </Button>
+    <PrintActionButton
+      label={printButtonLabel}
+      onClick={handlePrint}
+      className={className}
+    />
   );
 }
 

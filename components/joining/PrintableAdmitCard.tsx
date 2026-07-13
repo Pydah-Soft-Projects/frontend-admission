@@ -906,7 +906,7 @@ export function PrintableAdmitCard({
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="primary"
       size={size}
       onClick={() => void handlePrint()}
       className={className}
