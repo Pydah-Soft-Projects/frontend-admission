@@ -1,16 +1,28 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hostelAPI, transportAPI } from '@/lib/api';
 import {
-  isAccommodationChoiceLocked,
   joiningTransportDetailsCompletenessScore,
+  hasValidHostelFeeAmount,
   normalizeHostelFeesByYear,
+  resolveHostelFeeRowForYear,
 } from '@/lib/joiningBusFeeSync';
 import { calendarYearToAcademicYearRange } from '@/lib/joiningAcademicYearRegistration';
+import { showToast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { handleExternalPrint } from '@/lib/printHtml';
+import { Button } from '@/components/ui/Button';
+import { PrintActionButton } from '@/components/ui/PrintActionButton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/Dialog';
 import type {
   HostelCategorySummary,
   HostelRoomSummary,
@@ -39,6 +51,24 @@ const formatCurrency = (amount?: number | null) => {
 type AccommodationTab = 'bus' | 'hostel' | 'none';
 type HostelType = 'boys' | 'girls';
 
+type TransportRequestRow = {
+  id?: number;
+  admission_number?: string;
+  route_name?: string;
+  stage_name?: string;
+  fare?: number | string | null;
+  bus_id?: string | null;
+  status?: string | null;
+  cancellation_reason?: string | null;
+  academic_year?: string | null;
+  application_number?: string | null;
+};
+
+const isActiveTransportStatus = (status?: string | null) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  return normalized === 'pending' || normalized === 'approved';
+};
+
 type AdmissionStepThreeBusHostelPanelProps = {
   value: JoiningTransportDetails;
   onChange?: (next: JoiningTransportDetails) => void;
@@ -46,6 +76,8 @@ type AdmissionStepThreeBusHostelPanelProps = {
   className?: string;
   courseName?: string | null;
   programTotalYears?: number;
+  /** Program year for hostel fee display (1 = first year, 2 = lateral, etc.). */
+  studentYearOfStudy?: number;
   /** Step 1 intake calendar year (e.g. 2026) from registrationFormData. */
   joiningAcademicYear?: string | null;
   collegeId?: number | null;
@@ -53,6 +85,8 @@ type AdmissionStepThreeBusHostelPanelProps = {
   collegeName?: string | null;
   admissionNumber?: string | null;
   joiningId?: string | null;
+  /** Hide bus/hostel pickers after accommodation is saved / awaiting fee approval. */
+  selectionUiLocked?: boolean;
 };
 
 const emptyTransportDetails = (): JoiningTransportDetails => ({});
@@ -180,18 +214,24 @@ export function AdmissionStepThreeBusHostelPanel({
   className,
   courseName,
   programTotalYears = 4,
+  studentYearOfStudy = 1,
   joiningAcademicYear,
   collegeId = null,
   managedCourseId = null,
   collegeName = null,
   admissionNumber = null,
   joiningId = null,
+  selectionUiLocked = false,
   onExistingRequestChange,
+  onExistingHostelRequestChange,
 }: AdmissionStepThreeBusHostelPanelProps & {
   onExistingRequestChange?: (hasExisting: boolean) => void;
+  onExistingHostelRequestChange?: (hasExisting: boolean) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   const canEdit = Boolean(onChange) && !disabled;
-  const choiceLocked = isAccommodationChoiceLocked(value);
   const selectedTab: AccommodationTab | null =
     value.hostelId != null && String(value.hostelId).trim() !== ''
       ? 'hostel'
@@ -252,6 +292,7 @@ export function AdmissionStepThreeBusHostelPanel({
   const {
     data: existingRequestResponse,
     isFetched: transportRequestFetched,
+    isFetching: isFetchingTransportRequest,
   } = useQuery({
     queryKey: ['student-transport-request', admissionNumber, effectiveAcademicYear],
     queryFn: () =>
@@ -263,12 +304,16 @@ export function AdmissionStepThreeBusHostelPanel({
     staleTime: 60_000,
   });
 
-  const existingRequest = existingRequestResponse?.data || null;
+  const existingRequest = (existingRequestResponse?.data || null) as TransportRequestRow | null;
+  const isActiveTransportRequest = Boolean(existingRequest && isActiveTransportStatus(existingRequest.status));
+  const isCancelledTransportRequest =
+    Boolean(existingRequest) && String(existingRequest?.status || '').trim().toLowerCase() === 'cancelled';
 
   const {
     data: hostelStudentResponse,
     isLoading: isLoadingHostelStudent,
     isFetched: hostelStudentFetched,
+    isFetching: isFetchingHostelStudent,
   } = useQuery({
     queryKey: [
       'hostel-student-details',
@@ -289,6 +334,11 @@ export function AdmissionStepThreeBusHostelPanel({
   });
 
   const hostelStudentDetails = hostelStudentResponse?.data || null;
+  const isActiveHostelRequest = Boolean(hostelStudentDetails?.isAssigned);
+
+  useEffect(() => {
+    onExistingHostelRequestChange?.(isActiveHostelRequest);
+  }, [isActiveHostelRequest, onExistingHostelRequestChange]);
 
   useEffect(() => {
     if (tabAutoInitializedRef.current) return;
@@ -306,9 +356,9 @@ export function AdmissionStepThreeBusHostelPanel({
     }
 
     let inferredTab: AccommodationTab = 'bus';
-    if (hostelStudentDetails?.isAssigned) {
+    if (isActiveHostelRequest) {
       inferredTab = 'hostel';
-    } else if (existingRequest) {
+    } else if (isActiveTransportRequest) {
       inferredTab = 'bus';
     } else if (value.accommodationType === 'none') {
       inferredTab = 'none';
@@ -327,8 +377,8 @@ export function AdmissionStepThreeBusHostelPanel({
     admissionNumber,
     canEdit,
     effectiveAcademicYear,
-    existingRequest,
-    hostelStudentDetails?.isAssigned,
+    isActiveTransportRequest,
+    isActiveHostelRequest,
     hostelStudentFetched,
     joiningId,
     onChange,
@@ -338,8 +388,8 @@ export function AdmissionStepThreeBusHostelPanel({
   ]);
 
   useEffect(() => {
-    onExistingRequestChange?.(Boolean(existingRequest));
-  }, [existingRequest, onExistingRequestChange]);
+    onExistingRequestChange?.(isActiveTransportRequest);
+  }, [isActiveTransportRequest, onExistingRequestChange]);
 
   useEffect(() => {
     if (!canEdit || !onChange || !joiningAcademicYearSession) return;
@@ -440,26 +490,38 @@ export function AdmissionStepThreeBusHostelPanel({
     () => normalizeHostelFeesByYear(roomsPayload?.yearlyFees),
     [roomsPayload?.yearlyFees]
   );
+  const effectiveStudentYear = Math.max(1, Math.min(studentYearOfStudy, programTotalYears));
+  const currentYearHostelFee = useMemo(
+    () => resolveHostelFeeRowForYear(resolvedHostelFeesByYear, effectiveStudentYear),
+    [resolvedHostelFeesByYear, effectiveStudentYear]
+  );
 
   useEffect(() => {
     if (!canEdit || !onChange || displayTab !== 'hostel') return;
-    if (!value.categoryId || resolvedHostelFeesByYear.length === 0) return;
+    if (!value.categoryId || !currentYearHostelFee) return;
+    if (!value.roomId && !value.roomNumber) return;
 
-    const nextFirstFee = resolvedHostelFeesByYear[0]?.amount ?? null;
+    const nextFees = [currentYearHostelFee];
+    const nextFirstFee = currentYearHostelFee.amount ?? null;
     const currentFeesJson = JSON.stringify(value.hostelFeesByYear || []);
-    const nextFeesJson = JSON.stringify(resolvedHostelFeesByYear);
+    const nextFeesJson = JSON.stringify(nextFees);
     if (nextFeesJson === currentFeesJson && nextFirstFee === value.hostelFee) return;
 
     onChange({
       ...value,
-      hostelFeesByYear: resolvedHostelFeesByYear,
+      hostelFeesByYear: nextFees,
       hostelFee: nextFirstFee,
     });
   }, [
     displayTab,
     canEdit,
     onChange,
-    resolvedHostelFeesByYear,
+    currentYearHostelFee,
+    value.categoryId,
+    value.roomId,
+    value.roomNumber,
+    value.hostelFee,
+    value.hostelFeesByYear,
     value,
   ]);
 
@@ -490,8 +552,39 @@ export function AdmissionStepThreeBusHostelPanel({
     hostelFeesByYear: undefined,
   });
 
+  const cancelTransportMutation = useMutation({
+    mutationFn: async () =>
+      transportAPI.cancelTransportRequest({
+        admissionNumber: admissionNumber || '',
+        academicYear: effectiveAcademicYear,
+        requestId: existingRequest?.id,
+        joiningId: joiningId || undefined,
+        reason: cancelReason.trim(),
+      }),
+    onSuccess: async () => {
+      showToast.success('Transport request cancelled');
+      setCancelDialogOpen(false);
+      setCancelReason('');
+      await queryClient.invalidateQueries({
+        queryKey: ['student-transport-request', admissionNumber, effectiveAcademicYear],
+      });
+      await queryClient.refetchQueries({
+        queryKey: ['student-transport-request', admissionNumber, effectiveAcademicYear],
+        type: 'active',
+      });
+      if (canEdit && onChange) {
+        onChange({
+          accommodationType: undefined,
+          ...clearBusFields(),
+        });
+      }
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      showToast.error(error.response?.data?.message || 'Failed to cancel transport request');
+    },
+  });
+
   const handleTabChange = (tab: AccommodationTab) => {
-    if (choiceLocked && selectedTab && tab !== selectedTab) return;
     setActiveTab(tab);
     if (!canEdit || !onChange) return;
     if (tab === 'none') {
@@ -614,16 +707,28 @@ export function AdmissionStepThreeBusHostelPanel({
     selectedRouteId,
     value,
   ]);
-  const displayHostelFees =
-    resolvedHostelFeesByYear.length > 0
-      ? resolvedHostelFeesByYear
-      : value.hostelFeesByYear || [];
-  const hasHostelFeeRows = displayHostelFees.some(
-    (row) => row.amount != null && !Number.isNaN(Number(row.amount))
-  );
-  const hasVariableHostelFees =
-    displayHostelFees.length > 1 &&
-    new Set(displayHostelFees.map((row) => row.amount)).size > 1;
+  const displayHostelFeeRow =
+    currentYearHostelFee ??
+    (value.hostelFeesByYear?.length
+      ? resolveHostelFeeRowForYear(value.hostelFeesByYear, effectiveStudentYear)
+      : null);
+  const hasHostelFeeRows = hasValidHostelFeeAmount(displayHostelFeeRow?.amount);
+  const hasExternalBusApplication = isActiveTransportRequest;
+  const hasExternalHostelApplication = isActiveHostelRequest;
+  const busSelectionLocked = hasExternalBusApplication || selectionUiLocked;
+  const hostelSelectionLocked = hasExternalHostelApplication || selectionUiLocked;
+
+  const visibleAccommodationTabs = useMemo(() => {
+    if (hasExternalBusApplication && hasExternalHostelApplication) {
+      return ['bus', 'hostel'] as AccommodationTab[];
+    }
+    if (hasExternalBusApplication) return ['bus'] as AccommodationTab[];
+    if (hasExternalHostelApplication) return ['hostel'] as AccommodationTab[];
+    return ['bus', 'hostel', 'none'] as AccommodationTab[];
+  }, [
+    hasExternalBusApplication,
+    hasExternalHostelApplication,
+  ]);
   const resolvedFeeAcademicYear = roomsPayload?.resolvedAcademicYear || effectiveAcademicYear;
   const feeUsedFallback =
     roomsPayload?.feeMatchedBy === 'fallback' &&
@@ -655,10 +760,8 @@ export function AdmissionStepThreeBusHostelPanel({
         </div>
 
         <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900/80">
-          {(['bus', 'hostel', 'none'] as AccommodationTab[]).map((tab) => {
+          {visibleAccommodationTabs.map((tab) => {
             const isActive = displayTab === tab;
-            const tabLocked = choiceLocked && selectedTab != null && tab !== selectedTab;
-            if (tabLocked) return null;
             return (
               <button
                 key={tab}
@@ -701,13 +804,36 @@ export function AdmissionStepThreeBusHostelPanel({
         </div>
       ) : displayTab === 'bus' ? (
         <div className="space-y-5">
-          {existingRequest && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900/50 dark:bg-blue-950/20 text-slate-800 dark:text-slate-200">
-              <h4 className="font-semibold text-blue-800 dark:text-blue-200 text-sm">
-                Active Transport Request Found (AY: {existingRequest.academic_year})
+          {selectionUiLocked && isFetchingTransportRequest && !existingRequest ? (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+              Loading transport request details…
+            </div>
+          ) : null}
+          {(existingRequest && (isActiveTransportRequest || isCancelledTransportRequest)) ? (
+            <div
+              className={cn(
+                'rounded-xl border p-4 text-slate-800 dark:text-slate-200',
+                isCancelledTransportRequest
+                  ? 'border-rose-200 bg-rose-50/70 dark:border-rose-900/50 dark:bg-rose-950/20'
+                  : 'border-blue-200 bg-blue-50/70 dark:border-blue-900/50 dark:bg-blue-950/20'
+              )}
+            >
+              <h4
+                className={cn(
+                  'font-semibold text-sm',
+                  isCancelledTransportRequest
+                    ? 'text-rose-800 dark:text-rose-200'
+                    : 'text-blue-800 dark:text-blue-200'
+                )}
+              >
+                {isCancelledTransportRequest
+                  ? `Cancelled Transport Request (AY: ${existingRequest.academic_year})`
+                  : `Active Transport Request Found (AY: ${existingRequest.academic_year})`}
               </h4>
               <p className="mt-1 text-xs">
-                This student already has a registered request in the transport system:
+                {isCancelledTransportRequest
+                  ? 'This transport request was cancelled. Bus fee rows are inactive in Fee Management.'
+                  : 'This student already has a registered request in the transport system:'}
               </p>
               <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 font-medium text-xs sm:grid-cols-4">
                 <div>
@@ -717,7 +843,7 @@ export function AdmissionStepThreeBusHostelPanel({
                   <span className="text-slate-500">Stage:</span> {existingRequest.stage_name || '—'}
                 </div>
                 <div>
-                  <span className="text-slate-500">Fare:</span> {formatCurrency(existingRequest.fare)}
+                  <span className="text-slate-500">Fare:</span> {formatCurrency(Number(existingRequest.fare))}
                 </div>
                 <div>
                   <span className="text-slate-500">Bus Number:</span> {existingRequest.bus_id || 'Not assigned'}
@@ -726,7 +852,11 @@ export function AdmissionStepThreeBusHostelPanel({
                   <span className="text-slate-500">Status:</span>{' '}
                   <span className={cn(
                     'font-bold capitalize',
-                    existingRequest.status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+                    existingRequest.status === 'approved'
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : existingRequest.status === 'cancelled'
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-amber-600 dark:text-amber-400'
                   )}>
                     {existingRequest.status}
                   </span>
@@ -736,9 +866,25 @@ export function AdmissionStepThreeBusHostelPanel({
                     <span className="text-slate-500">Application ID:</span> {existingRequest.application_number}
                   </div>
                 )}
-                <div className="col-span-2 sm:col-span-4 mt-3 flex justify-end">
-                  <button
-                    type="button"
+                {isCancelledTransportRequest && existingRequest.cancellation_reason ? (
+                  <div className="col-span-2 sm:col-span-4">
+                    <span className="text-slate-500">Cancellation reason:</span>{' '}
+                    {existingRequest.cancellation_reason}
+                  </div>
+                ) : null}
+                <div className="col-span-2 sm:col-span-4 mt-3 flex justify-end gap-2">
+                  {isActiveTransportRequest && canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => setCancelDialogOpen(true)}
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
+                    >
+                      Cancel transport
+                    </button>
+                  ) : null}
+                  {!isCancelledTransportRequest ? (
+                  <PrintActionButton
+                    label="Print Transport Admit"
                     onClick={() => {
                       void handleExternalPrint('transport', {
                         template: 'transport-admit',
@@ -746,19 +892,16 @@ export function AdmissionStepThreeBusHostelPanel({
                         academicYear: existingRequest.academic_year || ''
                       }, undefined, 'Transport Admit Card');
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Print Transport Admit
-                  </button>
+                  />
+                  ) : null}
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
 
+          {!busSelectionLocked ? (
+          <>
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -767,7 +910,7 @@ export function AdmissionStepThreeBusHostelPanel({
               <select
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 value={selectedRouteId}
-                disabled={!canEdit || isLoadingRoutes}
+                disabled={!canEdit || isLoadingRoutes || busSelectionLocked}
                 onChange={(event) => handleRouteChange(event.target.value)}
               >
                 <option value="">
@@ -793,7 +936,7 @@ export function AdmissionStepThreeBusHostelPanel({
               <select
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 value={value.stageId || ''}
-                disabled={!canEdit || !selectedRouteId || isLoadingRouteDetail || stages.length === 0}
+                disabled={!canEdit || !selectedRouteId || isLoadingRouteDetail || stages.length === 0 || busSelectionLocked}
                 onChange={(event) => handleStageChange(event.target.value)}
               >
                 <option value="">
@@ -840,7 +983,7 @@ export function AdmissionStepThreeBusHostelPanel({
                   <select
                     className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                     value={selectedBusNumber}
-                    disabled={!canEdit}
+                    disabled={!canEdit || busSelectionLocked}
                     onChange={(event) => handleBusChange(event.target.value)}
                   >
                     <option value="">Select assigned bus</option>
@@ -892,9 +1035,16 @@ export function AdmissionStepThreeBusHostelPanel({
           ) : null}
 
           {/* Route stages & fees table removed as boarding stage can be selected from the dropdown above */}
+          </>
+          ) : null}
         </div>
       ) : displayTab === 'hostel' ? (
         <div className="space-y-5">
+          {selectionUiLocked && isFetchingHostelStudent && !hostelStudentDetails?.isAssigned ? (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+              Loading hostel registration details…
+            </div>
+          ) : null}
           {hostelStudentDetails && hostelStudentDetails.isAssigned && (
             <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
               <div className="flex items-center justify-between pb-3 border-b border-blue-200/50 dark:border-blue-900/30">
@@ -921,30 +1071,26 @@ export function AdmissionStepThreeBusHostelPanel({
                   <span className="text-slate-500">Academic Year:</span> <strong className="text-slate-900 dark:text-slate-100">{effectiveAcademicYear}</strong>
                 </div>
                 <div className="col-span-2 sm:col-span-4 mt-3 flex justify-end">
-                  <button
-                    type="button"
+                  <PrintActionButton
+                    label="Print Hostel Admit"
+                    disabled={!hostelStudentDetails || !(hostelStudentDetails as { _id?: string })._id}
                     onClick={() => {
-                      if (hostelStudentDetails && (hostelStudentDetails as any)._id) {
-                        void handleExternalPrint(
-                          'hostel',
-                          { template: 'hostel-admit' },
-                          { template: 'hostel-admit', data: { studentId: (hostelStudentDetails as any)._id } },
-                          'Hostel Admit Card'
-                        );
-                      }
+                      const studentId = (hostelStudentDetails as { _id?: string } | null)?._id;
+                      if (!studentId) return;
+                      void handleExternalPrint(
+                        'hostel',
+                        { template: 'hostel-admit' },
+                        { template: 'hostel-admit', data: { studentId } },
+                        'Hostel Admit Card'
+                      );
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Print Hostel Admit
-                  </button>
+                  />
                 </div>
               </div>
             </div>
           )}
 
+          {!hostelSelectionLocked ? (
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -953,7 +1099,7 @@ export function AdmissionStepThreeBusHostelPanel({
               <select
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 value={value.hostelId || ''}
-                disabled={!canEdit || isLoadingHostels}
+                disabled={!canEdit || isLoadingHostels || hostelSelectionLocked}
                 onChange={(event) => handleHostelChange(event.target.value)}
               >
                 <option value="">
@@ -976,6 +1122,7 @@ export function AdmissionStepThreeBusHostelPanel({
                 value={value.categoryId || ''}
                 disabled={
                   !canEdit ||
+                  hostelSelectionLocked ||
                   !value.hostelId ||
                   isLoadingCategories ||
                   categories.length === 0
@@ -1008,6 +1155,7 @@ export function AdmissionStepThreeBusHostelPanel({
                 value={value.roomId || ''}
                 disabled={
                   !canEdit ||
+                  hostelSelectionLocked ||
                   !value.categoryId ||
                   !effectiveAcademicYear ||
                   isLoadingRooms ||
@@ -1026,11 +1174,19 @@ export function AdmissionStepThreeBusHostelPanel({
                           ? 'No rooms in this category'
                           : 'Select room'}
                 </option>
-                {rooms.map((room) => (
+                {rooms.map((room) => {
+                  const filledBeds = Math.max(
+                    0,
+                    room.totalOccupancy ??
+                      room.occupiedBeds ??
+                      Math.max(0, room.bedCount - room.availableBeds)
+                  );
+                  return (
                   <option key={room._id} value={room._id} disabled={!room.isAvailable}>
-                    Room {room.roomNumber} · {room.availableBeds}/{room.bedCount} beds free
+                    Room {room.roomNumber} · {filledBeds}/{room.bedCount} filled
                   </option>
-                ))}
+                  );
+                })}
               </select>
               {roomsError ? (
                 <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
@@ -1039,6 +1195,7 @@ export function AdmissionStepThreeBusHostelPanel({
               ) : null}
             </div>
           </div>
+          ) : null}
 
           {value.categoryId && effectiveAcademicYear && (isLoadingRooms || roomsPayload) ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1080,29 +1237,15 @@ export function AdmissionStepThreeBusHostelPanel({
                       ? 'Loading hostel fees for this category…'
                       : `No hostel fee configured for ${effectiveAcademicYear || 'this academic year'} in HMS. Configure fee structures for this session in the hostel portal, then reselect the category here.`}
                   </p>
-                ) : hasVariableHostelFees || displayHostelFees.length > 1 ? (
-                  <div className="mt-2 space-y-1">
-                    {displayHostelFees.map((row) => (
-                      <div
-                        key={row.studentYear}
-                        className="flex items-center justify-between text-sm text-slate-700 dark:text-slate-200"
-                      >
-                        <span>Year {row.studentYear}</span>
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                          {formatCurrency(row.amount)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
                 ) : (
                   <p className="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-300">
-                    {formatCurrency(displayHostelFees[0]?.amount ?? value.hostelFee)}
+                    {formatCurrency(displayHostelFeeRow?.amount ?? value.hostelFee)}
                   </p>
                 )}
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                   {courseName ? `Course: ${courseName}` : 'Course fee match from HMS'}
-                  {displayHostelFees.length > 0
-                    ? ` · ${displayHostelFees.length} program year${displayHostelFees.length === 1 ? '' : 's'}`
+                  {hasHostelFeeRows
+                    ? ` · Year ${displayHostelFeeRow?.studentYear ?? effectiveStudentYear} fee`
                     : ''}
                   {feeUsedFallback
                     ? ` · Fee from AY ${resolvedFeeAcademicYear} (no ${effectiveAcademicYear} config yet)`
@@ -1133,6 +1276,46 @@ export function AdmissionStepThreeBusHostelPanel({
           ) : null}
         </div>
       ) : null}
+
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel transport request</DialogTitle>
+            <DialogDescription>
+              This will mark the transport request as cancelled and set the bus fee row inactive in Fee Management.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Cancellation reason
+            </label>
+            <textarea
+              className="min-h-[96px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              placeholder="Enter reason for cancelling this transport request"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setCancelDialogOpen(false)}
+              disabled={cancelTransportMutation.isPending}
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={!cancelReason.trim() || cancelTransportMutation.isPending}
+              onClick={() => cancelTransportMutation.mutate()}
+            >
+              {cancelTransportMutation.isPending ? 'Cancelling…' : 'Confirm cancellation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

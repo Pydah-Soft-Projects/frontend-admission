@@ -1812,6 +1812,22 @@ export const transportAPI = {
     const response = await api.get(`/transport/requests?${query.toString()}`);
     return response.data;
   },
+  cancelTransportRequest: async (params: {
+    admissionNumber?: string;
+    academicYear?: string;
+    requestId?: number;
+    joiningId?: string;
+    reason: string;
+  }) => {
+    const response = await api.post('/transport/requests/cancel', {
+      admissionNumber: params.admissionNumber,
+      academicYear: params.academicYear,
+      requestId: params.requestId,
+      joiningId: params.joiningId,
+      reason: params.reason,
+    });
+    return response.data;
+  },
 };
 
 export const hostelAPI = {
