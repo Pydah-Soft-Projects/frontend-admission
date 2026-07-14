@@ -1994,12 +1994,23 @@ export const paymentAPI = {
     feeHeadCode?: string;
     studentYear?: number | string | null;
     semester?: number | string | null;
+    targets?: Array<{
+      feeHeadId?: string;
+      feeHeadName?: string;
+      feeHeadCode?: string;
+      amount: number;
+      studentYear?: number | string | null;
+      semester?: number | string | null;
+    }>;
   }) => {
     const response = await api.post('/payments/razorpay/qr', data);
     return response.data;
   },
   verifyRazorpayQR: async (data: {
-    qrCodeId: string;
+    qrCodeId?: string;
+    razorpay_payment_id?: string;
+    razorpay_order_id?: string;
+    razorpay_signature?: string;
   }) => {
     const response = await api.post('/payments/razorpay/verify-qr', data);
     return response.data;

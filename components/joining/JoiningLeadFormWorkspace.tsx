@@ -899,6 +899,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   /** All public token links (staff invite and self-registration QR) are Step 1 only. */
   const usePublicWizard = false;
   const useWizard = useJoiningPageWizard || usePublicWizard;
+  /** After approval: admin sees bus/hostel (Step 3) and fee desk (Step 4) on this joining page. */
+  const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
+  const showAdminPostAdmissionStep4 = showAdminPostAdmissionStep3;
   /** Status/enquiry/student summary and course headings duplicate the workflow strip on Step 1. */
   const hideJoiningStepOneRedundantIntro = useWizard && applicationWizardStep === 1;
 
@@ -1831,7 +1834,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     });
   }, [courseSettings, formState.courseInfo.programLevel, programLevels, selectedCollegeId, joiningAllowedCollegeIds]);
 
-  /** Managed course IDs must belong to the selected secondary college (`courses.college_id`). */
+  /**
+   * Managed course IDs must belong to the selected secondary college (`courses.college_id`).
+   * When registration extras still hold a stale college after an admission course/branch
+   * change, sync college from the managed course instead of wiping course/branch —
+   * otherwise Edit Application reloads the old college and looks "stuck" on old values.
+   */
   useEffect(() => {
     const collegeKey = (selectedCollegeId || '').trim();
     if (!collegeKey) return;
@@ -1845,17 +1853,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       setting.course.collegeId !== undefined && setting.course.collegeId !== null
         ? String(setting.course.collegeId).trim()
         : '';
-    if (rowCollege === collegeKey) return;
-    setFormState((prev) => ({
+    if (!rowCollege || rowCollege === collegeKey) return;
+    setRegistrationExtras((prev) => ({
       ...prev,
-      courseInfo: {
-        ...prev.courseInfo,
-        courseId: undefined,
-        branchId: undefined,
-        branch: '',
-      },
+      ...collegeRegistrationPatchFromId(rowCollege, colleges),
     }));
-  }, [selectedCollegeId, formState.courseInfo.courseId, courseSettings]);
+  }, [selectedCollegeId, formState.courseInfo.courseId, courseSettings, colleges]);
 
   const programLevelTrimmed = (formState.courseInfo.programLevel || '').trim();
   const { data: certificateGuidanceResponse, isLoading: isLoadingCertificateGuidance } = useQuery({
@@ -3757,10 +3760,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ...(!isSelfRegistrationRecord ? { reference1: reference1.trim() } : {}),
       ...(isApprovedAdmission
         ? {
-            registrationFormData: {
-              ...joiningRegistrationPatch,
-              ...portraitRegistrationPatch,
-            },
+            // Include full registration extras (college, academic year, etc.).
+            // Previously only transport/portraits were saved on Update Admission, so a
+            // college change never persisted and Edit Application reloaded the old college.
+            registrationFormData: (() => {
+              const stripped = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
+              return {
+                ...stripped,
+                ...joiningRegistrationPatch,
+                ...portraitRegistrationPatch,
+              };
+            })(),
             studentFeeDetails: {
               batch: studentFeeDetails.batch || feeConfigurationBatch,
               lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
@@ -4153,10 +4163,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       studentInfo: { ...prev.studentInfo, preferredMobileNumber: suggested },
     }));
   }, [preferredMobileSources, formState.studentInfo.preferredMobileNumber]);
-
-  /** After approval: admin sees bus/hostel (Step 3) and fee desk (Step 4) on this joining page. */
-  const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
-  const showAdminPostAdmissionStep4 = showAdminPostAdmissionStep3;
 
   const joiningPhotoUploadContext = useMemo(
     () => ({
@@ -4955,8 +4961,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
     try {
       if (canSyncExternalSystems) {
+        const strippedExtras = stripJoiningRedundantRegistrationExtras({ ...registrationExtras });
         await joiningAPI.patchStepTwo(workflowJoiningId, {
           registrationFormData: {
+            ...strippedExtras,
             ...joiningRegistrationPatch,
             ...portraitRegistrationPatch,
           },

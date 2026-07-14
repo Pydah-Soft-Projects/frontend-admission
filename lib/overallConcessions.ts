@@ -148,7 +148,7 @@ type FeeStructureCatalogRow = {
   feeHead?: string | null;
   feeHeadCode?: string;
   feeHeadName?: string;
-  studentYear?: number;
+  studentYear?: number | null;
   amount?: number;
 };
 

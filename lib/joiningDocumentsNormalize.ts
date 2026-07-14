@@ -34,7 +34,7 @@ const normalizeDocumentStatus = (value: unknown): JoiningDocumentStatus =>
 
 /** Merge API document keys into the UI `JoiningDocuments` shape. */
 export function normalizeJoiningDocumentsFromApi(
-  raw?: Partial<JoiningDocuments> & Record<string, JoiningDocumentStatus | undefined> | null
+  raw?: JoiningDocuments | Partial<JoiningDocuments> | Record<string, unknown> | null
 ): JoiningDocuments {
   const out = defaultJoiningDocuments();
   if (!raw || typeof raw !== 'object') return out;
