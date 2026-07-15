@@ -14,6 +14,7 @@ type StagingRow = {
   name: string;
   village: string | null;
   mandal: string | null;
+  street: string | null;
   createdAt?: string | null;
 };
 
@@ -199,10 +200,13 @@ export default function GroupUpdatePage() {
                   <strong>Name</strong> (e.g. Name, STU_NAME)
                 </li>
                 <li>
-                  <strong>village</strong>
+                  <strong>village</strong> (e.g. Village, Village Name…)
                 </li>
                 <li>
-                  <strong>mandal</strong>
+                  <strong>mandal</strong> (e.g. Mandal, Mandal Name…)
+                </li>
+                <li>
+                  <strong>street</strong> (e.g. Street, Address, Street Name…)
                 </li>
               </ul>
               <p className="mt-3 text-xs text-blue-700 dark:text-blue-300">
@@ -314,6 +318,7 @@ export default function GroupUpdatePage() {
                       <th className="px-2 py-2 font-semibold">Name</th>
                       <th className="px-2 py-2 font-semibold">Village</th>
                       <th className="px-2 py-2 font-semibold">Mandal</th>
+                      <th className="px-2 py-2 font-semibold">Street</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -324,6 +329,7 @@ export default function GroupUpdatePage() {
                         <td className="px-2 py-2">{r.name}</td>
                         <td className="px-2 py-2">{r.village ?? '—'}</td>
                         <td className="px-2 py-2">{r.mandal ?? '—'}</td>
+                        <td className="px-2 py-2">{r.street ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>

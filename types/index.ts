@@ -140,7 +140,7 @@ export interface PaymentSummary {
 
 export type PaymentMode = 'cash' | 'online' | 'upi_qr';
 
-export type PaymentStatus = 'pending' | 'success' | 'failed';
+export type PaymentStatus = 'pending' | 'success' | 'failed' | 'cancelled';
 
 export interface PaymentTransaction {
   _id: string;

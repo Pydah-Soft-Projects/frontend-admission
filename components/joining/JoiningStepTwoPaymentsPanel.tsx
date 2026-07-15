@@ -295,12 +295,14 @@ export function JoiningStepTwoPaymentsPanel({
                     : transaction.mode === 'online'
                       ? 'Cashfree'
                       : 'Online';
-                const statusClass =
+                 const statusClass =
                   transaction.status === 'success'
                     ? 'text-emerald-600 dark:text-emerald-400'
-                    : transaction.status === 'failed'
+                    : transaction.status === 'cancelled'
                       ? 'text-rose-600 dark:text-rose-400'
-                      : 'text-amber-600 dark:text-amber-400';
+                      : transaction.status === 'failed'
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-amber-600 dark:text-amber-400';
                 const collectorName =
                   typeof transaction.collectedBy === 'object'
                     ? transaction.collectedBy?.name
@@ -314,7 +316,7 @@ export function JoiningStepTwoPaymentsPanel({
                 return (
                   <li
                     key={txKey}
-                    className="rounded-lg border border-slate-200 px-4 py-3 text-sm dark:border-slate-700"
+                    className={`rounded-lg border px-4 py-3 text-sm ${transaction.status === 'cancelled' ? 'border-rose-100 bg-rose-50/20 dark:border-rose-950/20 dark:bg-rose-950/5' : 'border-slate-200 dark:border-slate-700'}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -330,7 +332,7 @@ export function JoiningStepTwoPaymentsPanel({
                           {formatDateTime(paidAt)}
                         </p>
                       </div>
-                      <span className="shrink-0 text-base font-semibold text-emerald-700 dark:text-emerald-300">
+                      <span className={`shrink-0 text-base font-semibold ${transaction.status === 'cancelled' ? 'line-through text-slate-400 dark:text-slate-500' : 'text-emerald-700 dark:text-emerald-300'}`}>
                         {formatCurrency(amountValue)}
                       </span>
                     </div>

@@ -4524,7 +4524,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         studentYear?: string | number | null;
         amount?: string | number | null;
         transactionType?: string;
+        status?: string;
       };
+      if (row.status === 'cancelled') continue;
       const year = Number(row.studentYear) || 1;
       const amount = Number(row.amount) || 0;
       if (amount <= 0) continue;
@@ -7650,21 +7652,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           paymentDate?: string | Date | null;
                           collectedByName?: string;
                           remarks?: string;
+                          status?: string;
                         };
                         return (
-                          <tr key={row._id || row.receiptNumber}>
+                          <tr key={row._id || row.receiptNumber} className={row.status === 'cancelled' ? 'bg-slate-50/50 dark:bg-slate-900/30' : undefined}>
                             <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">
                               {row.receiptNumber || '—'}
                             </td>
                             <td className="px-4 py-3">
                               <div className="font-semibold text-slate-800 dark:text-slate-100">
                                 {row.feeHeadName || row.remarks || 'Fee head'}
+                                {row.status === 'cancelled' && (
+                                  <span className="ml-2 inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 ring-1 ring-inset ring-rose-600/10 dark:bg-rose-950/20 dark:text-rose-400">
+                                    Cancelled
+                                  </span>
+                                )}
                               </div>
                               {row.feeHeadCode ? (
                                 <div className="font-mono text-[10px] text-slate-400">{row.feeHeadCode}</div>
                               ) : null}
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-slate-100">
+                            <td className={`px-4 py-3 text-right font-semibold ${row.status === 'cancelled' ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
                               {formatCurrency(Number(row.amount) || 0)}
                             </td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
@@ -7680,7 +7688,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                               {row.collectedByName || '—'}
                             </td>
                             <td className="px-4 py-3">
-                              {row.receiptNumber && (
+                              {row.receiptNumber && row.status !== 'cancelled' && (
                                 <PrintActionButton
                                   label="Print"
                                   className="!px-2.5"
