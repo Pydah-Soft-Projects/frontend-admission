@@ -66,6 +66,19 @@ api.interceptors.request.use(
   }
 );
 
+// Public (unauthenticated) route prefixes. A 401 from an incidental authenticated
+// call on one of these pages must NOT clear cookies or redirect the visitor to
+// login — e.g. a student filling the self-registration form opened from a QR code.
+const PUBLIC_PATH_PREFIXES = ['/joining/public', '/lead-form', '/s/'];
+
+const isOnPublicPath = () => {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname;
+  return PUBLIC_PATH_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(prefix)
+  );
+};
+
 // Response interceptor to handle errors
 api.interceptors.response.use(
   (response) => response,
@@ -80,7 +93,10 @@ api.interceptors.response.use(
       // indicate user session expired, but we want to handle that gracefully without logout
       const isPrintRequest = error.config?.url?.includes('/print/');
 
-      if (!isLoginRequest && !isPrintRequest) {
+      // Never clear session / redirect when the visitor is on a public page.
+      const onPublicPath = isOnPublicPath();
+
+      if (!isLoginRequest && !isPrintRequest && !onPublicPath) {
         // Unauthorized on other private routes - clear token and redirect to login
         Cookies.remove('token', { path: '/' });
         Cookies.remove('user', { path: '/' });
