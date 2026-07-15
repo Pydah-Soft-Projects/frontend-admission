@@ -36,6 +36,11 @@ type ReferenceUserSelectProps = {
   showAddUserButton?: boolean;
   /** Show edit/remove on saved reference rows (defaults to showAddUserButton). */
   showManageSavedReferences?: boolean;
+  /**
+   * When true, the component is rendered on a public (unauthenticated) page.
+   * Authenticated API calls are skipped so they don't trigger a 401 -> login redirect.
+   */
+  publicMode?: boolean;
 };
 
 const normalizeName = (s: string) => s.trim().toLowerCase();
@@ -49,6 +54,7 @@ export function ReferenceUserSelect({
   className = '',
   showAddUserButton = false,
   showManageSavedReferences,
+  publicMode = false,
 }: ReferenceUserSelectProps) {
   const canManageSaved = showManageSavedReferences ?? showAddUserButton;
   const queryClient = useQueryClient();
@@ -71,7 +77,7 @@ export function ReferenceUserSelect({
   }, [search]);
 
   const searchTerm = debouncedSearch.trim();
-  const canSearchHrms = open && searchTerm.length >= 2;
+  const canSearchHrms = !publicMode && open && searchTerm.length >= 2;
 
   const { data: hrmsEmployees = [], isLoading: hrmsSearching } = useQuery({
     queryKey: ['admissions', 'hrms-reference-search', searchTerm],
@@ -83,6 +89,7 @@ export function ReferenceUserSelect({
   const { data: savedReferenceNames = [], isLoading: refsLoading } = useQuery({
     queryKey: [...REFERENCE_NAMES_QUERY_KEY],
     queryFn: () => admissionAPI.listReferenceNames(),
+    enabled: !publicMode,
     staleTime: 60 * 1000,
   });
 

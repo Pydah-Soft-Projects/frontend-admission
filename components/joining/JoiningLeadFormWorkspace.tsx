@@ -6703,6 +6703,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   <div className="w-full max-w-[17rem] shrink-0">
                     <ReferenceUserSelect
                       label=""
+                      publicMode={isPublicEdit}
                       value={isSelfRegistrationRecord ? '' : reference1}
                       onChange={setReference1}
                       disabled={
