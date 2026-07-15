@@ -744,6 +744,19 @@ export default function UserLeadsPage() {
                 ))}
               </select>
             </div>
+            <div className="flex min-w-0 flex-col gap-1 col-span-1">
+              <label className="text-[10px] font-medium text-slate-500">Source</label>
+              <select
+                className="w-full min-w-0 rounded border border-slate-200 bg-white py-1.5 px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                value={filters.source || ''}
+                onChange={(e) => handleFilterChange('source', e.target.value)}
+              >
+                <option value="">All sources</option>
+                {filterOptions?.sources?.map((src) => (
+                  <option key={src} value={src}>{src}</option>
+                ))}
+              </select>
+            </div>
             <div className="hidden md:flex flex-col gap-1 min-w-0 col-span-1">
               <label className="text-[10px] font-medium text-slate-500">State</label>
               <select
