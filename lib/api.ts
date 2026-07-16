@@ -2013,9 +2013,15 @@ export const paymentAPI = {
     remarks?: string;
     semester?: number | string | null;
     studentYear?: number | string | null;
+    paymentConfigId?: string;
+    depositedToAccount?: string;
   }) => {
     const response = await api.post('/payments/fee-management/transactions', data);
     return response.data;
+  },
+  getFeeManagementGlobalAccounts: async () => {
+    const response = await api.get('/payments/fee-management/global-accounts');
+    return response.data?.data || response.data;
   },
   generateRazorpayQR: async (data: {
     joiningId: string;

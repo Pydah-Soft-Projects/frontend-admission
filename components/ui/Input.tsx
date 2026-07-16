@@ -5,6 +5,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   icon?: React.ReactNode;
+  rightElement?: React.ReactNode;
   /** Smaller padding and label — for dense forms (e.g. joining edit). */
   compact?: boolean;
 }
@@ -15,6 +16,7 @@ export const Input: React.FC<InputProps> = ({
   className,
   id,
   icon,
+  rightElement,
   compact = false,
   ...props
 }) => {
@@ -48,6 +50,7 @@ export const Input: React.FC<InputProps> = ({
             'dark:hover:bg-slate-900 dark:hover:border-slate-700',
             error && 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-100 dark:border-red-800 dark:text-red-100 dark:focus:ring-red-900/20',
             icon && 'pl-11',
+            rightElement && 'pr-11',
             className
           )}
           {...props}
@@ -55,6 +58,11 @@ export const Input: React.FC<InputProps> = ({
         {icon && (
           <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-orange-500 dark:text-slate-500 dark:group-focus-within:text-orange-400">
             {icon}
+          </div>
+        )}
+        {rightElement && (
+          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center">
+            {rightElement}
           </div>
         )}
       </div>

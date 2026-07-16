@@ -1160,3 +1160,15 @@ export interface FeeStructureListPayload {
   filters: FeeStructureListFilters;
   total: number;
 }
+
+export interface FeeManagementGlobalAccount {
+  _id: string;
+  account_name: string;
+  bank_name: string;
+  account_number: string;
+  ifsc_code?: string;
+  upi_id?: string;
+  is_active: boolean;
+  is_global: boolean;
+}
+
