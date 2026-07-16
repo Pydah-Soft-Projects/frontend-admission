@@ -149,9 +149,11 @@ export function resolveSubmitFeeRequest(entry?: ModulePermission, isSuperAdmin =
   return Boolean(entry?.access && entry.permission === 'write');
 }
 
-/** Reference edits are restricted to Super Admin only (not grantable to other roles). */
-export function resolveJoiningEditReference(_entry?: ModulePermission, isSuperAdmin = false): boolean {
-  return isSuperAdmin;
+export function resolveJoiningEditReference(entry?: ModulePermission, isSuperAdmin = false): boolean {
+  if (isSuperAdmin) return true;
+  if (!entry?.access || entry.permission !== 'write') return false;
+  if (isLegacyJoiningWrite(entry)) return true;
+  return Boolean(entry.editReference);
 }
 
 export function resolveJoiningEditAdmission(entry?: ModulePermission, isSuperAdmin = false): boolean {
@@ -175,13 +177,13 @@ export function joiningExtrasFromStored(entry?: ModulePermission): JoiningPermis
   }
   if (isLegacyJoiningWrite(entry)) {
     return {
-      editReference: false,
+      editReference: true,
       editAdmission: true,
       approveFeeRequest: true,
     };
   }
   return {
-    editReference: false,
+    editReference: Boolean(entry.editReference),
     editAdmission: Boolean(entry.editAdmission),
     approveFeeRequest: Boolean(entry.approveFeeRequest),
   };
@@ -198,7 +200,7 @@ export function joiningPermissionForSave(value: ModulePermission): ModulePermiss
   return {
     access: true,
     permission: 'write',
-    editReference: false,
+    editReference: Boolean(value.editReference),
     editAdmission: Boolean(value.editAdmission),
     approveFeeRequest: Boolean(value.approveFeeRequest),
     allowedColleges: collegeScope,

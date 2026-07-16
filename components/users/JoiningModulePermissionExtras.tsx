@@ -12,7 +12,10 @@ type JoiningModulePermissionExtrasProps = {
   collegeOptions: Array<{ id: string; name: string }>;
   onChange: (
     patch: Partial<
-      Pick<ModulePermission, 'editAdmission' | 'approveFeeRequest' | 'allowedColleges'> &
+      Pick<
+        ModulePermission,
+        'editReference' | 'editAdmission' | 'approveFeeRequest' | 'allowedColleges'
+      > &
         Record<ReturnType<typeof admissionTabPermissionKey>, boolean>
     >
   ) => void;
@@ -35,12 +38,26 @@ export function JoiningModulePermissionExtras({ moduleState, collegeOptions, onC
               <input
                 type="checkbox"
                 className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                checked={Boolean(moduleState.editReference)}
+                onChange={(e) => onChange({ editReference: e.target.checked })}
+              />
+              <span>
+                Edit reference
+                <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">
+                  Change Reference on admissions and manage reference names
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 checked={Boolean(moduleState.editAdmission)}
                 onChange={(e) => onChange({ editAdmission: e.target.checked })}
               />
               <span>
                 Edit admission
-n                <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">
+                <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">
                   Open and edit joining / admission forms
                 </span>
               </span>

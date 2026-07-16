@@ -1158,6 +1158,7 @@ const UserManagementPage = () => {
                   )}
                 </div>
 
+<<<<<<< HEAD
                 {/* Right Column: Other Info */}
                 <div className="space-y-4">
                   {selectedUserDetail.roleName === 'Sub Super Admin' && (
@@ -1220,6 +1221,104 @@ const UserManagementPage = () => {
                         Use Edit User to change Joining Desk admission edits, admissions tabs, or fee request approval.
                       </p>
                     </div>
+=======
+              {selectedUserDetail.roleName === 'Sub Super Admin' && (
+                <div className="space-y-3 pt-2">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Module access</h3>
+                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+                    {PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).length ===
+                    0 ? (
+                      <p className="text-xs text-slate-500">No modules assigned.</p>
+                    ) : (
+                      PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).map(
+                        (module) => {
+                          const entry = selectedUserDetail.permissions?.[module.key] as
+                            | ModulePermission
+                            | undefined;
+                          const isWrite = entry?.permission === 'write';
+                          const joiningExtras =
+                            module.key === JOINING_PERMISSION_KEY && isWrite
+                              ? joiningExtrasFromStored(entry)
+                              : null;
+                          const admissionTabLabels =
+                            module.key === JOINING_PERMISSION_KEY
+                              ? enabledAdmissionTabLabels(entry)
+                              : null;
+                          return (
+                            <div
+                              key={module.key}
+                              className="rounded-lg border border-white/80 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/80"
+                            >
+                              <p className="font-semibold text-slate-800 dark:text-slate-100">{module.label}</p>
+                              <p className="mt-0.5 text-slate-500 dark:text-slate-400">
+                                {isWrite ? 'Read & Write' : 'Read only'}
+                              </p>
+                              {joiningExtras && (
+                                <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
+                                  Desk edits:{' '}
+                                  {[
+                                    joiningExtras.editReference ? 'Reference' : null,
+                                    joiningExtras.editAdmission ? 'Admission' : null,
+                                    joiningExtras.approveFeeRequest ? 'Approve fees' : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') || 'None (view only on desk)'}
+                                </p>
+                              )}
+                              {admissionTabLabels && (
+                                <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
+                                  Admissions tabs:{' '}
+                                  {admissionTabLabels.length > 0
+                                    ? admissionTabLabels.join(' · ')
+                                    : 'None selected'}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }
+                      )
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Use Edit User to change Joining Desk reference/admission edits, admissions tabs, or fee request approval.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Actions</h3>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleOpenTeamAssignment(selectedUserDetail)}
+                    disabled={!canManageUsers}
+                    className="justify-start"
+                  >
+                    <IconUserGroup className="w-4 h-4 mr-2" />
+                    Assign Manager
+                  </Button>
+
+                  {canManageUsers && (selectedUserDetail.roleName === 'Super Admin' || selectedUserDetail.roleName === 'Sub Super Admin' ? false : true) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (selectedUserDetail.isManager) {
+                          if (window.confirm(`Revoke Manager privileges from ${selectedUserDetail.name}?`)) {
+                            toggleManagerRoleMutation.mutate(selectedUserDetail);
+                          }
+                        } else {
+                          if (window.confirm(`Grant Manager privileges to ${selectedUserDetail.name}?`)) {
+                            toggleManagerRoleMutation.mutate(selectedUserDetail);
+                          }
+                        }
+                      }}
+                      className={selectedUserDetail.isManager ? "justify-start border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" : "justify-start"}
+                    >
+                      <IconBadge className="w-4 h-4 mr-2" />
+                      {selectedUserDetail.isManager ? 'Revoke Manager' : 'Make Manager'}
+                    </Button>
+>>>>>>> e3daf969ccab8b525f7196d5608c83985de906fa
                   )}
 
                   {selectedUserDetail.roleName === 'Super Admin' && (
