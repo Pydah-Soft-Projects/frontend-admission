@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Home } from 'lucide-react';
+import { Home, Eye, EyeOff } from 'lucide-react';
 import { authAPI, CRM_FRONTEND_URL } from '@/lib/api';
 import { auth } from '@/lib/auth';
 import { Input } from '@/components/ui/Input';
@@ -31,6 +31,7 @@ function LoginPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -264,11 +265,25 @@ function LoginPageContent() {
 
             <Input
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="Enter your password"
               error={errors.password?.message}
               {...register('password')}
               className="bg-white/50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-orange-500/50"
+              rightElement={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors focus:outline-none"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              }
             />
 
             <div className="flex justify-end">

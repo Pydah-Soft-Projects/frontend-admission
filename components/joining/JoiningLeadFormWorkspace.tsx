@@ -131,6 +131,7 @@ import {
   FeeHead,
   FeeStructure,
   Lead,
+  FeeManagementGlobalAccount,
 } from '@/types';
 
 type RequiredOverride = JoiningStudentFeeLineOverride & {
@@ -800,12 +801,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     receiptNumber: string;
     remarks: string;
     isProcessing: boolean;
+    paymentConfigId: string;
   }>({
     amount: '',
     paymentMode: 'Cash',
     receiptNumber: '',
     remarks: '',
     isProcessing: false,
+    paymentConfigId: '',
   });
   const [razorpayQrData, setRazorpayQrData] = useState<{
     qrCodeId: string;
@@ -816,6 +819,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const [isQrGenerating, setIsQrGenerating] = useState(false);
   const [isQrVerifying, setIsQrVerifying] = useState(false);
   const [qrError, setQrError] = useState<string | null>(null);
+
+  const { data: globalAccounts = [] } = useQuery<FeeManagementGlobalAccount[]>({
+    queryKey: ['fee-management-global-accounts'],
+    queryFn: () => paymentAPI.getFeeManagementGlobalAccounts(),
+    enabled: builderPaymentForm.paymentMode === 'Bank',
+  });
+
+  useEffect(() => {
+    if (builderPaymentForm.paymentMode === 'Bank' && globalAccounts && globalAccounts.length === 1) {
+      const singleAcc = globalAccounts[0];
+      setBuilderPaymentForm((prev) => ({
+        ...prev,
+        paymentConfigId: singleAcc._id,
+      }));
+    }
+  }, [globalAccounts, builderPaymentForm.paymentMode]);
   const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({});
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
@@ -4775,6 +4794,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         receiptNumber: '',
         remarks: target.feeHeadName || target.feeHeadCode || 'Fee payment',
         isProcessing: false,
+        paymentConfigId: '',
       });
     } else {
       setBuilderPaymentYear(1);
@@ -4785,6 +4805,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         receiptNumber: '',
         remarks: '',
         isProcessing: false,
+        paymentConfigId: '',
       });
     }
   };
@@ -4952,6 +4973,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               'Fee payment',
             semester: target.semester ?? null,
             studentYear: target.studentYear,
+            paymentConfigId: builderPaymentForm.paymentConfigId || undefined,
           })
         )
       );
@@ -4971,6 +4993,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         receiptNumber: '',
         remarks: '',
         isProcessing: false,
+        paymentConfigId: '',
       }));
     } catch (error) {
       const apiError = error as { response?: { data?: { message?: string } }; message?: string };
@@ -7379,12 +7402,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   setBuilderPaymentForm((form) => ({
                                     ...form,
                                     amount: nextTotal > 0 ? String(nextTotal) : '',
-                                    remarks:
-                                      next.length === 1
-                                        ? next[0].feeHeadName || next[0].feeHeadCode || 'Fee payment'
-                                        : next.length > 1
-                                          ? `Multiple fee heads - Year ${builderPaymentYear}`
-                                          : '',
+                                    remarks: next.length > 0
+                                      ? next.map((target) => target.feeHeadName || target.feeHeadCode || 'Fee payment').join(' / ')
+                                      : '',
                                   }));
                                   return next;
                                 });
@@ -7464,7 +7484,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   return next;
                                 });
                               }}
-                              className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
+                              className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
                               placeholder="0"
                               disabled={!selected || builderPaymentForm.isProcessing || row.paidAmount >= row.payableAmount}
                               aria-label={`Collect amount for ${row.feeHeadName || row.feeHeadCode || 'fee head'}`}
@@ -7486,9 +7506,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 ) : null}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className={cn(
+                "grid gap-3",
+                builderPaymentForm.paymentMode === 'Bank' ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2"
+              )}>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Total amount (INR)
                   </label>
                   <input
@@ -7497,13 +7520,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     step="0.01"
                     value={builderPaymentSelectedTotal > 0 ? String(builderPaymentSelectedTotal) : builderPaymentForm.amount}
                     readOnly
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 dark:bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700"
                     placeholder="Select fee heads"
                     disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Payment mode
                   </label>
                   <select
@@ -7514,16 +7537,57 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         ...prev,
                         paymentMode: nextMode,
                         receiptNumber: nextMode === 'Bank' ? prev.receiptNumber : '',
+                        paymentConfigId: '',
                       }));
                       setRazorpayQrData(null);
                       setQrError(null);
                     }}
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                    className="w-full rounded-lg border border-slate-200 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700"
                     disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
                   >
                     <option value="Cash">Cash</option>
                     <option value="Bank">Bank</option>
                   </select>
+                </div>
+                {builderPaymentForm.paymentMode === 'Bank' && (
+                  <div>
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Deposit Account (Global Bank Account)
+                    </label>
+                    <select
+                      value={builderPaymentForm.paymentConfigId || ''}
+                      onChange={(event) => {
+                        setBuilderPaymentForm((prev) => ({
+                          ...prev,
+                          paymentConfigId: event.target.value,
+                        }));
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700"
+                      disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                    >
+                      <option value="">Select Global Account</option>
+                      {globalAccounts.map((acc) => (
+                        <option key={acc._id} value={acc._id}>
+                          {acc.account_name} ({acc.bank_name} - {acc.account_number})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className={builderPaymentForm.paymentMode === 'Bank' ? 'sm:col-span-3' : 'sm:col-span-2'}>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Remarks
+                  </label>
+                  <input
+                    type="text"
+                    value={builderPaymentForm.remarks}
+                    onChange={(event) =>
+                      setBuilderPaymentForm((prev) => ({ ...prev, remarks: event.target.value }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700"
+                    placeholder="Fee head / payment remarks"
+                    disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                  />
                 </div>
               </div>
 
@@ -7583,7 +7647,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
                       — OR Manual Bank Transfer Override —
                     </p>
-                    <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-200">
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Bank reference number / UTR
                     </label>
                     <input
@@ -7592,7 +7656,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                       onChange={(event) =>
                         setBuilderPaymentForm((prev) => ({ ...prev, receiptNumber: event.target.value }))
                       }
-                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                      className="w-full rounded-lg border border-slate-200 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700"
                       placeholder="Enter UTR if student paid via direct net banking/DD/NEFT"
                       disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
                     />
@@ -7603,22 +7667,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   Select fee heads in the table above to configure payment amount.
                 </div>
               ) : null}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Remarks
-                </label>
-                <input
-                  type="text"
-                  value={builderPaymentForm.remarks}
-                  onChange={(event) =>
-                    setBuilderPaymentForm((prev) => ({ ...prev, remarks: event.target.value }))
-                  }
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                  placeholder="Fee head / payment remarks"
-                  disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
-                />
-              </div>
               </>
               ) : (
                 <div className="space-y-3">
