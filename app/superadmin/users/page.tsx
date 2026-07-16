@@ -1187,12 +1187,13 @@ const UserManagementPage = () => {
                               {joiningExtras && (
                                 <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
                                   Desk edits:{' '}
-                                  {joiningExtras.editAdmission ? 'Admission' : '—'}
-                                  {joiningExtras.editAdmission && joiningExtras.approveFeeRequest ? ' · ' : ''}
-                                  {joiningExtras.approveFeeRequest ? 'Approve fees' : ''}
-                                  {!joiningExtras.editAdmission && !joiningExtras.approveFeeRequest
-                                    ? 'None (view only on desk)'
-                                    : ''}
+                                  {[
+                                    joiningExtras.editReference ? 'Reference' : null,
+                                    joiningExtras.editAdmission ? 'Admission' : null,
+                                    joiningExtras.approveFeeRequest ? 'Approve fees' : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') || 'None (view only on desk)'}
                                 </p>
                               )}
                               {admissionTabLabels && (
@@ -1210,7 +1211,7 @@ const UserManagementPage = () => {
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Use Edit User to change Joining Desk admission edits, admissions tabs, or fee request approval.
+                    Use Edit User to change Joining Desk reference/admission edits, admissions tabs, or fee request approval.
                   </p>
                 </div>
               )}

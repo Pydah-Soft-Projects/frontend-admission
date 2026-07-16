@@ -131,7 +131,7 @@ const sanitizeSubAdminPermissions = (
           ...admissionTabsFromStored(typedEntry),
           ...(permission === 'write'
             ? {
-                editReference: false,
+                editReference: joiningExtras.editReference,
                 editAdmission: joiningExtras.editAdmission,
                 approveFeeRequest: joiningExtras.approveFeeRequest,
               }
