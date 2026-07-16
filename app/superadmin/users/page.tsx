@@ -1066,8 +1066,8 @@ const UserManagementPage = () => {
       {/* User Detail Modal */}
       {showUserDetail && selectedUserDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <Card className="w-full max-w-md space-y-6 p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-start justify-between">
+          <Card className="w-full max-w-6xl max-h-[85vh] flex flex-col p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between flex-shrink-0 border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-lg font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
                   {selectedUserDetail.name.slice(0, 2).toUpperCase()}
@@ -1097,246 +1097,281 @@ const UserManagementPage = () => {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-900/50 text-sm">
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Role</p>
-                  <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">{displayRole(selectedUserDetail)}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</p>
-                  <span
-                    className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${selectedUserDetail.isActive
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
-                      : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
-                      }`}
-                  >
-                    {selectedUserDetail.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Mobile</p>
-                  <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">{selectedUserDetail.mobileNumber || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Manager</p>
-                  <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">
-                    {selectedUserDetail.managedBy && typeof selectedUserDetail.managedBy !== 'string'
-                      ? selectedUserDetail.managedBy.name
-                      : selectedUserDetail.managedBy
-                        ? (users.find(u => u._id === selectedUserDetail.managedBy) as User)?.name || 'Unknown'
-                        : '-'}
-                  </p>
-                </div>
-              </div>
-
-              {(selectedUserDetail.emp_no || selectedUserDetail.hrms_id) && (
-                <div className="space-y-3 pt-2">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <IconBadge className="w-3.5 h-3.5" />
-                    HRMS Organizational Details
-                  </h3>
-                  <div className="grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-blue-50/30 p-4 dark:border-blue-900/20 dark:bg-blue-900/10">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-500 dark:text-slate-400">Division</span>
-                      <span className="font-semibold text-blue-700 dark:text-blue-300">{selectedUserDetail.division || '—'}</span>
+            <div className="flex-1 overflow-y-auto min-h-0 pr-1 py-2">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                
+                {/* Left Column: User details */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-900/50 text-sm">
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Role</p>
+                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">{displayRole(selectedUserDetail)}</p>
                     </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-500 dark:text-slate-400">Department</span>
-                      <span className="font-semibold text-blue-700 dark:text-blue-300">{selectedUserDetail.department || '—'}</span>
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</p>
+                      <span
+                        className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${selectedUserDetail.isActive
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200'
+                          : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200'
+                          }`}
+                      >
+                        {selectedUserDetail.isActive ? 'Active' : 'Inactive'}
+                      </span>
                     </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-500 dark:text-slate-400">Employee Group</span>
-                      <span className="font-semibold text-blue-700 dark:text-blue-300">{selectedUserDetail.group || '—'}</span>
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Mobile</p>
+                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">{selectedUserDetail.mobileNumber || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Manager</p>
+                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-200">
+                        {selectedUserDetail.managedBy && typeof selectedUserDetail.managedBy !== 'string'
+                          ? selectedUserDetail.managedBy.name
+                          : selectedUserDetail.managedBy
+                            ? (users.find(u => u._id === selectedUserDetail.managedBy) as User)?.name || 'Unknown'
+                            : '-'}
+                      </p>
                     </div>
                   </div>
+
+                  {(selectedUserDetail.emp_no || selectedUserDetail.hrms_id) && (
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <IconBadge className="w-3.5 h-3.5" />
+                        HRMS Organizational Details
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-blue-50/30 p-4 dark:border-blue-900/20 dark:bg-blue-900/10">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Division</span>
+                          <span className="font-semibold text-blue-700 dark:blue-300">{selectedUserDetail.division || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Department</span>
+                          <span className="font-semibold text-blue-700 dark:blue-300">{selectedUserDetail.department || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Employee Group</span>
+                          <span className="font-semibold text-blue-700 dark:blue-300">{selectedUserDetail.group || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {selectedUserDetail.roleName === 'Sub Super Admin' && (
-                <div className="space-y-3 pt-2">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Module access</h3>
-                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/50">
-                    {PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).length ===
-                    0 ? (
-                      <p className="text-xs text-slate-500">No modules assigned.</p>
-                    ) : (
-                      PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).map(
-                        (module) => {
-                          const entry = selectedUserDetail.permissions?.[module.key] as
-                            | ModulePermission
-                            | undefined;
-                          const isWrite = entry?.permission === 'write';
-                          const joiningExtras =
-                            module.key === JOINING_PERMISSION_KEY && isWrite
-                              ? joiningExtrasFromStored(entry)
-                              : null;
-                          const admissionTabLabels =
-                            module.key === JOINING_PERMISSION_KEY
-                              ? enabledAdmissionTabLabels(entry)
-                              : null;
-                          return (
-                            <div
-                              key={module.key}
-                              className="rounded-lg border border-white/80 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/80"
-                            >
-                              <p className="font-semibold text-slate-800 dark:text-slate-100">{module.label}</p>
-                              <p className="mt-0.5 text-slate-500 dark:text-slate-400">
-                                {isWrite ? 'Read & Write' : 'Read only'}
-                              </p>
-                              {joiningExtras && (
-                                <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
-                                  Desk edits:{' '}
-                                  {joiningExtras.editAdmission ? 'Admission' : '—'}
-                                  {joiningExtras.editAdmission && joiningExtras.approveFeeRequest ? ' · ' : ''}
-                                  {joiningExtras.approveFeeRequest ? 'Approve fees' : ''}
-                                  {!joiningExtras.editAdmission && !joiningExtras.approveFeeRequest
-                                    ? 'None (view only on desk)'
-                                    : ''}
-                                </p>
-                              )}
-                              {admissionTabLabels && (
-                                <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
-                                  Admissions tabs:{' '}
-                                  {admissionTabLabels.length > 0
-                                    ? admissionTabLabels.join(' · ')
-                                    : 'None selected'}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        }
-                      )
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Use Edit User to change Joining Desk admission edits, admissions tabs, or fee request approval.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Actions</h3>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => handleOpenTeamAssignment(selectedUserDetail)}
-                    disabled={!canManageUsers}
-                    className="justify-start"
-                  >
-                    <IconUserGroup className="w-4 h-4 mr-2" />
-                    Assign Manager
-                  </Button>
-
-                  {canManageUsers && (selectedUserDetail.roleName === 'Super Admin' || selectedUserDetail.roleName === 'Sub Super Admin' ? false : true) && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (selectedUserDetail.isManager) {
-                          if (window.confirm(`Revoke Manager privileges from ${selectedUserDetail.name}?`)) {
-                            toggleManagerRoleMutation.mutate(selectedUserDetail);
-                          }
-                        } else {
-                          if (window.confirm(`Grant Manager privileges to ${selectedUserDetail.name}?`)) {
-                            toggleManagerRoleMutation.mutate(selectedUserDetail);
-                          }
-                        }
-                      }}
-                      className={selectedUserDetail.isManager ? "justify-start border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" : "justify-start"}
-                    >
-                      <IconBadge className="w-4 h-4 mr-2" />
-                      {selectedUserDetail.isManager ? 'Revoke Manager' : 'Make Manager'}
-                    </Button>
+                {/* Right Column: Other Info */}
+                <div className="space-y-4">
+                  {selectedUserDetail.roleName === 'Sub Super Admin' && (
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Module access</h3>
+                      <div className="max-h-96 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+                        {PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).length ===
+                        0 ? (
+                          <p className="text-xs text-slate-500">No modules assigned.</p>
+                        ) : (
+                          PERMISSION_MODULES.filter((m) => selectedUserDetail.permissions?.[m.key]?.access).map(
+                            (module) => {
+                              const entry = selectedUserDetail.permissions?.[module.key] as
+                                | ModulePermission
+                                | undefined;
+                              const isWrite = entry?.permission === 'write';
+                              const joiningExtras =
+                                module.key === JOINING_PERMISSION_KEY && isWrite
+                                  ? joiningExtrasFromStored(entry)
+                                  : null;
+                              const admissionTabLabels =
+                                module.key === JOINING_PERMISSION_KEY
+                                  ? enabledAdmissionTabLabels(entry)
+                                  : null;
+                              return (
+                                <div
+                                  key={module.key}
+                                  className="rounded-lg border border-white/80 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/80"
+                                >
+                                  <p className="font-semibold text-slate-800 dark:text-slate-100">{module.label}</p>
+                                  <p className="mt-0.5 text-slate-500 dark:text-slate-400">
+                                    {isWrite ? 'Read & Write' : 'Read only'}
+                                  </p>
+                                  {joiningExtras && (
+                                    <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
+                                      Desk edits:{' '}
+                                      {joiningExtras.editAdmission ? 'Admission' : '—'}
+                                      {joiningExtras.editAdmission && joiningExtras.approveFeeRequest ? ' · ' : ''}
+                                      {joiningExtras.approveFeeRequest ? 'Approve fees' : ''}
+                                      {!joiningExtras.editAdmission && !joiningExtras.approveFeeRequest
+                                        ? 'None (view only on desk)'
+                                        : ''}
+                                    </p>
+                                  )}
+                                  {admissionTabLabels && (
+                                    <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
+                                      Admissions tabs:{' '}
+                                      {admissionTabLabels.length > 0
+                                        ? admissionTabLabels.join(' · ')
+                                        : 'None selected'}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            }
+                          )
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Use Edit User to change Joining Desk admission edits, admissions tabs, or fee request approval.
+                      </p>
+                    </div>
                   )}
 
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (selectedUserDetail.isActive) {
-                        setUserToDeactivate(selectedUserDetail);
-                        setShowDeactivateDialog(true);
-                      } else {
-                        toggleActiveMutation.mutate({ user: selectedUserDetail });
-                      }
-                    }}
-                    disabled={!canManageUsers || toggleActiveMutation.isPending}
-                    className={selectedUserDetail.isActive ? "justify-start text-rose-600 hover:bg-rose-50 border-rose-200" : "justify-start text-emerald-600 hover:bg-emerald-50 border-emerald-200"}
-                  >
-                    {selectedUserDetail.isActive ? <IconX className="w-4 h-4 mr-2" /> : <IconCheck className="w-4 h-4 mr-2" />}
-                    {selectedUserDetail.isActive ? 'Deactivate' : 'Activate'}
-                  </Button>
+                  {selectedUserDetail.roleName === 'Super Admin' && (
+                    <div className="flex h-full flex-col items-center justify-center text-center p-6 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                      <svg className="w-10 h-10 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300">Super Admin Privileges</h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
+                        Super Admins automatically have complete read and write access to all modules and lead sources.
+                      </p>
+                    </div>
+                  )}
 
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setEditingUser(selectedUserDetail);
-                      setEditFormState({
-                        name: selectedUserDetail.name,
-                        email: selectedUserDetail.email,
-                        mobileNumber: selectedUserDetail.mobileNumber || '',
-                        roleName: selectedUserDetail.roleName,
-                        designation: selectedUserDetail.designation || '',
-                        password: '',
-                        hrms_id: selectedUserDetail.hrms_id || '',
-                        emp_no: selectedUserDetail.emp_no || '',
-                      });
-                      if (selectedUserDetail.roleName === 'Sub Super Admin') {
-                        const base = createEmptyPermissions();
-                        const userPerms = selectedUserDetail.permissions || {};
-                        const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
-                        PERMISSION_MODULES.forEach((module) => {
-                          const entry = userPerms[module.key] as ModulePermission | undefined;
-                          if (entry?.access) {
-                            const permission = entry.permission === 'write' ? 'write' : 'read';
-                            seeded[module.key] =
-                              module.key === JOINING_PERMISSION_KEY
-                                ? {
-                                    access: true,
-                                    permission,
-                                    ...admissionTabsFromStored(entry),
-                                    ...(permission === 'write' ? joiningExtrasFromStored(entry) : {}),
-                                    allowedColleges: Array.isArray(entry.allowedColleges)
-                                      ? entry.allowedColleges.filter((id) => typeof id === 'string')
-                                      : [],
-                                  }
-                                : { access: true, permission };
-                          }
-                        });
-                        setEditPermissionState(seeded);
-                        setEditAllowedSourcesState(selectedUserDetail.permissions?.allowedSources || []);
-                      } else {
-                        setEditPermissionState(createEmptyPermissions());
-                        setEditAllowedSourcesState(selectedUserDetail.permissions?.allowedSources || []);
-                      }
-                      setShowEditUser(true);
-                      // Keep detail modal open or close it? 
-                      // User might want to see updated details. Let's keep it open, but edit modal is on top.
-                    }}
-                    disabled={!canManageUsers}
-                    className="justify-start"
-                  >
-                    <IconPencil className="w-4 h-4 mr-2" />
-                    Edit Details
-                  </Button>
+                  {selectedUserDetail.roleName !== 'Sub Super Admin' && selectedUserDetail.roleName !== 'Super Admin' && (
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Allowed Lead Sources</h3>
+                      <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+                        {selectedUserDetail.permissions?.allowedSources && selectedUserDetail.permissions.allowedSources.length > 0 ? (
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {selectedUserDetail.permissions.allowedSources.map((source: string) => (
+                              <div key={source} className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                {source}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">All lead sources allowed.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {canDeleteUsers && (
-                  <Button
-                    variant="outline" // Changed to outline but with red styling to match design system better for destructive in a list
-                    onClick={() => {
-                      if (window.confirm(`Delete ${selectedUserDetail.name}? This cannot be undone.`)) {
-                        deleteUserMutation.mutate(selectedUserDetail._id);
-                      }
-                    }}
-                    disabled={!canManageUsers}
-                    className="justify-start border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 w-full mt-2"
-                  >
-                    <IconTrash className="w-4 h-4 mr-2" />
-                    Delete User Permanently
-                  </Button>
-                )}
               </div>
+            </div>
+
+            <div className="flex-shrink-0 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => handleOpenTeamAssignment(selectedUserDetail)}
+                disabled={!canManageUsers}
+                className="justify-center"
+              >
+                <IconUserGroup className="w-4 h-4 mr-2" />
+                Assign Manager
+              </Button>
+
+              {canManageUsers && (selectedUserDetail.roleName === 'Super Admin' || selectedUserDetail.roleName === 'Sub Super Admin' ? false : true) && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (selectedUserDetail.isManager) {
+                      if (window.confirm(`Revoke Manager privileges from ${selectedUserDetail.name}?`)) {
+                        toggleManagerRoleMutation.mutate(selectedUserDetail);
+                      }
+                    } else {
+                      if (window.confirm(`Grant Manager privileges to ${selectedUserDetail.name}?`)) {
+                        toggleManagerRoleMutation.mutate(selectedUserDetail);
+                      }
+                    }
+                  }}
+                  className={selectedUserDetail.isManager ? "justify-center border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" : "justify-center"}
+                >
+                  <IconBadge className="w-4 h-4 mr-2" />
+                  {selectedUserDetail.isManager ? 'Revoke Manager' : 'Make Manager'}
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (selectedUserDetail.isActive) {
+                    setUserToDeactivate(selectedUserDetail);
+                    setShowDeactivateDialog(true);
+                  } else {
+                    toggleActiveMutation.mutate({ user: selectedUserDetail });
+                  }
+                }}
+                disabled={!canManageUsers || toggleActiveMutation.isPending}
+                className={selectedUserDetail.isActive ? "justify-center text-rose-600 hover:bg-rose-50 border-rose-200" : "justify-center text-emerald-600 hover:bg-emerald-50 border-emerald-200"}
+              >
+                {selectedUserDetail.isActive ? <IconX className="w-4 h-4 mr-2" /> : <IconCheck className="w-4 h-4 mr-2" />}
+                {selectedUserDetail.isActive ? 'Deactivate' : 'Activate'}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingUser(selectedUserDetail);
+                  setEditFormState({
+                    name: selectedUserDetail.name,
+                    email: selectedUserDetail.email,
+                    mobileNumber: selectedUserDetail.mobileNumber || '',
+                    roleName: selectedUserDetail.roleName,
+                    designation: selectedUserDetail.designation || '',
+                    password: '',
+                    hrms_id: selectedUserDetail.hrms_id || '',
+                    emp_no: selectedUserDetail.emp_no || '',
+                  });
+                  if (selectedUserDetail.roleName === 'Sub Super Admin') {
+                    const base = createEmptyPermissions();
+                    const userPerms = selectedUserDetail.permissions || {};
+                    const seeded: Record<PermissionModuleKey, ModulePermission> = { ...base };
+                    PERMISSION_MODULES.forEach((module) => {
+                      const entry = userPerms[module.key] as ModulePermission | undefined;
+                      if (entry?.access) {
+                        const permission = entry.permission === 'write' ? 'write' : 'read';
+                        seeded[module.key] =
+                          module.key === JOINING_PERMISSION_KEY
+                            ? {
+                                access: true,
+                                permission,
+                                ...admissionTabsFromStored(entry),
+                                ...(permission === 'write' ? joiningExtrasFromStored(entry) : {}),
+                                allowedColleges: Array.isArray(entry.allowedColleges)
+                                  ? entry.allowedColleges.filter((id) => typeof id === 'string')
+                                  : [],
+                              }
+                            : { access: true, permission };
+                      }
+                    });
+                    setEditPermissionState(seeded);
+                    setEditAllowedSourcesState(selectedUserDetail.permissions?.allowedSources || []);
+                  } else {
+                    setEditPermissionState(createEmptyPermissions());
+                    setEditAllowedSourcesState(selectedUserDetail.permissions?.allowedSources || []);
+                  }
+                  setShowEditUser(true);
+                }}
+                disabled={!canManageUsers}
+                className="justify-center"
+              >
+                <IconPencil className="w-4 h-4 mr-2" />
+                Edit Details
+              </Button>
+
+              {canDeleteUsers && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (window.confirm(`Delete ${selectedUserDetail.name}? This cannot be undone.`)) {
+                      deleteUserMutation.mutate(selectedUserDetail._id);
+                    }
+                  }}
+                  disabled={!canManageUsers}
+                  className="justify-center border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300"
+                >
+                  <IconTrash className="w-4 h-4 mr-2" />
+                  Delete User Permanently
+                </Button>
+              )}
             </div>
           </Card>
         </div>
@@ -1397,8 +1432,8 @@ const UserManagementPage = () => {
 
       {showCreateUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <Card className="w-full max-w-4xl space-y-6 p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none">
-            <div className="flex items-center justify-between">
+          <Card className="w-full max-w-6xl max-h-[85vh] flex flex-col p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between flex-shrink-0 border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create New User</h2>
               <button
                 type="button"
@@ -1408,290 +1443,304 @@ const UserManagementPage = () => {
                 Close
               </button>
             </div>
-            <form onSubmit={handleCreateUser} className="space-y-6">
-              <div
-                className={formState.roleName === 'Sub Super Admin' ? 'grid gap-6 lg:grid-cols-[minmax(0,0.55fr)_minmax(0,0.45fr)]' : 'space-y-6'}
-              >
-                <div className={formState.roleName === 'Sub Super Admin' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 content-start' : 'grid grid-cols-1 gap-4 sm:grid-cols-2'}>
-                  {/* Inline HRMS Search instead of component to prevent focus loss */}
-                  <div className="col-span-full space-y-3 rounded-xl border border-blue-100 bg-blue-50/30 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        Link with HRMS Employee
-                      </h3>
-                      {formState.emp_no && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                          Linked: {formState.emp_no}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFormState(prev => ({ ...prev, emp_no: '', hrms_id: '' }));
-                            }}
-                            className="ml-1.5 hover:text-emerald-900 dark:hover:text-emerald-100"
-                          >
-                            <IconX className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <Input
-                        placeholder="Search by Employee Name..."
-                        value={hrmsSearchTerm}
-                        onChange={(e) => handleSearchHrms(e.target.value)}
-                        className="bg-white dark:bg-slate-900 border-blue-200 focus:border-blue-500"
-                      />
-                      {isSearchingHrms && (
-                        <div className="absolute right-3 top-3">
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-                        </div>
-                      )}
-                      {hrmsResults.length > 0 && (
-                        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                          <div className="max-h-48 overflow-y-auto">
-                            {hrmsResults.map((emp) => (
-                              <button
-                                key={emp.emp_no}
-                                type="button"
-                                onClick={() => handleSelectHrmsEmployee(emp, false)}
-                                className="flex w-full flex-col px-4 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-700"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{emp.name}</span>
-                                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400">{emp.emp_no}</span>
-                                </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                  {emp.division} • {emp.department} • {emp.group}
-                                </div>
-                                <div className="text-xs text-slate-400 dark:text-slate-500 italic">
-                                  {emp.email}
-                                </div>
-                              </button>
-                            ))}
+            <form onSubmit={handleCreateUser} className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                  
+                  {/* Left Column: User details */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 content-start">
+                    {/* Link with HRMS Employee */}
+                    <div className="col-span-full space-y-3 rounded-xl border border-blue-100 bg-blue-50/30 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          Link with HRMS Employee
+                        </h3>
+                        {formState.emp_no && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                            Linked: {formState.emp_no}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormState(prev => ({ ...prev, emp_no: '', hrms_id: '' }));
+                              }}
+                              className="ml-1.5 hover:text-emerald-900 dark:hover:text-emerald-100"
+                            >
+                              <IconX className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <Input
+                          placeholder="Search by Employee Name..."
+                          value={hrmsSearchTerm}
+                          onChange={(e) => handleSearchHrms(e.target.value)}
+                          className="bg-white dark:bg-slate-900 border-blue-200 focus:border-blue-500"
+                        />
+                        {isSearchingHrms && (
+                          <div className="absolute right-3 top-3">
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                    {!formState.emp_no && (
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                        Search and select an employee to auto-fill details and enable HRMS authentication.
-                      </p>
-                    )}
-                  </div>
-                  <Input
-                    label="Full Name"
-                    name="name"
-                    value={formState.name}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
-                    placeholder="Counsellor name"
-                  />
-                  <Input
-                    label="Email Address (Optional)"
-                    name="email"
-                    type="email"
-                    value={formState.email}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
-                    placeholder="name@college.com"
-                  />
-                  <Input
-                    label="Mobile Number"
-                    name="mobileNumber"
-                    type="tel"
-                    value={formState.mobileNumber}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, mobileNumber: event.target.value }))}
-                    placeholder="9876543210 (Optional)"
-                  />
-                  {formState.emp_no ? (
-                    <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-900/30 dark:bg-blue-900/20">
-                      <p className="text-xs font-medium text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                        <IconBadge className="w-3.5 h-3.5" />
-                        Password managed by HRMS
-                      </p>
-                    </div>
-                  ) : (
-                    <Input
-                      label="Password"
-                      name="password"
-                      type="password"
-                      value={formState.password}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, password: event.target.value }))}
-                      placeholder="Temporary password"
-                    />
-                  )}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Role</label>
-                    <select
-                      value={formState.roleName}
-                      onChange={(event) => handleRoleChange(event.target.value)}
-                      className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                    >
-                      <option value="Student Counselor">Student Counselor</option>
-                      <option value="Data Entry User">Data Entry User</option>
-                      <option value="PRO">PRO</option>
-                      <option value="Sub Super Admin">Sub Super Admin</option>
-                      <option value="Super Admin">Super Admin</option>
-                    </select>
-                  </div>
-
-                  {/* Designation field removed as per requirement */}
-                </div>
-
-                {formState.roleName !== 'Sub Super Admin' && (
-                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                        Lead Source Permissions
-                      </h3>
-                      <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
-                        Restrict this user to only see leads from these sources. Leave all unchecked to show all leads.
-                      </p>
-                    </div>
-                    <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[40vh] bg-white rounded-xl p-3 border border-white/70 dark:bg-slate-900/80 dark:border-slate-700/60">
-                      {allSources.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic py-2">No sources found in database.</p>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {allSources.map((source) => (
-                            <label key={source} className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                checked={allowedSourcesState.includes(source)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setAllowedSourcesState(prev => [...prev, source]);
-                                  } else {
-                                    setAllowedSourcesState(prev => prev.filter(s => s !== source));
-                                  }
-                                }}
-                              />
-                              {source}
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {formState.roleName === 'Sub Super Admin' && (
-                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20 sm:col-span-2 lg:col-span-1">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                        Module Permissions
-                      </h3>
-                      <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
-                        Select which super admin modules this sub super admin can access, and whether they can edit them.
-                      </p>
-                    </div>
-                    <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-[60vh]">
-                      {PERMISSION_MODULES.map((module) => {
-                        const moduleState = permissionState[module.key];
-                        return (
-                          <div
-                            key={module.key}
-                            className="flex flex-col justify-between rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/80"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                  {module.label}
-                                </p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{module.description}</p>
-                              </div>
-                              <label className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                  checked={moduleState.access}
-                                  onChange={() => toggleModuleAccess(module.key)}
-                                />
-                                Access
-                              </label>
+                        )}
+                        {hrmsResults.length > 0 && (
+                          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                            <div className="max-h-48 overflow-y-auto">
+                              {hrmsResults.map((emp) => (
+                                <button
+                                  key={emp.emp_no}
+                                  type="button"
+                                  onClick={() => handleSelectHrmsEmployee(emp, false)}
+                                  className="flex w-full flex-col px-4 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-700"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{emp.name}</span>
+                                    <span className="text-xs font-medium text-blue-600 dark:text-blue-400">{emp.emp_no}</span>
+                                  </div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                                    {emp.division} • {emp.department} • {emp.group}
+                                  </div>
+                                  <div className="text-xs text-slate-400 dark:text-slate-500 italic">
+                                    {emp.email}
+                                  </div>
+                                </button>
+                              ))}
                             </div>
-                            {moduleState.access ? (
-                              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-200/70 bg-blue-50/70 p-2 dark:border-blue-900/50 dark:bg-blue-900/30">
-                                <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200">
-                                  Permission Level
-                                </p>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={moduleState.permission === 'read' ? 'primary' : 'outline'}
-                                    onClick={() => updateModulePermissionLevel(module.key, 'read')}
-                                  >
-                                    Read Only
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={moduleState.permission === 'write' ? 'primary' : 'outline'}
-                                    onClick={() => updateModulePermissionLevel(module.key, 'write')}
-                                  >
-                                    Read &amp; Write
-                                  </Button>
-                                </div>
-                                {module.key === JOINING_PERMISSION_KEY && (
-                                  <JoiningModulePermissionExtras
-                                    moduleState={moduleState}
-                                    collegeOptions={collegeOptions}
-                                    onChange={(patch) =>
-                                      setPermissionState((prev) => ({
-                                        ...prev,
-                                        [module.key]: { ...prev[module.key], ...patch },
-                                      }))
-                                    }
-                                  />
-                                )}
-                                {module.key === 'leads' && (
-                                  <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
-                                    <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">
-                                      Allowed Lead Sources
+                          </div>
+                        )}
+                      </div>
+                      {!formState.emp_no && (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                          Search and select an employee to auto-fill details and enable HRMS authentication.
+                        </p>
+                      )}
+                    </div>
+                    <Input
+                      label="Full Name"
+                      name="name"
+                      value={formState.name}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
+                      placeholder="Counsellor name"
+                    />
+                    <Input
+                      label="Email Address (Optional)"
+                      name="email"
+                      type="email"
+                      value={formState.email}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
+                      placeholder="name@college.com"
+                    />
+                    <Input
+                      label="Mobile Number"
+                      name="mobileNumber"
+                      type="tel"
+                      value={formState.mobileNumber}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, mobileNumber: event.target.value }))}
+                      placeholder="9876543210 (Optional)"
+                    />
+                    {formState.emp_no ? (
+                      <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-900/30 dark:bg-blue-900/20">
+                        <p className="text-xs font-medium text-blue-800 dark:text-blue-300 flex items-center gap-2">
+                          <IconBadge className="w-3.5 h-3.5" />
+                          Password managed by HRMS
+                        </p>
+                      </div>
+                    ) : (
+                      <Input
+                        label="Password"
+                        name="password"
+                        type="password"
+                        value={formState.password}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, password: event.target.value }))}
+                        placeholder="Temporary password"
+                      />
+                    )}
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">Role</label>
+                      <select
+                        value={formState.roleName}
+                        onChange={(event) => handleRoleChange(event.target.value)}
+                        className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                      >
+                        <option value="Student Counselor">Student Counselor</option>
+                        <option value="Data Entry User">Data Entry User</option>
+                        <option value="PRO">PRO</option>
+                        <option value="Sub Super Admin">Sub Super Admin</option>
+                        <option value="Super Admin">Super Admin</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Other Info */}
+                  <div className="space-y-4">
+                    {formState.roleName === 'Sub Super Admin' && (
+                      <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                            Module Permissions
+                          </h3>
+                          <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+                            Select which super admin modules this sub super admin can access, and whether they can edit them.
+                          </p>
+                        </div>
+                        <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-[45vh]">
+                          {PERMISSION_MODULES.map((module) => {
+                            const moduleState = permissionState[module.key];
+                            return (
+                              <div
+                                key={module.key}
+                                className="flex flex-col justify-between rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/80"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                      {module.label}
                                     </p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                      {allSources.map((source) => (
-                                        <label key={source} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
-                                          <input
-                                            type="checkbox"
-                                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                            checked={allowedSourcesState.includes(source)}
-                                            onChange={(e) => {
-                                              if (e.target.checked) {
-                                                setAllowedSourcesState(prev => [...prev, source]);
-                                              } else {
-                                                setAllowedSourcesState(prev => prev.filter(s => s !== source));
-                                              }
-                                            }}
-                                          />
-                                          {source}
-                                        </label>
-                                      ))}
-                                      {allSources.length === 0 && (
-                                        <p className="text-[10px] text-slate-400 italic">No sources found.</p>
-                                      )}
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{module.description}</p>
+                                  </div>
+                                  <label className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                      checked={moduleState.access}
+                                      onChange={() => toggleModuleAccess(module.key)}
+                                    />
+                                    Access
+                                  </label>
+                                </div>
+                                {moduleState.access ? (
+                                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-200/70 bg-blue-50/70 p-2 dark:border-blue-900/50 dark:bg-blue-900/30">
+                                    <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200">
+                                      Permission Level
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={moduleState.permission === 'read' ? 'primary' : 'outline'}
+                                        onClick={() => updateModulePermissionLevel(module.key, 'read')}
+                                      >
+                                        Read Only
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={moduleState.permission === 'write' ? 'primary' : 'outline'}
+                                        onClick={() => updateModulePermissionLevel(module.key, 'write')}
+                                      >
+                                        Read &amp; Write
+                                      </Button>
                                     </div>
+                                    {module.key === JOINING_PERMISSION_KEY && (
+                                      <JoiningModulePermissionExtras
+                                        moduleState={moduleState}
+                                        collegeOptions={collegeOptions}
+                                        onChange={(patch) =>
+                                          setPermissionState((prev) => ({
+                                            ...prev,
+                                            [module.key]: { ...prev[module.key], ...patch },
+                                          }))
+                                        }
+                                      />
+                                    )}
+                                    {module.key === 'leads' && (
+                                      <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">
+                                          Allowed Lead Sources
+                                        </p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                          {allSources.map((source) => (
+                                            <label key={source} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                checked={allowedSourcesState.includes(source)}
+                                                onChange={(e) => {
+                                                  if (e.target.checked) {
+                                                    setAllowedSourcesState(prev => [...prev, source]);
+                                                  } else {
+                                                    setAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                                  }
+                                                }}
+                                              />
+                                              {source}
+                                            </label>
+                                          ))}
+                                          {allSources.length === 0 && (
+                                            <p className="text-[10px] text-slate-400 italic">No sources found.</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[10px] font-medium uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500">
+                                    Access disabled
                                   </div>
                                 )}
                               </div>
-                            ) : (
-                              <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[10px] font-medium uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500">
-                                Access disabled
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
+                    {formState.roleName !== 'Sub Super Admin' && formState.roleName !== 'Super Admin' && (
+                      <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                            Lead Source Permissions
+                          </h3>
+                          <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+                            Restrict this user to only see leads from these sources. Leave all unchecked to show all leads.
+                          </p>
+                        </div>
+                        <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[45vh] bg-white rounded-xl p-3 border border-white/70 dark:bg-slate-900/80 dark:border-slate-700/60">
+                          {allSources.length === 0 ? (
+                            <p className="text-xs text-slate-400 italic py-2">No sources found in database.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {allSources.map((source) => (
+                                <label key={source} className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    checked={allowedSourcesState.includes(source)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setAllowedSourcesState(prev => [...prev, source]);
+                                      } else {
+                                        setAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                      }
+                                    }}
+                                  />
+                                  {source}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {formState.roleName === 'Super Admin' && (
+                      <div className="flex h-full flex-col items-center justify-center text-center p-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                        <svg className="w-12 h-12 text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Super Admin Privileges</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
+                          Super Admins automatically have complete read and write access to all modules and lead sources.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex-shrink-0">
                 <Button
                   type="button"
                   variant="outline"
@@ -1717,8 +1766,8 @@ const UserManagementPage = () => {
       {/* Edit User Modal */}
       {showEditUser && editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
-          <Card className="w-full max-w-4xl space-y-6 p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none">
-            <div className="flex items-center justify-between">
+          <Card className="w-full max-w-6xl max-h-[85vh] flex flex-col p-6 shadow-lg border border-slate-200 dark:border-slate-800 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between flex-shrink-0 border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                 Edit User
               </h2>
@@ -1795,329 +1844,333 @@ const UserManagementPage = () => {
 
                 updateUserMutation.mutate({ userId: editingUser._id, data: payload });
               }}
-              className="space-y-6"
+              className="flex-1 flex flex-col min-h-0"
             >
-              <div
-                className={
-                  editFormState.roleName === 'Sub Super Admin'
-                    ? 'grid gap-6 lg:grid-cols-[minmax(0,0.55fr)_minmax(0,0.45fr)]'
-                    : 'space-y-4'
-                }
-              >
-                <div
-                  className={
-                    editFormState.roleName === 'Sub Super Admin' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 content-start' : 'grid grid-cols-1 gap-4 sm:grid-cols-2'
-                  }
-                >
-                  <div className="col-span-full space-y-3 rounded-xl border border-blue-100 bg-blue-50/30 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        Link with HRMS Employee
-                      </h3>
-                      {editFormState.emp_no && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                          Linked: {editFormState.emp_no}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditFormState(prev => ({ ...prev, emp_no: '', hrms_id: '' }));
-                            }}
-                            className="ml-1.5 hover:text-emerald-900 dark:hover:text-emerald-100"
-                          >
-                            <IconX className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <Input
-                        placeholder="Search by Employee Name..."
-                        value={hrmsSearchTerm}
-                        onChange={(e) => handleSearchHrms(e.target.value)}
-                        className="bg-white dark:bg-slate-900 border-blue-200 focus:border-blue-500"
-                      />
-                      {isSearchingHrms && (
-                        <div className="absolute right-3 top-3">
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-                        </div>
-                      )}
-                      {hrmsResults.length > 0 && (
-                        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                          <div className="max-h-48 overflow-y-auto">
-                            {hrmsResults.map((emp) => (
-                              <button
-                                key={emp.emp_no}
-                                type="button"
-                                onClick={() => handleSelectHrmsEmployee(emp, true)}
-                                className="flex w-full flex-col px-4 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-700"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{emp.name}</span>
-                                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400">{emp.emp_no}</span>
-                                </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                  {emp.designation} • {emp.email}
-                                </div>
-                              </button>
-                            ))}
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                  
+                  {/* Left Column: User details */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 content-start">
+                    <div className="col-span-full space-y-3 rounded-xl border border-blue-100 bg-blue-50/30 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          Link with HRMS Employee
+                        </h3>
+                        {editFormState.emp_no && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                            Linked: {editFormState.emp_no}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditFormState(prev => ({ ...prev, emp_no: '', hrms_id: '' }));
+                              }}
+                              className="ml-1.5 hover:text-emerald-900 dark:hover:text-emerald-100"
+                            >
+                              <IconX className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <Input
+                          placeholder="Search by Employee Name..."
+                          value={hrmsSearchTerm}
+                          onChange={(e) => handleSearchHrms(e.target.value)}
+                          className="bg-white dark:bg-slate-900 border-blue-200 focus:border-blue-500"
+                        />
+                        {isSearchingHrms && (
+                          <div className="absolute right-3 top-3">
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                    {!editFormState.emp_no && (
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                        Search and select an employee to auto-fill details and enable HRMS authentication.
-                      </p>
-                    )}
-                  </div>
-                  <Input
-                    label="Full Name"
-                    name="name"
-                    value={editFormState.name}
-                    onChange={(event) =>
-                      setEditFormState((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                    placeholder="Counsellor name"
-                  />
-                  <Input
-                    label="Email Address (Optional)"
-                    name="email"
-                    type="email"
-                    value={editFormState.email}
-                    onChange={(event) =>
-                      setEditFormState((prev) => ({ ...prev, email: event.target.value }))
-                    }
-                    placeholder="name@college.com"
-                  />
-                  <Input
-                    label="Mobile Number"
-                    name="mobileNumber"
-                    type="tel"
-                    value={editFormState.mobileNumber || ''}
-                    onChange={(event) =>
-                      setEditFormState((prev) => ({ ...prev, mobileNumber: event.target.value }))
-                    }
-                    placeholder="mobile number"
-                  />
-                  {editFormState.emp_no ? (
-                    <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-900/30 dark:bg-blue-900/20">
-                      <p className="text-xs font-medium text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                        <IconBadge className="w-3.5 h-3.5" />
-                        Password managed by HRMS
-                      </p>
-                    </div>
-                  ) : (
-                    <Input
-                      label="New Password"
-                      name="password"
-                      type="password"
-                      value={editFormState.password || ''}
-                      onChange={(event) =>
-                        setEditFormState((prev) => ({ ...prev, password: event.target.value }))
-                      }
-                      placeholder="Leave blank to keep current"
-                    />
-                  )}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
-                      Role
-                    </label>
-                    <select
-                      value={editFormState.roleName}
-                      onChange={(event) => handleEditRoleChange(event.target.value)}
-                      className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
-                    >
-                      <option value="Student Counselor">Student Counselor</option>
-                      <option value="Data Entry User">Data Entry User</option>
-                      <option value="PRO">PRO</option>
-                      <option value="Sub Super Admin">Sub Super Admin</option>
-                      <option value="Super Admin">Super Admin</option>
-                    </select>
-                  </div>
-
-                  {/* Designation field removed as per requirement */}
-                </div>
-
-                {editFormState.roleName !== 'Sub Super Admin' && (
-                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                        Lead Source Permissions
-                      </h3>
-                      <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
-                        Restrict this user to only see leads from these sources. Leave all unchecked to show all leads.
-                      </p>
-                    </div>
-                    <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[40vh] bg-white rounded-xl p-3 border border-white/70 dark:bg-slate-900/80 dark:border-slate-700/60">
-                      {allSources.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic py-2">No sources found in database.</p>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {allSources.map((source) => (
-                            <label key={source} className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                checked={editAllowedSourcesState.includes(source)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setEditAllowedSourcesState(prev => [...prev, source]);
-                                  } else {
-                                    setEditAllowedSourcesState(prev => prev.filter(s => s !== source));
-                                  }
-                                }}
-                              />
-                              {source}
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {editFormState.roleName === 'Sub Super Admin' && (
-                  <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20 sm:col-span-2 lg:col-span-1">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                        Module Permissions
-                      </h3>
-                      <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
-                        Select which super admin modules this sub super admin can access, and
-                        whether they can edit them.
-                      </p>
-                    </div>
-                    <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-[60vh]">
-                      {PERMISSION_MODULES.map((module) => {
-                        const moduleState = editPermissionState[module.key];
-                        return (
-                          <div
-                            key={module.key}
-                            className="flex flex-col justify-between rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/80"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                  {module.label}
-                                </p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                  {module.description}
-                                </p>
-                              </div>
-                              <label className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                  checked={moduleState.access}
-                                  onChange={() =>
-                                    setEditPermissionState((prev) => {
-                                      const nextAccess = !prev[module.key].access;
-                                      return {
-                                        ...prev,
-                                        [module.key]: {
-                                          ...prev[module.key],
-                                          access: nextAccess,
-                                          permission: nextAccess
-                                            ? prev[module.key].permission || 'read'
-                                            : prev[module.key].permission,
-                                          ...(module.key === JOINING_PERMISSION_KEY &&
-                                          nextAccess &&
-                                          !prev[module.key].access
-                                            ? {
-                                                ...defaultJoiningPermissionExtras(),
-                                                ...defaultAdmissionTabExtras(),
-                                              }
-                                            : {}),
-                                        },
-                                      };
-                                    })
-                                  }
-                                />
-                                Access
-                              </label>
+                        )}
+                        {hrmsResults.length > 0 && (
+                          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                            <div className="max-h-48 overflow-y-auto">
+                              {hrmsResults.map((emp) => (
+                                <button
+                                  key={emp.emp_no}
+                                  type="button"
+                                  onClick={() => handleSelectHrmsEmployee(emp, true)}
+                                  className="flex w-full flex-col px-4 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-700"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{emp.name}</span>
+                                    <span className="text-xs font-medium text-blue-600 dark:text-blue-400">{emp.emp_no}</span>
+                                  </div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                                    {emp.designation} • {emp.email}
+                                  </div>
+                                </button>
+                              ))}
                             </div>
-                            {moduleState.access ? (
-                              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-200/70 bg-blue-50/70 p-2 dark:border-blue-900/50 dark:bg-blue-900/30">
-                                <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200">
-                                  Permission Level
-                                </p>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={moduleState.permission === 'read' ? 'primary' : 'outline'}
-                                    onClick={() => updateEditModulePermissionLevel(module.key, 'read')}
-                                  >
-                                    Read Only
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={moduleState.permission === 'write' ? 'primary' : 'outline'}
-                                    onClick={() => updateEditModulePermissionLevel(module.key, 'write')}
-                                  >
-                                    Read &amp; Write
-                                  </Button>
-                                </div>
-                                {module.key === JOINING_PERMISSION_KEY && (
-                                  <JoiningModulePermissionExtras
-                                    moduleState={moduleState}
-                                    collegeOptions={collegeOptions}
-                                    onChange={(patch) =>
-                                      setEditPermissionState((prev) => ({
-                                        ...prev,
-                                        [module.key]: { ...prev[module.key], ...patch },
-                                      }))
-                                    }
-                                  />
-                                )}
-                                {module.key === 'leads' && (
-                                  <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
-                                    <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">
-                                      Allowed Lead Sources
+                          </div>
+                        )}
+                      </div>
+                      {!editFormState.emp_no && (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                          Search and select an employee to auto-fill details and enable HRMS authentication.
+                        </p>
+                      )}
+                    </div>
+                    <Input
+                      label="Full Name"
+                      name="name"
+                      value={editFormState.name}
+                      onChange={(event) =>
+                        setEditFormState((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      placeholder="Counsellor name"
+                    />
+                    <Input
+                      label="Email Address (Optional)"
+                      name="email"
+                      type="email"
+                      value={editFormState.email}
+                      onChange={(event) =>
+                        setEditFormState((prev) => ({ ...prev, email: event.target.value }))
+                      }
+                      placeholder="name@college.com"
+                    />
+                    <Input
+                      label="Mobile Number"
+                      name="mobileNumber"
+                      type="tel"
+                      value={editFormState.mobileNumber || ''}
+                      onChange={(event) =>
+                        setEditFormState((prev) => ({ ...prev, mobileNumber: event.target.value }))
+                      }
+                      placeholder="mobile number"
+                    />
+                    {editFormState.emp_no ? (
+                      <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-900/30 dark:bg-blue-900/20">
+                        <p className="text-xs font-medium text-blue-800 dark:text-blue-300 flex items-center gap-2">
+                          <IconBadge className="w-3.5 h-3.5" />
+                          Password managed by HRMS
+                        </p>
+                      </div>
+                    ) : (
+                      <Input
+                        label="New Password"
+                        name="password"
+                        type="password"
+                        value={editFormState.password || ''}
+                        onChange={(event) =>
+                          setEditFormState((prev) => ({ ...prev, password: event.target.value }))
+                        }
+                        placeholder="Leave blank to keep current"
+                      />
+                    )}
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                        Role
+                      </label>
+                      <select
+                        value={editFormState.roleName}
+                        onChange={(event) => handleEditRoleChange(event.target.value)}
+                        className="w-full rounded-xl border-2 border-gray-200 bg-white/80 px-4 py-3 text-sm font-medium text-slate-600 transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+                      >
+                        <option value="Student Counselor">Student Counselor</option>
+                        <option value="Data Entry User">Data Entry User</option>
+                        <option value="PRO">PRO</option>
+                        <option value="Sub Super Admin">Sub Super Admin</option>
+                        <option value="Super Admin">Super Admin</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Other Info */}
+                  <div className="space-y-4">
+                    {editFormState.roleName === 'Sub Super Admin' && (
+                      <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                            Module Permissions
+                          </h3>
+                          <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+                            Select which super admin modules this sub super admin can access, and whether they can edit them.
+                          </p>
+                        </div>
+                        <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-[45vh]">
+                          {PERMISSION_MODULES.map((module) => {
+                            const moduleState = editPermissionState[module.key];
+                            return (
+                              <div
+                                key={module.key}
+                                className="flex flex-col justify-between rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/80"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                      {module.label}
                                     </p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                      {allSources.map((source) => (
-                                        <label key={source} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
-                                          <input
-                                            type="checkbox"
-                                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                            checked={editAllowedSourcesState.includes(source)}
-                                            onChange={(e) => {
-                                              if (e.target.checked) {
-                                                setEditAllowedSourcesState(prev => [...prev, source]);
-                                              } else {
-                                                setEditAllowedSourcesState(prev => prev.filter(s => s !== source));
-                                              }
-                                            }}
-                                          />
-                                          {source}
-                                        </label>
-                                      ))}
-                                      {allSources.length === 0 && (
-                                        <p className="text-[10px] text-slate-400 italic">No sources found.</p>
-                                      )}
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{module.description}</p>
+                                  </div>
+                                  <label className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                      checked={moduleState.access}
+                                      onChange={() =>
+                                        setEditPermissionState((prev) => {
+                                          const nextAccess = !prev[module.key].access;
+                                          return {
+                                            ...prev,
+                                            [module.key]: {
+                                              ...prev[module.key],
+                                              access: nextAccess,
+                                              permission: nextAccess
+                                                ? prev[module.key].permission || 'read'
+                                                : prev[module.key].permission,
+                                              ...(module.key === JOINING_PERMISSION_KEY &&
+                                              nextAccess &&
+                                              !prev[module.key].access
+                                                ? {
+                                                    ...defaultJoiningPermissionExtras(),
+                                                    ...defaultAdmissionTabExtras(),
+                                                  }
+                                                : {}),
+                                            },
+                                          };
+                                        })
+                                      }
+                                    />
+                                    Access
+                                  </label>
+                                </div>
+                                {moduleState.access ? (
+                                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-200/70 bg-blue-50/70 p-2 dark:border-blue-900/50 dark:bg-blue-900/30">
+                                    <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200">
+                                      Permission Level
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={moduleState.permission === 'read' ? 'primary' : 'outline'}
+                                        onClick={() => updateEditModulePermissionLevel(module.key, 'read')}
+                                      >
+                                        Read Only
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={moduleState.permission === 'write' ? 'primary' : 'outline'}
+                                        onClick={() => updateEditModulePermissionLevel(module.key, 'write')}
+                                      >
+                                        Read &amp; Write
+                                      </Button>
                                     </div>
+                                    {module.key === JOINING_PERMISSION_KEY && (
+                                      <JoiningModulePermissionExtras
+                                        moduleState={moduleState}
+                                        collegeOptions={collegeOptions}
+                                        onChange={(patch) =>
+                                          setEditPermissionState((prev) => ({
+                                            ...prev,
+                                            [module.key]: { ...prev[module.key], ...patch },
+                                          }))
+                                        }
+                                      />
+                                    )}
+                                    {module.key === 'leads' && (
+                                      <div className="mt-3 border-t border-blue-100 pt-3 dark:border-blue-900/30 w-full">
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-blue-600 dark:text-blue-200 mb-2">
+                                          Allowed Lead Sources
+                                        </p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                          {allSources.map((source) => (
+                                            <label key={source} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                checked={editAllowedSourcesState.includes(source)}
+                                                onChange={(e) => {
+                                                  if (e.target.checked) {
+                                                    setEditAllowedSourcesState(prev => [...prev, source]);
+                                                  } else {
+                                                    setEditAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                                  }
+                                                }}
+                                              />
+                                              {source}
+                                            </label>
+                                          ))}
+                                          {allSources.length === 0 && (
+                                            <p className="text-[10px] text-slate-400 italic">No sources found.</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[10px] font-medium uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500">
+                                    Access disabled
                                   </div>
                                 )}
                               </div>
-                            ) : (
-                              <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[10px] font-medium uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500">
-                                Access disabled
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {editFormState.roleName !== 'Sub Super Admin' && editFormState.roleName !== 'Super Admin' && (
+                      <div className="flex h-full flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-900/20">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                            Lead Source Permissions
+                          </h3>
+                          <p className="text-xs text-blue-700/80 dark:text-blue-200/70">
+                            Restrict this user to only see leads from these sources. Leave all unchecked to show all leads.
+                          </p>
+                        </div>
+                        <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[45vh] bg-white rounded-xl p-3 border border-white/70 dark:bg-slate-900/80 dark:border-slate-700/60">
+                          {allSources.length === 0 ? (
+                            <p className="text-xs text-slate-400 italic py-2">No sources found in database.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {allSources.map((source) => (
+                                <label key={source} className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    checked={editAllowedSourcesState.includes(source)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setEditAllowedSourcesState(prev => [...prev, source]);
+                                      } else {
+                                        setEditAllowedSourcesState(prev => prev.filter(s => s !== source));
+                                      }
+                                    }}
+                                  />
+                                  {source}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {editFormState.roleName === 'Super Admin' && (
+                      <div className="flex h-full flex-col items-center justify-center text-center p-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                        <svg className="w-12 h-12 text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Super Admin Privileges</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
+                          Super Admins automatically have complete read and write access to all modules and lead sources.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex-shrink-0">
                 <Button
                   type="button"
                   variant="outline"

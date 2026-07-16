@@ -7574,7 +7574,24 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     </select>
                   </div>
                 )}
-                <div className={builderPaymentForm.paymentMode === 'Bank' ? 'sm:col-span-3' : 'sm:col-span-2'}>
+                {builderPaymentForm.paymentMode === 'Bank' && (
+                  <div className="sm:col-span-1">
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Bank reference number / UTR
+                    </label>
+                    <input
+                      type="text"
+                      value={builderPaymentForm.receiptNumber}
+                      onChange={(event) =>
+                        setBuilderPaymentForm((prev) => ({ ...prev, receiptNumber: event.target.value }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700"
+                      placeholder="Enter UTR if student paid via direct net banking/DD/NEFT"
+                      disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
+                    />
+                  </div>
+                )}
+                <div className={builderPaymentForm.paymentMode === 'Bank' ? 'sm:col-span-2' : 'sm:col-span-2'}>
                   <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Remarks
                   </label>
@@ -7642,25 +7659,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                       </p>
                     </div>
                   )}
-
-                  <div className="border-t border-indigo-100/30 pt-3 dark:border-slate-800/50">
-                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      — OR Manual Bank Transfer Override —
-                    </p>
-                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Bank reference number / UTR
-                    </label>
-                    <input
-                      type="text"
-                      value={builderPaymentForm.receiptNumber}
-                      onChange={(event) =>
-                        setBuilderPaymentForm((prev) => ({ ...prev, receiptNumber: event.target.value }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700"
-                      placeholder="Enter UTR if student paid via direct net banking/DD/NEFT"
-                      disabled={builderPaymentForm.isProcessing || builderPaymentTargets.length === 0}
-                    />
-                  </div>
                 </div>
               ) : builderPaymentForm.paymentMode === 'Bank' ? (
                 <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
