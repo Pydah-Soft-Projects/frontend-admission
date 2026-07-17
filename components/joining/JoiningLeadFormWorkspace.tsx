@@ -764,6 +764,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
   const [reference1, setReference1] = useState('');
+  const [isSavingReference, setIsSavingReference] = useState(false);
   /** Latest workflow-fixed registration year/semester (B.Tech vs others); synced after course catalog context resolves. */
   const joiningFixedRegistrationRef = useRef<JoiningRegistrationFixedGate>(
     buildJoiningRegistrationFixedGate({ courseName: '', courseCode: '' })
@@ -3918,6 +3919,36 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     },
   });
 
+  const handleSaveReference = async () => {
+    if (!leadId) return;
+    setIsSavingReference(true);
+    try {
+      if (status === 'approved' && admissionRecord?._id) {
+        await admissionAPI.patchReferenceById(String(admissionRecord._id), reference1.trim());
+        showToast.success('Reference updated successfully');
+      } else {
+        const payload = {
+          ...payloadForSave,
+          ...(joiningRecord?._id ? { _id: joiningRecord._id } : {}),
+        };
+        if (isPublicEdit && publicToken) {
+          await joiningPublicApi.saveDraft(publicToken, payload);
+        } else {
+          await joiningAPI.saveDraft(leadId, payload);
+        }
+        showToast.success('Reference saved successfully');
+      }
+      void queryClient.invalidateQueries({ queryKey: ['joining', leadId] });
+      void queryClient.invalidateQueries({ queryKey: ['admissions'] });
+    } catch (error: any) {
+      console.error('Error saving reference:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Failed to save reference';
+      showToast.error(msg);
+    } finally {
+      setIsSavingReference(false);
+    }
+  };
+
   const joiningDraftPayloadRef = useRef(payloadForSave);
   joiningDraftPayloadRef.current = payloadForSave;
   const joiningRecordIdRef = useRef<string | undefined>(undefined);
@@ -6723,7 +6754,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 description="Staff or referral contact linked to this lead (saved with Step 2)"
               >
                 <div className="flex flex-row items-center gap-3">
-                  <div className="w-full max-w-[17rem] shrink-0">
+                  <div className="w-full max-w-[28rem] shrink-0">
                     <ReferenceUserSelect
                       label=""
                       publicMode={isPublicEdit}
@@ -6743,6 +6774,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                       }
                     />
                   </div>
+                  <Button
+                    type="button"
+                    onClick={handleSaveReference}
+                    disabled={
+                      isSavingReference ||
+                      isSelfRegistrationRecord ||
+                      !canEditReferenceField ||
+                      isUpdatingAdmission ||
+                      isSaving
+                    }
+                    className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
+                  >
+                    {isSavingReference ? 'Saving...' : 'Save'}
+                  </Button>
                   {referenceFieldReadOnlyReason ? (
                     <p
                       className={cn(

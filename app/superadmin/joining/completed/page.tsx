@@ -328,6 +328,7 @@ const CompletedAdmissionsPage = () => {
   const [referenceEditValue, setReferenceEditValue] = useState('');
   const [referenceDepartmentFilter, setReferenceDepartmentFilter] = useState('');
   const [referenceDesignationFilter, setReferenceDesignationFilter] = useState('');
+  const [referenceSearchQuery, setReferenceSearchQuery] = useState('');
   const [referenceDrilldownTarget, setReferenceDrilldownTarget] =
     useState<AdmissionReferenceStatsRow | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -688,9 +689,15 @@ const CompletedAdmissionsPage = () => {
         ) {
           return false;
         }
+        if (
+          referenceSearchQuery &&
+          !String(row.name || '').toLowerCase().includes(referenceSearchQuery.toLowerCase())
+        ) {
+          return false;
+        }
         return true;
       }),
-    [referenceRows, referenceDepartmentFilter, referenceDesignationFilter]
+    [referenceRows, referenceDepartmentFilter, referenceDesignationFilter, referenceSearchQuery]
   );
 
   useEffect(() => {
@@ -2459,7 +2466,16 @@ const CompletedAdmissionsPage = () => {
                       pivotThClass
                     )}
                   >
-                    Reference
+                    <div className="flex flex-col gap-0.5 min-w-[10rem]">
+                      <span>Reference</span>
+                      <input
+                        type="text"
+                        placeholder="Search name..."
+                        value={referenceSearchQuery}
+                        onChange={(e) => setReferenceSearchQuery(e.target.value)}
+                        className={cn(referencePivotHeaderSelectClass, 'max-w-[12rem] border-blue-400 dark:border-blue-500')}
+                      />
+                    </div>
                   </th>
                   <th className={cn(pivotTheadStickyTopClass, pivotThClass)}>
                     <div className="flex min-w-[5.5rem] flex-col gap-0.5">

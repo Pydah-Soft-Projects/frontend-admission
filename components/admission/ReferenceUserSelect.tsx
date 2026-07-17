@@ -298,7 +298,7 @@ export function ReferenceUserSelect({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by name or employee ID…"
-                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  className="w-full rounded-lg border border-blue-400 py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-blue-500 dark:bg-slate-800 dark:text-slate-100"
                   autoFocus
                 />
               </div>
