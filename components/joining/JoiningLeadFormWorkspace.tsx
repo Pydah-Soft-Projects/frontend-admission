@@ -3820,7 +3820,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       educationHistory: formState.educationHistory,
       siblings: formState.siblings,
       documents: serializeJoiningDocumentsForApi(formState.documents),
-      ...(!isSelfRegistrationRecord ? { reference1: reference1.trim() } : {}),
+      reference1: reference1.trim(),
       ...(isApprovedAdmission
         ? {
             // Include full registration extras (college, academic year, etc.).
@@ -3877,7 +3877,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     status,
     feeConfigurationBatch,
     reference1,
-    isSelfRegistrationRecord,
   ]);
 
   const stepOneNextBlockedHint = useMemo(() => {
@@ -4172,7 +4171,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const canApprove = !isPublicEdit && canWriteJoining && status === 'pending_approval';
   const isAdmissionEditable = canEditApprovedAdmission && status === 'approved';
   const canEditReferenceField =
-    !isSelfRegistrationRecord &&
     !isPublicEdit &&
     canEditReference &&
     (status === 'approved' ? isAdmissionEditable : canWriteJoining);
@@ -4183,9 +4181,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
     if (isSaving || isUpdatingAdmission) {
       return 'Please wait — a save is in progress.';
-    }
-    if (isSelfRegistrationRecord) {
-      return 'Reference is not used for self-registration leads. Lead source stays as Self Registration.';
     }
     if (isPublicEdit) {
       return 'Reference is not editable on public joining links.';
@@ -4204,7 +4199,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     canEditReferenceField,
     isUpdatingAdmission,
     isSaving,
-    isSelfRegistrationRecord,
     isPublicEdit,
     canEditReference,
     status,
@@ -5189,7 +5183,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           },
           documents: serializeJoiningDocumentsForApi(formState.documents),
         });
-        if (!isSelfRegistrationRecord && admissionRecord?._id) {
+        if (admissionRecord?._id) {
           await admissionAPI.patchReferenceById(String(admissionRecord._id), reference1.trim());
         }
         return null;
@@ -6758,16 +6752,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     <ReferenceUserSelect
                       label=""
                       publicMode={isPublicEdit}
-                      value={isSelfRegistrationRecord ? '' : reference1}
+                      value={reference1}
                       onChange={setReference1}
                       disabled={
-                        isSelfRegistrationRecord ||
                         !canEditReferenceField ||
                         isUpdatingAdmission ||
                         isSaving
                       }
                       showAddUserButton={
-                        !isSelfRegistrationRecord &&
                         canEditReferenceField &&
                         !isUpdatingAdmission &&
                         !isSaving
@@ -6779,7 +6771,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     onClick={handleSaveReference}
                     disabled={
                       isSavingReference ||
-                      isSelfRegistrationRecord ||
                       !canEditReferenceField ||
                       isUpdatingAdmission ||
                       isSaving
@@ -6790,12 +6781,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </Button>
                   {referenceFieldReadOnlyReason ? (
                     <p
-                      className={cn(
-                        'flex min-w-0 flex-1 items-center rounded-lg border px-3 py-2 text-sm leading-snug',
-                        isSelfRegistrationRecord
-                          ? 'border-slate-200/90 bg-slate-50/90 text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300'
-                          : 'border-amber-200/90 bg-amber-50/90 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100'
-                      )}
+                      className="flex min-w-0 flex-1 items-center rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm leading-snug text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
                       role="status"
                     >
                       {referenceFieldReadOnlyReason}

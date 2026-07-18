@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { admissionAPI, courseAPI } from '@/lib/api';
+import { admissionAPI, courseAPI, leadAPI } from '@/lib/api';
 import { Admission, AdmissionListResponse } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -311,6 +311,7 @@ const CompletedAdmissionsPage = () => {
   const [collegeFilter, setCollegeFilter] = useState<string>('');
   const [courseFilter, setCourseFilter] = useState<string>('');
   const [branchFilter, setBranchFilter] = useState<string>('');
+  const [sourceFilter, setSourceFilter] = useState<string>('');
   const [dateRange, setDateRange] = useState({
     from: '',
     to: '',
@@ -429,21 +430,43 @@ const CompletedAdmissionsPage = () => {
     if (collegeFilter) count += 1;
     if (courseFilter) count += 1;
     if (branchFilter) count += 1;
+    if (sourceFilter) count += 1;
     if (statusFilter !== 'active') count += 1;
     if (dateRange.from) count += 1;
     if (dateRange.to) count += 1;
     return count;
-  }, [collegeFilter, courseFilter, branchFilter, statusFilter, dateRange.from, dateRange.to]);
+  }, [collegeFilter, courseFilter, branchFilter, sourceFilter, statusFilter, dateRange.from, dateRange.to]);
 
   const clearFilters = () => {
     setCollegeFilter('');
     setCourseFilter('');
     setBranchFilter('');
+    setSourceFilter('');
     setStatusFilter('active');
     setDateRange({ from: '', to: '' });
     setSearchTerm('');
     setPage(1);
   };
+
+  /** Distinct lead sources for the source filter dropdown (shared leads filter options API). */
+  const { data: leadFilterOptionsRes } = useQuery({
+    queryKey: ['filterOptions', 'admissions-completed'],
+    queryFn: async () => {
+      const res = await leadAPI.getFilterOptions();
+      const payload = (res as { data?: Record<string, unknown> })?.data ?? res;
+      return payload && typeof payload === 'object' ? payload : {};
+    },
+    staleTime: 300_000,
+  });
+
+  const sourceOptions = useMemo(() => {
+    const raw = (leadFilterOptionsRes as { sources?: string[] } | undefined)?.sources;
+    const values = new Set<string>(
+      (Array.isArray(raw) ? raw : []).map((s) => String(s).trim()).filter(Boolean)
+    );
+    values.add('Self Registration');
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [leadFilterOptionsRes]);
 
   const statsThroughDate = dateRange.to || formatLocalDateIso(new Date());
 
@@ -762,9 +785,10 @@ const CompletedAdmissionsPage = () => {
       effectiveCollegeFilter,
       courseFilter,
       branchFilter,
+      sourceFilter,
       dateRange,
     ],
-    [page, limit, debouncedSearchTerm, statusFilter, effectiveCollegeFilter, courseFilter, branchFilter, dateRange]
+    [page, limit, debouncedSearchTerm, statusFilter, effectiveCollegeFilter, courseFilter, branchFilter, sourceFilter, dateRange]
   );
 
   const { data, isLoading, isFetching } = useQuery<AdmissionListResponse>({
@@ -781,6 +805,7 @@ const CompletedAdmissionsPage = () => {
         branchId: branchFilter || undefined,
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
+        source: sourceFilter || undefined,
         startDate: dateRange.from || undefined,
         endDate: statsThroughDate,
       });
@@ -868,6 +893,7 @@ const CompletedAdmissionsPage = () => {
         branchId: branchFilter || undefined,
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
+        source: sourceFilter || undefined,
         startDate: dateRange.from || undefined,
         endDate: statsThroughDate,
       });
@@ -1797,7 +1823,7 @@ const CompletedAdmissionsPage = () => {
               </div>
 
               <div
-                className={`grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-8 ${
+                className={`grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-9 ${
                   showFilters ? 'grid' : 'hidden md:grid'
                 }`}
               >
@@ -1877,6 +1903,23 @@ const CompletedAdmissionsPage = () => {
                   >
                     {statusOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</label>
+                  <select
+                    value={sourceFilter}
+                    onChange={(e) => {
+                      setSourceFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <option value="">All Sources</option>
+                    {sourceOptions.map((src) => (
+                      <option key={src} value={src}>{src}</option>
                     ))}
                   </select>
                 </div>

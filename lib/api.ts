@@ -1681,6 +1681,8 @@ export const admissionAPI = {
     branchId?: string;
     courseName?: string;
     branchName?: string;
+    /** Filter by lead source (e.g. `Self Registration`, `Website`). */
+    source?: string;
   }) => {
     const queryParams = new URLSearchParams();
     if (params) {
@@ -1738,6 +1740,8 @@ export const admissionAPI = {
     branchId?: string;
     courseName?: string;
     branchName?: string;
+    /** Filter by lead source (e.g. `Self Registration`, `Website`). */
+    source?: string;
   }) => {
     const queryParams = new URLSearchParams();
     if (filters) {
