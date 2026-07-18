@@ -413,18 +413,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   );
 
   const canJoiningEditAdmission = useCallback(
-    () => resolveJoiningEditAdmission(joiningPermissionEntry),
-    [joiningPermissionEntry]
+    () => resolveJoiningEditAdmission(joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
   );
 
   const canSubmitFeeRequest = useCallback(
-    () => resolveSubmitFeeRequest(joiningPermissionEntry),
-    [joiningPermissionEntry]
+    () => resolveSubmitFeeRequest(joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
   );
 
   const canApproveFeeRequest = useCallback(
-    () => resolveApproveFeeRequest(joiningPermissionEntry),
-    [joiningPermissionEntry]
+    () => resolveApproveFeeRequest(joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
   );
 
   const canAccessAdmissionTab = useCallback(
