@@ -454,6 +454,8 @@ export interface JoiningParentInfo {
   aadhaarNumber?: string;
   /** Portrait from joining uploads: typically a data URL (`data:image/...;base64,...`), or a URL/filename string. */
   photo?: string;
+  /** Parent occupation (dropdown + custom “Others” values). */
+  occupation?: string;
 }
 
 export interface JoiningReservation {

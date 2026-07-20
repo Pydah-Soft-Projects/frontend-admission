@@ -173,6 +173,7 @@ import {
 } from '@/components/admission/AdmissionStepThreeBusHostelPanel';
 import { ApplicationInfoCard } from '@/components/admission/ApplicationInfoCard';
 import { JoiningStepOneShell } from '@/components/joining/JoiningStepOneShell';
+import { ParentOccupationSelect } from '@/components/joining/ParentOccupationSelect';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
 import { BookOpen, FileText, GraduationCap, MapPin, User, UserPlus, Users } from 'lucide-react';
@@ -555,12 +556,14 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
         phone: joining?.parents?.father?.phone || '',
         aadhaarNumber: joining?.parents?.father?.aadhaarNumber || '',
         photo: joining?.parents?.father?.photo || '',
+        occupation: joining?.parents?.father?.occupation || '',
       },
       mother: {
         name: joining?.parents?.mother?.name || '',
         phone: joining?.parents?.mother?.phone || '',
         aadhaarNumber: joining?.parents?.mother?.aadhaarNumber || '',
         photo: joining?.parents?.mother?.photo || '',
+        occupation: joining?.parents?.mother?.occupation || '',
       },
     },
     reservation: {
@@ -6425,6 +6428,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         </Button>
                       </div>
                     </div>
+                    <ParentOccupationSelect
+                      role="father"
+                      label="Father Occupation"
+                      value={formState.parents.father.occupation || ''}
+                      onChange={(next) => handleParentChange('father', 'occupation', next)}
+                      labelClassName={JOINING_FORM_LABEL_CLASS}
+                      selectClassName={JOINING_FORM_CONTROL_CLASS}
+                    />
                   </div>
                 </div>
                 <div>
@@ -6483,6 +6494,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         </Button>
                       </div>
                     </div>
+                    <ParentOccupationSelect
+                      role="mother"
+                      label="Mother Occupation"
+                      value={formState.parents.mother.occupation || ''}
+                      onChange={(next) => handleParentChange('mother', 'occupation', next)}
+                      labelClassName={JOINING_FORM_LABEL_CLASS}
+                      selectClassName={JOINING_FORM_CONTROL_CLASS}
+                    />
                   </div>
                 </div>
               </div>

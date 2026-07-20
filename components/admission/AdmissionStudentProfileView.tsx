@@ -507,7 +507,7 @@ export function AdmissionStudentProfileView({
                 title="Parent information"
                 icon={<Phone className="h-4 w-4" aria-hidden />}
                 className="xl:col-span-2"
-                bodyClassName="grid gap-3 sm:grid-cols-3"
+                bodyClassName="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
               >
                 <ProfileField label="Father name" value={admission.parents.father?.name} />
                 <MaskedPhoneField
@@ -538,6 +538,10 @@ export function AdmissionStudentProfileView({
                       : maskAadhaar(admission.parents.father?.aadhaarNumber)}
                   </p>
                 </div>
+                <ProfileField
+                  label="Father occupation"
+                  value={admission.parents.father?.occupation || '—'}
+                />
                 <ProfileField label="Mother name" value={admission.parents.mother?.name} />
                 <MaskedPhoneField
                   label="Mother mobile"
@@ -567,6 +571,10 @@ export function AdmissionStudentProfileView({
                       : maskAadhaar(admission.parents.mother?.aadhaarNumber)}
                   </p>
                 </div>
+                <ProfileField
+                  label="Mother occupation"
+                  value={admission.parents.mother?.occupation || '—'}
+                />
               </ProfileDetailCard>
             ) : null}
 

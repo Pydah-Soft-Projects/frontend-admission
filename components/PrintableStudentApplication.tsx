@@ -1289,6 +1289,20 @@ function getPrintApplicationHtml(props: {
       max-width: none;
       white-space: nowrap;
     }
+    .form-row-parent-mobile-occ {
+      gap: 6px;
+    }
+    .form-row-parent-mobile-occ .form-label-occ {
+      min-width: 85px;
+      max-width: 85px;
+      margin-left: 4px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .form-row-parent-mobile-occ .form-field-line {
+      flex: 1 1 0;
+      min-width: 0;
+    }
     .form-row-section-title .form-label {
       min-width: auto;
       max-width: none;
@@ -2038,9 +2052,11 @@ function getPrintApplicationHtml(props: {
             <span class="form-label">Aadhar No :</span>
             <span class="form-field-line">${escapeHtml(parents?.father?.aadhaarNumber)}</span>
           </div>
-          <div class="form-row form-row-sub">
+          <div class="form-row form-row-sub form-row-parent-mobile-occ">
             <span class="form-label">Mobile :</span>
             <span class="form-field-line">${escapeHtml(parents?.father?.phone)}</span>
+            <span class="form-label form-label-occ">Occupation :</span>
+            <span class="form-field-line">${escapeHtml(parents?.father?.occupation)}</span>
           </div>
 
           <div class="form-row">
@@ -2052,9 +2068,11 @@ function getPrintApplicationHtml(props: {
             <span class="form-label">Aadhar No :</span>
             <span class="form-field-line">${escapeHtml(parents?.mother?.aadhaarNumber)}</span>
           </div>
-          <div class="form-row form-row-sub">
+          <div class="form-row form-row-sub form-row-parent-mobile-occ">
             <span class="form-label">Mobile :</span>
             <span class="form-field-line">${escapeHtml(parents?.mother?.phone)}</span>
+            <span class="form-label form-label-occ">Occupation :</span>
+            <span class="form-field-line">${escapeHtml(parents?.mother?.occupation)}</span>
           </div>
           </div>
           <div class="form-row form-row-lined form-row-section-title section-4-title">
