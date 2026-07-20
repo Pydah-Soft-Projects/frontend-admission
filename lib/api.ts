@@ -1757,6 +1757,157 @@ export const admissionAPI = {
     });
     return response.data;
   },
+  listPendingCertificates: async (filters?: {
+    collegeId?: string;
+    courseId?: string;
+    courseName?: string;
+    branchId?: string;
+    branchName?: string;
+    startDate?: string;
+    endDate?: string;
+    quota?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/pending-certificates${query ? `?${query}` : ''}`);
+    return (response.data?.data || response.data) as {
+      rows: Array<{
+        id: string;
+        admissionNumber: string;
+        studentName: string;
+        parentMobile: string;
+        studentMobile: string;
+        quota: string;
+        course: string;
+        branch: string;
+        programLevel?: string;
+        importantDocumentsPending?: string[];
+        otherDocumentsPending?: string[];
+        pendingCertificates: string[];
+        pendingCertificatesText: string;
+        importantDocumentsPendingText?: string;
+        otherDocumentsPendingText?: string;
+      }>;
+      sampleLimit: number;
+      stats: {
+        totalStudents: number;
+        pendingStudents: number;
+        completedStudents: number;
+        importantReceivedStudents?: number;
+        importantPendingStudents?: number;
+        otherPendingStudents?: number;
+        otherCompletedStudents?: number;
+      };
+      total: number;
+    };
+  },
+  exportPendingCertificates: async (filters?: {
+    collegeId?: string;
+    courseId?: string;
+    courseName?: string;
+    branchId?: string;
+    branchName?: string;
+    startDate?: string;
+    endDate?: string;
+    quota?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(
+      `/admissions/pending-certificates/export${query ? `?${query}` : ''}`,
+      { responseType: 'blob' }
+    );
+    return response.data;
+  },
+  listPendingFees: async (filters?: {
+    collegeId?: string;
+    courseId?: string;
+    courseName?: string;
+    branchId?: string;
+    branchName?: string;
+    startDate?: string;
+    endDate?: string;
+    quota?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/pending-fees${query ? `?${query}` : ''}`);
+    return (response.data?.data || response.data) as {
+      rows: Array<{
+        id: string;
+        admissionNumber: string;
+        studentName: string;
+        parentMobile: string;
+        studentMobile: string;
+        quota: string;
+        course: string;
+        branch: string;
+        tuitionPayable: number;
+        tuitionPaid: number;
+        tuitionPending: number;
+        hasFeeEntry: boolean;
+        feeStatus: 'paid' | 'unpaid' | 'no_entry';
+        displayAmount: number;
+        displayLabel: string;
+        feeStatusText: string;
+        feeAmountText: string;
+      }>;
+      sampleLimit: number;
+      stats: {
+        totalStudents: number;
+        tuitionPaidStudents: number;
+        tuitionUnpaidStudents: number;
+        tuitionNoEntryStudents: number;
+        pendingStudents: number;
+      };
+      total: number;
+    };
+  },
+  exportPendingFees: async (filters?: {
+    collegeId?: string;
+    courseId?: string;
+    courseName?: string;
+    branchId?: string;
+    branchName?: string;
+    startDate?: string;
+    endDate?: string;
+    quota?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/pending-fees/export${query ? `?${query}` : ''}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };
 
 export const feeStructureAPI = {

@@ -132,6 +132,8 @@ export type PaymentSummaryStatus = 'not_started' | 'partial' | 'paid';
 export interface PaymentSummary {
   totalFee: number;
   totalPaid: number;
+  /** Year 1 tuition fee head (TUI01) paid amount from Fee Management ledger. */
+  tuitionPaid?: number;
   balance: number;
   currency: string;
   status: PaymentSummaryStatus;

@@ -35,6 +35,8 @@ import {
 import { LayoutGrid, List, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { cn } from '@/lib/utils';
+import { PendingCertificatesDownloadModal } from '@/components/admission/PendingCertificatesDownloadModal';
+import { PendingFeesDownloadModal } from '@/components/admission/PendingFeesDownloadModal';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -333,6 +335,8 @@ const CompletedAdmissionsPage = () => {
   const [referenceDrilldownTarget, setReferenceDrilldownTarget] =
     useState<AdmissionReferenceStatsRow | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [pendingCertificatesOpen, setPendingCertificatesOpen] = useState(false);
+  const [pendingFeesOpen, setPendingFeesOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 350);
@@ -1541,7 +1545,7 @@ const CompletedAdmissionsPage = () => {
                       style: 'currency',
                       currency: 'INR',
                       maximumFractionDigits: 0,
-                    }).format(studentInfoViewRecord.paymentSummary?.totalPaid || 0)}
+                    }).format(studentInfoViewRecord.paymentSummary?.tuitionPaid ?? 0)}
                   </p>
                 </div>
                 <div>
@@ -1674,6 +1678,38 @@ const CompletedAdmissionsPage = () => {
         </DialogContent>
       </Dialog>
 
+      <PendingCertificatesDownloadModal
+        open={pendingCertificatesOpen}
+        onOpenChange={setPendingCertificatesOpen}
+        colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
+        initialCollegeId={effectiveCollegeFilter}
+        deskFilters={{
+          collegeId: effectiveCollegeFilter || undefined,
+          courseId: courseFilter || undefined,
+          courseName: getCourseName(courseFilter) || undefined,
+          branchId: branchFilter || undefined,
+          branchName: getBranchName(branchFilter) || undefined,
+          startDate: dateRange.from || undefined,
+          endDate: statsThroughDate,
+        }}
+      />
+
+      <PendingFeesDownloadModal
+        open={pendingFeesOpen}
+        onOpenChange={setPendingFeesOpen}
+        colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
+        initialCollegeId={effectiveCollegeFilter}
+        deskFilters={{
+          collegeId: effectiveCollegeFilter || undefined,
+          courseId: courseFilter || undefined,
+          courseName: getCourseName(courseFilter) || undefined,
+          branchId: branchFilter || undefined,
+          branchName: getBranchName(branchFilter) || undefined,
+          startDate: dateRange.from || undefined,
+          endDate: statsThroughDate,
+        }}
+      />
+
       {activeTab === 'abstract' && canAccessTab('abstract') ? (
         <div className="space-y-3">
           {statsLoading || collegesLoading ? (
@@ -1755,7 +1791,7 @@ const CompletedAdmissionsPage = () => {
               })}
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               {activeTab === 'abstract' && !statsLoading && stats.length > 0 && (
                 <Button
                   variant="outline"
@@ -1768,6 +1804,30 @@ const CompletedAdmissionsPage = () => {
                   <span className="hidden sm:inline">Print PDF</span>
                 </Button>
               )}
+              {activeTab === 'student-info' ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2 sm:w-auto"
+                    onClick={() => setPendingFeesOpen(true)}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="sm:hidden">Pending Fee</span>
+                    <span className="hidden sm:inline">Pending Fee</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2 sm:w-auto"
+                    onClick={() => setPendingCertificatesOpen(true)}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="sm:hidden">Pending Docs</span>
+                    <span className="hidden sm:inline">Pending Documents</span>
+                  </Button>
+                </>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
@@ -2444,7 +2504,7 @@ const CompletedAdmissionsPage = () => {
                       </td>
                       <td className={`${tableTdClass} text-right`}>
                         <span className="text-xs font-bold text-slate-900 sm:text-sm dark:text-slate-100">
-                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.totalPaid || 0)}
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.tuitionPaid ?? 0)}
                         </span>
                       </td>
                       <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 md:table-cell dark:text-slate-400`}>
