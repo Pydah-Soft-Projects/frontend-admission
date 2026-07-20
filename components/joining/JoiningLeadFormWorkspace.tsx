@@ -436,12 +436,14 @@ function RelativeAddressRow({
   relative,
   index,
   updateRelative,
+  toggleRelativeGuardian,
   removeRelative,
   stateNames,
 }: {
   relative: JoiningRelativeAddress;
   index: number;
   updateRelative: (index: number, field: keyof JoiningRelativeAddress, value: string) => void;
+  toggleRelativeGuardian: (index: number, checked: boolean) => void;
   removeRelative: (index: number) => void;
   stateNames: string[];
 }) {
@@ -458,6 +460,20 @@ function RelativeAddressRow({
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <Input compact label="Name" value={relative.name || ''} onChange={(e) => updateRelative(index, 'name', e.target.value)} />
         <Input compact label="Relationship" value={relative.relationship || ''} onChange={(e) => updateRelative(index, 'relationship', e.target.value)} />
+        <div className="flex flex-col justify-end gap-1">
+          <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              checked={Boolean(relative.isGuardian)}
+              onChange={(e) => toggleRelativeGuardian(index, e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            Guardian entry (optional)
+          </label>
+          <p className="text-xs text-gray-500 dark:text-slate-400">
+            Optional — check only if this relative should be offered as a preferred contact.
+          </p>
+        </div>
         <Input
           compact
           label="Mobile Number"
@@ -567,6 +583,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
           name: relative.name || '',
           relationship: relative.relationship || '',
           phone: relative.phone || '',
+          isGuardian: Boolean(relative.isGuardian),
           state: relative.state || '',
           doorOrStreet: relative.doorOrStreet || '',
           landmark: relative.landmark || '',
@@ -3433,6 +3450,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     });
   };
 
+  const toggleRelativeGuardian = (index: number, checked: boolean) => {
+    setFormState((prev) => {
+      const nextRelatives = [...prev.address.relatives];
+      nextRelatives[index] = { ...nextRelatives[index], isGuardian: checked };
+      return {
+        ...prev,
+        address: {
+          ...prev.address,
+          relatives: nextRelatives,
+        },
+      };
+    });
+  };
+
   const addRelative = () => {
     setFormState((prev) => ({
       ...prev,
@@ -3444,6 +3475,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             name: '',
             relationship: '',
             phone: '',
+            isGuardian: false,
             state: '',
             doorOrStreet: '',
             landmark: '',
@@ -4226,6 +4258,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       lead?.motherPhone,
       lead?.alternateMobile,
     ]
+  );
+
+  const preferredMobileGuardianSources = useMemo(
+    () =>
+      formState.address.relatives
+        .filter((relative) => relative.isGuardian)
+        .map((relative) => ({
+          name: relative.name || '',
+          phone: relative.phone || '',
+        })),
+    [formState.address.relatives]
   );
 
   useEffect(() => {
@@ -6200,6 +6243,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         dropdownStudentPhone: preferredMobileSources.studentPhone,
                         fatherPhone: preferredMobileSources.fatherPhone,
                         motherPhone: preferredMobileSources.motherPhone,
+                        guardianPhones: preferredMobileGuardianSources,
                         aadhaarNumber: formState.studentInfo.aadhaarNumber || '',
                         onAadhaarChange: (value) => handleStudentInfoChange('aadhaarNumber', value),
                         showAadhaar: showStudentAadhaar,
@@ -6234,6 +6278,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     studentPhone={preferredMobileSources.studentPhone}
                     fatherPhone={preferredMobileSources.fatherPhone}
                     motherPhone={preferredMobileSources.motherPhone}
+                    guardianPhones={preferredMobileGuardianSources}
                     disabled={!canWriteJoining && !isAdmissionEditable}
                   />
                   <div>
@@ -6270,6 +6315,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     studentPhone={preferredMobileSources.studentPhone}
                     fatherPhone={preferredMobileSources.fatherPhone}
                     motherPhone={preferredMobileSources.motherPhone}
+                    guardianPhones={preferredMobileGuardianSources}
                     disabled={!canWriteJoining && !isAdmissionEditable}
                   />
                 </div>
@@ -6555,6 +6601,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     relative={relative}
                     index={index}
                     updateRelative={updateRelative}
+                    toggleRelativeGuardian={toggleRelativeGuardian}
                     removeRelative={removeRelative}
                     stateNames={stateNames}
                   />

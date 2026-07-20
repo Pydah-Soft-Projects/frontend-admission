@@ -476,6 +476,8 @@ export interface JoiningRelativeAddress extends JoiningCommunicationAddress {
   name?: string;
   relationship?: string;
   phone?: string;
+  /** When true, this relative's mobile is offered in the preferred-mobile dropdown (optional). */
+  isGuardian?: boolean;
 }
 
 export interface JoiningQualifications {

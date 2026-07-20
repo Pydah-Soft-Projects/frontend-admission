@@ -374,6 +374,7 @@ type Props = {
     dropdownStudentPhone?: string;
     fatherPhone?: string;
     motherPhone?: string;
+    guardianPhones?: Array<{ name?: string; phone?: string }>;
     aadhaarNumber: string;
     onAadhaarChange: (value: string) => void;
     showAadhaar: boolean;
@@ -899,6 +900,7 @@ export function JoiningDynamicRegistrationFields({
               studentPhone={studentContactFields.dropdownStudentPhone ?? studentContactFields.phone}
               fatherPhone={studentContactFields.fatherPhone}
               motherPhone={studentContactFields.motherPhone}
+              guardianPhones={studentContactFields.guardianPhones}
               disabled={studentContactFields.contactFieldsDisabled}
             />
           ) : null}

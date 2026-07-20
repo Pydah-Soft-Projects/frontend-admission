@@ -6,6 +6,7 @@ import {
   normalizePreferredMobileDigits,
   phonesAreSame,
   resolvePreferredMobileSelectValue,
+  type GuardianMobileSource,
   type PreferredMobileOption,
 } from '@/lib/joiningPreferredMobile';
 
@@ -15,6 +16,7 @@ type Props = {
   studentPhone?: string;
   fatherPhone?: string;
   motherPhone?: string;
+  guardianPhones?: GuardianMobileSource[];
   disabled?: boolean;
   className?: string;
 };
@@ -25,13 +27,14 @@ export function PreferredMobileNumberSelect({
   studentPhone,
   fatherPhone,
   motherPhone,
+  guardianPhones,
   disabled = false,
   className = '',
 }: Props) {
   const options: PreferredMobileOption[] = buildPreferredMobileOptions({
-    studentPhone,
     fatherPhone,
     motherPhone,
+    guardianPhones,
   });
 
   const selectValue = resolvePreferredMobileSelectValue(value, options);
@@ -80,7 +83,9 @@ export function PreferredMobileNumberSelect({
         </p>
       ) : (
         <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-          Used for admission SMS and as the primary contact number where applicable.
+          Used for admission SMS and as the primary contact number where applicable. Father and
+          mother mobiles are always listed; optionally mark a relative as Guardian entry to add
+          their mobile here.
         </p>
       )}
     </div>

@@ -1,10 +1,15 @@
-export type PreferredMobileRole = 'student' | 'father' | 'mother';
+export type PreferredMobileRole = 'student' | 'father' | 'mother' | 'guardian';
 
 export type PreferredMobileOption = {
   label: string;
   value: string;
   role: PreferredMobileRole;
   digits: string;
+};
+
+export type GuardianMobileSource = {
+  name?: string;
+  phone?: string;
 };
 
 export function normalizeJoiningMobileDigits(value?: string): string {
@@ -31,7 +36,7 @@ export function decodePreferredMobileValue(value?: string): {
   digits: string;
 } {
   const raw = String(value ?? '').trim();
-  const match = /^(student|father|mother):(\d{10})$/.exec(raw);
+  const match = /^(student|father|mother|guardian):(\d{10})$/.exec(raw);
   if (match) {
     return { role: match[1] as PreferredMobileRole, digits: match[2] };
   }
@@ -55,7 +60,7 @@ function pickPhone(...candidates: Array<string | undefined | null>): string {
 
 /**
  * Merge structured joining/admission parent phones with lead snapshot numbers so the
- * preferred-mobile dropdown can offer student / father / mother (including lead alternate)
+ * preferred-mobile dropdown can offer father / mother (including lead alternate)
  * before parent fields are filled on the form.
  */
 export function resolvePreferredMobileSourcePhones(input: {
@@ -78,16 +83,16 @@ export function resolvePreferredMobileSourcePhones(input: {
   };
 }
 
-const ROLE_PRIORITY: PreferredMobileRole[] = ['father', 'mother', 'student'];
+const ROLE_PRIORITY: PreferredMobileRole[] = ['father', 'mother', 'guardian', 'student'];
 
 /**
- * Build one option per role that has a valid phone — even when student and parent
- * numbers are identical (each role stays selectable in the dropdown).
+ * Build one option per role that has a valid phone. Student mobile is excluded from
+ * the dropdown; guardian mobiles come from relatives marked as guardian entry.
  */
 export function buildPreferredMobileOptions(input: {
-  studentPhone?: string;
   fatherPhone?: string;
   motherPhone?: string;
+  guardianPhones?: GuardianMobileSource[];
 }): PreferredMobileOption[] {
   const options: PreferredMobileOption[] = [];
 
@@ -102,9 +107,14 @@ export function buildPreferredMobileOptions(input: {
     });
   };
 
-  push('Student mobile', 'student', input.studentPhone);
   push('Father mobile', 'father', input.fatherPhone);
   push('Mother mobile', 'mother', input.motherPhone);
+
+  for (const guardian of input.guardianPhones ?? []) {
+    const name = String(guardian.name ?? '').trim();
+    const label = name ? `Guardian mobile (${name})` : 'Guardian mobile';
+    push(label, 'guardian', guardian.phone);
+  }
 
   return options;
 }
@@ -131,7 +141,8 @@ export function resolvePreferredMobileSelectValue(
 
 /**
  * Default preferred contact: parent mobile when it differs from student, otherwise
- * father, then mother, then student.
+ * father, then mother. Guardian mobiles are not auto-selected — they are optional
+ * and only appear in the dropdown when a relative is marked as guardian entry.
  */
 export function suggestDefaultPreferredMobileDigits(input: {
   studentPhone?: string;
@@ -146,6 +157,6 @@ export function suggestDefaultPreferredMobileDigits(input: {
   if (mother.length === 10 && !phonesAreSame(mother, student)) return mother;
   if (father.length === 10) return father;
   if (mother.length === 10) return mother;
-  if (student.length === 10) return student;
+
   return '';
 }
