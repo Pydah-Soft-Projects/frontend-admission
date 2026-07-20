@@ -264,6 +264,11 @@ function isJoiningWorkspaceEditPath(pathname: string): boolean {
   return !['confirmed', 'completed', 'in-progress', 'self-registration'].includes(m[1]);
 }
 
+/** `/superadmin/admission/:admissionId/detail` — full-width read-only profile view. */
+function isAdmissionDetailPath(pathname: string): boolean {
+  return /^\/superadmin\/admission\/[^/]+\/detail$/.test(pathname);
+}
+
 interface DashboardShellProps {
   children: React.ReactNode;
   navItems: DashboardNavItem[];
@@ -299,18 +304,23 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
   const isSuperadminLeadDetail = isSuperadminLeadDetailPath(pathname);
   const isJoiningWorkspaceEdit = isJoiningWorkspaceEditPath(pathname);
+  const isAdmissionDetail = isAdmissionDetailPath(pathname);
+  const isEdgeToEdgeWorkspace =
+    isJoiningWorkspaceEdit || isAdmissionDetail;
 
   // Pages where we want minimal top spacing (compact header)
   const isCompactPage =
     ['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/leads/assign'].includes(pathname) ||
     pathname.startsWith('/superadmin/joining') ||
-    isSuperadminLeadDetail;
+    isSuperadminLeadDetail ||
+    isAdmissionDetail;
 
   // Pages where we want full width (no max-width constraint on main content wrapper)
   const isFullWidthPage =
     ['/superadmin/leads/assign', '/superadmin/communications/templates'].includes(pathname) ||
     pathname.startsWith('/superadmin/joining') ||
-    isSuperadminLeadDetail;
+    isSuperadminLeadDetail ||
+    isAdmissionDetail;
 
   // Pages where we want reduced vertical spacing but keep header visible
   const isReducedSpacingPage = ['/superadmin/users'].includes(pathname);
@@ -929,15 +939,15 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 <header
                   className={cn(
                     'flex-shrink-0 z-10',
-                    isJoiningWorkspaceEdit ? 'px-2 pt-2 pb-0 sm:px-3 lg:px-3' : 'px-4 sm:px-6 lg:px-8',
-                    !isJoiningWorkspaceEdit && (isCompactPage ? 'pt-2 pb-0' : (isReducedSpacingPage ? 'pt-6 pb-0' : 'pt-6 pb-4')),
+                    isEdgeToEdgeWorkspace ? 'px-2 pt-2 pb-0 sm:px-3 lg:px-3' : 'px-4 sm:px-6 lg:px-8',
+                    !isEdgeToEdgeWorkspace && (isCompactPage ? 'pt-2 pb-0' : (isReducedSpacingPage ? 'pt-6 pb-0' : 'pt-6 pb-4')),
                     useMobileBottomNav && 'hidden'
                   )}
                 >
                   <div
                     className={cn(
                       'flex flex-wrap items-center justify-between gap-4 transition-all duration-300',
-                      isJoiningWorkspaceEdit ? 'px-1 py-2 sm:px-2 lg:px-2' : 'px-4 py-3 sm:px-5 lg:px-6'
+                      isEdgeToEdgeWorkspace ? 'px-1 py-2 sm:px-2 lg:px-2' : 'px-4 py-3 sm:px-5 lg:px-6'
                     )}
                   >
                     {/* Left Section: Mobile Menu, Back Icon, Header Content */}
@@ -987,7 +997,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               <main
                 className={cn(
                   'relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden',
-                  isJoiningWorkspaceEdit
+                  isEdgeToEdgeWorkspace
                     ? 'px-1 py-2 sm:px-2 sm:pt-2 lg:px-2 lg:pt-3'
                     : isCompactPage
                       ? 'p-3 sm:px-6 sm:pt-2 lg:px-8 lg:pt-4'

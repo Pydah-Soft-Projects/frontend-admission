@@ -4,7 +4,17 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { feeStructureAPI } from '@/lib/api';
+import {
+  classifyPrintFeeColumn,
+  type PrintFeeColumn,
+} from '@/lib/printApplicationFeeStructure';
 import type { FeeStructure, JoiningStudentFeeDetails, JoiningStudentFeeLineOverride } from '@/types';
+
+const SUMMARY_PIVOT_COLUMNS: ReadonlyArray<{ key: PrintFeeColumn; label: string }> = [
+  { key: 'tuition', label: 'Tuition Fee' },
+  { key: 'other', label: 'Others Fee' },
+  { key: 'transport', label: 'Transport Fee' },
+];
 
 /**
  * Build the batch dropdown values: 3 past + current year + 3 future years.
@@ -149,6 +159,11 @@ export type FeeStructureSectionProps = {
    * Dual-fee mode (actual vs revised) is supported — each fee head column shows both amounts.
    */
   pivotView?: boolean;
+  /**
+   * When `pivotView` is true, `summary` collapses fee heads into Tuition / Others / Transport
+   * columns (matches the printable application fee table). Default `all` keeps one column per head.
+   */
+  pivotFeeColumns?: 'all' | 'summary';
 };
 
 /**
@@ -177,6 +192,7 @@ export function FeeStructureSection({
   injectedFeeRows,
   showActualAndRevisedFees = false,
   pivotView = false,
+  pivotFeeColumns = 'all',
 }: FeeStructureSectionProps) {
   const resolvedCategory = useMemo(() => {
     if (category && category.trim()) return category.trim();
@@ -500,8 +516,11 @@ export function FeeStructureSection({
   const pivotData = useMemo(() => {
     if (!pivotView) return null;
 
+    const useSummaryColumns = pivotFeeColumns === 'summary';
+
     // Derive a stable column key that is shared across all years for the same fee head.
     const getFeeHeadKey = (row: FeeStructure): string => {
+      if (useSummaryColumns) return classifyPrintFeeColumn(row);
       const byRef = String(row.feeHead ?? '').trim();
       if (byRef) return byRef;
       const byCode = String(row.feeHeadCode ?? '').trim();
@@ -513,8 +532,15 @@ export function FeeStructureSection({
     };
 
     // Collect distinct fee heads in first-seen insertion order
-    const headOrder: string[] = [];
+    const headOrder: string[] = useSummaryColumns
+      ? SUMMARY_PIVOT_COLUMNS.map((col) => col.key)
+      : [];
     const headMeta = new Map<string, { name: string; code: string; key: string }>();
+    if (useSummaryColumns) {
+      for (const col of SUMMARY_PIVOT_COLUMNS) {
+        headMeta.set(col.key, { key: col.key, name: col.label, code: '' });
+      }
+    }
     // year → feeHeadKey → { catalog, revised }
     const yearHeadMap = new Map<number | string, Map<string, { catalog: number; revised: number }>>();
     // year → individual FeeStructure rows (for the edit panel)
@@ -525,12 +551,15 @@ export function FeeStructureSection({
       const hkey = getFeeHeadKey(row);
 
       if (!headMeta.has(hkey)) {
-        headOrder.push(hkey);
+        if (!useSummaryColumns) headOrder.push(hkey);
         headMeta.set(hkey, {
           key: hkey,
           name: row.feeHeadName || row.feeHeadCode || hkey,
           code: row.feeHeadCode || '',
         });
+      } else if (useSummaryColumns) {
+        const meta = headMeta.get(hkey)!;
+        if (!meta.code && row.feeHeadCode) meta.code = row.feeHeadCode;
       }
 
       if (!yearHeadMap.has(year)) {
@@ -555,7 +584,7 @@ export function FeeStructureSection({
     });
 
     return { headOrder, headMeta, yearHeadMap, yearRowsMap, sortedYears };
-  }, [pivotView, items, effectiveRowAmount]);
+  }, [pivotView, pivotFeeColumns, items, effectiveRowAmount]);
 
   return (
     <div

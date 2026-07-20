@@ -52,7 +52,9 @@ export function CertificateInformationChecklistBlock({
     <div className={wrapClass}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">{title}</h3>
+          {title ? (
+            <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">{title}</h3>
+          ) : null}
           {derivedCertificationStatus !== null && (
             <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
               <span className="font-medium text-gray-900 dark:text-slate-100">Certification status</span>

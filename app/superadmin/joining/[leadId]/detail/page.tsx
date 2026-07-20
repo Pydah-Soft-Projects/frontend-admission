@@ -5,9 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
-import { joiningAPI, paymentAPI, admissionAPI } from '@/lib/api';
-import { Joining, JoiningDocuments, PaymentSummary, PaymentTransaction, Admission } from '@/types';
-import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
+import { joiningAPI, paymentAPI, admissionAPI, courseAPI } from '@/lib/api';
+import { Joining, JoiningDocuments, PaymentSummary, PaymentTransaction, Admission, CertificateGuidance } from '@/types';
+import { DocumentsChecklistTabs } from '@/components/admission/DocumentsChecklistTabs';
+import {
+  buildImportantDocumentTabItems,
+  buildOtherDocumentTabItems,
+} from '@/lib/joiningDocumentsDisplay';
 import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
@@ -82,6 +86,24 @@ export default function JoiningDetailPage() {
   const joining = data?.data?.joining as Joining | undefined;
   /** Prefer API `lead` (fresher); fall back to snapshot in `joining.leadData`. */
   const lead = (data?.data?.lead as any) || (joining?.leadData as any);
+  const programLevelTrimmed = String(joining?.courseInfo?.programLevel ?? '').trim();
+
+  const { data: certificateGuidanceResponse } = useQuery({
+    queryKey: ['courses', 'certificate-guidance', programLevelTrimmed, 'joining-detail'],
+    enabled: Boolean(programLevelTrimmed),
+    queryFn: async () => courseAPI.getCertificateGuidance(programLevelTrimmed),
+    staleTime: 120_000,
+  });
+
+  const certificateGuidance: CertificateGuidance | null = useMemo(() => {
+    const envelope = certificateGuidanceResponse?.data ?? certificateGuidanceResponse;
+    const inner =
+      envelope && typeof envelope === 'object' && 'data' in envelope
+        ? (envelope as { data: unknown }).data
+        : envelope;
+    if (!inner || typeof inner !== 'object') return null;
+    return inner as CertificateGuidance;
+  }, [certificateGuidanceResponse]);
 
   // Fetch admission if joining is approved
   const { data: admissionData } = useQuery({
@@ -234,6 +256,15 @@ export default function JoiningDetailPage() {
   const branchName =
     getBranchName(joining.courseInfo?.branchId) || joining.courseInfo?.branch || undefined;
   const reference1 = resolveJoiningReference1(admission, joining, lead);
+  const importantDocumentItems = buildImportantDocumentTabItems(
+    joining?.documents,
+    joining?.courseInfo?.quota,
+    joining?.registrationFormData as Record<string, unknown> | undefined,
+    certificateGuidance
+  );
+  const otherDocumentItems = buildOtherDocumentTabItems(joining?.documents, joining?.courseInfo?.quota);
+  const hasDocumentChecklist =
+    importantDocumentItems.length > 0 || otherDocumentItems.length > 0;
 
   return (
     <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -545,35 +576,14 @@ export default function JoiningDetailPage() {
         </ApplicationSectionCard>
       )}
 
-      {joining.documents && (
+      {hasDocumentChecklist ? (
         <ApplicationSectionCard step={6} title="Documents Checklist">
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {Object.entries(joining.documents)
-              .filter(([key]) =>
-                isJoiningDocumentChecklistKeyVisible(
-                  key as keyof JoiningDocuments,
-                  joining.courseInfo?.quota,
-                  { paperChecklist: false }
-                )
-              )
-              .map(([key, value]) => (
-              <div key={key} className="flex items-center gap-2">
-                <div
-                  className={`h-3 w-3 rounded-full ${
-                    value === 'received' ? 'bg-green-500' : value === 'pending' ? 'bg-amber-500' : 'bg-gray-300'
-                  }`}
-                />
-                <div>
-                  <p className="text-xs font-medium text-gray-700 dark:text-slate-300 capitalize">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-slate-400 capitalize">{value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <DocumentsChecklistTabs
+            importantDocuments={importantDocumentItems}
+            otherDocuments={otherDocumentItems}
+          />
         </ApplicationSectionCard>
-      )}
+      ) : null}
 
       {/* Payment Information */}
       {paymentSummary && (

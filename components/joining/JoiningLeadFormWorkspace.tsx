@@ -741,6 +741,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const preferredMobileAutoFilledRef = useRef(false);
   const [status, setStatus] = useState<JoiningStatus>('draft');
   const [applicationWizardStep, setApplicationWizardStep] = useState<AdmissionWorkflowStep>(1);
+  const [step2DocumentsTab, setStep2DocumentsTab] = useState<'important' | 'other'>('important');
   const useJoiningPageWizard = !isPublicEdit;
 
   const [meta, setMeta] = useState<{
@@ -6837,21 +6838,45 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 </div>
               </ApplicationInfoCard>
               <section
-                className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
+                className="scroll-mt-24 space-y-6 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
               >
-                {!isPublicEdit && programLevelTrimmed ? (
-                  <CertificateInformationChecklistBlock
-                    variant="admission-step-two"
-                    radioNameSuffix="-joining-wizard-step2"
-                    derivedCertificationStatus={derivedCertificationStatus}
-                    programLevelTrimmed={programLevelTrimmed}
-                    isLoadingCertificateGuidance={isLoadingCertificateGuidance}
-                    certificateGuidance={certificateGuidance}
-                    certificateChecklistParsed={certificateChecklistParsed}
-                    onChecklistOptionChange={updateCertificateChecklistOption}
-                    onChecklistStatusChange={updateCertificateChecklistStatus}
-                    title="Important Documents"
-                    headerActions={
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div
+                    className="inline-flex w-full rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900/80 sm:w-auto"
+                    role="tablist"
+                    aria-label="Document categories"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={step2DocumentsTab === 'important'}
+                      onClick={() => setStep2DocumentsTab('important')}
+                      className={cn(
+                        'flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition sm:flex-initial sm:text-sm',
+                        step2DocumentsTab === 'important'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+                      )}
+                    >
+                      Important Documents
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={step2DocumentsTab === 'other'}
+                      onClick={() => setStep2DocumentsTab('other')}
+                      className={cn(
+                        'flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition sm:flex-initial sm:text-sm',
+                        step2DocumentsTab === 'other'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+                      )}
+                    >
+                      Other Documents
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {step2DocumentsTab === 'important' ? (
                       <>
                         <PrintableCertificateChecklist
                           certificateGuidance={certificateGuidance}
@@ -6875,85 +6900,95 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           </Button>
                         ) : null}
                       </>
-                    }
-                  />
-                ) : (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                    Select a program level under Course &amp; Quota in Step 1 to load certificate rules.
-                  </p>
-                )}
-
-              </section>
-
-              <ApplicationInfoCard
-                title="Other Documents to Submit"
-                icon={<FileText className="h-4 w-4" aria-hidden />}
-              >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-slate-400">
-                    Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
-                    Certificate are tracked under{' '}
-                    <span className="font-medium">Important Documents</span>.
-                    {isManagementQuotaSelected ? (
-                      <>
-                        {' '}
-                        CET rank card, hall ticket, allotment letter, and joining report are not required for{' '}
-                        <span className="font-medium">Management</span> quota.
-                      </>
-                    ) : null}
-                  </p>
+                    ) : (
+                      <PrintableDocumentChecklist
+                        documentLabels={documentsChecklistForPrint.labels}
+                        documents={documentsChecklistForPrint.documents}
+                        title="Documents Checklist"
+                        studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
+                        enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}
+                        printButtonLabel="Print checklist"
+                        className="shrink-0"
+                      />
+                    )}
+                  </div>
                 </div>
-                <PrintableDocumentChecklist
-                  documentLabels={documentsChecklistForPrint.labels}
-                  documents={documentsChecklistForPrint.documents}
-                  title="Documents Checklist"
-                  studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
-                  enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}
-                  printButtonLabel="Print checklist"
-                  className="shrink-0"
-                />
-              </div>
-              <div className={cn('mt-2', JOINING_DOCUMENTS_GRID_CLASS)}>
-                {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
-                  .filter(([key]) =>
-                    isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota)
+
+                {step2DocumentsTab === 'important' ? (
+                  !isPublicEdit && programLevelTrimmed ? (
+                    <CertificateInformationChecklistBlock
+                      variant="admission-step-two"
+                      radioNameSuffix="-joining-wizard-step2"
+                      derivedCertificationStatus={derivedCertificationStatus}
+                      programLevelTrimmed={programLevelTrimmed}
+                      isLoadingCertificateGuidance={isLoadingCertificateGuidance}
+                      certificateGuidance={certificateGuidance}
+                      certificateChecklistParsed={certificateChecklistParsed}
+                      onChecklistOptionChange={updateCertificateChecklistOption}
+                      onChecklistStatusChange={updateCertificateChecklistStatus}
+                      title=""
+                    />
+                  ) : (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                      Select a program level under Course &amp; Quota in Step 1 to load certificate rules.
+                    </p>
                   )
-                  .map(([key, label]) => (
-                    <div
-                      key={key}
-                      className="flex min-w-0 flex-col gap-2 rounded-lg border border-gray-200 px-3 py-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-700"
-                    >
-                      <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-gray-800 dark:text-slate-200">
-                        {label}
-                      </p>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        {documentStatusOptions.map((statusOption) => (
-                          <label
-                            key={`${key}-${statusOption}`}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold uppercase transition ${
-                              (formState.documents[key] || 'pending') === statusOption
-                                ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
-                                : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
-                            }`}
+                ) : (
+                  <div role="tabpanel" className="space-y-4">
+                    <p className="text-sm text-gray-500 dark:text-slate-400">
+                      Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
+                      Certificate are tracked under{' '}
+                      <span className="font-medium">Important Documents</span>.
+                      {isManagementQuotaSelected ? (
+                        <>
+                          {' '}
+                          CET rank card, hall ticket, allotment letter, and joining report are not required for{' '}
+                          <span className="font-medium">Management</span> quota.
+                        </>
+                      ) : null}
+                    </p>
+                    <div className={cn(JOINING_DOCUMENTS_GRID_CLASS)}>
+                      {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
+                        .filter(([key]) =>
+                          isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota)
+                        )
+                        .map(([key, label]) => (
+                          <div
+                            key={key}
+                            className="flex min-w-0 flex-col gap-2 rounded-lg border border-gray-200 px-3 py-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-700"
                           >
-                            <input
-                              type="radio"
-                              name={`document-${key}`}
-                              value={statusOption}
-                              checked={(formState.documents[key] || 'pending') === statusOption}
-                              disabled={!canWriteJoining && !isAdmissionEditable}
-                              onChange={() => updateDocumentStatus(key, statusOption)}
-                              className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
-                            />
-                            <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
-                          </label>
+                            <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-gray-800 dark:text-slate-200">
+                              {label}
+                            </p>
+                            <div className="flex shrink-0 flex-wrap gap-2">
+                              {documentStatusOptions.map((statusOption) => (
+                                <label
+                                  key={`${key}-${statusOption}`}
+                                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold uppercase transition ${
+                                    (formState.documents[key] || 'pending') === statusOption
+                                      ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/60 dark:bg-blue-900/30 dark:text-blue-200'
+                                      : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:text-blue-200'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`document-${key}`}
+                                    value={statusOption}
+                                    checked={(formState.documents[key] || 'pending') === statusOption}
+                                    disabled={!canWriteJoining && !isAdmissionEditable}
+                                    onChange={() => updateDocumentStatus(key, statusOption)}
+                                    className="h-3 w-3 border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                  />
+                                  <span>{statusOption === 'received' ? 'Received' : 'Pending'}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
                         ))}
-                      </div>
                     </div>
-                  ))}
-              </div>
-              </ApplicationInfoCard>
+                  </div>
+                )}
+              </section>
               {renderWizardStepFooter(2)}
             </div>
 

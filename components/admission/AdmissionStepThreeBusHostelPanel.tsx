@@ -87,6 +87,8 @@ type AdmissionStepThreeBusHostelPanelProps = {
   joiningId?: string | null;
   /** Hide bus/hostel pickers after accommodation is saved / awaiting fee approval. */
   selectionUiLocked?: boolean;
+  /** When true, hides the outer step title (for side-by-side admission layout). */
+  embedded?: boolean;
 };
 
 const emptyTransportDetails = (): JoiningTransportDetails => ({});
@@ -222,6 +224,7 @@ export function AdmissionStepThreeBusHostelPanel({
   admissionNumber = null,
   joiningId = null,
   selectionUiLocked = false,
+  embedded = false,
   onExistingRequestChange,
   onExistingHostelRequestChange,
 }: AdmissionStepThreeBusHostelPanelProps & {
@@ -747,19 +750,26 @@ export function AdmissionStepThreeBusHostelPanel({
         className
       )}
     >
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Accommodation selection
-          </h2>
-          {effectiveAcademicYear && (
-            <p className="text-xs text-slate-500 font-medium">
-              Academic Year: {effectiveAcademicYear}
-            </p>
-          )}
-        </div>
+      <div
+        className={cn(
+          'flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between',
+          !embedded && 'border-b border-slate-100 pb-4 dark:border-slate-800'
+        )}
+      >
+        {!embedded ? (
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Accommodation selection
+            </h2>
+            {effectiveAcademicYear && (
+              <p className="text-xs text-slate-500 font-medium">
+                Academic Year: {effectiveAcademicYear}
+              </p>
+            )}
+          </div>
+        ) : null}
 
-        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900/80">
+        <div className={cn('inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900/80', embedded && 'w-full sm:justify-start')}>
           {visibleAccommodationTabs.map((tab) => {
             const isActive = displayTab === tab;
             return (

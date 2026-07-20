@@ -24,18 +24,14 @@ import {
   PaymentSummary,
   PaymentTransaction,
 } from '@/types';
-import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { normalizeJoiningDocumentsFromApi } from '@/lib/joiningDocumentsNormalize';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
-import { AdmissionReferenceEditor } from '@/components/admission/AdmissionReferenceEditor';
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
 import {
   communicationAddressHasDisplayValues,
-  formatCommunicationAddressLines,
-  formatRelativeAddressBlock,
 } from '@/lib/formatJoiningAddressDisplay';
 import { PrintableStudentApplication } from '@/components/PrintableStudentApplication';
 import {
@@ -50,10 +46,8 @@ import {
   parseJoiningTransportDetails,
 } from '@/components/admission/AdmissionStepThreeBusHostelPanel';
 import { AdmissionWorkflowStepButtons } from '@/components/admission/AdmissionWorkflowSteps';
-import { ApplicationSectionCard } from '@/components/admission/ApplicationSectionCard';
+import { AdmissionStudentProfileView } from '@/components/admission/AdmissionStudentProfileView';
 import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
-import { JoiningCourseQuotaReadSection } from '@/components/joining/JoiningCourseQuotaReadSection';
-import { JoiningRegistrationFieldsReadView } from '@/components/joining/JoiningRegistrationFieldsReadView';
 import {
   pickJoiningCourseQuotaRegistrationEntries,
   pickJoiningStudentProfileRegistrationEntries,
@@ -156,6 +150,7 @@ export default function AdmissionDetailPage() {
     father: false,
     mother: false,
   });
+  const [revealedPhones, setRevealedPhones] = useState<Record<string, boolean>>({});
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [cancelForm, setCancelForm] = useState({
     reason: '',
@@ -588,6 +583,13 @@ export default function AdmissionDetailPage() {
     }));
   };
 
+  const togglePhone = (key: string) => {
+    setRevealedPhones((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
   const handleCancelAdmissionSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!cancelForm.reason.trim()) {
@@ -607,7 +609,7 @@ export default function AdmissionDetailPage() {
     getBranchName(admission.courseInfo?.branchId) || admission.courseInfo?.branch || undefined;
 
   return (
-    <div className="w-full space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="w-full space-y-3 py-2">
       <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
         <DialogContent className="w-[95vw] max-w-lg">
           <form onSubmit={handleCancelAdmissionSubmit} className="space-y-5">
@@ -753,438 +755,229 @@ export default function AdmissionDetailPage() {
         </div>
       )}
 
-      <div id="admission-step-one" className="scroll-mt-24 space-y-6">
-        <ApplicationSectionCard
-          step={1}
-          title="Student Information"
-          description={
-            admission.joiningId
-              ? 'Read-only application view — same layout as the joining form and print application.'
-              : 'Read-only application view — same layout as the print application.'
-          }
-        >
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Course &amp; quota
-          </h3>
-          <div className="mt-4">
-            <JoiningCourseQuotaReadSection
-              joining={admission as unknown as Joining}
-              collegeName={collegeName}
-              courseName={courseName}
-              branchName={branchName}
-              intakeRegistrationEntries={courseQuotaRegistrationEntries}
-              referenceSlot={
-                <AdmissionReferenceEditor
-                  admissionId={String(admission._id)}
-                  initialReference1={resolvedReference1}
-                  canEdit={canEditReference && !isAdmissionCancelled}
-                />
-              }
+      <div id="admission-step-one" className="scroll-mt-24 space-y-4">
+        <AdmissionStudentProfileView
+          admission={admission}
+          lead={lead}
+          collegeName={collegeName}
+          courseName={courseName}
+          branchName={branchName}
+          resolvedReference1={resolvedReference1}
+          studentProfileRegistrationEntries={studentProfileRegistrationEntries}
+          courseQuotaRegistrationEntries={courseQuotaRegistrationEntries}
+          revealedAadhaars={revealedAadhaars}
+          onToggleAadhaar={toggleAadhaar}
+          maskAadhaar={maskAadhaar}
+          revealedPhones={revealedPhones}
+          onTogglePhone={togglePhone}
+          canEditReference={canEditReference}
+          isAdmissionCancelled={isAdmissionCancelled}
+        />
+
+        {admitCardPrintStudent?.courseId ? (
+          <div className="flex justify-end">
+            <PrintableAdmitCard
+              courseId={admitCardPrintStudent.courseId}
+              student={admitCardPrintStudent}
+              printButtonLabel="Print acknowledgement card"
             />
           </div>
-          <h3 className="mt-8 border-t border-slate-200/80 pt-6 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            Student profile
-          </h3>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            Registration fields in the same order as the edit form.
-          </p>
-          <div className="mt-4">
-            {studentProfileRegistrationEntries.length > 0 ? (
-              <JoiningRegistrationFieldsReadView
-                entries={studentProfileRegistrationEntries}
-                revealAadhaar={revealedAadhaars.student}
-                onToggleAadhaar={() => toggleAadhaar('student')}
-              />
-            ) : (
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Full name</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {admission.studentInfo?.name || '—'}
-                  </p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Phone</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {admission.studentInfo?.phone || '—'}
-                  </p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Preferred mobile
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {admission.studentInfo?.preferredMobileNumber || '—'}
-                  </p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Gender</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {admission.studentInfo?.gender || '—'}
-                  </p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Date of birth</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {admission.studentInfo?.dateOfBirth || '—'}
-                  </p>
-                </div>
-                <div className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Aadhaar</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {revealedAadhaars.student
-                      ? admission.studentInfo?.aadhaarNumber || '—'
-                      : maskAadhaar(admission.studentInfo?.aadhaarNumber)}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </ApplicationSectionCard>
-
-      {admission.parents && (
-        <ApplicationSectionCard step={2} title="Parents Details">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Father</h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Name</p>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1">
-                    {admission.parents.father?.name || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Phone</p>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1">
-                    {admission.parents.father?.phone || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Aadhaar Number</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                      {revealedAadhaars.father
-                        ? admission.parents.father?.aadhaarNumber || '—'
-                        : maskAadhaar(admission.parents.father?.aadhaarNumber)}
-                    </p>
-                    {admission.parents.father?.aadhaarNumber && (
-                      <button
-                        type="button"
-                        onClick={() => toggleAadhaar('father')}
-                        className="rounded-lg p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800"
-                        aria-label={revealedAadhaars.father ? 'Hide Aadhaar' : 'Show Aadhaar'}
-                      >
-                        <svg
-                          className={`h-5 w-5 ${revealedAadhaars.father ? 'text-blue-600' : 'text-gray-400'}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                          />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Mother</h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Name</p>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1">
-                    {admission.parents.mother?.name || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Phone</p>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mt-1">
-                    {admission.parents.mother?.phone || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Aadhaar Number</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                      {revealedAadhaars.mother
-                        ? admission.parents.mother?.aadhaarNumber || '—'
-                        : maskAadhaar(admission.parents.mother?.aadhaarNumber)}
-                    </p>
-                    {admission.parents.mother?.aadhaarNumber && (
-                      <button
-                        type="button"
-                        onClick={() => toggleAadhaar('mother')}
-                        className="rounded-lg p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800"
-                        aria-label={revealedAadhaars.mother ? 'Hide Aadhaar' : 'Show Aadhaar'}
-                      >
-                        <svg
-                          className={`h-5 w-5 ${revealedAadhaars.mother ? 'text-blue-600' : 'text-gray-400'}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                          />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ApplicationSectionCard>
-      )}
-
-      {admission.address && (
-        <ApplicationSectionCard step={3} title="Address Details">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">
-                Communication Address
-              </h3>
-              {(() => {
-                const lines = formatCommunicationAddressLines(admission.address.communication);
-                return (
-                  <div className="space-y-2 text-sm">
-                    <p className="text-gray-900 dark:text-slate-100">{lines.doorOrStreet}</p>
-                    {lines.landmark ? (
-                      <p className="text-gray-600 dark:text-slate-400">{lines.landmark}</p>
-                    ) : null}
-                    <p className="text-gray-600 dark:text-slate-400">{lines.locality}</p>
-                    {lines.pin ? (
-                      <p className="text-gray-600 dark:text-slate-400">{lines.pin}</p>
-                    ) : null}
-                  </div>
-                );
-              })()}
-            </div>
-            {admission.address.relatives && admission.address.relatives.length > 0 && (
-              <div>
-                <h3 className="mb-4 text-sm font-semibold text-gray-700 dark:text-slate-300">
-                  Relatives / Friends
-                </h3>
-                <div className="space-y-3">
-                  {admission.address.relatives.map((relative, idx) => {
-                    const block = formatRelativeAddressBlock(relative);
-                    return (
-                      <div key={idx} className="border-l-2 border-blue-200 pl-3">
-                        <p className="font-semibold text-gray-900 dark:text-slate-100">{block.header}</p>
-                        {block.addressLine ? (
-                          <p className="mt-1 text-xs text-gray-600 dark:text-slate-400">{block.addressLine}</p>
-                        ) : null}
-                        {block.mobile ? (
-                          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                            Mobile: {block.mobile}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </ApplicationSectionCard>
-      )}
-
-      {admission.educationHistory && admission.educationHistory.length > 0 && (
-        <ApplicationSectionCard step={4} title="Education History">
-          <div className="space-y-4">
-            {admission.educationHistory.map((edu, idx) => {
-              const standardLabel =
-                edu.level === 'other' && edu.otherLevelLabel?.trim()
-                  ? edu.otherLevelLabel
-                  : edu.level?.replace(/_/g, ' ') || '—';
-              return (
-                <div key={idx} className="border-l-4 border-blue-500 py-2 pl-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold uppercase text-gray-900 dark:text-slate-100">
-                        {standardLabel}
-                      </p>
-                      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-                        {edu.courseOrBranch} • {edu.yearOfPassing}
-                      </p>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-slate-500">
-                        {edu.institutionName}
-                      </p>
-                      {(edu.hallTicketNumber || edu.cetRank) && (
-                        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                          {[edu.hallTicketNumber && `Hall ticket: ${edu.hallTicketNumber}`, edu.cetRank && `CET rank: ${edu.cetRank}`]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </p>
-                      )}
-                    </div>
-                    {edu.totalMarksOrGrade && (
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500 dark:text-slate-400">Marks/Grade</p>
-                        <p className="text-base font-semibold text-gray-900 dark:text-slate-100">
-                          {edu.totalMarksOrGrade}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </ApplicationSectionCard>
-      )}
-
-      {admission.siblings && admission.siblings.length > 0 && (
-        <ApplicationSectionCard step={5} title="Siblings">
-          <div className="space-y-4">
-            {admission.siblings.map((sibling, idx) => (
-              <div
-                key={idx}
-                className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40"
-              >
-                <p className="font-semibold text-gray-900 dark:text-slate-100">{sibling.name || '—'}</p>
-                <p className="text-sm text-gray-600 dark:text-slate-400">
-                  {[sibling.relation, sibling.studyingStandard, sibling.institutionName]
-                    .filter(Boolean)
-                    .join(' · ') || '—'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </ApplicationSectionCard>
-      )}
-
-      {admission.documents && (
-        <ApplicationSectionCard step={6} title="Documents Checklist">
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {Object.entries(admission.documents)
-              .filter(([key]) =>
-                isJoiningDocumentChecklistKeyVisible(
-                  key as keyof JoiningDocuments,
-                  admission.courseInfo?.quota,
-                  { paperChecklist: false }
-                )
-              )
-              .map(([key, value]) => (
-                <div key={key} className="flex items-center gap-2">
-                  <div
-                    className={`h-3 w-3 rounded-full ${
-                      value === 'received'
-                        ? 'bg-green-500'
-                        : value === 'pending'
-                          ? 'bg-amber-500'
-                          : 'bg-gray-300'
-                    }`}
-                  />
-                  <div>
-                    <p className="text-xs font-medium capitalize text-gray-700 dark:text-slate-300">
-                      {key.replace(/([A-Z])/g, ' $1').trim()}
-                    </p>
-                    <p className="text-xs capitalize text-gray-500 dark:text-slate-400">{value}</p>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </ApplicationSectionCard>
-      )}
-
-      {admitCardPrintStudent?.courseId ? (
-        <div className="flex justify-end">
-          <PrintableAdmitCard
-            courseId={admitCardPrintStudent.courseId}
-            student={admitCardPrintStudent}
-            printButtonLabel="Print acknowledgement card"
-          />
-        </div>
-      ) : null}
+        ) : null}
       </div>
 
-      {admission.joiningId && admission._id && !isAdmissionCancelled ? (
-        <AdmissionStepTwoPanel
-          joiningId={admission.joiningId}
-          admissionId={admission._id}
-          course={admission.courseInfo?.course || ''}
-          branch={admission.courseInfo?.branch || ''}
-          quota={admission.courseInfo?.quota || ''}
-          batch={resolveBatch(admission, lead)}
-          paymentSummary={paymentSummary}
-          transactions={transactions}
-          readOnly
-        />
-      ) : null}
+      <div className="scroll-mt-24">
+        <div className="grid gap-4 xl:grid-cols-2 xl:items-stretch">
+          <div className="flex min-h-0 min-w-0 flex-col gap-4">
+            {admission.joiningId && admission._id && !isAdmissionCancelled ? (
+              <div
+                id="admission-step-two"
+                className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-blue-200/80 bg-white/95 shadow-sm dark:border-blue-900/50 dark:bg-slate-900/70"
+              >
+                <div className="shrink-0 border-b border-slate-200/80 px-4 py-3 dark:border-slate-700">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                    Step 2
+                  </p>
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    Payments &amp; documents
+                  </h2>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <AdmissionStepTwoPanel
+                    joiningId={admission.joiningId}
+                    admissionId={admission._id}
+                    course={admission.courseInfo?.course || ''}
+                    branch={admission.courseInfo?.branch || ''}
+                    quota={admission.courseInfo?.quota || ''}
+                    batch={resolveBatch(admission, lead)}
+                    paymentSummary={paymentSummary}
+                    transactions={transactions}
+                    readOnly
+                    embedded
+                  />
+                </div>
+              </div>
+            ) : null}
 
-      <section
-        id="admission-step-three"
-        className="scroll-mt-24 space-y-4 rounded-2xl border border-amber-200/80 bg-gradient-to-b from-amber-50/50 to-white/95 p-6 shadow-lg shadow-amber-100/20 backdrop-blur dark:border-amber-900/50 dark:from-amber-950/25 dark:to-slate-900/70 dark:shadow-none"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-            Step 3
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Bus &amp; hostel
-          </h2>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Read-only view of transport or hostel selection saved on this admission.
-          </p>
+            <div
+              id="admission-step-three"
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-amber-200/80 bg-white/95 shadow-sm dark:border-amber-900/50 dark:bg-slate-900/70"
+            >
+              <div className="shrink-0 border-b border-slate-200/80 px-4 py-3 dark:border-slate-700">
+                <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  Step 3
+                </p>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  Bus &amp; hostel
+                </h2>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <AdmissionStepThreeBusHostelPanel
+                  value={transportDetails}
+                  disabled
+                  courseName={courseName}
+                  embedded
+                  className="scroll-mt-0 space-y-4 rounded-none border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div
+            id="admission-step-four"
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-emerald-200/80 bg-white/95 shadow-sm dark:border-emerald-900/50 dark:bg-slate-900/70 xl:h-full"
+          >
+            <div className="shrink-0 border-b border-slate-200/80 px-4 py-3 dark:border-slate-700">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                Step 4
+              </p>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Fee configuration
+              </h2>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              <FeeStructureSection
+                title="Fee configuration (Fee Management database)"
+                course={admission.courseInfo?.course || ''}
+                branch={admission.courseInfo?.branch || ''}
+                quota={admission.courseInfo?.quota || ''}
+                batch={resolveBatch(admission, lead)}
+                studentFeeDetails={studentFeeDetails}
+                feeDetailsEditable={false}
+                showActualAndRevisedFees
+                pivotView
+                pivotFeeColumns="summary"
+                description="Year-wise tuition, others, and transport fees for this admission."
+              />
+
+              {transactions.length > 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Payment transactions
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Recorded payments for this admission.
+                  </p>
+                  <ul className="mt-4 max-h-80 space-y-3 overflow-y-auto">
+                    {transactions.map((transaction) => {
+                      const txKey =
+                        transaction._id || transaction.id || String(transaction.createdAt);
+                      const modeLabel =
+                        transaction.mode === 'cash'
+                          ? 'Cash'
+                          : transaction.mode === 'online'
+                            ? 'Cashfree'
+                            : 'Online';
+                      const statusClass =
+                        transaction.status === 'success'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : transaction.status === 'cancelled' || transaction.status === 'failed'
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-amber-600 dark:text-amber-400';
+                      const collectorName =
+                        typeof transaction.collectedBy === 'object'
+                          ? transaction.collectedBy?.name
+                          : undefined;
+                      const paidAt = transaction.processedAt || transaction.createdAt;
+                      const amountValue =
+                        typeof transaction.amount === 'number' && !Number.isNaN(transaction.amount)
+                          ? transaction.amount
+                          : Number(transaction.amount) || 0;
+                      const isCancelled = transaction.status === 'cancelled';
+
+                      return (
+                        <li
+                          key={txKey}
+                          className={`rounded-lg border px-4 py-3 text-sm ${
+                            isCancelled
+                              ? 'border-rose-100 bg-rose-50/20 dark:border-rose-950/20 dark:bg-rose-950/5'
+                              : 'border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {modeLabel}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-semibold uppercase ${statusClass}`}
+                                >
+                                  {transaction.status}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {formatDateTime(paidAt)}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 text-base font-semibold ${
+                                isCancelled
+                                  ? 'line-through text-slate-400 dark:text-slate-500'
+                                  : 'text-emerald-700 dark:text-emerald-300'
+                              }`}
+                            >
+                              {formatCurrency(amountValue)}
+                            </span>
+                          </div>
+                          {(transaction.referenceId ||
+                            transaction.feeHeadName ||
+                            collectorName) && (
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                              {transaction.referenceId ? (
+                                <span className="font-mono">
+                                  Ref: {transaction.referenceId}
+                                  {transaction.feeHeadName || collectorName ? ' · ' : ''}
+                                </span>
+                              ) : null}
+                              {transaction.feeHeadName ? (
+                                <span className="font-medium">{transaction.feeHeadName}</span>
+                              ) : null}
+                              {collectorName ? (
+                                <span>
+                                  {(transaction.referenceId || transaction.feeHeadName) && ' · '}
+                                  {collectorName}
+                                </span>
+                              ) : null}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Payment transactions
+                  </h3>
+                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                    There are no transactions.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <AdmissionStepThreeBusHostelPanel
-          value={transportDetails}
-          disabled
-          courseName={courseName}
-        />
-      </section>
-
-      {/* Fee configuration & payments — Step 4 */}
-      <div
-        id="admission-step-four"
-        className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-emerald-200/80 bg-gradient-to-b from-emerald-50/40 to-white/95 p-6 shadow-lg shadow-emerald-100/30 backdrop-blur dark:border-emerald-900/50 dark:from-emerald-950/20 dark:to-slate-900/70 dark:shadow-none"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-            Step 4
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
-            Fee configuration
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-            Fee heads from the Fee Management database. Admission fee payments are shown under Step 2.
-          </p>
-        </div>
-
-        <FeeStructureSection
-          title="Fee configuration (Fee Management database)"
-          course={admission.courseInfo?.course || ''}
-          branch={admission.courseInfo?.branch || ''}
-          quota={admission.courseInfo?.quota || ''}
-          batch={resolveBatch(admission, lead)}
-          studentFeeDetails={studentFeeDetails}
-          feeDetailsEditable={false}
-          showActualAndRevisedFees
-          description="Read-only fee heads and student line items for this admission."
-        />
       </div>
     </div>
   );

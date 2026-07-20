@@ -7,6 +7,7 @@ import {
   sortCleanRegistrationFieldEntries,
   type CleanRegistrationFieldEntry,
 } from '@/lib/registrationFieldsDisplay';
+import { isPhoneFieldKey, maskPhone } from '@/lib/maskSensitiveDisplay';
 
 function normKey(key: string): string {
   return String(key || '')
@@ -33,6 +34,9 @@ type Props = {
   revealAadhaar?: boolean;
   /** When set, renders Show/Hide on the Aadhaar field card instead of a detached page-level link. */
   onToggleAadhaar?: () => void;
+  /** Keys of registration phone/mobile fields currently revealed. */
+  revealedPhoneKeys?: Record<string, boolean>;
+  onTogglePhone?: (key: string) => void;
 };
 
 /** Read-only registration grid — same field order as the joining edit form. */
@@ -41,6 +45,8 @@ export function JoiningRegistrationFieldsReadView({
   className,
   revealAadhaar = false,
   onToggleAadhaar,
+  revealedPhoneKeys = {},
+  onTogglePhone,
 }: Props) {
   const sorted = sortCleanRegistrationFieldEntries(entries);
   if (!sorted.length) {
@@ -57,7 +63,13 @@ export function JoiningRegistrationFieldsReadView({
         const label = formatRegistrationFieldLabel(key);
         const text = formatRegistrationFieldDisplayValue(key, raw);
         const isAadhaarField = isAadhaarFieldKey(key);
+        const isPhoneField = isPhoneFieldKey(key);
         const showMaskedAadhaar = !revealAadhaar && isAadhaarField && text && text !== '—';
+        const showMaskedPhone =
+          !revealedPhoneKeys[key] && isPhoneField && text && text !== '—' && onTogglePhone;
+        const showToggle =
+          (isAadhaarField && hasAadhaarField && onToggleAadhaar) ||
+          (isPhoneField && text && text !== '—' && onTogglePhone);
         return (
           <div
             key={key}
@@ -67,13 +79,22 @@ export function JoiningRegistrationFieldsReadView({
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 {label}
               </p>
-              {isAadhaarField && hasAadhaarField && onToggleAadhaar ? (
+              {showToggle ? (
                 <button
                   type="button"
-                  onClick={onToggleAadhaar}
+                  onClick={() => {
+                    if (isAadhaarField && onToggleAadhaar) onToggleAadhaar();
+                    else if (isPhoneField && onTogglePhone) onTogglePhone(key);
+                  }}
                   className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
                 >
-                  {revealAadhaar ? 'Hide' : 'Show'}
+                  {isAadhaarField
+                    ? revealAadhaar
+                      ? 'Hide'
+                      : 'Show'
+                    : revealedPhoneKeys[key]
+                      ? 'Hide'
+                      : 'Show'}
                 </button>
               ) : null}
             </div>
@@ -85,7 +106,11 @@ export function JoiningRegistrationFieldsReadView({
               />
             ) : (
               <p className="mt-1 break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {showMaskedAadhaar ? maskAadhaarValue(text) : text || '—'}
+                {showMaskedAadhaar
+                  ? maskAadhaarValue(text)
+                  : showMaskedPhone
+                    ? maskPhone(text)
+                    : text || '—'}
               </p>
             )}
           </div>

@@ -11,8 +11,14 @@ import {
 import { joiningAPI, courseAPI } from '@/lib/api';
 import { CertificateInformationChecklistBlock } from '@/components/joining/CertificateInformationChecklistPanel';
 import { JoiningStepTwoPaymentsPanel } from '@/components/joining/JoiningStepTwoPaymentsPanel';
+import { DocumentsChecklistTabs } from '@/components/admission/DocumentsChecklistTabs';
+import {
+  buildImportantDocumentTabItems,
+  buildOtherDocumentTabItems,
+} from '@/lib/joiningDocumentsDisplay';
 import { showToast } from '@/lib/toast';
 import { useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
+import { cn } from '@/lib/utils';
 import {
   buildCertificateChecklistStoredValue,
   certificateChecklistValuesEqual,
@@ -62,6 +68,8 @@ type AdmissionStepTwoPanelProps = {
   readOnly?: boolean;
   paymentSummary?: PaymentSummary | null;
   transactions?: PaymentTransaction[];
+  /** When true, renders without outer step card styling (for side-by-side admission layout). */
+  embedded?: boolean;
 };
 
 export function AdmissionStepTwoPanel({
@@ -75,6 +83,7 @@ export function AdmissionStepTwoPanel({
   readOnly = false,
   paymentSummary = null,
   transactions = [],
+  embedded = false,
 }: AdmissionStepTwoPanelProps) {
   const queryClient = useQueryClient();
   const { canEditAdmission } = useJoiningDeskPermissions();
@@ -207,6 +216,33 @@ export function AdmissionStepTwoPanel({
     );
   }, [certificateGuidance, registrationExtras.certificate_checklist]);
 
+  const registrationFormDataForDocs = useMemo(() => {
+    const fromJoining = joining?.registrationFormData;
+    if (fromJoining && typeof fromJoining === 'object' && !Array.isArray(fromJoining)) {
+      return fromJoining as Record<string, unknown>;
+    }
+    return registrationExtras;
+  }, [joining?.registrationFormData, registrationExtras]);
+
+  const importantDocumentItems = useMemo(
+    () =>
+      buildImportantDocumentTabItems(
+        joining?.documents,
+        quota,
+        registrationFormDataForDocs,
+        certificateGuidance
+      ),
+    [joining?.documents, quota, registrationFormDataForDocs, certificateGuidance]
+  );
+
+  const otherDocumentItems = useMemo(
+    () => buildOtherDocumentTabItems(joining?.documents, quota),
+    [joining?.documents, quota]
+  );
+
+  const hasDocumentChecklist =
+    importantDocumentItems.length > 0 || otherDocumentItems.length > 0;
+
   const updateCertificateChecklistStatus = useCallback(
     (itemId: string, value: JoiningDocumentStatus, hasOptions: boolean) => {
       const id = String(itemId || '').trim();
@@ -323,79 +359,95 @@ export function AdmissionStepTwoPanel({
 
   return (
     <section
-      id="admission-step-two"
-      className="scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
+      id={embedded ? undefined : 'admission-step-two'}
+      className={cn(
+        embedded
+          ? 'space-y-5'
+          : 'scroll-mt-24 space-y-8 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none'
+      )}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
-            Step 2
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Certificate checklist &amp; admission fee
-          </h2>
+      {!embedded ? (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+              Step 2
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Certificate checklist &amp; admission fee
+            </h2>
+          </div>
+          {!readOnly ? (
+            <Button
+              type="button"
+              variant="primary"
+              disabled={!canWrite || saveMutation.isPending}
+              onClick={() => saveMutation.mutate()}
+            >
+              {saveMutation.isPending ? 'Saving…' : 'Save certificate checklist'}
+            </Button>
+          ) : null}
         </div>
-        {!readOnly ? (
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!canWrite || saveMutation.isPending}
-            onClick={() => saveMutation.mutate()}
-          >
-            {saveMutation.isPending ? 'Saving…' : 'Save certificate checklist'}
-          </Button>
-        ) : null}
-      </div>
+      ) : null}
 
-      <CertificateInformationChecklistBlock
-        variant="admission-step-two"
-        radioNameSuffix="-admission-step2"
-        derivedCertificationStatus={derivedCertificationStatus}
-        programLevelTrimmed={programLevelTrimmed}
-        isLoadingCertificateGuidance={isLoadingCertificateGuidance}
-        certificateGuidance={certificateGuidance}
-        certificateChecklistParsed={certificateChecklistParsed}
-        onChecklistOptionChange={updateCertificateChecklistOption}
-        onChecklistStatusChange={updateCertificateChecklistStatus}
-        readOnly={readOnly}
-      />
+      {readOnly && hasDocumentChecklist ? (
+        <DocumentsChecklistTabs
+          importantDocuments={importantDocumentItems}
+          otherDocuments={otherDocumentItems}
+          showBothStacked
+        />
+      ) : (
+        <CertificateInformationChecklistBlock
+          variant="admission-step-two"
+          radioNameSuffix="-admission-step2"
+          derivedCertificationStatus={derivedCertificationStatus}
+          programLevelTrimmed={programLevelTrimmed}
+          isLoadingCertificateGuidance={isLoadingCertificateGuidance}
+          certificateGuidance={certificateGuidance}
+          certificateChecklistParsed={certificateChecklistParsed}
+          onChecklistOptionChange={updateCertificateChecklistOption}
+          onChecklistStatusChange={updateCertificateChecklistStatus}
+          readOnly={readOnly}
+        />
+      )}
 
-      <JoiningStepTwoPaymentsPanel
-        courseName={course}
-        branchName={branch}
-        quota={quota}
-        paymentSummary={paymentSummary}
-        transactions={transactions}
-        isLoadingTransactions={false}
-        formatCurrency={formatCurrency}
-        formatDateTime={formatDateTime}
-        baseFeeTarget={baseFeeTarget}
-        baseFeePaid={baseFeePaid}
-        outstandingBalance={outstandingBalance}
-        additionalFeePaid={additionalFeePaid}
-        totalAmountPaid={Math.max(totalPaid, 0)}
-        configuredFee={effectiveTotalFee > 0 ? effectiveTotalFee : null}
-        paymentStatusBadgeClass={paymentStatusBadgeClass}
-        paymentStatusLabel={paymentStatusLabel}
-        cashfreeConfig={null}
-        canAccessPaymentsModule
-        canWritePayments={false}
-        canUseCashfree={false}
-        paymentActionsDisabled
-        isAdditionalFeeMode={false}
-        shouldShowAdditionalFeeButton={false}
-        isProcessingPayment={false}
-        onOpenCash={() => {}}
-        onOpenOnline={() => {}}
-        onToggleAdditionalFeeMode={() => {}}
-        paymentAmount=""
-        paymentReferenceId=""
-        onPaymentAmountChange={() => {}}
-        onPaymentReferenceChange={() => {}}
-        onRecordCashPayment={() => {}}
-        paymentRecordDisabled
-        readOnly={readOnly}
-      />
+      {!readOnly ? (
+        <JoiningStepTwoPaymentsPanel
+          courseName={course}
+          branchName={branch}
+          quota={quota}
+          paymentSummary={paymentSummary}
+          transactions={transactions}
+          isLoadingTransactions={false}
+          formatCurrency={formatCurrency}
+          formatDateTime={formatDateTime}
+          baseFeeTarget={baseFeeTarget}
+          baseFeePaid={baseFeePaid}
+          outstandingBalance={outstandingBalance}
+          additionalFeePaid={additionalFeePaid}
+          totalAmountPaid={Math.max(totalPaid, 0)}
+          configuredFee={effectiveTotalFee > 0 ? effectiveTotalFee : null}
+          paymentStatusBadgeClass={paymentStatusBadgeClass}
+          paymentStatusLabel={paymentStatusLabel}
+          cashfreeConfig={null}
+          canAccessPaymentsModule
+          canWritePayments={false}
+          canUseCashfree={false}
+          paymentActionsDisabled
+          isAdditionalFeeMode={false}
+          shouldShowAdditionalFeeButton={false}
+          isProcessingPayment={false}
+          onOpenCash={() => {}}
+          onOpenOnline={() => {}}
+          onToggleAdditionalFeeMode={() => {}}
+          paymentAmount=""
+          paymentReferenceId=""
+          onPaymentAmountChange={() => {}}
+          onPaymentReferenceChange={() => {}}
+          onRecordCashPayment={() => {}}
+          paymentRecordDisabled
+          readOnly={readOnly}
+        />
+      ) : null}
 
       {!readOnly ? (
         <WorkflowStickyActionBar

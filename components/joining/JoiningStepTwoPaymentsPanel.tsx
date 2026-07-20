@@ -87,14 +87,16 @@ export function JoiningStepTwoPaymentsPanel({
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Payments &amp; transactions
-          </h3>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            {readOnly
-              ? 'Admission fee collected during Step 2 of the workflow.'
-              : 'Enter the amount received and transaction / reference ID below, then record the payment. Student details auto-fill on the printable slip when you print from the payment dialog.'}
-          </p>
+          {!readOnly ? (
+            <>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Payments &amp; transactions
+              </h3>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Enter the amount received and transaction / reference ID below, then record the payment. Student details auto-fill on the printable slip when you print from the payment dialog.
+              </p>
+            </>
+          ) : null}
           {/* Legacy fee-configuration copy — kept for rollback, hidden from Step 2 UI */}
           <p className="mt-1 hidden text-sm text-slate-600 dark:text-slate-400">
             Admission fee from{' '}
