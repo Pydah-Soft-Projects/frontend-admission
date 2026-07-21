@@ -1545,7 +1545,7 @@ const CompletedAdmissionsPage = () => {
                       style: 'currency',
                       currency: 'INR',
                       maximumFractionDigits: 0,
-                    }).format(studentInfoViewRecord.paymentSummary?.tuitionPaid ?? 0)}
+                    }).format(studentInfoViewRecord.paymentSummary?.yearOnePaid ?? 0)}
                   </p>
                 </div>
                 <div>
@@ -2504,7 +2504,7 @@ const CompletedAdmissionsPage = () => {
                       </td>
                       <td className={`${tableTdClass} text-right`}>
                         <span className="text-xs font-bold text-slate-900 sm:text-sm dark:text-slate-100">
-                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.tuitionPaid ?? 0)}
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.yearOnePaid ?? 0)}
                         </span>
                       </td>
                       <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 md:table-cell dark:text-slate-400`}>

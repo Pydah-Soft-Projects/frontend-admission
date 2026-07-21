@@ -134,6 +134,8 @@ export interface PaymentSummary {
   totalPaid: number;
   /** Year 1 tuition fee head (TUI01) paid amount from Fee Management ledger. */
   tuitionPaid?: number;
+  /** Combined Year 1 paid amount for Tuition (TUI01) + Special Fee (OTH1) only. */
+  yearOnePaid?: number;
   balance: number;
   currency: string;
   status: PaymentSummaryStatus;

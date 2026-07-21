@@ -7140,7 +7140,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         type="button"
                         variant="primary"
                         size="sm"
-                        className="!bg-amber-600 hover:!bg-amber-700 text-white dark:!bg-amber-700 dark:hover:!bg-amber-800 border-none"
                         onClick={() => submitFeeRequestMutation.mutate()}
                         disabled={submitFeeRequestMutation.isPending || isBusy || !workflowJoiningId}
                       >

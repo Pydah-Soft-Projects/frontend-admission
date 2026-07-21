@@ -25,6 +25,7 @@ import {
   PaymentTransaction,
 } from '@/types';
 import { normalizeJoiningDocumentsFromApi } from '@/lib/joiningDocumentsNormalize';
+import type { OverallConcessionLine } from '@/lib/overallConcessions';
 import { showToast } from '@/lib/toast';
 import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
@@ -116,6 +117,21 @@ const resolveBatch = (
 
 type NestedPaymentPayload = {
   data?: PaymentTransaction[];
+};
+
+/** Fee Management ledger transaction (same rows as the Collect fee dialog's Transactions tab). */
+type FeeManagementTransactionRow = {
+  _id?: string;
+  receiptNumber?: string;
+  feeHeadName?: string;
+  feeHeadCode?: string;
+  amount?: number | string | null;
+  paymentMode?: string;
+  studentYear?: string | number | null;
+  paymentDate?: string | Date | null;
+  collectedByName?: string;
+  remarks?: string;
+  status?: string;
 };
 
 type ApiError = {
@@ -393,15 +409,141 @@ export default function AdmissionDetailPage() {
   );
 
   const studentFeeDetails = useMemo(() => {
-    if (admission?.studentFeeDetails) {
-      return admission.studentFeeDetails;
-    }
+    // The Collect Fee builder edits the joining record. Prefer that same saved
+    // configuration so this read-only view cannot show an older admission snapshot.
     const joiningFeeDetails = joiningForReference?.studentFeeDetails;
     if (joiningFeeDetails) {
       return joiningFeeDetails;
     }
+    if (admission?.studentFeeDetails) {
+      return admission.studentFeeDetails;
+    }
     return { lines: [], batch: resolveBatch(admission, lead) || '' };
   }, [admission, joiningForReference, lead]);
+
+  /** Course inputs used by Collect Fee; joining data is the editable source of truth. */
+  const feeCourseInfo = useMemo(
+    () => ({
+      course:
+        joiningForReference?.courseInfo?.course || admission?.courseInfo?.course || '',
+      branch:
+        joiningForReference?.courseInfo?.branch || admission?.courseInfo?.branch || '',
+      quota:
+        joiningForReference?.courseInfo?.quota || admission?.courseInfo?.quota || '',
+    }),
+    [joiningForReference?.courseInfo, admission?.courseInfo]
+  );
+
+  const feeStudentStatus = useMemo(() => {
+    const joiningRegistration = joiningForReference?.registrationFormData as
+      | Record<string, unknown>
+      | undefined;
+    const admissionRegistration = admission?.registrationFormData as
+      | Record<string, unknown>
+      | undefined;
+    return String(
+      joiningRegistration?.studentStatus ??
+        joiningRegistration?.student_status ??
+        admissionRegistration?.studentStatus ??
+        admissionRegistration?.student_status ??
+        ''
+    ).trim();
+  }, [joiningForReference?.registrationFormData, admission?.registrationFormData]);
+
+  // Same fee portal concession/revised lines the joining workspace payment builder uses,
+  // so the read-only Step 4 table resolves head-wise amounts identically to the edit view.
+  const overallConcessionsQuery = useQuery({
+    queryKey: ['overall-concessions', admission?.admissionNumber || null],
+    queryFn: async () =>
+      paymentAPI.getOverallConcessions(String(admission?.admissionNumber || '')),
+    enabled: Boolean(admission?.admissionNumber),
+    staleTime: 30_000,
+  });
+
+  const overallConcessionLines = useMemo(() => {
+    const payload = (
+      overallConcessionsQuery.data as { data?: { revisedFees?: unknown } } | undefined
+    )?.data;
+    return Array.isArray(payload?.revisedFees)
+      ? (payload.revisedFees as OverallConcessionLine[])
+      : [];
+  }, [overallConcessionsQuery.data]);
+
+  // Fee Management ledger transactions — same source as the Collect fee dialog's
+  // Transactions tab, shown below the Step 4 fee configuration.
+  const feeMongoTransactionsQuery = useQuery({
+    queryKey: [
+      'fee-mongo-transactions',
+      'admission-detail',
+      admission?._id || null,
+      admission?.admissionNumber || null,
+    ],
+    queryFn: async () =>
+      paymentAPI.listFeeManagementTransactions({
+        joiningId: admission?.joiningId,
+        admissionId: admission?._id,
+        admissionNumber: admission?.admissionNumber || undefined,
+      }),
+    enabled: Boolean(admission?._id || admission?.admissionNumber),
+    staleTime: 30_000,
+  });
+
+  const feeManagementTransactions = useMemo(() => {
+    const response = feeMongoTransactionsQuery.data as
+      | {
+          transactions?: unknown[];
+          data?: { data?: unknown[]; transactions?: unknown[] } | unknown[];
+        }
+      | unknown[]
+      | undefined;
+    let rows: unknown[] = [];
+    if (Array.isArray(response)) rows = response;
+    else if (Array.isArray(response?.transactions)) rows = response.transactions;
+    else if (Array.isArray(response?.data)) rows = response.data;
+    else if (response?.data && typeof response.data === 'object') {
+      const payload = response.data as { data?: unknown[]; transactions?: unknown[] };
+      if (Array.isArray(payload.transactions)) rows = payload.transactions;
+      else if (Array.isArray(payload.data)) rows = payload.data;
+    }
+    return rows.filter((tx): tx is FeeManagementTransactionRow =>
+      Boolean(tx && typeof tx === 'object')
+    );
+  }, [feeMongoTransactionsQuery.data]);
+
+  /** Only the heads shown in the fee configuration above: TUI01, OTH1, and transport. */
+  const displayedFeeTransactions = useMemo(
+    () =>
+      feeManagementTransactions.filter((row) => {
+        const code = String(row.feeHeadCode || '').trim().toUpperCase();
+        const name = String(row.feeHeadName || '').trim().toUpperCase();
+        if (code === 'TUI01' || name.includes('TUITION')) return true;
+        if (code === 'OTH1' || name === 'SPECIAL FEE') return true;
+        return (
+          code.startsWith('TRN') || name.includes('TRANSPORT') || name.includes('BUS')
+        );
+      }),
+    [feeManagementTransactions]
+  );
+
+  /** Batch the fee configuration was saved against — matches the edit view's batch resolution. */
+  const feeConfigurationBatch = useMemo(() => {
+    // Collect Fee prefers the Step 1/intake academic year over the contextual batch
+    // stored alongside overrides.
+    const fromRegistration = String(
+      registrationSource.academic_year ?? registrationSource.academicYear ?? ''
+    ).trim();
+    if (fromRegistration) return fromRegistration;
+    const fromDetails =
+      studentFeeDetails?.batch != null ? String(studentFeeDetails.batch).trim() : '';
+    if (fromDetails) return fromDetails;
+    return resolveBatch(admission, lead);
+  }, [
+    registrationSource.academic_year,
+    registrationSource.academicYear,
+    studentFeeDetails?.batch,
+    admission,
+    lead,
+  ]);
 
   const programLevelTrimmed = useMemo(
     () =>
@@ -857,124 +999,109 @@ export default function AdmissionDetailPage() {
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
               <FeeStructureSection
                 title="Fee configuration (Fee Management database)"
-                course={admission.courseInfo?.course || ''}
-                branch={admission.courseInfo?.branch || ''}
-                quota={admission.courseInfo?.quota || ''}
-                batch={resolveBatch(admission, lead)}
+                course={feeCourseInfo.course}
+                branch={feeCourseInfo.branch}
+                quota={feeCourseInfo.quota}
+                batch={feeConfigurationBatch}
+                studentStatus={feeStudentStatus}
                 studentFeeDetails={studentFeeDetails}
+                overallConcessionLines={overallConcessionLines}
                 feeDetailsEditable={false}
                 showActualAndRevisedFees
                 pivotView
-                pivotFeeColumns="summary"
-                description="Year-wise tuition, others, and transport fees for this admission."
+                pivotFeeColumns="tuition-special-transport"
+                description="Year-wise Tuition Fee, Special Fee, and applicable Transport Fee."
               />
 
-              {transactions.length > 0 ? (
-                <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Payment transactions
-                  </h3>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Recorded payments for this admission.
-                  </p>
-                  <ul className="mt-4 max-h-80 space-y-3 overflow-y-auto">
-                    {transactions.map((transaction) => {
-                      const txKey =
-                        transaction._id || transaction.id || String(transaction.createdAt);
-                      const modeLabel =
-                        transaction.mode === 'cash'
-                          ? 'Cash'
-                          : transaction.mode === 'online'
-                            ? 'Cashfree'
-                            : 'Online';
-                      const statusClass =
-                        transaction.status === 'success'
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : transaction.status === 'cancelled' || transaction.status === 'failed'
-                            ? 'text-rose-600 dark:text-rose-400'
-                            : 'text-amber-600 dark:text-amber-400';
-                      const collectorName =
-                        typeof transaction.collectedBy === 'object'
-                          ? transaction.collectedBy?.name
-                          : undefined;
-                      const paidAt = transaction.processedAt || transaction.createdAt;
-                      const amountValue =
-                        typeof transaction.amount === 'number' && !Number.isNaN(transaction.amount)
-                          ? transaction.amount
-                          : Number(transaction.amount) || 0;
-                      const isCancelled = transaction.status === 'cancelled';
-
-                      return (
-                        <li
-                          key={txKey}
-                          className={`rounded-lg border px-4 py-3 text-sm ${
-                            isCancelled
-                              ? 'border-rose-100 bg-rose-50/20 dark:border-rose-950/20 dark:bg-rose-950/5'
-                              : 'border-slate-200 dark:border-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                  {modeLabel}
-                                </span>
-                                <span
-                                  className={`text-[10px] font-semibold uppercase ${statusClass}`}
-                                >
-                                  {transaction.status}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                {formatDateTime(paidAt)}
-                              </p>
-                            </div>
-                            <span
-                              className={`shrink-0 text-base font-semibold ${
-                                isCancelled
-                                  ? 'line-through text-slate-400 dark:text-slate-500'
-                                  : 'text-emerald-700 dark:text-emerald-300'
-                              }`}
+              <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Payment transactions
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Fee Management transactions for the fee heads shown above (Tuition, Special,
+                  and Transport).
+                </p>
+                {displayedFeeTransactions.length > 0 ? (
+                  <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-slate-900 text-left text-xs font-semibold uppercase tracking-wide text-white dark:border-slate-200 dark:bg-slate-100 dark:text-slate-900">
+                          <th className="px-4 py-3 whitespace-nowrap">Receipt</th>
+                          <th className="px-4 py-3 whitespace-nowrap">Fee Head</th>
+                          <th className="px-4 py-3 whitespace-nowrap text-right">Amount</th>
+                          <th className="px-4 py-3 whitespace-nowrap">Mode</th>
+                          <th className="px-4 py-3 whitespace-nowrap">Year</th>
+                          <th className="px-4 py-3 whitespace-nowrap">Date</th>
+                          <th className="px-4 py-3 whitespace-nowrap">Collected By</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {displayedFeeTransactions.map((row) => {
+                          const isCancelled = row.status === 'cancelled';
+                          return (
+                            <tr
+                              key={row._id || row.receiptNumber}
+                              className={
+                                isCancelled ? 'bg-slate-50/50 dark:bg-slate-900/30' : undefined
+                              }
                             >
-                              {formatCurrency(amountValue)}
-                            </span>
-                          </div>
-                          {(transaction.referenceId ||
-                            transaction.feeHeadName ||
-                            collectorName) && (
-                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                              {transaction.referenceId ? (
-                                <span className="font-mono">
-                                  Ref: {transaction.referenceId}
-                                  {transaction.feeHeadName || collectorName ? ' · ' : ''}
-                                </span>
-                              ) : null}
-                              {transaction.feeHeadName ? (
-                                <span className="font-medium">{transaction.feeHeadName}</span>
-                              ) : null}
-                              {collectorName ? (
-                                <span>
-                                  {(transaction.referenceId || transaction.feeHeadName) && ' · '}
-                                  {collectorName}
-                                </span>
-                              ) : null}
-                            </p>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Payment transactions
-                  </h3>
+                              <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">
+                                {row.receiptNumber || '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="font-semibold text-slate-800 dark:text-slate-100">
+                                  {row.feeHeadName || row.remarks || 'Fee head'}
+                                  {isCancelled && (
+                                    <span className="ml-2 inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 ring-1 ring-inset ring-rose-600/10 dark:bg-rose-950/20 dark:text-rose-400">
+                                      Cancelled
+                                    </span>
+                                  )}
+                                </div>
+                                {row.feeHeadCode ? (
+                                  <div className="font-mono text-[10px] text-slate-400">
+                                    {row.feeHeadCode}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td
+                                className={`px-4 py-3 text-right font-semibold ${
+                                  isCancelled
+                                    ? 'line-through text-slate-400 dark:text-slate-500'
+                                    : 'text-slate-900 dark:text-slate-100'
+                                }`}
+                              >
+                                {formatCurrency(Number(row.amount) || 0)}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                {row.paymentMode === 'Net Banking' ? 'Bank' : row.paymentMode || '—'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                {row.studentYear ? `Year ${row.studentYear}` : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                {row.paymentDate
+                                  ? new Date(row.paymentDate).toLocaleString('en-IN')
+                                  : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                {row.collectedByName || '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : feeMongoTransactionsQuery.isLoading ? (
                   <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                    There are no transactions.
+                    Loading Fee Management transactions…
                   </p>
-                </div>
-              )}
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                    There are no transactions for these fee heads.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>

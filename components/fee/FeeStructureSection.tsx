@@ -8,6 +8,11 @@ import {
   classifyPrintFeeColumn,
   type PrintFeeColumn,
 } from '@/lib/printApplicationFeeStructure';
+import {
+  normalizeOverallConcessionType,
+  resolveOverallConcessionLine,
+  type OverallConcessionLine,
+} from '@/lib/overallConcessions';
 import type { FeeStructure, JoiningStudentFeeDetails, JoiningStudentFeeLineOverride } from '@/types';
 
 const SUMMARY_PIVOT_COLUMNS: ReadonlyArray<{ key: PrintFeeColumn; label: string }> = [
@@ -163,7 +168,13 @@ export type FeeStructureSectionProps = {
    * When `pivotView` is true, `summary` collapses fee heads into Tuition / Others / Transport
    * columns (matches the printable application fee table). Default `all` keeps one column per head.
    */
-  pivotFeeColumns?: 'all' | 'summary';
+  pivotFeeColumns?: 'all' | 'summary' | 'tuition-special-transport';
+  /**
+   * Student-specific concession/revised lines from the fee portal (`overall_concessions`).
+   * When provided, per-row amounts resolve exactly like the joining workspace payment builder:
+   * local override (by structureId or head+year) first, then the overall concession line, then catalog.
+   */
+  overallConcessionLines?: OverallConcessionLine[];
 };
 
 /**
@@ -193,7 +204,9 @@ export function FeeStructureSection({
   showActualAndRevisedFees = false,
   pivotView = false,
   pivotFeeColumns = 'all',
+  overallConcessionLines,
 }: FeeStructureSectionProps) {
+  const explicitCategory = String(category || '').trim();
   const resolvedCategory = useMemo(() => {
     if (category && category.trim()) return category.trim();
 
@@ -253,14 +266,17 @@ export function FeeStructureSection({
     }
   }, [propBatch]);
 
-  const queryEnabled = Boolean(cleanCourse || cleanBranch || resolvedCategory || selectedBatch);
+  const queryEnabled = Boolean(
+    cleanCourse || cleanBranch || explicitCategory || quota || selectedBatch
+  );
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: [
       'fee-structures',
       cleanCourse || null,
       cleanBranch || null,
-      resolvedCategory || null,
+      explicitCategory || null,
+      !explicitCategory ? quota || null : null,
       selectedBatch || null,
       college || null,
       studentYear ?? null,
@@ -272,7 +288,11 @@ export function FeeStructureSection({
       const response: ApiListPayload = await feeStructureAPI.list({
         course: cleanCourse || undefined,
         branch: cleanBranch || undefined,
-        category: resolvedCategory || undefined,
+        // Match the joining workspace query exactly. When the caller supplied a quota,
+        // let the backend apply its canonical quota → fee category mapping (including
+        // CQ/lateral rules) rather than sending the UI's display-oriented category.
+        category: explicitCategory || undefined,
+        quota: !explicitCategory ? quota || undefined : undefined,
         batch: selectedBatch || undefined,
         college: college || undefined,
         studentYear: studentYear ?? undefined,
@@ -290,10 +310,67 @@ export function FeeStructureSection({
       else if (Array.isArray(payload.data)) base = payload.data;
     }
     const injected = injectedFeeRows || [];
-    if (injected.length === 0) return base;
-    const injectedIds = new Set(injected.map((row) => String(row._id)));
-    return [...base.filter((row) => !injectedIds.has(String(row._id))), ...injected];
-  }, [data, injectedFeeRows]);
+    let merged = base;
+    if (injected.length > 0) {
+      const injectedIds = new Set(injected.map((row) => String(row._id)));
+      merged = [...base.filter((row) => !injectedIds.has(String(row._id))), ...injected];
+    }
+
+    // Builder-added heads (e.g. an "Others fee" revised fee added in the concession builder)
+    // persist as override lines with a custom structureId and no catalog row. Synthesize rows
+    // for them so they appear here (classified into Tuition / Others / Transport in pivot view).
+    const knownIds = new Set(merged.map((row) => String(row._id)));
+    // Head+year identities already covered by catalog rows — a saved line matching one of
+    // these applies as an override on that row instead of becoming a duplicate custom row.
+    const knownHeadYears = new Set<string>();
+    for (const row of merged) {
+      const year = Number(row.studentYear) || 1;
+      const headId = String(row.feeHead ?? '').trim();
+      const headCode = String(row.feeHeadCode ?? '').trim().toUpperCase();
+      if (headId) knownHeadYears.add(`${headId}::${year}`);
+      if (headCode) knownHeadYears.add(`code:${headCode}::${year}`);
+    }
+    const customRows: FeeStructure[] = [];
+    for (const line of studentFeeDetails?.lines || []) {
+      const sid = String(line.structureId || '').trim();
+      if (!sid || knownIds.has(sid)) continue;
+      if (!line.feeHeadId && !line.feeHeadCode && !line.feeHeadName) continue;
+      const lineYear = Number(line.studentYear) > 0 ? Number(line.studentYear) : 1;
+      const lineHeadId = String(line.feeHeadId || '').trim();
+      const lineHeadCode = String(line.feeHeadCode || '').trim().toUpperCase();
+      if (
+        (lineHeadId && knownHeadYears.has(`${lineHeadId}::${lineYear}`)) ||
+        (lineHeadCode && knownHeadYears.has(`code:${lineHeadCode}::${lineYear}`))
+      ) {
+        continue;
+      }
+      // A concession without a catalog base has nothing payable to display.
+      if (line.concessionType === 'CONCESSION') continue;
+      const amount = Number(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      customRows.push({
+        _id: sid,
+        id: sid,
+        category: '',
+        course: '',
+        branch: '',
+        college: '',
+        studentYear: Number(line.studentYear) > 0 ? Number(line.studentYear) : 1,
+        semester: null,
+        batch: '',
+        amount: 0,
+        isScholarshipApplicable: false,
+        feeHead: line.feeHeadId || null,
+        feeHeadName: line.feeHeadName || line.feeHeadCode || 'Fee head',
+        feeHeadCode: line.feeHeadCode || '',
+        feeHeadDescription: '',
+        terms: [],
+        createdAt: null,
+        updatedAt: null,
+      });
+    }
+    return customRows.length > 0 ? [...merged, ...customRows] : merged;
+  }, [data, injectedFeeRows, studentFeeDetails?.lines]);
 
   const hasEditableFees = Boolean(feeDetailsEditable && onStudentFeeDetailsChange);
   const showDualFeeColumns = showActualAndRevisedFees || hasEditableFees;
@@ -302,6 +379,22 @@ export function FeeStructureSection({
   const useInlineRevisedFeeEdit = false;
   /** Pencil first: open an edit panel, then Cash/Cashfree (joining workspace). */
   const paymentViaEditPanel = Boolean(hasEditableFees && onSelectFeeHead && !useInlineRevisedFeeEdit);
+
+  /**
+   * Admission view mode: show TUI01, Special Fee (OTH1), and transport only when
+   * a transport row actually exists. Keeping the individual rows (rather than
+   * summary buckets) preserves their exact head-wise amounts and codes.
+   */
+  const displayItems = useMemo(() => {
+    if (pivotFeeColumns !== 'tuition-special-transport') return items;
+    return items.filter((row) => {
+      const code = String(row.feeHeadCode || '').trim().toUpperCase();
+      const name = String(row.feeHeadName || '').trim().toUpperCase();
+      if (code === 'TUI01') return true;
+      if (code === 'OTH1' || name === 'SPECIAL FEE') return true;
+      return classifyPrintFeeColumn(row) === 'transport';
+    });
+  }, [items, pivotFeeColumns]);
 
   /** Row id (`_id`) whose fee edit + payment panel is open (panel mode only). */
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -323,16 +416,84 @@ export function FeeStructureSection({
     return m;
   }, [studentFeeDetails?.lines]);
 
+  /**
+   * Saved builder lines keyed by fee head + year, so they still apply when the catalog row
+   * ids differ (e.g. the view loads a different batch's structure documents than the batch
+   * the concession was saved against). Only typed builder lines are indexed this way —
+   * legacy direct-amount overrides remain structureId-only.
+   */
+  const lineOverrideByHeadYear = useMemo(() => {
+    const m = new Map<string, JoiningStudentFeeLineOverride>();
+    for (const line of studentFeeDetails?.lines || []) {
+      if (!normalizeOverallConcessionType(line.concessionType)) continue;
+      const year = Number(line.studentYear) > 0 ? Number(line.studentYear) : 1;
+      const headId = String(line.feeHeadId || '').trim();
+      const headCode = String(line.feeHeadCode || '').trim().toUpperCase();
+      if (headId) m.set(`${headId}::${year}`, line);
+      if (headCode) m.set(`code:${headCode}::${year}`, line);
+    }
+    return m;
+  }, [studentFeeDetails?.lines]);
+
+  /** Approved (and pending) concession/revised lines from the fee portal, keyed by head + year. */
+  const overallConcessionByHeadYear = useMemo(() => {
+    const m = new Map<string, OverallConcessionLine>();
+    for (const line of overallConcessionLines || []) {
+      if (!line || typeof line !== 'object') continue;
+      const year = Number(line.studentYear) || 1;
+      if (line.feeHeadId) m.set(`${String(line.feeHeadId)}::${year}`, line);
+      if (line.feeHeadCode) m.set(`code:${String(line.feeHeadCode).toUpperCase()}::${year}`, line);
+    }
+    return m;
+  }, [overallConcessionLines]);
+
+  /**
+   * Effective (payable) amount for a row — mirrors the joining workspace payment builder:
+   * 1. a saved builder line with a concessionType (matched by structureId, then head+year)
+   *    resolved against the catalog actual (CONCESSION = deduction, REVISED_FEE = new amount);
+   * 2. a legacy direct-amount override matched by structureId;
+   * 3. the overall_concessions line for that head+year from the fee portal;
+   * 4. the catalog amount.
+   */
   const effectiveRowAmount = useCallback(
     (row: FeeStructure) => {
       const catalog = Number(row.amount) || 0;
-      const o = lineOverrideByStructureId.get(String(row._id));
-      if (o?.amount !== undefined && o?.amount !== null && Number.isFinite(Number(o.amount))) {
-        return Number(o.amount);
+      const year = Number(row.studentYear) || 1;
+      const headId = String(row.feeHead ?? '').trim();
+      const headCode = String(row.feeHeadCode ?? '').trim().toUpperCase();
+
+      const local =
+        lineOverrideByStructureId.get(String(row._id)) ||
+        (headId ? lineOverrideByHeadYear.get(`${headId}::${year}`) : undefined) ||
+        (headCode ? lineOverrideByHeadYear.get(`code:${headCode}::${year}`) : undefined);
+
+      if (local) {
+        const amount =
+          local.amount !== undefined && local.amount !== null ? Number(local.amount) : NaN;
+        const type = normalizeOverallConcessionType(local.concessionType);
+        if (type && Number.isFinite(amount) && amount > 0) {
+          const resolved = resolveOverallConcessionLine(
+            { concessionType: type, amount },
+            catalog
+          );
+          if (resolved) return resolved.payableAmount;
+        }
+        if (!type && Number.isFinite(amount)) {
+          return amount;
+        }
       }
+
+      const overall =
+        (headId ? overallConcessionByHeadYear.get(`${headId}::${year}`) : undefined) ||
+        (headCode ? overallConcessionByHeadYear.get(`code:${headCode}::${year}`) : undefined);
+      if (overall) {
+        const resolved = resolveOverallConcessionLine(overall, catalog);
+        if (resolved) return resolved.payableAmount;
+      }
+
       return catalog;
     },
-    [lineOverrideByStructureId]
+    [lineOverrideByStructureId, lineOverrideByHeadYear, overallConcessionByHeadYear]
   );
 
   useEffect(() => {
@@ -482,7 +643,7 @@ export function FeeStructureSection({
 
   const grouped = useMemo(() => {
     const map = new Map<number | string, FeeStructure[]>();
-    for (const item of items) {
+    for (const item of displayItems) {
       const key = item.studentYear ?? 'all';
       const existing = map.get(key) || [];
       existing.push(item);
@@ -493,11 +654,11 @@ export function FeeStructureSection({
       const bv = typeof b[0] === 'number' ? b[0] : Number.MAX_SAFE_INTEGER;
       return av - bv;
     });
-  }, [items]);
+  }, [displayItems]);
 
   const grandTotal = useMemo(
-    () => items.reduce((sum, row) => sum + effectiveRowAmount(row), 0),
-    [items, effectiveRowAmount]
+    () => displayItems.reduce((sum, row) => sum + effectiveRowAmount(row), 0),
+    [displayItems, effectiveRowAmount]
   );
 
   // ---------------------------------------------------------------------------
@@ -531,6 +692,19 @@ export function FeeStructureSection({
       return String(row._id);
     };
 
+    /**
+     * Summary mode shows exactly three head groups: Tuition (TUI01), Others (OTH-coded
+     * heads), and Transport (TRN/bus). Any other catalog head (e.g. APPL01 application
+     * fee, ADM01 admission fee, HST01 hostel) is excluded from this table.
+     */
+    const isSummaryHeadIncluded = (row: FeeStructure): boolean => {
+      const col = classifyPrintFeeColumn(row);
+      if (col === 'tuition' || col === 'transport') return true;
+      const code = String(row.feeHeadCode || '').trim().toUpperCase();
+      const name = String(row.feeHeadName || '').trim().toLowerCase();
+      return code.startsWith('OTH') || /\bothers?\b/.test(name);
+    };
+
     // Collect distinct fee heads in first-seen insertion order
     const headOrder: string[] = useSummaryColumns
       ? SUMMARY_PIVOT_COLUMNS.map((col) => col.key)
@@ -546,7 +720,8 @@ export function FeeStructureSection({
     // year → individual FeeStructure rows (for the edit panel)
     const yearRowsMap = new Map<number | string, FeeStructure[]>();
 
-    for (const row of items) {
+    for (const row of displayItems) {
+      if (useSummaryColumns && !isSummaryHeadIncluded(row)) continue;
       const year = row.studentYear ?? 'all';
       const hkey = getFeeHeadKey(row);
 
@@ -584,7 +759,7 @@ export function FeeStructureSection({
     });
 
     return { headOrder, headMeta, yearHeadMap, yearRowsMap, sortedYears };
-  }, [pivotView, pivotFeeColumns, items, effectiveRowAmount]);
+  }, [pivotView, pivotFeeColumns, displayItems, effectiveRowAmount]);
 
   return (
     <div
@@ -769,7 +944,7 @@ export function FeeStructureSection({
                               {displayAmt !== null && displayAmt > 0 ? (
                                 <div className="inline-flex flex-col items-end gap-0.5">
                                   <span className="font-semibold">{formatCurrency(displayAmt)}</span>
-                                  {isChanged && catalogAmt !== null && (
+                                  {isChanged && catalogAmt !== null && catalogAmt > 0 && (
                                     <span className="text-[10px] text-slate-400 line-through">
                                       {formatCurrency(catalogAmt)}
                                     </span>
