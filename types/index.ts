@@ -570,6 +570,8 @@ export interface JoiningTransportDetails {
   categoryName?: string;
   roomId?: string;
   roomNumber?: string;
+  /** Live seat availability count from transport app. */
+  busSeatsAvailable?: number;
   /** Legacy first-year amount; kept for backward compatibility. */
   hostelFee?: number | null;
   /** Per student-year hostel fees from HMS `hostelfeestructures`. */
@@ -637,6 +639,9 @@ export interface TransportRouteSummary {
   endPoint?: string;
   totalDistance?: number | null;
   stageCount?: number;
+  capacity?: number;
+  seatsFilled?: number;
+  seatsAvailable?: number;
 }
 
 export interface TransportRouteStage {
@@ -650,6 +655,8 @@ export interface TransportBusSummary {
   _id: string;
   busNumber: string;
   capacity?: number | null;
+  seatsFilled?: number;
+  seatsAvailable?: number;
   type?: string;
   driverName?: string;
   attendantName?: string;
