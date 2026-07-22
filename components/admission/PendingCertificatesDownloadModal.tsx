@@ -202,8 +202,7 @@ export function PendingCertificatesDownloadModal({
       const { page: _page, limit: _limit, ...baseFilters } = filterParams;
       const printData = await admissionAPI.listPendingCertificates({
         ...baseFilters,
-        page: 1,
-        limit: 500,
+        all: true,
       });
       const printRows = printData?.rows ?? [];
       if (printRows.length === 0) {

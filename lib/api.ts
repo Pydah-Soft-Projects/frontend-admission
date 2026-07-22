@@ -1768,7 +1768,9 @@ export const admissionAPI = {
     endDate?: string;
     quota?: string;
     page?: number;
-    limit?: number;
+    limit?: number | 'all';
+    /** When true, return every matching pending row (used for Print PDF). */
+    all?: boolean;
   }) => {
     const queryParams = new URLSearchParams();
     if (filters) {
@@ -1847,7 +1849,9 @@ export const admissionAPI = {
     endDate?: string;
     quota?: string;
     page?: number;
-    limit?: number;
+    limit?: number | 'all';
+    /** When true, return every matching pending row (used for Print PDF). */
+    all?: boolean;
   }) => {
     const queryParams = new URLSearchParams();
     if (filters) {
@@ -1872,6 +1876,12 @@ export const admissionAPI = {
         tuitionPayable: number;
         tuitionPaid: number;
         tuitionPending: number;
+        otherPayable?: number;
+        otherPaid?: number;
+        otherPending?: number;
+        totalPayable?: number;
+        totalPaid?: number;
+        totalPending?: number;
         hasFeeEntry: boolean;
         feeStatus: 'paid' | 'unpaid' | 'no_entry';
         displayAmount: number;
