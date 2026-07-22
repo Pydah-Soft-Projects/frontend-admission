@@ -199,6 +199,13 @@ export function PendingFeesDownloadModal({
   };
   const pendingTotal = pagination.total ?? stats?.tuitionUnpaidStudents ?? stats?.pendingStudents ?? 0;
 
+  // Calculate corrected stats for mutually exclusive categories
+  const totalStudents = stats?.totalStudents ?? 0;
+  const feePaidStudents = stats?.tuitionPaidStudents ?? 0; // Any payment > 0
+  const noFeeEntryStudents = stats?.tuitionNoEntryStudents ?? 0;
+  // Fee unpaid = students who haven't paid anything (totalPaid = 0) but have fee entry
+  const feeUnpaidStudents = Math.max(0, totalStudents - feePaidStudents - noFeeEntryStudents);
+
   const handleLoad = async () => {
     setPage(1);
     if (!hasLoadedOnce) {
@@ -459,7 +466,7 @@ export function PendingFeesDownloadModal({
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total students</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {stats?.totalStudents ?? 0}
+                    {totalStudents}
                   </p>
                   <p className="mt-0.5 text-[10px] text-slate-500">Active admissions (desk filters)</p>
                 </div>
@@ -468,10 +475,10 @@ export function PendingFeesDownloadModal({
                     Fee paid
                   </p>
                   <p className="mt-1 text-2xl font-bold text-emerald-800 dark:text-emerald-300">
-                    {stats?.tuitionPaidStudents ?? 0}
+                    {feePaidStudents}
                   </p>
                   <p className="mt-0.5 text-[10px] text-emerald-700/80 dark:text-emerald-400/80">
-                    Year 1 tuition + other fully settled
+                    Paid any amount on tuition + other
                   </p>
                 </div>
                 <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
@@ -479,10 +486,10 @@ export function PendingFeesDownloadModal({
                     Fee unpaid
                   </p>
                   <p className="mt-1 text-2xl font-bold text-amber-800 dark:text-amber-300">
-                    {stats?.tuitionUnpaidStudents ?? stats?.pendingStudents ?? 0}
+                    {feeUnpaidStudents}
                   </p>
                   <p className="mt-0.5 text-[10px] text-amber-700/80 dark:text-amber-400/80">
-                    Still have balance on tuition + other
+                    Haven't paid any amount yet
                   </p>
                 </div>
                 <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 dark:border-sky-900/50 dark:bg-sky-950/30">
@@ -490,7 +497,7 @@ export function PendingFeesDownloadModal({
                     No fee entry
                   </p>
                   <p className="mt-1 text-2xl font-bold text-sky-800 dark:text-sky-300">
-                    {stats?.tuitionNoEntryStudents ?? 0}
+                    {noFeeEntryStudents}
                   </p>
                   <p className="mt-0.5 text-[10px] text-sky-700/80 dark:text-sky-400/80">
                     Pending — ₹0 (no Year 1 TUI01/OTH1 ledger row)

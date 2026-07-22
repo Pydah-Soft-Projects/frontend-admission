@@ -1896,6 +1896,7 @@ export const admissionAPI = {
         tuitionPaidStudents: number;
         tuitionUnpaidStudents: number;
         tuitionNoEntryStudents: number;
+        tuitionFullySettledStudents?: number;
         pendingStudents: number;
       };
       total: number;
