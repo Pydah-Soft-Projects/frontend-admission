@@ -18,7 +18,8 @@ import {
   parseStudentQuotasResponse,
   quotaLabelsFromCatalog,
 } from '@/lib/studentQuotaCatalog';
-import { Download } from 'lucide-react';
+import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
+import { Download, Printer } from 'lucide-react';
 import type { PendingDocumentsDeskFilters } from '@/components/admission/PendingCertificatesDownloadModal';
 
 type CollegeOption = { id: string; name: string };
@@ -30,6 +31,8 @@ type PendingFeesDownloadModalProps = {
   initialCollegeId?: string;
   deskFilters?: PendingDocumentsDeskFilters;
 };
+
+const PAGE_LIMIT = 20;
 
 const selectClassName =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900';
@@ -102,7 +105,9 @@ export function PendingFeesDownloadModal({
   const [collegeId, setCollegeId] = useState(initialCollegeId);
   const [courseId, setCourseId] = useState('');
   const [quota, setQuota] = useState('');
+  const [page, setPage] = useState(1);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   useEffect(() => {
@@ -110,6 +115,7 @@ export function PendingFeesDownloadModal({
     setCollegeId(initialCollegeId || '');
     setCourseId('');
     setQuota('');
+    setPage(1);
     setHasLoadedOnce(false);
   }, [open, initialCollegeId]);
 
@@ -165,8 +171,10 @@ export function PendingFeesDownloadModal({
       startDate: deskFilters?.startDate || undefined,
       endDate: deskFilters?.endDate || undefined,
       quota: quota || undefined,
+      page,
+      limit: PAGE_LIMIT,
     }),
-    [collegeId, courseId, selectedCourseName, quota, deskFilters]
+    [collegeId, courseId, selectedCourseName, quota, deskFilters, page]
   );
 
   const {
@@ -183,10 +191,16 @@ export function PendingFeesDownloadModal({
 
   const rows = pendingData?.rows ?? [];
   const stats = pendingData?.stats;
-  const sampleLimit = pendingData?.sampleLimit ?? 10;
-  const pendingTotal = stats?.tuitionUnpaidStudents ?? stats?.pendingStudents ?? pendingData?.total ?? 0;
+  const pagination = pendingData?.pagination ?? {
+    page: 1,
+    pages: 1,
+    limit: PAGE_LIMIT,
+    total: pendingData?.total ?? 0,
+  };
+  const pendingTotal = pagination.total ?? stats?.tuitionUnpaidStudents ?? stats?.pendingStudents ?? 0;
 
   const handleLoad = async () => {
+    setPage(1);
     if (!hasLoadedOnce) {
       setHasLoadedOnce(true);
       return;
@@ -200,7 +214,8 @@ export function PendingFeesDownloadModal({
       if (!hasLoadedOnce) {
         setHasLoadedOnce(true);
       }
-      const blob = await admissionAPI.exportPendingFees(filterParams);
+      const { page: _page, limit: _limit, ...exportFilters } = filterParams;
+      const blob = await admissionAPI.exportPendingFees(exportFilters);
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
@@ -219,6 +234,96 @@ export function PendingFeesDownloadModal({
     }
   };
 
+  const handlePrintPdf = async () => {
+    try {
+      setIsPrinting(true);
+      if (!hasLoadedOnce) {
+        setHasLoadedOnce(true);
+      }
+      const { page: _page, limit: _limit, ...baseFilters } = filterParams;
+      const printData = await admissionAPI.listPendingFees({
+        ...baseFilters,
+        page: 1,
+        limit: 500,
+      });
+      const printRows = printData?.rows ?? [];
+      if (printRows.length === 0) {
+        showToast.error('No pending fee records to print for the selected filters.');
+        return;
+      }
+
+      const esc = escapePrintHtml;
+      const bodyRows = printRows
+        .map(
+          (row, index) => `
+      <tr>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">${index + 1}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;">${esc(row.studentName || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.admissionNumber || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.course || '—')}${row.branch ? `<div style="font-size:10px;color:#64748b;">${esc(row.branch)}</div>` : ''}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.parentMobile || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.studentMobile || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">${esc(row.quota || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">${esc(formatInr(row.tuitionPayable))}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">${esc(formatInr(row.tuitionPaid))}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${esc(row.feeAmountText || formatInr(row.displayAmount))}</td>
+      </tr>`
+        )
+        .join('');
+
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pending Tuition Fee</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; color: #0f172a; }
+    .page-header { text-align: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #0f172a; }
+    .page-header h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .page-header p { margin: 0; font-size: 12px; color: #64748b; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { padding: 8px; border: 1px solid #cbd5e1; background: #f1f5f9; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; text-align: left; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    .footer { margin-top: 12px; font-size: 10px; color: #94a3b8; text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Pending Tuition Fee</h1>
+    <p>Year 1 tuition unpaid — ${printRows.length} student(s)</p>
+    <p>Generated ${esc(new Date().toLocaleString('en-IN'))}</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px;text-align:center;">S.No</th>
+        <th>Student Name</th>
+        <th>Admission No</th>
+        <th>Course</th>
+        <th>Parent Mobile</th>
+        <th>Student Mobile</th>
+        <th style="text-align:center;">Quota</th>
+        <th style="text-align:right;">Payable</th>
+        <th style="text-align:right;">Paid</th>
+        <th style="text-align:right;">Year 1 Tuition</th>
+      </tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+  <div class="footer">Admissions CRM — Pending Fee report</div>
+</body>
+</html>`;
+
+      printHtmlDocument(html, 'Pending Tuition Fee');
+    } catch (error) {
+      console.error('Error printing pending fees:', error);
+      showToast.error('Failed to prepare pending fees print. Please try again.');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[98vw] max-w-7xl flex-col overflow-hidden p-0 sm:max-w-7xl">
@@ -226,8 +331,8 @@ export function PendingFeesDownloadModal({
           <DialogTitle>Pending tuition fee</DialogTitle>
           <DialogDescription>
             Active admissions only, using the same date and desk filters as the Abstract tab. Year 1
-            tuition fee head (TUI01) payable vs paid from Fee Management. Sample list and Excel export
-            show students with Year 1 tuition due and no payment recorded yet.
+            tuition fee head (TUI01) payable vs paid from Fee Management. Paginated list and Excel
+            export show students with Year 1 tuition due and no payment recorded yet.
           </DialogDescription>
         </DialogHeader>
 
@@ -242,6 +347,7 @@ export function PendingFeesDownloadModal({
                 onChange={(e) => {
                   setCollegeId(e.target.value);
                   setCourseId('');
+                  setPage(1);
                   setHasLoadedOnce(false);
                 }}
                 className={selectClassName}
@@ -262,6 +368,7 @@ export function PendingFeesDownloadModal({
                 value={courseId}
                 onChange={(e) => {
                   setCourseId(e.target.value);
+                  setPage(1);
                   setHasLoadedOnce(false);
                 }}
                 className={selectClassName}
@@ -287,6 +394,7 @@ export function PendingFeesDownloadModal({
                 value={quota}
                 onChange={(e) => {
                   setQuota(e.target.value);
+                  setPage(1);
                   setHasLoadedOnce(false);
                 }}
                 className={selectClassName}
@@ -313,6 +421,17 @@ export function PendingFeesDownloadModal({
             <Button
               type="button"
               size="sm"
+              variant="outline"
+              className="h-[38px] shrink-0 gap-2 whitespace-nowrap"
+              onClick={handlePrintPdf}
+              isLoading={isPrinting}
+            >
+              <Printer className="h-4 w-4" />
+              Print PDF
+            </Button>
+            <Button
+              type="button"
+              size="sm"
               className="h-[38px] shrink-0 gap-2 whitespace-nowrap"
               onClick={handleDownload}
               isLoading={isDownloading}
@@ -327,7 +446,7 @@ export function PendingFeesDownloadModal({
           {!hasLoadedOnce ? (
             <p className="py-10 text-center text-sm text-slate-500">
               Select filters and click <span className="font-semibold">Show list</span> to view tuition
-              fee stats and a sample of students with unpaid tuition balance.
+              fee stats and students with unpaid tuition balance.
             </p>
           ) : pendingLoading || pendingFetching ? (
             <div className="flex flex-col items-center justify-center py-12">
@@ -383,13 +502,14 @@ export function PendingFeesDownloadModal({
                 <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                      Sample — Year 1 tuition unpaid (no payment)
+                      Year 1 tuition unpaid (no payment)
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Showing {rows.length} of {pendingTotal} student(s) with Year 1 tuition due and no
-                      payment yet
-                      {pendingTotal > sampleLimit ? ` (first ${sampleLimit})` : ''}. Last column shows
-                      Paid / Unpaid amount, or Pending — ₹0 when no fee entry exists.
+                      Showing {rows.length} of {pendingTotal} student(s)
+                      {pagination.pages > 1
+                        ? ` — page ${pagination.page} of ${pagination.pages}`
+                        : ''}
+                      . Last column shows Paid / Unpaid amount, or Pending — ₹0 when no fee entry exists.
                     </p>
                   </div>
                 </div>
@@ -399,66 +519,96 @@ export function PendingFeesDownloadModal({
                     No students found with unpaid tuition fee for the selected filters.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                    <table className="min-w-[1100px] w-full divide-y divide-slate-200 dark:divide-slate-800">
-                      <thead className="bg-slate-50 dark:bg-slate-900/70">
-                        <tr>
-                          <th className={tableThClass}>Student Name</th>
-                          <th className={tableThClass}>Admission No</th>
-                          <th className={tableThClass}>Course</th>
-                          <th className={`${tableThClass} hidden md:table-cell`}>Parent Mobile No</th>
-                          <th className={`${tableThClass} hidden md:table-cell`}>Student Mobile No</th>
-                          <th className={`${tableThClass} text-center`}>Quota</th>
-                          <th className={`${tableThClass} text-right hidden lg:table-cell`}>Payable</th>
-                          <th className={`${tableThClass} text-right hidden lg:table-cell`}>Paid</th>
-                          <th className={`${tableThClass} text-right`}>Year 1 Tuition</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {rows.map((row) => (
-                          <tr key={row.id}>
-                            <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
-                              {row.studentName || '—'}
-                            </td>
-                            <td className={`${tableTdClass} font-semibold text-blue-600 dark:text-blue-400`}>
-                              {row.admissionNumber || '—'}
-                            </td>
-                            <td className={tableTdClass}>
-                              <div className="flex flex-col">
-                                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                  {row.course || '—'}
-                                </span>
-                                {row.branch ? (
-                                  <span className="text-[10px] text-slate-500">{row.branch}</span>
-                                ) : null}
-                              </div>
-                            </td>
-                            <td className={`${tableTdClass} hidden md:table-cell`}>{row.parentMobile || '—'}</td>
-                            <td className={`${tableTdClass} hidden md:table-cell`}>{row.studentMobile || '—'}</td>
-                            <td className={`${tableTdClass} text-center`}>
-                              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                {row.quota || '—'}
-                              </span>
-                            </td>
-                            <td className={`${tableTdClass} hidden text-right lg:table-cell`}>
-                              {formatInr(row.tuitionPayable)}
-                            </td>
-                            <td className={`${tableTdClass} hidden text-right lg:table-cell`}>
-                              {formatInr(row.tuitionPaid)}
-                            </td>
-                            <td className={`${tableTdClass} text-right`}>
-                              <FeeStatusCell
-                                feeStatus={row.feeStatus}
-                                displayLabel={row.displayLabel}
-                                displayAmount={row.displayAmount}
-                                hasFeeEntry={row.hasFeeEntry}
-                              />
-                            </td>
+                  <>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                      <table className="min-w-[1100px] w-full divide-y divide-slate-200 dark:divide-slate-800">
+                        <thead className="bg-slate-50 dark:bg-slate-900/70">
+                          <tr>
+                            <th className={tableThClass}>Student Name</th>
+                            <th className={tableThClass}>Admission No</th>
+                            <th className={tableThClass}>Course</th>
+                            <th className={`${tableThClass} hidden md:table-cell`}>Parent Mobile No</th>
+                            <th className={`${tableThClass} hidden md:table-cell`}>Student Mobile No</th>
+                            <th className={`${tableThClass} text-center`}>Quota</th>
+                            <th className={`${tableThClass} text-right hidden lg:table-cell`}>Payable</th>
+                            <th className={`${tableThClass} text-right hidden lg:table-cell`}>Paid</th>
+                            <th className={`${tableThClass} text-right`}>Year 1 Tuition</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {rows.map((row) => (
+                            <tr key={row.id}>
+                              <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
+                                {row.studentName || '—'}
+                              </td>
+                              <td className={`${tableTdClass} font-semibold text-blue-600 dark:text-blue-400`}>
+                                {row.admissionNumber || '—'}
+                              </td>
+                              <td className={tableTdClass}>
+                                <div className="flex flex-col">
+                                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                    {row.course || '—'}
+                                  </span>
+                                  {row.branch ? (
+                                    <span className="text-[10px] text-slate-500">{row.branch}</span>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className={`${tableTdClass} hidden md:table-cell`}>{row.parentMobile || '—'}</td>
+                              <td className={`${tableTdClass} hidden md:table-cell`}>{row.studentMobile || '—'}</td>
+                              <td className={`${tableTdClass} text-center`}>
+                                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                  {row.quota || '—'}
+                                </span>
+                              </td>
+                              <td className={`${tableTdClass} hidden text-right lg:table-cell`}>
+                                {formatInr(row.tuitionPayable)}
+                              </td>
+                              <td className={`${tableTdClass} hidden text-right lg:table-cell`}>
+                                {formatInr(row.tuitionPaid)}
+                              </td>
+                              <td className={`${tableTdClass} text-right`}>
+                                <FeeStatusCell
+                                  feeStatus={row.feeStatus}
+                                  displayLabel={row.displayLabel}
+                                  displayAmount={row.displayAmount}
+                                  hasFeeEntry={row.hasFeeEntry}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {pagination.pages > 1 && (
+                      <div className="mt-3 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:gap-4 dark:border-slate-700 dark:text-slate-300">
+                        <div className="text-center sm:text-left">
+                          Page {pagination.page} of {pagination.pages}
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 sm:flex-none"
+                            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                            disabled={pagination.page === 1 || pendingFetching}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 sm:flex-none"
+                            onClick={() => setPage((prev) => Math.min(prev + 1, pagination.pages))}
+                            disabled={pagination.page === pagination.pages || pendingFetching}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </>

@@ -79,6 +79,52 @@ const IconX = ({ className = 'w-4 h-4' }: { className?: string }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
+const IconHistory = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+type UserAuditLog = {
+  id: string;
+  targetUserId: string | null;
+  targetUserName: string | null;
+  targetUserEmail: string | null;
+  action: 'create' | 'update' | 'delete';
+  changedBy: string | null;
+  changedByName: string | null;
+  changes: Record<string, { from?: unknown; to?: unknown }>;
+  ipAddress?: string | null;
+  createdAt: string;
+};
+
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  name: 'Name',
+  email: 'Email',
+  mobileNumber: 'Mobile',
+  roleName: 'Role',
+  designation: 'Designation',
+  isActive: 'Active',
+  isManager: 'Manager',
+  managedBy: 'Managed by',
+  permissions: 'Permissions',
+  hrms_id: 'HRMS ID',
+  emp_no: 'Employee No',
+  password: 'Password',
+};
+
+const formatAuditValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+};
 
 const IconFileExport = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>

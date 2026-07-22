@@ -14,7 +14,6 @@ import {
   formatRegistrationFieldLabel,
   isRegistrationImageDataUrl,
 } from '@/lib/registrationFieldsDisplay';
-import { AdmissionReferenceEditor } from '@/components/admission/AdmissionReferenceEditor';
 import { pickStudentPortraitForAdmitCard } from '@/components/joining/PrintableAdmitCard';
 import {
   formatCommunicationAddressLines,
@@ -34,7 +33,6 @@ type Props = {
   collegeName?: string;
   courseName?: string;
   branchName?: string;
-  resolvedReference1: string;
   studentProfileRegistrationEntries: CleanRegistrationFieldEntry[];
   courseQuotaRegistrationEntries: CleanRegistrationFieldEntry[];
   revealedAadhaars: { student: boolean; father: boolean; mother: boolean };
@@ -42,8 +40,6 @@ type Props = {
   maskAadhaar: (value?: string) => string;
   revealedPhones: Record<string, boolean>;
   onTogglePhone: (key: string) => void;
-  canEditReference: boolean;
-  isAdmissionCancelled: boolean;
 };
 
 function MaskedPhoneField({
@@ -249,7 +245,6 @@ export function AdmissionStudentProfileView({
   collegeName,
   courseName,
   branchName,
-  resolvedReference1,
   studentProfileRegistrationEntries,
   courseQuotaRegistrationEntries,
   revealedAadhaars,
@@ -257,8 +252,6 @@ export function AdmissionStudentProfileView({
   maskAadhaar,
   revealedPhones,
   onTogglePhone,
-  canEditReference,
-  isAdmissionCancelled,
 }: Props) {
   const studentPhoto = pickStudentPortraitForAdmitCard(admission);
   const fatherPhoto =
@@ -427,18 +420,6 @@ export function AdmissionStudentProfileView({
                   className={entry.value.length > 40 ? 'sm:col-span-2' : undefined}
                 />
               ))}
-              <div className="sm:col-span-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  Reference 1
-                </p>
-                <div className="mt-1">
-                  <AdmissionReferenceEditor
-                    admissionId={String(admission._id)}
-                    initialReference1={resolvedReference1}
-                    canEdit={canEditReference && !isAdmissionCancelled}
-                  />
-                </div>
-              </div>
             </ProfileDetailCard>
 
             <ProfileDetailCard

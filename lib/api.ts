@@ -1766,6 +1766,8 @@ export const admissionAPI = {
     startDate?: string;
     endDate?: string;
     quota?: string;
+    page?: number;
+    limit?: number;
   }) => {
     const queryParams = new URLSearchParams();
     if (filters) {
@@ -1795,7 +1797,8 @@ export const admissionAPI = {
         importantDocumentsPendingText?: string;
         otherDocumentsPendingText?: string;
       }>;
-      sampleLimit: number;
+      pagination: { page: number; pages: number; limit: number; total: number };
+      sampleLimit?: number;
       stats: {
         totalStudents: number;
         pendingStudents: number;
@@ -1842,6 +1845,8 @@ export const admissionAPI = {
     startDate?: string;
     endDate?: string;
     quota?: string;
+    page?: number;
+    limit?: number;
   }) => {
     const queryParams = new URLSearchParams();
     if (filters) {
@@ -1873,7 +1878,8 @@ export const admissionAPI = {
         feeStatusText: string;
         feeAmountText: string;
       }>;
-      sampleLimit: number;
+      pagination: { page: number; pages: number; limit: number; total: number };
+      sampleLimit?: number;
       stats: {
         totalStudents: number;
         tuitionPaidStudents: number;

@@ -18,7 +18,8 @@ import {
   parseStudentQuotasResponse,
   quotaLabelsFromCatalog,
 } from '@/lib/studentQuotaCatalog';
-import { Download } from 'lucide-react';
+import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
+import { Download, Printer } from 'lucide-react';
 
 type CollegeOption = { id: string; name: string };
 
@@ -43,6 +44,8 @@ type PendingCertificatesDownloadModalProps = {
   deskFilters?: PendingDocumentsDeskFilters;
 };
 
+const PAGE_LIMIT = 20;
+
 const selectClassName =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900';
 
@@ -60,7 +63,9 @@ export function PendingCertificatesDownloadModal({
   const [collegeId, setCollegeId] = useState(initialCollegeId);
   const [courseId, setCourseId] = useState('');
   const [quota, setQuota] = useState('');
+  const [page, setPage] = useState(1);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   useEffect(() => {
@@ -68,6 +73,7 @@ export function PendingCertificatesDownloadModal({
     setCollegeId(initialCollegeId || '');
     setCourseId('');
     setQuota('');
+    setPage(1);
     setHasLoadedOnce(false);
   }, [open, initialCollegeId]);
 
@@ -123,8 +129,10 @@ export function PendingCertificatesDownloadModal({
       startDate: deskFilters?.startDate || undefined,
       endDate: deskFilters?.endDate || undefined,
       quota: quota || undefined,
+      page,
+      limit: PAGE_LIMIT,
     }),
-    [collegeId, courseId, selectedCourseName, quota, deskFilters]
+    [collegeId, courseId, selectedCourseName, quota, deskFilters, page]
   );
 
   const {
@@ -141,11 +149,17 @@ export function PendingCertificatesDownloadModal({
 
   const rows = pendingData?.rows ?? [];
   const stats = pendingData?.stats;
-  const sampleLimit = pendingData?.sampleLimit ?? 10;
+  const pagination = pendingData?.pagination ?? {
+    page: 1,
+    pages: 1,
+    limit: PAGE_LIMIT,
+    total: pendingData?.total ?? 0,
+  };
   const pendingTotal =
-    stats?.otherPendingStudents ?? stats?.pendingStudents ?? pendingData?.total ?? 0;
+    pagination.total ?? stats?.otherPendingStudents ?? stats?.pendingStudents ?? 0;
 
   const handleLoad = async () => {
+    setPage(1);
     if (!hasLoadedOnce) {
       setHasLoadedOnce(true);
       return;
@@ -159,7 +173,8 @@ export function PendingCertificatesDownloadModal({
       if (!hasLoadedOnce) {
         setHasLoadedOnce(true);
       }
-      const blob = await admissionAPI.exportPendingCertificates(filterParams);
+      const { page: _page, limit: _limit, ...exportFilters } = filterParams;
+      const blob = await admissionAPI.exportPendingCertificates(exportFilters);
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
@@ -178,6 +193,100 @@ export function PendingCertificatesDownloadModal({
     }
   };
 
+  const handlePrintPdf = async () => {
+    try {
+      setIsPrinting(true);
+      if (!hasLoadedOnce) {
+        setHasLoadedOnce(true);
+      }
+      const { page: _page, limit: _limit, ...baseFilters } = filterParams;
+      const printData = await admissionAPI.listPendingCertificates({
+        ...baseFilters,
+        page: 1,
+        limit: 500,
+      });
+      const printRows = printData?.rows ?? [];
+      if (printRows.length === 0) {
+        showToast.error('No pending document records to print for the selected filters.');
+        return;
+      }
+
+      const esc = escapePrintHtml;
+      const bodyRows = printRows
+        .map((row, index) => {
+          const importantText = row.importantDocumentsPending?.length
+            ? row.importantDocumentsPending.join(', ')
+            : row.importantDocumentsPendingText || 'Completed';
+          const otherText = row.otherDocumentsPending?.length
+            ? row.otherDocumentsPending.join(', ')
+            : row.otherDocumentsPendingText || row.pendingCertificatesText || '—';
+          return `
+      <tr>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">${index + 1}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;">${esc(row.studentName || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.admissionNumber || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.course || '—')}${row.branch ? `<div style="font-size:10px;color:#64748b;">${esc(row.branch)}</div>` : ''}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.parentMobile || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.studentMobile || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">${esc(row.quota || '—')}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(importantText)}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(otherText)}</td>
+      </tr>`;
+        })
+        .join('');
+
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pending Documents</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; color: #0f172a; }
+    .page-header { text-align: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #0f172a; }
+    .page-header h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .page-header p { margin: 0; font-size: 12px; color: #64748b; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { padding: 8px; border: 1px solid #cbd5e1; background: #f1f5f9; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; text-align: left; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    .footer { margin-top: 12px; font-size: 10px; color: #94a3b8; text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Pending Documents</h1>
+    <p>Other documents pending — ${printRows.length} student(s)</p>
+    <p>Generated ${esc(new Date().toLocaleString('en-IN'))}</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px;text-align:center;">S.No</th>
+        <th>Student Name</th>
+        <th>Admission No</th>
+        <th>Course</th>
+        <th>Parent Mobile</th>
+        <th>Student Mobile</th>
+        <th style="text-align:center;">Quota</th>
+        <th>Important Documents</th>
+        <th>Other Documents Pending</th>
+      </tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+  <div class="footer">Admissions CRM — Pending Documents report</div>
+</body>
+</html>`;
+
+      printHtmlDocument(html, 'Pending Documents');
+    } catch (error) {
+      console.error('Error printing pending documents:', error);
+      showToast.error('Failed to prepare pending documents print. Please try again.');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[98vw] max-w-7xl flex-col overflow-hidden p-0 sm:max-w-7xl">
@@ -185,7 +294,7 @@ export function PendingCertificatesDownloadModal({
           <DialogTitle>Pending documents</DialogTitle>
           <DialogDescription>
             Active admissions only, using the same date and desk filters as the Abstract tab. Stats
-            separate Step 2 Important Documents from Other Documents. Sample list and Excel export
+            separate Step 2 Important Documents from Other Documents. Paginated list and Excel export
             show students with other documents pending (Important Documents status included in export).
           </DialogDescription>
         </DialogHeader>
@@ -201,6 +310,7 @@ export function PendingCertificatesDownloadModal({
                 onChange={(e) => {
                   setCollegeId(e.target.value);
                   setCourseId('');
+                  setPage(1);
                   setHasLoadedOnce(false);
                 }}
                 className={selectClassName}
@@ -221,6 +331,7 @@ export function PendingCertificatesDownloadModal({
                 value={courseId}
                 onChange={(e) => {
                   setCourseId(e.target.value);
+                  setPage(1);
                   setHasLoadedOnce(false);
                 }}
                 className={selectClassName}
@@ -246,6 +357,7 @@ export function PendingCertificatesDownloadModal({
                 value={quota}
                 onChange={(e) => {
                   setQuota(e.target.value);
+                  setPage(1);
                   setHasLoadedOnce(false);
                 }}
                 className={selectClassName}
@@ -272,6 +384,17 @@ export function PendingCertificatesDownloadModal({
             <Button
               type="button"
               size="sm"
+              variant="outline"
+              className="h-[38px] shrink-0 gap-2 whitespace-nowrap"
+              onClick={handlePrintPdf}
+              isLoading={isPrinting}
+            >
+              <Printer className="h-4 w-4" />
+              Print PDF
+            </Button>
+            <Button
+              type="button"
+              size="sm"
               className="h-[38px] shrink-0 gap-2 whitespace-nowrap"
               onClick={handleDownload}
               isLoading={isDownloading}
@@ -286,7 +409,7 @@ export function PendingCertificatesDownloadModal({
           {!hasLoadedOnce ? (
             <p className="py-10 text-center text-sm text-slate-500">
               Select filters and click <span className="font-semibold">Show list</span> to view stats
-              (Important vs Other documents) and a sample of students with other documents still pending.
+              (Important vs Other documents) and students with other documents still pending.
             </p>
           ) : pendingLoading || pendingFetching ? (
             <div className="flex flex-col items-center justify-center py-12">
@@ -353,12 +476,14 @@ export function PendingCertificatesDownloadModal({
                 <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                      Sample — other documents pending
+                      Other documents pending
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Showing {rows.length} of {pendingTotal} student(s) with other documents pending
-                      {pendingTotal > sampleLimit ? ` (first ${sampleLimit})` : ''}. Download XLSX exports
-                      other documents only.
+                      Showing {rows.length} of {pendingTotal} student(s)
+                      {pagination.pages > 1
+                        ? ` — page ${pagination.page} of ${pagination.pages}`
+                        : ''}
+                      . Download XLSX exports other documents only.
                     </p>
                   </div>
                 </div>
@@ -368,72 +493,102 @@ export function PendingCertificatesDownloadModal({
                     No students found with pending other documents for the selected filters.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                    <table className="min-w-[1200px] w-full divide-y divide-slate-200 dark:divide-slate-800">
-                      <thead className="bg-slate-50 dark:bg-slate-900/70">
-                        <tr>
-                          <th className={tableThClass}>Student Name</th>
-                          <th className={tableThClass}>Admission No</th>
-                          <th className={tableThClass}>Course</th>
-                          <th className={tableThClass}>Parent Mobile No</th>
-                          <th className={tableThClass}>Student Mobile No</th>
-                          <th className={`${tableThClass} text-center`}>Quota</th>
-                          <th className={tableThClass}>Important Documents</th>
-                          <th className={tableThClass}>Other Documents Pending</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {rows.map((row) => {
-                          const importantText = row.importantDocumentsPending?.length
-                            ? row.importantDocumentsPending.join(', ')
-                            : row.importantDocumentsPendingText || 'Completed';
-                          const otherText = row.otherDocumentsPending?.length
-                            ? row.otherDocumentsPending.join(', ')
-                            : row.otherDocumentsPendingText || 'Completed';
-                          const importantDone =
-                            !row.importantDocumentsPending?.length &&
-                            (importantText === 'Completed' || !importantText || importantText === '—');
-                          return (
-                            <tr key={row.id}>
-                              <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
-                                {row.studentName || '—'}
-                              </td>
-                              <td className={`${tableTdClass} font-semibold text-blue-600 dark:text-blue-400`}>
-                                {row.admissionNumber || '—'}
-                              </td>
-                              <td className={tableTdClass}>
-                                <div className="flex flex-col">
-                                  <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                    {row.course || '—'}
+                  <>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                      <table className="min-w-[1200px] w-full divide-y divide-slate-200 dark:divide-slate-800">
+                        <thead className="bg-slate-50 dark:bg-slate-900/70">
+                          <tr>
+                            <th className={tableThClass}>Student Name</th>
+                            <th className={tableThClass}>Admission No</th>
+                            <th className={tableThClass}>Course</th>
+                            <th className={tableThClass}>Parent Mobile No</th>
+                            <th className={tableThClass}>Student Mobile No</th>
+                            <th className={`${tableThClass} text-center`}>Quota</th>
+                            <th className={tableThClass}>Important Documents</th>
+                            <th className={tableThClass}>Other Documents Pending</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {rows.map((row) => {
+                            const importantText = row.importantDocumentsPending?.length
+                              ? row.importantDocumentsPending.join(', ')
+                              : row.importantDocumentsPendingText || 'Completed';
+                            const otherText = row.otherDocumentsPending?.length
+                              ? row.otherDocumentsPending.join(', ')
+                              : row.otherDocumentsPendingText || 'Completed';
+                            const importantDone =
+                              !row.importantDocumentsPending?.length &&
+                              (importantText === 'Completed' || !importantText || importantText === '—');
+                            return (
+                              <tr key={row.id}>
+                                <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
+                                  {row.studentName || '—'}
+                                </td>
+                                <td className={`${tableTdClass} font-semibold text-blue-600 dark:text-blue-400`}>
+                                  {row.admissionNumber || '—'}
+                                </td>
+                                <td className={tableTdClass}>
+                                  <div className="flex flex-col">
+                                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                      {row.course || '—'}
+                                    </span>
+                                    {row.branch ? (
+                                      <span className="text-[10px] text-slate-500">{row.branch}</span>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td className={tableTdClass}>{row.parentMobile || '—'}</td>
+                                <td className={tableTdClass}>{row.studentMobile || '—'}</td>
+                                <td className={`${tableTdClass} text-center`}>
+                                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                    {row.quota || '—'}
                                   </span>
-                                  {row.branch ? (
-                                    <span className="text-[10px] text-slate-500">{row.branch}</span>
-                                  ) : null}
-                                </div>
-                              </td>
-                              <td className={tableTdClass}>{row.parentMobile || '—'}</td>
-                              <td className={tableTdClass}>{row.studentMobile || '—'}</td>
-                              <td className={`${tableTdClass} text-center`}>
-                                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                  {row.quota || '—'}
-                                </span>
-                              </td>
-                              <td className={tableTdClass}>
-                                {importantDone || importantText === 'Completed' ? (
-                                  <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                                    Completed
-                                  </span>
-                                ) : (
-                                  importantText
-                                )}
-                              </td>
-                              <td className={tableTdClass}>{otherText}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                </td>
+                                <td className={tableTdClass}>
+                                  {importantDone || importantText === 'Completed' ? (
+                                    <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                      Completed
+                                    </span>
+                                  ) : (
+                                    importantText
+                                  )}
+                                </td>
+                                <td className={tableTdClass}>{otherText}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {pagination.pages > 1 && (
+                      <div className="mt-3 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:gap-4 dark:border-slate-700 dark:text-slate-300">
+                        <div className="text-center sm:text-left">
+                          Page {pagination.page} of {pagination.pages}
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 sm:flex-none"
+                            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                            disabled={pagination.page === 1 || pendingFetching}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 sm:flex-none"
+                            onClick={() => setPage((prev) => Math.min(prev + 1, pagination.pages))}
+                            disabled={pagination.page === pagination.pages || pendingFetching}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </>

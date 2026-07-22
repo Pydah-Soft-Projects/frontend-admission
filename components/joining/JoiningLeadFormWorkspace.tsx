@@ -744,7 +744,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const preferredMobileAutoFilledRef = useRef(false);
   const [status, setStatus] = useState<JoiningStatus>('draft');
   const [applicationWizardStep, setApplicationWizardStep] = useState<AdmissionWorkflowStep>(1);
-  const [step2DocumentsTab, setStep2DocumentsTab] = useState<'important' | 'other'>('important');
   const useJoiningPageWizard = !isPublicEdit;
 
   const [meta, setMeta] = useState<{
@@ -6809,132 +6808,41 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 (useWizard && applicationWizardStep !== 2) || isPublicEdit ? 'hidden' : ''
               )}
             >
-              <ApplicationInfoCard
-                title="Reference"
-                icon={<UserPlus className="h-4 w-4" aria-hidden />}
-                description="Staff or referral contact linked to this lead (saved with Step 2)"
-              >
-                <div className="flex flex-row items-center gap-3">
-                  <div className="w-full max-w-[28rem] shrink-0">
-                    <ReferenceUserSelect
-                      label=""
-                      publicMode={isPublicEdit}
-                      value={reference1}
-                      onChange={setReference1}
-                      disabled={
-                        !canEditReferenceField ||
-                        isUpdatingAdmission ||
-                        isSaving
-                      }
-                      showAddUserButton={
-                        canEditReferenceField &&
-                        !isUpdatingAdmission &&
-                        !isSaving
-                      }
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={handleSaveReference}
-                    disabled={
-                      isSavingReference ||
-                      !canEditReferenceField ||
-                      isUpdatingAdmission ||
-                      isSaving
-                    }
-                    className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
-                  >
-                    {isSavingReference ? 'Saving...' : 'Save'}
-                  </Button>
-                  {referenceFieldReadOnlyReason ? (
-                    <p
-                      className="flex min-w-0 flex-1 items-center rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm leading-snug text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
-                      role="status"
-                    >
-                      {referenceFieldReadOnlyReason}
-                    </p>
-                  ) : null}
-                </div>
-              </ApplicationInfoCard>
               <section
                 className="scroll-mt-24 space-y-6 rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-indigo-50/50 to-white/95 p-6 shadow-lg shadow-indigo-100/30 backdrop-blur dark:border-indigo-900/50 dark:from-indigo-950/25 dark:to-slate-900/70 dark:shadow-none"
               >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div
-                    className="inline-flex w-full rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900/80 sm:w-auto"
-                    role="tablist"
-                    aria-label="Document categories"
-                  >
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={step2DocumentsTab === 'important'}
-                      onClick={() => setStep2DocumentsTab('important')}
-                      className={cn(
-                        'flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition sm:flex-initial sm:text-sm',
-                        step2DocumentsTab === 'important'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
-                      )}
-                    >
+                {/* Important documents */}
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                       Important Documents
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={step2DocumentsTab === 'other'}
-                      onClick={() => setStep2DocumentsTab('other')}
-                      className={cn(
-                        'flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition sm:flex-initial sm:text-sm',
-                        step2DocumentsTab === 'other'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
-                      )}
-                    >
-                      Other Documents
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {step2DocumentsTab === 'important' ? (
-                      <>
-                        <PrintableCertificateChecklist
-                          certificateGuidance={certificateGuidance}
-                          certificateChecklistParsed={certificateChecklistParsed}
-                          programLevel={programLevelTrimmed}
-                          certificationStatus={derivedCertificationStatus}
-                          studentName={formState.studentInfo.name || lead?.name}
-                          fatherName={formState.parents.father.name}
-                          course={formState.courseInfo.course}
-                          branch={formState.courseInfo.branch}
-                          enquiryNumber={lead?.enquiryNumber}
-                        />
-                        {canWriteJoining ? (
-                          <Button
-                            type="button"
-                            variant="primary"
-                            disabled={saveStepTwoMutation.isPending}
-                            onClick={() => saveStepTwoMutation.mutate()}
-                          >
-                            {saveStepTwoMutation.isPending ? 'Saving…' : 'Save documents'}
-                          </Button>
-                        ) : null}
-                      </>
-                    ) : (
-                      <PrintableDocumentChecklist
-                        documentLabels={documentsChecklistForPrint.labels}
-                        documents={documentsChecklistForPrint.documents}
-                        title="Documents Checklist"
-                        studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
-                        enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}
-                        printButtonLabel="Print checklist"
-                        className="shrink-0"
+                    </h3>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <PrintableCertificateChecklist
+                        certificateGuidance={certificateGuidance}
+                        certificateChecklistParsed={certificateChecklistParsed}
+                        programLevel={programLevelTrimmed}
+                        certificationStatus={derivedCertificationStatus}
+                        studentName={formState.studentInfo.name || lead?.name}
+                        fatherName={formState.parents.father.name}
+                        course={formState.courseInfo.course}
+                        branch={formState.courseInfo.branch}
+                        enquiryNumber={lead?.enquiryNumber}
                       />
-                    )}
+                      {canWriteJoining ? (
+                        <Button
+                          type="button"
+                          variant="primary"
+                          disabled={saveStepTwoMutation.isPending}
+                          onClick={() => saveStepTwoMutation.mutate()}
+                        >
+                          {saveStepTwoMutation.isPending ? 'Saving…' : 'Save documents'}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
 
-                {step2DocumentsTab === 'important' ? (
-                  !isPublicEdit && programLevelTrimmed ? (
+                  {!isPublicEdit && programLevelTrimmed ? (
                     <CertificateInformationChecklistBlock
                       variant="admission-step-two"
                       radioNameSuffix="-joining-wizard-step2"
@@ -6951,9 +6859,26 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
                       Select a program level under Course &amp; Quota in Step 1 to load certificate rules.
                     </p>
-                  )
-                ) : (
-                  <div role="tabpanel" className="space-y-4">
+                  )}
+                </div>
+
+                {/* Other documents */}
+                <div className="space-y-4 border-t border-indigo-100 pt-6 dark:border-indigo-900/40">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                      Other Documents
+                    </h3>
+                    <PrintableDocumentChecklist
+                      documentLabels={documentsChecklistForPrint.labels}
+                      documents={documentsChecklistForPrint.documents}
+                      title="Documents Checklist"
+                      studentName={formState.studentInfo.name || (lead as Lead | undefined)?.name || undefined}
+                      enquiryNumber={(lead as Lead | undefined)?.enquiryNumber || undefined}
+                      printButtonLabel="Print checklist"
+                      className="shrink-0"
+                    />
+                  </div>
+                  <div className="space-y-4">
                     <p className="text-sm text-gray-500 dark:text-slate-400">
                       Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
                       Certificate are tracked under{' '}
@@ -7006,7 +6931,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         ))}
                     </div>
                   </div>
-                )}
+                </div>
               </section>
               {renderWizardStepFooter(2)}
             </div>
@@ -7059,6 +6984,54 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 id="joining-post-admission-payments"
                 className="space-y-8"
               >
+              <ApplicationInfoCard
+                title="Reference"
+                icon={<UserPlus className="h-4 w-4" aria-hidden />}
+                description="Staff or referral contact linked to this admission"
+              >
+                <div className="flex flex-row items-center gap-3">
+                  <div className="w-full max-w-[28rem] shrink-0">
+                    <ReferenceUserSelect
+                      label=""
+                      publicMode={isPublicEdit}
+                      value={reference1}
+                      onChange={setReference1}
+                      disabled={
+                        !canEditReferenceField ||
+                        isUpdatingAdmission ||
+                        isSaving
+                      }
+                      showAddUserButton={
+                        canEditReferenceField &&
+                        !isUpdatingAdmission &&
+                        !isSaving
+                      }
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleSaveReference}
+                    disabled={
+                      isSavingReference ||
+                      !canEditReferenceField ||
+                      isUpdatingAdmission ||
+                      isSaving
+                    }
+                    className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
+                  >
+                    {isSavingReference ? 'Saving...' : 'Save'}
+                  </Button>
+                  {referenceFieldReadOnlyReason ? (
+                    <p
+                      className="flex min-w-0 flex-1 items-center rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm leading-snug text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
+                      role="status"
+                    >
+                      {referenceFieldReadOnlyReason}
+                    </p>
+                  ) : null}
+                </div>
+              </ApplicationInfoCard>
+
               {/* Concessions / Revised Fees Builder Section */}
               {status === 'approved' && canWriteJoining && canEditAdmission && (
                 <div className="mt-8 rounded-2xl border border-blue-200 bg-white p-6 shadow-lg dark:border-blue-900/40 dark:bg-slate-900/70">

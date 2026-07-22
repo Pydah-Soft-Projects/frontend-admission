@@ -48,6 +48,7 @@ import {
 } from '@/components/admission/AdmissionStepThreeBusHostelPanel';
 import { AdmissionWorkflowStepButtons } from '@/components/admission/AdmissionWorkflowSteps';
 import { AdmissionStudentProfileView } from '@/components/admission/AdmissionStudentProfileView';
+import { AdmissionReferenceEditor } from '@/components/admission/AdmissionReferenceEditor';
 import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import {
   pickJoiningCourseQuotaRegistrationEntries,
@@ -904,7 +905,6 @@ export default function AdmissionDetailPage() {
           collegeName={collegeName}
           courseName={courseName}
           branchName={branchName}
-          resolvedReference1={resolvedReference1}
           studentProfileRegistrationEntries={studentProfileRegistrationEntries}
           courseQuotaRegistrationEntries={courseQuotaRegistrationEntries}
           revealedAadhaars={revealedAadhaars}
@@ -912,8 +912,6 @@ export default function AdmissionDetailPage() {
           maskAadhaar={maskAadhaar}
           revealedPhones={revealedPhones}
           onTogglePhone={togglePhone}
-          canEditReference={canEditReference}
-          isAdmissionCancelled={isAdmissionCancelled}
         />
 
         {admitCardPrintStudent?.courseId ? (
@@ -940,7 +938,7 @@ export default function AdmissionDetailPage() {
                     Step 2
                   </p>
                   <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    Payments &amp; documents
+                    Documents
                   </h2>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -997,6 +995,22 @@ export default function AdmissionDetailPage() {
               </h2>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Reference
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Staff or referral contact linked to this admission.
+                </p>
+                <div className="mt-3 max-w-xl">
+                  <AdmissionReferenceEditor
+                    admissionId={String(admission._id)}
+                    initialReference1={resolvedReference1}
+                    canEdit={canEditReference && !isAdmissionCancelled}
+                  />
+                </div>
+              </div>
+
               <FeeStructureSection
                 title="Fee configuration (Fee Management database)"
                 course={feeCourseInfo.course}
