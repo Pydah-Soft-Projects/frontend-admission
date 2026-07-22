@@ -247,7 +247,7 @@ export function AdmissionStepThreeBusHostelPanel({
             : value.accommodationType === 'none'
               ? 'none'
               : null;
-  const [activeTab, setActiveTab] = useState<AccommodationTab>(selectedTab || 'bus');
+  const [activeTab, setActiveTab] = useState<AccommodationTab>(selectedTab || 'none');
   const tabAutoInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -358,24 +358,24 @@ export function AdmissionStepThreeBusHostelPanel({
       return;
     }
 
-    let inferredTab: AccommodationTab = 'bus';
+    let inferredTab: AccommodationTab = 'none';
     if (isActiveHostelRequest) {
       inferredTab = 'hostel';
     } else if (isActiveTransportRequest) {
+      inferredTab = 'bus';
+    } else if (value.hostelId != null && String(value.hostelId).trim() !== '') {
+      inferredTab = 'hostel';
+    } else if (value.routeId != null && String(value.routeId).trim() !== '') {
+      inferredTab = 'bus';
+    } else if (value.accommodationType === 'hostel') {
+      inferredTab = 'hostel';
+    } else if (value.accommodationType === 'bus') {
       inferredTab = 'bus';
     } else if (value.accommodationType === 'none') {
       inferredTab = 'none';
     }
 
     setActiveTab(inferredTab);
-
-    if (canEdit && onChange && !value.accommodationType && inferredTab !== 'none') {
-      onChange({
-        ...value,
-        accommodationType: inferredTab,
-        ...(effectiveAcademicYear ? { academicYear: effectiveAcademicYear } : {}),
-      });
-    }
   }, [
     admissionNumber,
     canEdit,
@@ -678,6 +678,19 @@ export function AdmissionStepThreeBusHostelPanel({
   const stages = routeDetail?.stages || [];
   const buses = routeDetail?.buses || [];
   const selectedBusNumber = String(value.busId || value.busNumber || '').trim();
+  const selectedBusObj = buses.find((b) => String(b.busNumber || '').trim() === selectedBusNumber) || buses[0];
+  const selectedBusSeatsAvailable = selectedBusObj?.seatsAvailable ?? routeDetail?.seatsAvailable ?? 0;
+  const selectedBusCapacity = selectedBusObj?.capacity ?? routeDetail?.capacity ?? 40;
+  const selectedBusSeatsFilled = selectedBusObj?.seatsFilled ?? routeDetail?.seatsFilled ?? 0;
+  const isBusFull = Boolean(selectedRouteId && routeDetail && selectedBusSeatsAvailable <= 0);
+
+  useEffect(() => {
+    if (!canEdit || !onChange || displayTab !== 'bus') return;
+    if (!selectedRouteId || !routeDetail) return;
+    if (value.busSeatsAvailable !== selectedBusSeatsAvailable) {
+      onChange({ ...value, busSeatsAvailable: selectedBusSeatsAvailable });
+    }
+  }, [displayTab, canEdit, onChange, selectedRouteId, routeDetail, selectedBusSeatsAvailable, value]);
 
   useEffect(() => {
     if (!canEdit || !onChange || displayTab !== 'bus') return;
@@ -928,7 +941,7 @@ export function AdmissionStepThreeBusHostelPanel({
                 </option>
                 {routes.map((route) => (
                   <option key={route.routeId} value={route.routeId}>
-                    {route.routeName} ({route.routeId})
+                    {route.routeName} ({route.routeId}){route.seatsAvailable != null ? ` — ${route.seatsAvailable} seats available` : ''}
                   </option>
                 ))}
               </select>
@@ -946,7 +959,7 @@ export function AdmissionStepThreeBusHostelPanel({
               <select
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 value={value.stageId || ''}
-                disabled={!canEdit || !selectedRouteId || isLoadingRouteDetail || stages.length === 0 || busSelectionLocked}
+                disabled={!canEdit || !selectedRouteId || isLoadingRouteDetail || stages.length === 0 || busSelectionLocked || isBusFull}
                 onChange={(event) => handleStageChange(event.target.value)}
               >
                 <option value="">
@@ -954,9 +967,11 @@ export function AdmissionStepThreeBusHostelPanel({
                     ? 'Select a route first'
                     : isLoadingRouteDetail
                       ? 'Loading stages…'
-                      : stages.length === 0
-                        ? 'No stages on this route'
-                        : 'Select boarding stage'}
+                      : isBusFull
+                        ? 'No seats available on this route'
+                        : stages.length === 0
+                          ? 'No stages on this route'
+                          : 'Select boarding stage'}
                 </option>
                 {stages.map((stage) => (
                   <option key={stage._id} value={stage._id}>
@@ -972,8 +987,25 @@ export function AdmissionStepThreeBusHostelPanel({
             </div>
           </div>
 
+          {isBusFull ? (
+            <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-rose-900 shadow-sm dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+              <div className="flex items-start gap-3">
+                <span className="text-xl">🛑</span>
+                <div>
+                  <h4 className="font-bold text-sm text-rose-900 dark:text-rose-100">
+                    No Available Bus Seats (0 / {selectedBusCapacity} Seats Remaining)
+                  </h4>
+                  <p className="mt-1 text-xs text-rose-800 dark:text-rose-200">
+                    This bus route ({routeDetail?.routeName}{selectedBusObj?.busNumber ? ` · Bus ${selectedBusObj.busNumber}` : ''}) currently has <strong>0 available seats</strong> ({selectedBusSeatsFilled} of {selectedBusCapacity} seats filled).
+                    Request raising is stopped from here for this route due to zero availability. Please select a different bus route with available seats.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {selectedRouteId && routeDetail ? (
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Route
@@ -1015,6 +1047,26 @@ export function AdmissionStepThreeBusHostelPanel({
                   </p>
                 )}
               </div>
+
+              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Bus seat availability
+                </p>
+                <p className={cn(
+                  "mt-1 text-lg font-bold",
+                  selectedBusSeatsAvailable === 0
+                    ? "text-rose-600 dark:text-rose-400"
+                    : selectedBusSeatsAvailable <= 5
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-emerald-700 dark:text-emerald-300"
+                )}>
+                  {selectedBusSeatsAvailable} Seats Available
+                </p>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  {selectedBusSeatsFilled} / {selectedBusCapacity} filled from Transport App
+                </p>
+              </div>
+
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Selected stage fee

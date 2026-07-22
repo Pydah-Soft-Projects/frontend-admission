@@ -1351,6 +1351,7 @@ export const joiningAPI = {
     leadId: string,
     data: {
       registrationFormData?: Record<string, unknown>;
+      transportDetails?: unknown;
       studentFeeDetails?: unknown;
       documents?: Record<string, unknown>;
     }

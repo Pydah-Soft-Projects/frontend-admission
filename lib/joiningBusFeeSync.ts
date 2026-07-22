@@ -158,8 +158,11 @@ export function isAccommodationChoiceLocked(transport: JoiningTransportDetails):
   return false;
 }
 
-/** Step 3 can advance when accommodation is explicitly none or a fee-bearing choice is complete. */
+/** Step 3 can advance when accommodation is explicitly none or a fee-bearing choice is complete (and bus has available seats). */
 export function canProceedFromAccommodationStep(transport: JoiningTransportDetails): boolean {
+  if (transport.accommodationType === 'bus' && transport.busSeatsAvailable === 0) {
+    return false;
+  }
   return isAccommodationChoiceLocked(transport);
 }
 

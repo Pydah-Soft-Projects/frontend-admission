@@ -2783,18 +2783,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const pendingFeeRequest = pendingFeeRequestQuery.data;
 
   useEffect(() => {
-    const joiningTransport =
-      joiningRecord?.registrationFormData && typeof joiningRecord.registrationFormData === 'object'
-        ? (joiningRecord.registrationFormData as Record<string, unknown>).transport_details
+    const rawJoiningType = (joiningRecord?.registrationFormData as Record<string, unknown>)?.transport_details as Record<string, unknown> | undefined;
+    const rawAdmissionType = (admissionRecord?.registrationFormData as Record<string, unknown>)?.transport_details as Record<string, unknown> | undefined;
+    const accommodationTypeOnly = rawJoiningType?.accommodationType
+      ? { accommodationType: rawJoiningType.accommodationType as any, academicYear: rawJoiningType.academicYear as any }
+      : rawAdmissionType?.accommodationType
+        ? { accommodationType: rawAdmissionType.accommodationType as any, academicYear: rawAdmissionType.academicYear as any }
         : undefined;
-    const admissionTransport =
-      admissionRecord?.registrationFormData && typeof admissionRecord.registrationFormData === 'object'
-        ? (admissionRecord.registrationFormData as Record<string, unknown>).transport_details
-        : undefined;
+
     const merged = mergeJoiningTransportDetails(
       pendingFeeRequest?.transportDetails,
-      joiningTransport,
-      admissionTransport
+      accommodationTypeOnly
     );
     setTransportDetails((prev) => {
       const prevScore = joiningTransportDetailsCompletenessScore(prev);
@@ -2808,10 +2807,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     pendingFeeRequest?.id,
     joiningRecord?._id,
     joiningRecord?.updatedAt,
-    joiningRecord?.registrationFormData,
     admissionRecord?._id,
     admissionRecord?.updatedAt,
-    admissionRecord?.registrationFormData,
   ]);
 
   const step3AccommodationReadOnly =
@@ -3745,7 +3742,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const joiningRegistrationPatch = useMemo(
     () => ({
-      transport_details: transportDetails,
+      transport_details: transportDetails?.accommodationType
+        ? {
+            accommodationType: transportDetails.accommodationType,
+            ...(transportDetails.academicYear ? { academicYear: transportDetails.academicYear } : {}),
+          }
+        : {},
       program_total_years: programTotalYears,
       ...(stepOneAcademicYear
         ? { academic_year: stepOneAcademicYear, academicYear: stepOneAcademicYear }
@@ -5142,6 +5144,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
       return joiningAPI.patchStepTwo(workflowJoiningId, {
         registrationFormData: joiningRegistrationPatch,
+        transportDetails,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
           lines: filterEmptyFeeHeads(studentFeeDetails.lines || []),
@@ -5223,6 +5226,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             ...registrationFormData,
             ...joiningRegistrationPatch,
           },
+          transportDetails,
           studentFeeDetails: {
             batch: studentFeeDetails.batch,
             lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
@@ -5236,6 +5240,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
       return joiningAPI.saveDraft(leadId as string, {
         ...payloadForSave,
+        transportDetails,
         ...(joiningRecord?._id ? { _id: joiningRecord._id } : {}),
       });
     },
