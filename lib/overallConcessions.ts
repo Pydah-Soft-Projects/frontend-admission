@@ -184,7 +184,8 @@ export function overallConcessionLinesToBuilderLines<
     if (!concessionType) continue;
 
     const feeHeadId = line.feeHeadId ? String(line.feeHeadId).trim() : '';
-    const feeHeadCode = line.feeHeadCode ? String(line.feeHeadCode).trim() : '';
+    const rawCode = line.feeHeadCode ? String(line.feeHeadCode).trim() : '';
+    const feeHeadCode = String(rawCode).trim().toUpperCase() === 'OTH02' ? 'OTH1' : rawCode;
     const year = Number(line.studentYear) > 0 ? Number(line.studentYear) : 1;
 
     const matchingCatalog = catalogRows.find(

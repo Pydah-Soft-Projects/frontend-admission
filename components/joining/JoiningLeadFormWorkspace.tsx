@@ -246,6 +246,19 @@ const filterEmptyFeeHeads = (lines: JoiningStudentFeeLineOverride[]): JoiningStu
   return validLines;
 };
 
+const mapRevisedFeeLinesWithOth1 = (lines: JoiningStudentFeeLineOverride[]): JoiningStudentFeeLineOverride[] => {
+  return (lines || []).map(line => {
+    const code = String(line.feeHeadCode || '').trim().toUpperCase();
+    if (code === 'OTH02') {
+      return {
+        ...line,
+        feeHeadCode: 'OTH1',
+      };
+    }
+    return line;
+  });
+};
+
 const formatDateTime = (value?: string) => {
   if (!value) return '—';
   const parsed = new Date(value);
@@ -699,7 +712,11 @@ const normalizeStudentFeeDetailsFromRecord = (
                 ? line.concessionType
                 : undefined,
             feeHeadId: line.feeHeadId ? String(line.feeHeadId).trim() : undefined,
-            feeHeadCode: line.feeHeadCode ? String(line.feeHeadCode).trim() : undefined,
+            feeHeadCode: line.feeHeadCode
+              ? String(line.feeHeadCode).trim().toUpperCase() === 'OTH02'
+                ? 'OTH1'
+                : String(line.feeHeadCode).trim()
+              : undefined,
             feeHeadName: line.feeHeadName ? String(line.feeHeadName).trim() : undefined,
             studentYear:
               line.studentYear != null && Number.isFinite(Number(line.studentYear))
@@ -4659,10 +4676,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }) => {
       const headId = String(item.feeHead || item.feeHeadId || '').trim();
       if (headId && !map.has(headId)) {
+        const rawCode = item.feeHeadCode || '';
+        const finalCode = String(rawCode).trim().toUpperCase() === 'OTH02' ? 'OTH1' : rawCode;
+        
+        let finalName = item.feeHeadName || finalCode || headId;
+        if (finalCode === 'TUI01') finalName = 'Tuition Fee';
+        else if (finalCode === 'OTH1') finalName = 'SPECIAL FEE';
+        else if (finalCode === 'TRN01') finalName = 'Transport Fee';
+
+        const masterHead = feeHeadRows.find(h => 
+          String(h.code || '').trim().toUpperCase() === finalCode.toUpperCase()
+        ) || feeHeadRows.find(h => 
+          String(h._id || h.id) === headId
+        );
+        if (masterHead) {
+          finalName = masterHead.name;
+        }
+
         map.set(headId, {
           id: headId,
-          name: item.feeHeadName || item.feeHeadCode || headId,
-          code: item.feeHeadCode || '',
+          name: finalName,
+          code: finalCode,
         });
       }
     };
@@ -4679,6 +4713,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
     const sortedList = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
     return sortedList.filter(h =>
+      h.code === 'TUI01' || h.code === 'OTH1' || h.code === 'TRN01' ||
       /tuition|tution/i.test(h.name) ||
       /other/i.test(h.name) ||
       /transport|bus/i.test(h.name)
@@ -4694,9 +4729,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const map = new Map<string, { id: string; name: string; code: string }>();
 
     // Pre-populate with our 3 primary fee heads by default if they exist
-    const tutionHead = allUniqueFeeHeads.find(h => /tuition|tution/i.test(h.name));
-    const othersHead = allUniqueFeeHeads.find(h => /other/i.test(h.name));
-    const transportHead = allUniqueFeeHeads.find(h => /transport|bus/i.test(h.name));
+    const tutionHead = allUniqueFeeHeads.find(h => h.code === 'TUI01') || allUniqueFeeHeads.find(h => /tuition|tution/i.test(h.name));
+    const othersHead = allUniqueFeeHeads.find(h => h.code === 'OTH1') || allUniqueFeeHeads.find(h => /other/i.test(h.name));
+    const transportHead = allUniqueFeeHeads.find(h => h.code === 'TRN01') || allUniqueFeeHeads.find(h => /transport|bus/i.test(h.name));
 
     if (tutionHead) map.set(tutionHead.id, tutionHead);
     if (othersHead) map.set(othersHead.id, othersHead);
@@ -4719,6 +4754,28 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         }
       }
 
+      if (feeHeadCode && String(feeHeadCode).trim().toUpperCase() === 'OTH02') {
+        feeHeadCode = 'OTH1';
+      }
+
+      if (feeHeadCode === 'TUI01') feeHeadName = 'Tuition Fee';
+      else if (feeHeadCode === 'OTH1') feeHeadName = 'SPECIAL FEE';
+      else if (feeHeadCode === 'TRN01') feeHeadName = 'Transport Fee';
+
+      // Resolve the master fee head name from allUniqueFeeHeads using code or ID
+      if (feeHeadCode) {
+        const masterHead = allUniqueFeeHeads.find(h => h.code === feeHeadCode);
+        if (masterHead) {
+          feeHeadName = masterHead.name;
+        }
+      } else if (feeHeadId) {
+        const masterHead = allUniqueFeeHeads.find(h => h.id === feeHeadId);
+        if (masterHead) {
+          feeHeadName = masterHead.name;
+          feeHeadCode = masterHead.code;
+        }
+      }
+
       if (feeHeadId && !map.has(feeHeadId)) {
         map.set(feeHeadId, {
           id: feeHeadId,
@@ -4737,6 +4794,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
 
     return Array.from(map.values()).filter(h =>
+      h.code === 'TUI01' || h.code === 'OTH1' || h.code === 'TRN01' ||
       /tuition|tution/i.test(h.name) ||
       /other/i.test(h.name) ||
       /transport|bus/i.test(h.name)
@@ -5147,7 +5205,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         transportDetails,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
-          lines: filterEmptyFeeHeads(studentFeeDetails.lines || []),
+          lines: filterEmptyFeeHeads(mapRevisedFeeLinesWithOth1(studentFeeDetails.lines || [])),
         },
       });
     },
@@ -5183,7 +5241,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         joiningId,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
-          lines: filterEmptyFeeHeads(studentFeeDetails.lines || []),
+          lines: filterEmptyFeeHeads(mapRevisedFeeLinesWithOth1(studentFeeDetails.lines || [])),
         },
         registrationFormData: {
           transport_details: transportDetails,
@@ -5229,7 +5287,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           transportDetails,
           studentFeeDetails: {
             batch: studentFeeDetails.batch,
-            lines: filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
+            lines: filterPersistableBuilderConcessionLines(mapRevisedFeeLinesWithOth1(studentFeeDetails.lines || [])),
           },
           documents: serializeJoiningDocumentsForApi(formState.documents),
         });
