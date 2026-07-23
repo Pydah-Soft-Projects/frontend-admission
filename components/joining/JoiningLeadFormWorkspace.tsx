@@ -4676,27 +4676,35 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }) => {
       const headId = String(item.feeHead || item.feeHeadId || '').trim();
       if (headId && !map.has(headId)) {
-        const rawCode = item.feeHeadCode || '';
-        const finalCode = String(rawCode).trim().toUpperCase() === 'OTH02' ? 'OTH1' : rawCode;
+        const rawCode = String(item.feeHeadCode || '').trim();
+        const normalizedCode = rawCode.toUpperCase();
+        let finalCodeValue = normalizedCode === 'OTH02' ? 'OTH1' : normalizedCode;
         
-        let finalName = item.feeHeadName || finalCode || headId;
-        if (finalCode === 'TUI01') finalName = 'Tuition Fee';
-        else if (finalCode === 'OTH1') finalName = 'SPECIAL FEE';
-        else if (finalCode === 'TRN01') finalName = 'Transport Fee';
+        let finalName = item.feeHeadName || finalCodeValue || headId;
+        if (finalCodeValue === 'TUI01') finalName = 'Tuition Fee';
+        else if (finalCodeValue === 'OTH1') finalName = 'SPECIAL FEE';
+        else if (finalCodeValue === 'TRN01') finalName = 'Transport Fee';
 
         const masterHead = feeHeadRows.find(h => 
-          String(h.code || '').trim().toUpperCase() === finalCode.toUpperCase()
+          String(h.code || '').trim().toUpperCase() === finalCodeValue.toUpperCase()
         ) || feeHeadRows.find(h => 
           String(h._id || h.id) === headId
         );
         if (masterHead) {
+          if (!finalCodeValue) {
+            finalCodeValue = String(masterHead.code || '').trim().toUpperCase();
+          }
           finalName = masterHead.name;
         }
+
+        if (finalCodeValue === 'TUI01') finalName = 'Tuition Fee';
+        else if (finalCodeValue === 'OTH1') finalName = 'SPECIAL FEE';
+        else if (finalCodeValue === 'TRN01') finalName = 'Transport Fee';
 
         map.set(headId, {
           id: headId,
           name: finalName,
-          code: finalCode,
+          code: finalCodeValue,
         });
       }
     };
@@ -4754,8 +4762,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         }
       }
 
-      if (feeHeadCode && String(feeHeadCode).trim().toUpperCase() === 'OTH02') {
-        feeHeadCode = 'OTH1';
+      if (feeHeadCode) {
+        feeHeadCode = String(feeHeadCode).trim().toUpperCase();
+        if (feeHeadCode === 'OTH02') {
+          feeHeadCode = 'OTH1';
+        }
       }
 
       if (feeHeadCode === 'TUI01') feeHeadName = 'Tuition Fee';
@@ -4775,6 +4786,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           feeHeadCode = masterHead.code;
         }
       }
+
+      if (feeHeadCode === 'TUI01') feeHeadName = 'Tuition Fee';
+      else if (feeHeadCode === 'OTH1') feeHeadName = 'SPECIAL FEE';
+      else if (feeHeadCode === 'TRN01') feeHeadName = 'Transport Fee';
 
       if (feeHeadId && !map.has(feeHeadId)) {
         map.set(feeHeadId, {

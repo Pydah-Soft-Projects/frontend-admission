@@ -134,6 +134,10 @@ export function classifyPrintFeeColumn(row: FeeStructure): PrintFeeColumn {
   const desc = String(row.feeHeadDescription || '').trim().toLowerCase();
   const blob = `${code} ${name} ${desc}`;
 
+  if (code === 'OTH1') {
+    return 'other';
+  }
+
   if (
     code === 'TRN01' ||
     /\btransport\b/.test(blob) ||
@@ -417,21 +421,37 @@ export function buildPrintFeeStructureDetailedTable(
 }
 
 export function courseCatalogFromCourseList(
-  courseList: Array<Course & { branches?: Array<{ _id: string; totalYears?: number | null }> }>
+  courseList: Array<Course & { branches?: Array<{ _id: string; totalYears?: number | null; name?: string }> }>
 ): CoursePaymentSettings[] {
   return courseList.map((course) => ({
     course: {
       _id: String(course._id),
       name: course.name,
+      code: course.code,
+      description: course.description,
+      collegeId: course.collegeId,
+      level: course.level,
       totalYears: course.totalYears ?? null,
+      isActive: course.isActive ?? true,
+      createdAt: String(course.createdAt ?? ''),
+      updatedAt: String(course.updatedAt ?? ''),
     },
     branches: (course.branches || []).map((branch) => ({
       _id: String(branch._id),
-      name: String((branch as { name?: string }).name ?? ''),
+      courseId: String(course._id),
+      name: String(branch.name ?? ''),
+      code: undefined,
+      description: undefined,
       totalYears: branch.totalYears ?? null,
+      isActive: true,
+      createdAt: '',
+      updatedAt: '',
     })),
-    payment: { defaultFee: null, branchFees: [] },
-  }));
+    payment: {
+      defaultFee: null,
+      branchFees: [],
+    },
+  })) as CoursePaymentSettings[];
 }
 
 export function unwrapFeeStructureListPayload(payload: unknown): FeeStructure[] {
