@@ -845,6 +845,18 @@ const CompletedAdmissionsPage = () => {
     },
   });
 
+  const sendDocumentSmsMutation = useMutation({
+    mutationFn: async (admissionId: string) => {
+      return admissionAPI.sendDocumentNotificationSms(admissionId);
+    },
+    onSuccess: () => {
+      showToast.success('Pending documents SMS sent successfully');
+    },
+    onError: (error: ApiError) => {
+      showToast.error(error.response?.data?.message || 'Failed to send SMS');
+    },
+  });
+
   const openCancelDialog = (record: Admission) => {
     setCancelTarget(record);
     setCancelForm({ reason: '', approvedBy: '' });
@@ -1583,9 +1595,20 @@ const CompletedAdmissionsPage = () => {
             </div>
           )}
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setStudentInfoViewRecord(null)}>
-              Close
-            </Button>
+            {studentInfoViewRecord?._id && (
+              <Button
+                type="button"
+                className="w-full gap-2 sm:w-auto"
+                isLoading={sendDocumentSmsMutation.isPending}
+                onClick={() => {
+                  if (studentInfoViewRecord?._id) {
+                    sendDocumentSmsMutation.mutate(studentInfoViewRecord._id);
+                  }
+                }}
+              >
+                Send Pending Documents SMS
+              </Button>
+            )}
             {canEditReference &&
             studentInfoViewRecord &&
             studentInfoViewRecord.status !== ADMISSION_CANCELLED_STATUS ? (
