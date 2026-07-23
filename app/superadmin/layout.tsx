@@ -92,7 +92,6 @@ const buildFullAccessPermissions = (): Record<PermissionModuleKey, ModulePermiss
             editAdmission: true,
             approveFeeRequest: true,
             admissionTabAbstract: true,
-            admissionTabDetailed: true,
             admissionTabStudentInfo: true,
             admissionTabReference: true,
             admissionTabSource: true,

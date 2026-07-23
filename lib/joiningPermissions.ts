@@ -9,7 +9,6 @@ export type JoiningPermissionExtras = Pick<
 
 export type AdmissionTabKey =
   | 'abstract'
-  | 'detailed'
   | 'student-info'
   | 'reference-list'
   | 'source-list'
@@ -18,7 +17,6 @@ export type AdmissionTabKey =
 /** Labels match the Admissions page (`/superadmin/joining/completed`) tab bar. */
 export const ADMISSION_PAGE_TABS: { key: AdmissionTabKey; label: string }[] = [
   { key: 'abstract', label: 'Abstract' },
-  { key: 'detailed', label: 'Detailed' },
   { key: 'student-info', label: 'Student Info' },
   { key: 'reference-list', label: 'Reference' },
   { key: 'source-list', label: 'Source' },
@@ -27,7 +25,6 @@ export const ADMISSION_PAGE_TABS: { key: AdmissionTabKey; label: string }[] = [
 
 const ADMISSION_TAB_FLAG_KEYS = {
   abstract: 'admissionTabAbstract',
-  detailed: 'admissionTabDetailed',
   'student-info': 'admissionTabStudentInfo',
   'reference-list': 'admissionTabReference',
   'source-list': 'admissionTabSource',
@@ -37,7 +34,6 @@ const ADMISSION_TAB_FLAG_KEYS = {
 export type AdmissionTabPermissionExtras = Pick<
   ModulePermission,
   | 'admissionTabAbstract'
-  | 'admissionTabDetailed'
   | 'admissionTabStudentInfo'
   | 'admissionTabReference'
   | 'admissionTabSource'
@@ -61,7 +57,6 @@ export function defaultJoiningPermissionExtras(): JoiningPermissionExtras {
 export function defaultAdmissionTabExtras(): AdmissionTabPermissionExtras {
   return {
     admissionTabAbstract: false,
-    admissionTabDetailed: false,
     admissionTabStudentInfo: false,
     admissionTabReference: false,
     admissionTabSource: false,
@@ -98,7 +93,6 @@ export function admissionTabsFromStored(entry?: ModulePermission): AdmissionTabP
   if (isLegacyAdmissionTabs(entry)) {
     return {
       admissionTabAbstract: true,
-      admissionTabDetailed: true,
       admissionTabStudentInfo: true,
       admissionTabReference: true,
       admissionTabSource: true,
@@ -107,7 +101,6 @@ export function admissionTabsFromStored(entry?: ModulePermission): AdmissionTabP
   }
   return {
     admissionTabAbstract: Boolean(entry.admissionTabAbstract),
-    admissionTabDetailed: Boolean(entry.admissionTabDetailed),
     admissionTabStudentInfo: Boolean(entry.admissionTabStudentInfo),
     admissionTabReference: Boolean(entry.admissionTabReference),
     admissionTabSource: Boolean(entry.admissionTabSource),
@@ -125,7 +118,6 @@ export function enabledAdmissionTabLabels(entry?: ModulePermission): string[] {
 function admissionTabFlagsForSave(value: ModulePermission): AdmissionTabPermissionExtras {
   return {
     admissionTabAbstract: Boolean(value.admissionTabAbstract),
-    admissionTabDetailed: Boolean(value.admissionTabDetailed),
     admissionTabStudentInfo: Boolean(value.admissionTabStudentInfo),
     admissionTabReference: Boolean(value.admissionTabReference),
     admissionTabSource: Boolean(value.admissionTabSource),

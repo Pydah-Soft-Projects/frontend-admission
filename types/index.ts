@@ -16,7 +16,6 @@ export interface ModulePermission {
   allowedColleges?: string[];
   /** Admissions page (`/joining/completed`) tab access (requires joining module access). */
   admissionTabAbstract?: boolean;
-  admissionTabDetailed?: boolean;
   admissionTabStudentInfo?: boolean;
   admissionTabReference?: boolean;
   admissionTabSource?: boolean;

@@ -995,21 +995,23 @@ export default function AdmissionDetailPage() {
               </h2>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-              <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Reference
-                </h3>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Staff or referral contact linked to this admission.
-                </p>
-                <div className="mt-3 max-w-xl">
-                  <AdmissionReferenceEditor
-                    admissionId={String(admission._id)}
-                    initialReference1={resolvedReference1}
-                    canEdit={canEditReference && !isAdmissionCancelled}
-                  />
+              {canEditReference && !isAdmissionCancelled ? (
+                <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Reference
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Staff or referral contact linked to this admission.
+                  </p>
+                  <div className="mt-3 max-w-xl">
+                    <AdmissionReferenceEditor
+                      admissionId={String(admission._id)}
+                      initialReference1={resolvedReference1}
+                      canEdit={canEditReference && !isAdmissionCancelled}
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <FeeStructureSection
                 title="Fee configuration (Fee Management database)"

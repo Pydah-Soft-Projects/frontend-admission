@@ -188,7 +188,6 @@ export const useAdmissionTabPermissions = () => {
   const base = useModulePermission(JOINING_PERMISSION_KEY);
   const allTabs: AdmissionTabKey[] = [
     'abstract',
-    'detailed',
     'student-info',
     'reference-list',
     'source-list',

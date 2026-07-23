@@ -113,8 +113,8 @@ export function JoiningModulePermissionExtras({ moduleState, collegeOptions, onC
           Admissions page tabs
         </p>
         <p className="mb-2 text-[11px] text-slate-600 dark:text-slate-400">
-          Choose which tabs appear on the Joining Desk → Admissions page (Abstract, Detailed, Student
-          Info, and others).
+          Choose which tabs appear on the Joining Desk → Admissions page (Abstract, Student
+          Info, Reference, Source, and Date-wise).
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {ADMISSION_PAGE_TABS.map(({ key, label }) => {
