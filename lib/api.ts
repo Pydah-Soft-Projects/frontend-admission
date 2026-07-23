@@ -1731,6 +1731,10 @@ export const admissionAPI = {
     const response = await api.patch(`/admissions/id/${admissionId}/reference`, { reference1 });
     return response.data;
   },
+  patchRemarksById: async (admissionId: string, remarks: string) => {
+    const response = await api.patch(`/admissions/id/${admissionId}/remarks`, { remarks });
+    return response.data;
+  },
   exportAdmissions: async (filters?: {
     search?: string;
     status?: string;
@@ -2862,5 +2866,4 @@ export const printAPI = {
 };
 
 export default api;
-
 

@@ -883,6 +883,7 @@ export interface Admission {
   referenceName?: string;
   /** Lead source / quota label on list API. */
   leadSource?: string;
+  remarks?: string;
 }
 
 export interface AdmissionListResponse {

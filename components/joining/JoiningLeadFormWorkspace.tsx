@@ -770,6 +770,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     admissionNumber?: string;
   }>({});
   const [admissionRecord, setAdmissionRecord] = useState<Admission | null>(null);
+  const [admissionRemarks, setAdmissionRemarks] = useState('');
   const [hasAppliedAdmissionSnapshot, setHasAppliedAdmissionSnapshot] = useState(false);
 
   const advanceApplicationWizard = useCallback(
@@ -802,6 +803,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
   const [reference1, setReference1] = useState('');
   const [isSavingReference, setIsSavingReference] = useState(false);
+  const [isSavingRemarks, setIsSavingRemarks] = useState(false);
   /** Latest workflow-fixed registration year/semester (B.Tech vs others); synced after course catalog context resolves. */
   const joiningFixedRegistrationRef = useRef<JoiningRegistrationFixedGate>(
     buildJoiningRegistrationFixedGate({ courseName: '', courseCode: '' })
@@ -2872,6 +2874,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const applyAdmissionRecordToWorkspace = useCallback(
     (record: Admission) => {
       setAdmissionRecord(record);
+      setAdmissionRemarks(record.remarks || '');
       setMeta((prev) => ({
         ...prev,
         admissionNumber: record.admissionNumber || prev.admissionNumber,
@@ -3999,6 +4002,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       showToast.error(msg);
     } finally {
       setIsSavingReference(false);
+    }
+  };
+
+  const handleSaveRemarks = async () => {
+    if (!leadId || !admissionRecord?._id) return;
+    setIsSavingRemarks(true);
+    try {
+      await admissionAPI.patchRemarksById(String(admissionRecord._id), admissionRemarks);
+      showToast.success('Admission remarks updated successfully');
+      void queryClient.invalidateQueries({ queryKey: ['joining', leadId] });
+      void queryClient.invalidateQueries({ queryKey: ['admissions'] });
+      // Update the local admission record with new remarks
+      setAdmissionRecord(prev => prev ? { ...prev, remarks: admissionRemarks } : null);
+    } catch (error: any) {
+      console.error('Error saving admission remarks:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Failed to save admission remarks';
+      showToast.error(msg);
+    } finally {
+      setIsSavingRemarks(false);
     }
   };
 
@@ -7424,6 +7446,45 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     <p className="mt-4 text-xs text-slate-500 italic">No revised heads configured yet.</p>
                   )}
                 </div>
+              )}
+
+              {/* Admission Remarks Section */}
+              {status === 'approved' && canWriteJoining && canEditAdmission && (
+                <ApplicationInfoCard
+                  title="Admission Remarks"
+                  icon={<FileText className="h-4 w-4" aria-hidden />}
+                  description="Additional notes or remarks about this admission"
+                >
+                  <div className="flex flex-col gap-3">
+                    <textarea
+                      className={JOINING_FORM_CONTROL_CLASS}
+                      rows={4}
+                      placeholder="Enter admission remarks..."
+                      value={admissionRemarks}
+                      onChange={(e) => setAdmissionRemarks(e.target.value)}
+                      disabled={
+                        !canEditAdmission ||
+                        isUpdatingAdmission ||
+                        isSaving
+                      }
+                    />
+                    <div className="flex items-center gap-3">
+                      <Button
+                        type="button"
+                        onClick={handleSaveRemarks}
+                        disabled={
+                          isSavingRemarks ||
+                          !canEditAdmission ||
+                          isUpdatingAdmission ||
+                          isSaving
+                        }
+                        className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
+                      >
+                        {isSavingRemarks ? 'Saving...' : 'Save'}
+                      </Button>
+                    </div>
+                  </div>
+                </ApplicationInfoCard>
               )}
 
               {renderWizardStepFooter(4)}

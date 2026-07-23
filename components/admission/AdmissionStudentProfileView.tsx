@@ -614,6 +614,18 @@ export function AdmissionStudentProfileView({
               </ProfileDetailCard>
             ) : null}
 
+            {admission.remarks ? (
+              <ProfileDetailCard
+                title="Admission remarks"
+                icon={<GraduationCap className="h-4 w-4" aria-hidden />}
+                className="xl:col-span-2"
+              >
+                <p className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                  {admission.remarks}
+                </p>
+              </ProfileDetailCard>
+            ) : null}
+
             {admission.address?.relatives && admission.address.relatives.length > 0 ? (
               <ProfileDetailCard
                 title="Relatives information"
