@@ -5721,8 +5721,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const joiningStepHeaderActions = (
     <>
-      {!isPublicEdit && publicLinkRouteKey ? (
-        <Link href={`/superadmin/joining/${publicLinkRouteKey}/detail`}>
+      {!isPublicEdit && (publicLinkRouteKey || admissionRecord?._id) ? (
+        <Link href={admissionRecord?._id ? `/superadmin/admission/${admissionRecord._id}/detail` : `/superadmin/joining/${publicLinkRouteKey}/detail`}>
           <Button
             variant="outline"
             size="sm"

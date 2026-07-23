@@ -36,8 +36,7 @@ import {
 import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { cn } from '@/lib/utils';
-import { PendingCertificatesDownloadModal } from '@/components/admission/PendingCertificatesDownloadModal';
-import { PendingFeesDownloadModal } from '@/components/admission/PendingFeesDownloadModal';
+import { PendingAdmissionsDownloadModal } from '@/components/admission/PendingAdmissionsDownloadModal';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
 
@@ -338,8 +337,7 @@ const CompletedAdmissionsPage = () => {
   const [referenceDrilldownTarget, setReferenceDrilldownTarget] =
     useState<AdmissionReferenceStatsRow | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [pendingCertificatesOpen, setPendingCertificatesOpen] = useState(false);
-  const [pendingFeesOpen, setPendingFeesOpen] = useState(false);
+  const [pendingAdmissionsOpen, setPendingAdmissionsOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 350);
@@ -1686,25 +1684,9 @@ const CompletedAdmissionsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <PendingCertificatesDownloadModal
-        open={pendingCertificatesOpen}
-        onOpenChange={setPendingCertificatesOpen}
-        colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
-        initialCollegeId={effectiveCollegeFilter}
-        deskFilters={{
-          collegeId: effectiveCollegeFilter || undefined,
-          courseId: courseFilter || undefined,
-          courseName: getCourseName(courseFilter) || undefined,
-          branchId: branchFilter || undefined,
-          branchName: getBranchName(branchFilter) || undefined,
-          startDate: dateRange.from || undefined,
-          endDate: statsThroughDate,
-        }}
-      />
-
-      <PendingFeesDownloadModal
-        open={pendingFeesOpen}
-        onOpenChange={setPendingFeesOpen}
+      <PendingAdmissionsDownloadModal
+        open={pendingAdmissionsOpen}
+        onOpenChange={setPendingAdmissionsOpen}
         colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
         initialCollegeId={effectiveCollegeFilter}
         deskFilters={{
@@ -1813,28 +1795,16 @@ const CompletedAdmissionsPage = () => {
                 </Button>
               )}
               {activeTab === 'student-info' ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2 sm:w-auto"
-                    onClick={() => setPendingFeesOpen(true)}
-                  >
-                    <Download className="h-4 w-4" />
-                    <span className="sm:hidden">Pending Fee</span>
-                    <span className="hidden sm:inline">Pending Fee</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2 sm:w-auto"
-                    onClick={() => setPendingCertificatesOpen(true)}
-                  >
-                    <Download className="h-4 w-4" />
-                    <span className="sm:hidden">Pending Docs</span>
-                    <span className="hidden sm:inline">Pending Documents</span>
-                  </Button>
-                </>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2 sm:w-auto"
+                  onClick={() => setPendingAdmissionsOpen(true)}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="sm:hidden">Pending</span>
+                  <span className="hidden sm:inline">Pending Fee & Docs</span>
+                </Button>
               ) : null}
               <Button
                 variant="outline"
@@ -2274,17 +2244,14 @@ const CompletedAdmissionsPage = () => {
                     <tr
                       key={record._id}
                       className="cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60"
-                      onClick={() => {
-                        if (record._id) {
-                          router.push(`/superadmin/admission/${record._id}/detail`);
-                        }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setStudentInfoViewRecord(record);
                       }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
-                          if (record._id) {
-                            router.push(`/superadmin/admission/${record._id}/detail`);
-                          }
+                          setStudentInfoViewRecord(record);
                         }
                       }}
                       role="button"
