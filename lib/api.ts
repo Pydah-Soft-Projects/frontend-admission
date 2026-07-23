@@ -1723,8 +1723,8 @@ export const admissionAPI = {
     const response = await api.post(`/admissions/id/${admissionId}/send-confirmation-sms`);
     return response.data;
   },
-  sendDocumentNotificationSms: async (admissionId: string) => {
-    const response = await api.post(`/admissions/id/${admissionId}/send-document-notification`);
+  sendDocumentNotificationSms: async (admissionId: string, selectedDocuments?: string[]) => {
+    const response = await api.post(`/admissions/id/${admissionId}/send-document-notification`, { selectedDocuments });
     return response.data;
   },
   updateByLeadId: async (leadId: string, data: any) => {

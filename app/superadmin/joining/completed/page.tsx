@@ -33,6 +33,7 @@ import {
   resolveAdmissionStatCourseLabel,
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
+import { JOINING_DOCUMENT_LABELS } from '@/lib/joiningDocumentsDisplay';
 import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { cn } from '@/lib/utils';
@@ -338,6 +339,8 @@ const CompletedAdmissionsPage = () => {
     useState<AdmissionReferenceStatsRow | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [pendingAdmissionsOpen, setPendingAdmissionsOpen] = useState(false);
+  const [showDocumentSmsDialog, setShowDocumentSmsDialog] = useState(false);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 350);
@@ -846,11 +849,12 @@ const CompletedAdmissionsPage = () => {
   });
 
   const sendDocumentSmsMutation = useMutation({
-    mutationFn: async (admissionId: string) => {
-      return admissionAPI.sendDocumentNotificationSms(admissionId);
+    mutationFn: async ({ admissionId, selectedDocuments }: { admissionId: string; selectedDocuments?: string[] }) => {
+      return admissionAPI.sendDocumentNotificationSms(admissionId, selectedDocuments);
     },
     onSuccess: () => {
       showToast.success('Pending documents SMS sent successfully');
+      setShowDocumentSmsDialog(false);
     },
     onError: (error: ApiError) => {
       showToast.error(error.response?.data?.message || 'Failed to send SMS');
@@ -1599,11 +1603,18 @@ const CompletedAdmissionsPage = () => {
               <Button
                 type="button"
                 className="w-full gap-2 sm:w-auto"
-                isLoading={sendDocumentSmsMutation.isPending}
                 onClick={() => {
-                  if (studentInfoViewRecord?._id) {
-                    sendDocumentSmsMutation.mutate(studentInfoViewRecord._id);
-                  }
+                  // Initialize selected documents with all pending documents
+                  const pendingDocs: string[] = [];
+                  const docs = studentInfoViewRecord.documents;
+                  Object.entries(JOINING_DOCUMENT_LABELS).forEach(([key, label]) => {
+                    const status = docs[key as keyof typeof docs];
+                    if (status !== 'received') {
+                      pendingDocs.push(label);
+                    }
+                  });
+                  setSelectedDocuments(pendingDocs);
+                  setShowDocumentSmsDialog(true);
                 }}
               >
                 Send Pending Documents SMS
@@ -1722,6 +1733,97 @@ const CompletedAdmissionsPage = () => {
           endDate: statsThroughDate,
         }}
       />
+
+      {/* Send Pending Documents SMS Dialog */}
+      <Dialog
+        open={showDocumentSmsDialog}
+        onOpenChange={(open) => {
+          if (!open) setShowDocumentSmsDialog(false);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] w-[95vw] max-w-md overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Send Pending Documents SMS</DialogTitle>
+            <DialogDescription>
+              Select which pending documents to include in the SMS to the student.
+            </DialogDescription>
+          </DialogHeader>
+
+          {studentInfoViewRecord && (
+            <div className="space-y-3">
+              {/* Display student info */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {studentInfoViewRecord.studentInfo?.name || 'Student'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {studentInfoViewRecord.studentInfo?.phone || 'No phone number'}
+                </p>
+              </div>
+
+              {/* Document checkboxes - two columns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {Object.entries(JOINING_DOCUMENT_LABELS).map(([key, label]) => {
+                  const docs = studentInfoViewRecord.documents;
+                  const status = docs[key as keyof typeof docs];
+                  const isPending = status !== 'received';
+
+                  if (!isPending) return null;
+
+                  return (
+                    <label
+                      key={key}
+                      className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={selectedDocuments.includes(label)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDocuments([...selectedDocuments, label]);
+                          } else {
+                            setSelectedDocuments(selectedDocuments.filter((d) => d !== label));
+                          }
+                        }}
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-200">
+                        {label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowDocumentSmsDialog(false)}
+              disabled={sendDocumentSmsMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              isLoading={sendDocumentSmsMutation.isPending}
+              disabled={!studentInfoViewRecord?._id || selectedDocuments.length === 0}
+              onClick={() => {
+                if (studentInfoViewRecord?._id) {
+                  sendDocumentSmsMutation.mutate({
+                    admissionId: studentInfoViewRecord._id,
+                    selectedDocuments,
+                  });
+                }
+              }}
+            >
+              Send SMS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {activeTab === 'abstract' && canAccessTab('abstract') ? (
         <div className="space-y-3">
