@@ -193,17 +193,20 @@ export const useAdmissionTabPermissions = () => {
     'source-list',
     'date-wise',
   ];
-  if (!ctx) {
-    return {
-      ...base,
-      allowedTabs: allTabs,
-      canAccessTab: () => true,
-    };
-  }
+  const allowedTabs = useMemo(
+    () => (ctx ? ctx.getAllowedAdmissionTabs() : allTabs),
+    // Permission context value is memoized; recompute when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ctx]
+  );
+  const canAccessTab = useCallback(
+    (tab: AdmissionTabKey) => (ctx ? ctx.canAccessAdmissionTab(tab) : true),
+    [ctx]
+  );
   return {
     ...base,
-    allowedTabs: ctx.getAllowedAdmissionTabs(),
-    canAccessTab: (tab: AdmissionTabKey) => ctx.canAccessAdmissionTab(tab),
+    allowedTabs: ctx ? allowedTabs : allTabs,
+    canAccessTab,
   };
 };
 
@@ -256,11 +259,31 @@ function isSuperadminLeadDetailPath(pathname: string): boolean {
   return !['assign', 'individual', 'group-update', 'upload'].includes(segment);
 }
 
+/** Joining Desk list tabs (not a lead/joining workspace). */
+const JOINING_LIST_SEGMENTS = [
+  'confirmed',
+  'completed',
+  'in-progress',
+  'self-registration',
+  'fee-requests',
+] as const;
+
+function isJoiningListPath(pathname: string): boolean {
+  if (pathname === '/superadmin/joining') return true;
+  const m = pathname.match(/^\/superadmin\/joining\/([^/]+)\/?$/);
+  return !!m && (JOINING_LIST_SEGMENTS as readonly string[]).includes(m[1]);
+}
+
 /** `/superadmin/joining/:leadId` edit workspace — not list sub-routes or detail. */
 function isJoiningWorkspaceEditPath(pathname: string): boolean {
   const m = pathname.match(/^\/superadmin\/joining\/([^/]+)$/);
   if (!m) return false;
-  return !['confirmed', 'completed', 'in-progress', 'self-registration'].includes(m[1]);
+  return !(JOINING_LIST_SEGMENTS as readonly string[]).includes(m[1]);
+}
+
+/** `/superadmin/joining/:leadId/detail` read-only joining form view. */
+function isJoiningDetailPath(pathname: string): boolean {
+  return /^\/superadmin\/joining\/[^/]+\/detail$/.test(pathname);
 }
 
 /** `/superadmin/admission/:admissionId/detail` — full-width read-only profile view. */
@@ -542,9 +565,37 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     } else if (pathname.includes('/user/leads/')) {
       // If on user lead detail page, go to user leads list
       router.push('/user/leads');
-    } else if (pathname.includes('/superadmin/joining/')) {
-      // If on joining detail page, go to joining list
-      router.push('/superadmin/joining');
+    } else if (isAdmissionDetailPath(pathname)) {
+      // Full admission page — return to Admissions Student Info (or ?tab= from URL)
+      const tab =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('tab')
+          : null;
+      const admissionsTab =
+        tab &&
+        ['abstract', 'student-info', 'reference-list', 'source-list', 'date-wise'].includes(tab)
+          ? tab
+          : 'student-info';
+      router.push(`/superadmin/joining/completed?tab=${encodeURIComponent(admissionsTab)}`);
+    } else if (isJoiningWorkspaceEditPath(pathname) || isJoiningDetailPath(pathname)) {
+      // Prefer explicit Admissions return (?from=admissions&tab=...) then browser history
+      const fromParams =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search)
+          : null;
+      if (fromParams?.get('from') === 'admissions') {
+        const tab = fromParams.get('tab');
+        const admissionsTab =
+          tab &&
+          ['abstract', 'student-info', 'reference-list', 'source-list', 'date-wise'].includes(tab)
+            ? tab
+            : 'student-info';
+        router.push(`/superadmin/joining/completed?tab=${encodeURIComponent(admissionsTab)}`);
+      } else if (typeof window !== 'undefined' && window.history.length > 1) {
+        router.back();
+      } else {
+        router.push('/superadmin/joining');
+      }
     } else if (pathname.includes('/superadmin/payments/')) {
       // If on payments detail page, go to payments list
       router.push('/superadmin/payments');
@@ -558,10 +609,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       // If on any manager page, go to manager dashboard
       router.push('/manager/dashboard');
     } else {
-      // Default: go back in history
+      // Default: go back in history (includes Joining Desk list tabs)
       router.back();
     }
   };
+
+  const hideShellBackButton = [
+    '/superadmin/dashboard',
+    '/superadmin/leads',
+    '/superadmin/reports',
+    '/superadmin/users',
+    '/superadmin/visitors',
+  ].includes(pathname) || isJoiningListPath(pathname);
 
   const renderNavItems = useCallback(
     (items: DashboardNavItem[], level = 0): ReactNode =>
@@ -960,8 +1019,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                         <MenuIcon className="h-5 w-5" />
                       </button>
 
-                      {/* Back Icon - Hide on Dashboard and Leads root pages */}
-                      {!['/superadmin/dashboard', '/superadmin/leads', '/superadmin/reports', '/superadmin/users', '/superadmin/visitors'].includes(pathname) && (
+                      {/* Back Icon - Hide on Dashboard, Leads, and Joining Desk list tabs */}
+                      {!hideShellBackButton && (
                         <button
                           type="button"
                           onClick={handleBack}

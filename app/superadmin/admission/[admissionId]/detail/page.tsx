@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import type { FormEvent } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
@@ -155,11 +155,22 @@ const formatAdmissionStatus = (status?: string) => {
 
 export default function AdmissionDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const admissionId = Array.isArray(params?.admissionId) ? params.admissionId[0] : params?.admissionId;
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
   const { canEditReference } = useJoiningDeskPermissions();
+
+  const admissionsListHref = useMemo(() => {
+    const tab = searchParams.get('tab');
+    const validTab =
+      tab &&
+      ['abstract', 'student-info', 'reference-list', 'source-list', 'date-wise'].includes(tab)
+        ? tab
+        : 'student-info';
+    return `/superadmin/joining/completed?tab=${encodeURIComponent(validTab)}`;
+  }, [searchParams]);
 
   const [revealedAadhaars, setRevealedAadhaars] = useState<{
     student: boolean;
@@ -701,7 +712,7 @@ export default function AdmissionDetailPage() {
               Cancel Admission
             </Button>
           )}
-          <Link href="/superadmin/joining/completed">
+          <Link href={admissionsListHref}>
             <Button variant="outline">Back to List</Button>
           </Link>
         </div>
@@ -716,6 +727,7 @@ export default function AdmissionDetailPage() {
     transactions,
     getCollegeNameForCourse,
     joiningStatus,
+    admissionsListHref,
     setHeaderContent,
     clearHeaderContent,
   ]);
@@ -732,7 +744,7 @@ export default function AdmissionDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <p className="text-lg text-slate-600 dark:text-slate-400">Admission not found</p>
-        <Link href="/superadmin/joining/completed" className="mt-4">
+        <Link href={admissionsListHref} className="mt-4">
           <Button variant="outline">Back to List</Button>
         </Link>
       </div>

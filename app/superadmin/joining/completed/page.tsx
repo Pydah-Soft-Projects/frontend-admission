@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { admissionAPI, courseAPI, leadAPI } from '@/lib/api';
 import { Admission, AdmissionListResponse } from '@/types';
@@ -302,27 +302,247 @@ const ADMISSION_TAB_ICONS: Record<AdmissionTabKey, typeof LayoutGrid> = {
   'date-wise': CalendarDays,
 };
 
+function isAdmissionTabKey(value: string | null | undefined): value is AdmissionTabKey {
+  return ADMISSION_PAGE_TABS.some(({ key }) => key === value);
+}
+
+const INR_CURRENCY_FORMAT = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+});
+
+/** Update ?tab= without App Router navigation (avoids full-page re-render lag). */
+function replaceAdmissionsTabInUrl(tab: AdmissionTabKey) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('tab') === tab) return;
+  url.searchParams.set('tab', tab);
+  const next = `${url.pathname}?${url.searchParams.toString()}`;
+  window.history.replaceState(window.history.state, '', next);
+}
+
+type StudentInfoRowProps = {
+  record: Admission;
+  showSourceReferenceColumns: boolean;
+  canEditReference: boolean;
+  tableTdClass: string;
+  onOpenDetails: (record: Admission) => void;
+  onEditReference: (record: Admission) => void;
+  onEditApplication: (joiningId: string) => void;
+};
+
+const StudentInfoRow = memo(function StudentInfoRow({
+  record,
+  showSourceReferenceColumns,
+  canEditReference,
+  tableTdClass,
+  onOpenDetails,
+  onEditReference,
+  onEditApplication,
+}: StudentInfoRowProps) {
+  const hasNoFeeEntry =
+    (record as Admission & { feeStatus?: string }).feeStatus === 'no_entry' ||
+    record.paymentSummary?.feeStatus === 'no_entry';
+  const ewsLabel = formatReservationEws(record.reservation);
+  const meritLabel = formatQualificationMerit(record.qualifications);
+  const docs = record.documents || {};
+  const docValues = Object.values(docs);
+  const receivedDocs = docValues.filter((v) => v === 'received').length;
+  const totalDocs = docValues.length;
+
+  return (
+    <tr
+      className={
+        hasNoFeeEntry
+          ? 'cursor-pointer bg-pink-50/90 transition hover:bg-pink-100/90 dark:bg-pink-950/30 dark:hover:bg-pink-950/45'
+          : 'cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60'
+      }
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpenDetails(record);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpenDetails(record);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      title={
+        hasNoFeeEntry
+          ? 'Lateral course with non-lateral quota and no TUI01/OTH1 ledger'
+          : 'View admission details'
+      }
+    >
+      <td className={`${tableTdClass} font-bold text-blue-600 dark:text-blue-400`}>
+        {record.admissionNumber}
+      </td>
+      <td className={`${tableTdClass} hidden text-xs text-slate-500 md:table-cell`}>
+        {record.createdAt ? new Date(record.createdAt).toLocaleString() : '—'}
+      </td>
+      <td className={tableTdClass}>
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold text-slate-900 sm:text-sm dark:text-slate-100">
+            {record.courseInfo?.course || '—'}
+          </span>
+          <span className="text-[10px] text-slate-500">{record.courseInfo?.branch || '—'}</span>
+        </div>
+      </td>
+      <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
+        {record.studentInfo?.name ?? '—'}
+      </td>
+      <td className={`${tableTdClass} hidden text-slate-600 sm:table-cell dark:text-slate-400`}>
+        {record.studentInfo?.phone ?? '—'}
+      </td>
+      <td className={`${tableTdClass} text-center`}>
+        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-600 sm:px-2 sm:py-1 sm:text-[10px] dark:bg-slate-800 dark:text-slate-400">
+          {record.courseInfo?.quota || '—'}
+        </span>
+      </td>
+      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
+        <span className="text-[10px] font-semibold uppercase text-slate-700 sm:text-xs dark:text-slate-300">
+          {record.reservation?.general || 'OC'}
+        </span>
+      </td>
+      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
+        <span
+          className={`text-[10px] font-semibold sm:text-xs ${
+            ewsLabel === 'Yes'
+              ? 'text-emerald-700 dark:text-emerald-400'
+              : 'text-slate-600 dark:text-slate-400'
+          }`}
+        >
+          {ewsLabel}
+        </span>
+      </td>
+      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
+        <span
+          className={`text-[10px] font-semibold sm:text-xs ${
+            meritLabel === 'Yes'
+              ? 'text-emerald-700 dark:text-emerald-400'
+              : meritLabel === 'No'
+                ? 'text-slate-600 dark:text-slate-400'
+                : 'text-slate-500 dark:text-slate-500'
+          }`}
+        >
+          {meritLabel}
+        </span>
+      </td>
+      <td className={`${tableTdClass} hidden text-center xl:table-cell`}>
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-[10px] font-bold text-slate-700 sm:text-xs dark:text-slate-300">
+            {receivedDocs}/{totalDocs}
+          </span>
+          <div className="h-1 w-10 overflow-hidden rounded-full bg-slate-100 sm:w-12 dark:bg-slate-800">
+            <div
+              className="h-full bg-blue-500"
+              style={{ width: `${(receivedDocs / (totalDocs || 1)) * 100}%` }}
+            />
+          </div>
+        </div>
+      </td>
+      <td className={`${tableTdClass} text-right`}>
+        <span className="text-xs font-bold text-slate-900 sm:text-sm dark:text-slate-100">
+          {INR_CURRENCY_FORMAT.format(record.paymentSummary?.yearOnePaid ?? 0)}
+        </span>
+      </td>
+      {showSourceReferenceColumns ? (
+        <>
+          <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 md:table-cell dark:text-slate-400`}>
+            {resolveAdmissionSource(record) || '—'}
+          </td>
+          <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 lg:table-cell dark:text-slate-400`}>
+            <div className="flex items-center justify-end gap-1">
+              <span>{resolveAdmissionReference1(record) || '—'}</span>
+              {canEditReference && record.status !== ADMISSION_CANCELLED_STATUS ? (
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                  title="Edit reference"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEditReference(record);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </div>
+          </td>
+        </>
+      ) : null}
+      <td className={`${tableTdClass} text-right`}>
+        {record.joiningId ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEditApplication(String(record.joiningId));
+            }}
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
+          >
+            Edit Application
+          </button>
+        ) : (
+          '—'
+        )}
+      </td>
+    </tr>
+  );
+});
+
 const CompletedAdmissionsPage = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
   const isSuperAdmin = auth.getUser()?.roleName === 'Super Admin';
   const showSourceReferenceColumns = isSuperAdmin;
   const tableColumnCount = showSourceReferenceColumns ? 14 : 12;
   const { allowedTabs, canAccessTab, hasAccess: hasJoiningAccess } = useAdmissionTabPermissions();
+  const allowedTabsKey = allowedTabs.join('|');
   const visibleAdmissionTabs = useMemo(
-    () => ADMISSION_PAGE_TABS.filter(({ key }) => canAccessTab(key)),
-    [canAccessTab]
+    () => ADMISSION_PAGE_TABS.filter(({ key }) => allowedTabs.includes(key)),
+    // allowedTabsKey keeps this stable when the array identity churns but contents match
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allowedTabsKey]
   );
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<AdmissionTabKey>('abstract');
+  const tabFromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTabState] = useState<AdmissionTabKey>(() =>
+    isAdmissionTabKey(tabFromUrl) ? tabFromUrl : 'abstract'
+  );
+
+  const setActiveTab = useCallback((key: AdmissionTabKey) => {
+    setActiveTabState((prev) => (prev === key ? prev : key));
+    replaceAdmissionsTabInUrl(key);
+  }, []);
+
+  // Restore tab when App Router navigates here with ?tab= (e.g. back from edit)
+  useEffect(() => {
+    const nextTab = searchParams.get('tab');
+    if (isAdmissionTabKey(nextTab)) {
+      setActiveTabState((prev) => (prev === nextTab ? prev : nextTab));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (visibleAdmissionTabs.length === 0) return;
     if (!allowedTabs.includes(activeTab)) {
       setActiveTab(visibleAdmissionTabs[0].key);
     }
-  }, [activeTab, allowedTabs, visibleAdmissionTabs]);
+  }, [activeTab, allowedTabs, visibleAdmissionTabs, setActiveTab]);
+
+  // Seed ?tab= once on mount so back navigation can restore the active tab
+  useEffect(() => {
+    replaceAdmissionsTabInUrl(activeTab);
+    // intentionally mount-only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const admissionsEditQuery = `from=admissions&tab=${encodeURIComponent(activeTab)}`;
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -383,10 +603,10 @@ const CompletedAdmissionsPage = () => {
 
   useEffect(() => {
     const term = debouncedSearchTerm.trim();
-    if (term.length > 0 && activeTab !== 'student-info' && canAccessTab('student-info')) {
+    if (term.length > 0 && activeTab !== 'student-info' && allowedTabs.includes('student-info')) {
       setActiveTab('student-info');
     }
-  }, [debouncedSearchTerm, activeTab, canAccessTab]);
+  }, [debouncedSearchTerm, activeTab, allowedTabs, setActiveTab]);
 
   const listTabsActive = activeTab === 'student-info';
 
@@ -533,7 +753,7 @@ const CompletedAdmissionsPage = () => {
 
   const statsThroughDate = dateRange.to || formatLocalDateIso(new Date());
 
-  // Stats Query (course cards count admissions through today when “Admission To” is empty)
+  // Stats Query (course cards — only needed on Abstract tab)
   const { data: statsData, isLoading: statsLoading } = useQuery({
     queryKey: [
       'admissions',
@@ -554,6 +774,7 @@ const CompletedAdmissionsPage = () => {
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
       }),
+    enabled: activeTab === 'abstract',
     staleTime: 120_000,
   });
 
@@ -890,13 +1111,14 @@ const CompletedAdmissionsPage = () => {
       });
       return response.data || response;
     },
-    placeholderData: debouncedSearchTerm.trim() ? undefined : (previousData) => previousData,
+    placeholderData: (previousData) => previousData,
     staleTime: 30_000,
   });
 
   const admissions = data?.admissions ?? [];
   const pagination = data?.pagination ?? { page: 1, pages: 1, limit: 20, total: 0 };
-  const isEmpty = !isLoading && admissions.length === 0;
+  const showListSpinner = isLoading && admissions.length === 0;
+  const isEmpty = !showListSpinner && admissions.length === 0;
 
   const PAGE_BLOCK_SIZE = 5;
   const paginationBlock = useMemo(() => {
@@ -989,11 +1211,25 @@ const CompletedAdmissionsPage = () => {
     },
   });
 
-  const openReferenceEditor = (record: Admission) => {
-    if (!canEditReference) return;
-    setReferenceEditTarget(record);
-    setReferenceEditValue(resolveAdmissionReference1(record));
-  };
+  const openReferenceEditor = useCallback(
+    (record: Admission) => {
+      if (!canEditReference) return;
+      setReferenceEditTarget(record);
+      setReferenceEditValue(resolveAdmissionReference1(record));
+    },
+    [canEditReference]
+  );
+
+  const handleOpenStudentInfoDetails = useCallback((record: Admission) => {
+    setStudentInfoViewRecord(record);
+  }, []);
+
+  const handleEditApplicationFromList = useCallback(
+    (joiningId: string) => {
+      router.push(`/superadmin/joining/${joiningId}?${admissionsEditQuery}`);
+    },
+    [router, admissionsEditQuery]
+  );
 
   const handleExportExcel = async () => {
     try {
@@ -1481,7 +1717,7 @@ const CompletedAdmissionsPage = () => {
                       <td className={`${tableTdClass} text-right`}>
                         {admission.id ? (
                           <Link
-                            href={`/superadmin/admission/${admission.id}/detail`}
+                            href={`/superadmin/admission/${admission.id}/detail?${admissionsEditQuery}`}
                             className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
                             onClick={() => setReferenceDrilldownTarget(null)}
                           >
@@ -1651,11 +1887,7 @@ const CompletedAdmissionsPage = () => {
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paid</p>
                   <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
-                    {new Intl.NumberFormat('en-IN', {
-                      style: 'currency',
-                      currency: 'INR',
-                      maximumFractionDigits: 0,
-                    }).format(studentInfoViewRecord.paymentSummary?.yearOnePaid ?? 0)}
+                    {INR_CURRENCY_FORMAT.format(studentInfoViewRecord.paymentSummary?.yearOnePaid ?? 0)}
                   </p>
                 </div>
                 {isSuperAdmin ? (
@@ -1726,7 +1958,10 @@ const CompletedAdmissionsPage = () => {
               </Button>
             ) : null}
             {canEditAdmission && studentInfoViewRecord?.joiningId ? (
-              <Link href={`/superadmin/joining/${studentInfoViewRecord.joiningId}`} className="w-full sm:w-auto">
+              <Link
+                href={`/superadmin/joining/${studentInfoViewRecord.joiningId}?${admissionsEditQuery}`}
+                className="w-full sm:w-auto"
+              >
                 <Button type="button" className="w-full gap-2 sm:w-auto">
                   <Pencil className="h-4 w-4" />
                   Edit joining form
@@ -1734,7 +1969,10 @@ const CompletedAdmissionsPage = () => {
               </Link>
             ) : null}
             {studentInfoViewRecord?._id ? (
-              <Link href={`/superadmin/admission/${studentInfoViewRecord._id}/detail`} className="w-full sm:w-auto">
+              <Link
+                href={`/superadmin/admission/${studentInfoViewRecord._id}/detail?${admissionsEditQuery}`}
+                className="w-full sm:w-auto"
+              >
                 <Button type="button" variant="outline" className="w-full sm:w-auto">
                   Full admission page
                 </Button>
@@ -2503,8 +2741,12 @@ const CompletedAdmissionsPage = () => {
                   <th className={`${tableThClass} text-right`}>Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60">
-                {isLoading || isFetching ? (
+              <tbody
+                className={`divide-y divide-slate-100 bg-white/80 backdrop-blur-sm dark:divide-slate-800 dark:bg-slate-900/60 ${
+                  isFetching && admissions.length > 0 ? 'opacity-70' : ''
+                }`}
+              >
+                {showListSpinner ? (
                   <tr>
                     <td colSpan={tableColumnCount} className="px-3 py-10 text-center text-sm text-slate-500 sm:px-6 sm:py-16">
                       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-400 border-t-transparent sm:h-12 sm:w-12" />
@@ -2518,165 +2760,18 @@ const CompletedAdmissionsPage = () => {
                     </td>
                   </tr>
                 ) : (
-                  admissions.map((record: any) => {
-                    const hasNoFeeEntry =
-                      record.feeStatus === 'no_entry' ||
-                      record.paymentSummary?.feeStatus === 'no_entry';
-                    return (
-                    <tr
+                  admissions.map((record: Admission) => (
+                    <StudentInfoRow
                       key={record._id}
-                      className={
-                        hasNoFeeEntry
-                          ? 'cursor-pointer bg-pink-50/90 transition hover:bg-pink-100/90 dark:bg-pink-950/30 dark:hover:bg-pink-950/45'
-                          : 'cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60'
-                      }
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setStudentInfoViewRecord(record);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          setStudentInfoViewRecord(record);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      title={
-                        hasNoFeeEntry
-                          ? 'Lateral course with non-lateral quota and no TUI01/OTH1 ledger'
-                          : 'View admission details'
-                      }
-                    >
-                      <td className={`${tableTdClass} font-bold text-blue-600 dark:text-blue-400`}>
-                        {record.admissionNumber}
-                      </td>
-                      <td className={`${tableTdClass} hidden text-xs text-slate-500 md:table-cell`}>
-                        {record.createdAt ? new Date(record.createdAt).toLocaleString() : '—'}
-                      </td>
-                      <td className={tableTdClass}>
-                        <div className="flex flex-col">
-                          <span className="text-xs font-semibold text-slate-900 sm:text-sm dark:text-slate-100">{record.courseInfo?.course || '—'}</span>
-                          <span className="text-[10px] text-slate-500">{record.courseInfo?.branch || '—'}</span>
-                        </div>
-                      </td>
-                      <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
-                        {record.studentInfo?.name ?? '—'}
-                      </td>
-                      <td className={`${tableTdClass} hidden text-slate-600 sm:table-cell dark:text-slate-400`}>
-                        {record.studentInfo?.phone ?? '—'}
-                      </td>
-                      <td className={`${tableTdClass} text-center`}>
-                        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-600 sm:px-2 sm:py-1 sm:text-[10px] dark:bg-slate-800 dark:text-slate-400">
-                          {record.courseInfo?.quota || '—'}
-                        </span>
-                      </td>
-                      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
-                        <span className="text-[10px] font-semibold uppercase text-slate-700 sm:text-xs dark:text-slate-300">
-                          {record.reservation?.general || 'OC'}
-                        </span>
-                      </td>
-                      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
-                        {(() => {
-                          const ewsLabel = formatReservationEws(record.reservation);
-                          return (
-                            <span
-                              className={`text-[10px] font-semibold sm:text-xs ${
-                                ewsLabel === 'Yes'
-                                  ? 'text-emerald-700 dark:text-emerald-400'
-                                  : 'text-slate-600 dark:text-slate-400'
-                              }`}
-                            >
-                              {ewsLabel}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
-                        {(() => {
-                          const meritLabel = formatQualificationMerit(record.qualifications);
-                          return (
-                            <span
-                              className={`text-[10px] font-semibold sm:text-xs ${
-                                meritLabel === 'Yes'
-                                  ? 'text-emerald-700 dark:text-emerald-400'
-                                  : meritLabel === 'No'
-                                    ? 'text-slate-600 dark:text-slate-400'
-                                    : 'text-slate-500 dark:text-slate-500'
-                              }`}
-                            >
-                              {meritLabel}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className={`${tableTdClass} hidden text-center xl:table-cell`}>
-                        {(() => {
-                           const docs = record.documents || {};
-                           const received = Object.values(docs).filter(v => v === 'received').length;
-                           const total = Object.values(docs).length;
-                           return (
-                             <div className="flex flex-col items-center gap-1">
-                               <span className="text-[10px] font-bold text-slate-700 sm:text-xs dark:text-slate-300">{received}/{total}</span>
-                               <div className="h-1 w-10 overflow-hidden rounded-full bg-slate-100 sm:w-12 dark:bg-slate-800">
-                                 <div 
-                                   className="h-full bg-blue-500" 
-                                   style={{ width: `${(received / (total || 1)) * 100}%` }}
-                                 />
-                               </div>
-                             </div>
-                           );
-                        })()}
-                      </td>
-                      <td className={`${tableTdClass} text-right`}>
-                        <span className="text-xs font-bold text-slate-900 sm:text-sm dark:text-slate-100">
-                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(record.paymentSummary?.yearOnePaid ?? 0)}
-                        </span>
-                      </td>
-                      {showSourceReferenceColumns ? (
-                        <>
-                          <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 md:table-cell dark:text-slate-400`}>
-                            {resolveAdmissionSource(record) || '—'}
-                          </td>
-                          <td className={`${tableTdClass} hidden text-right text-xs text-slate-600 lg:table-cell dark:text-slate-400`}>
-                            <div className="flex items-center justify-end gap-1">
-                              <span>{resolveAdmissionReference1(record) || '—'}</span>
-                              {canEditReference && record.status !== ADMISSION_CANCELLED_STATUS ? (
-                                <button
-                                  type="button"
-                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
-                                  title="Edit reference"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openReferenceEditor(record);
-                                  }}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
-                        </>
-                      ) : null}
-                      <td className={`${tableTdClass} text-right`}>
-                        {record.joiningId ? (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              router.push(`/superadmin/joining/${record.joiningId}`);
-                            }}
-                            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-                          >
-                            Edit Application
-                          </button>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                    );
-                  })
+                      record={record}
+                      showSourceReferenceColumns={showSourceReferenceColumns}
+                      canEditReference={canEditReference}
+                      tableTdClass={tableTdClass}
+                      onOpenDetails={handleOpenStudentInfoDetails}
+                      onEditReference={openReferenceEditor}
+                      onEditApplication={handleEditApplicationFromList}
+                    />
+                  ))
                 )}
               </tbody>
             </table>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/Button';
@@ -743,10 +743,26 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const isPublicEdit = Boolean(publicToken);
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const routeLeadFromParams = Array.isArray(params?.leadId) ? params.leadId[0] : params?.leadId;
   const effectiveAdminLeadId = (adminLeadId ?? routeLeadFromParams) as string | undefined;
+
+  const joiningListReturnPath = useMemo(() => {
+    if (searchParams.get('from') !== 'admissions') {
+      return '/superadmin/joining';
+    }
+    const tab = searchParams.get('tab');
+    const admissionsTab = tab && ['abstract', 'student-info', 'reference-list', 'source-list', 'date-wise'].includes(tab)
+      ? tab
+      : 'student-info';
+    return `/superadmin/joining/completed?tab=${encodeURIComponent(admissionsTab)}`;
+  }, [searchParams]);
+
+  const navigateBackToJoiningList = useCallback(() => {
+    router.push(joiningListReturnPath);
+  }, [router, joiningListReturnPath]);
 
   const joiningPerm = useModulePermission('joining');
   const joiningPermData = useModulePermissionRaw('joining');
@@ -5451,7 +5467,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               variant="outline"
               size="sm"
               className={JOINING_ACTION_BTN_CLASS}
-              onClick={() => router.push('/superadmin/joining')}
+              onClick={navigateBackToJoiningList}
             >
               Back to Joining Desk
             </Button>
@@ -5473,6 +5489,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     isPublicEdit,
     lead,
     router,
+    navigateBackToJoiningList,
     setHeaderContent,
     clearHeaderContent,
     status,
@@ -5846,7 +5863,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             variant="outline"
             size="sm"
             className={JOINING_ACTION_BTN_CLASS}
-            onClick={() => router.push('/superadmin/joining')}
+            onClick={navigateBackToJoiningList}
           >
             Joining List
           </Button>
