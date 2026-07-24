@@ -34,12 +34,21 @@ import {
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
 import { JOINING_DOCUMENT_LABELS } from '@/lib/joiningDocumentsDisplay';
-import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer } from 'lucide-react';
+import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer, Settings2 } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { cn } from '@/lib/utils';
 import { PendingAdmissionsDownloadModal } from '@/components/admission/PendingAdmissionsDownloadModal';
+import {
+  parseStudentQuotasResponse,
+  quotaLabelsFromCatalog,
+} from '@/lib/studentQuotaCatalog';
+import {
+  MinimumFeeConfigDialog,
+  type MinimumFeeConfigEntry,
+} from '@/components/admission/MinimumFeeConfigDialog';
 
 type AdmissionStatusFilter = 'all' | 'active' | 'withdrawn' | 'Admission Cancelled';
+type FeeEntryFilter = 'all' | 'no_entry' | 'has_entry';
 
 const ADMISSION_CANCELLED_STATUS = 'Admission Cancelled';
 
@@ -48,6 +57,12 @@ const statusOptions: Array<{ label: string; value: AdmissionStatusFilter }> = [
   { label: 'Active', value: 'active' },
   { label: 'Withdrawn', value: 'withdrawn' },
   { label: 'Admission Cancelled', value: ADMISSION_CANCELLED_STATUS },
+];
+
+const feeEntryOptions: Array<{ label: string; value: FeeEntryFilter }> = [
+  { label: 'All Fee Entries', value: 'all' },
+  { label: 'No Fee Entry', value: 'no_entry' },
+  { label: 'Has Fee Entry', value: 'has_entry' },
 ];
 
 type AdmissionCourseStat = {
@@ -313,6 +328,8 @@ const CompletedAdmissionsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AdmissionStatusFilter>('active');
+  const [feeEntryFilter, setFeeEntryFilter] = useState<FeeEntryFilter>('all');
+  const [quotaFilter, setQuotaFilter] = useState<string>('');
   const [collegeFilter, setCollegeFilter] = useState<string>('');
   const [courseFilter, setCourseFilter] = useState<string>('');
   const [branchFilter, setBranchFilter] = useState<string>('');
@@ -339,7 +356,20 @@ const CompletedAdmissionsPage = () => {
     useState<AdmissionReferenceStatsRow | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [pendingAdmissionsOpen, setPendingAdmissionsOpen] = useState(false);
+  const [minimumConfigOpen, setMinimumConfigOpen] = useState(false);
   const [showDocumentSmsDialog, setShowDocumentSmsDialog] = useState(false);
+
+  const {
+    data: minimumFeeConfigs = [],
+    refetch: refetchMinimumFeeConfigs,
+  } = useQuery({
+    queryKey: ['admissions', 'minimum-fee-configs'],
+    queryFn: async () => {
+      const response = await admissionAPI.listMinimumFeeConfigs();
+      return (response?.configs || []) as MinimumFeeConfigEntry[];
+    },
+    staleTime: 30_000,
+  });
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
 
   useEffect(() => {
@@ -439,18 +469,32 @@ const CompletedAdmissionsPage = () => {
     if (courseFilter) count += 1;
     if (branchFilter) count += 1;
     if (sourceFilter) count += 1;
+    if (quotaFilter) count += 1;
     if (statusFilter !== 'active') count += 1;
+    if (feeEntryFilter !== 'all') count += 1;
     if (dateRange.from) count += 1;
     if (dateRange.to) count += 1;
     return count;
-  }, [collegeFilter, courseFilter, branchFilter, sourceFilter, statusFilter, dateRange.from, dateRange.to]);
+  }, [
+    collegeFilter,
+    courseFilter,
+    branchFilter,
+    sourceFilter,
+    quotaFilter,
+    statusFilter,
+    feeEntryFilter,
+    dateRange.from,
+    dateRange.to,
+  ]);
 
   const clearFilters = () => {
     setCollegeFilter('');
     setCourseFilter('');
     setBranchFilter('');
     setSourceFilter('');
+    setQuotaFilter('');
     setStatusFilter('active');
+    setFeeEntryFilter('all');
     setDateRange({ from: '', to: '' });
     setSearchTerm('');
     setPage(1);
@@ -475,6 +519,17 @@ const CompletedAdmissionsPage = () => {
     values.add('Self Registration');
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [leadFilterOptionsRes]);
+
+  const { data: studentQuotasResponse } = useQuery({
+    queryKey: ['courses', 'student-quotas', 'student-info-filters'],
+    queryFn: async () => courseAPI.listStudentQuotas(),
+    staleTime: 300_000,
+  });
+
+  const quotaOptions = useMemo(
+    () => quotaLabelsFromCatalog(parseStudentQuotasResponse(studentQuotasResponse)),
+    [studentQuotasResponse]
+  );
 
   const statsThroughDate = dateRange.to || formatLocalDateIso(new Date());
 
@@ -790,13 +845,27 @@ const CompletedAdmissionsPage = () => {
       limit,
       debouncedSearchTerm,
       statusFilter,
+      feeEntryFilter,
+      quotaFilter,
       effectiveCollegeFilter,
       courseFilter,
       branchFilter,
       sourceFilter,
       dateRange,
     ],
-    [page, limit, debouncedSearchTerm, statusFilter, effectiveCollegeFilter, courseFilter, branchFilter, sourceFilter, dateRange]
+    [
+      page,
+      limit,
+      debouncedSearchTerm,
+      statusFilter,
+      feeEntryFilter,
+      quotaFilter,
+      effectiveCollegeFilter,
+      courseFilter,
+      branchFilter,
+      sourceFilter,
+      dateRange,
+    ]
   );
 
   const { data, isLoading, isFetching } = useQuery<AdmissionListResponse>({
@@ -814,6 +883,8 @@ const CompletedAdmissionsPage = () => {
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
         source: sourceFilter || undefined,
+        feeEntry: feeEntryFilter === 'all' ? undefined : feeEntryFilter,
+        quota: quotaFilter || undefined,
         startDate: dateRange.from || undefined,
         endDate: statsThroughDate,
       });
@@ -916,6 +987,7 @@ const CompletedAdmissionsPage = () => {
         courseName: getCourseName(courseFilter) || undefined,
         branchName: getBranchName(branchFilter) || undefined,
         source: sourceFilter || undefined,
+        quota: quotaFilter || undefined,
         startDate: dateRange.from || undefined,
         endDate: statsThroughDate,
       });
@@ -1723,6 +1795,7 @@ const CompletedAdmissionsPage = () => {
         onOpenChange={setPendingAdmissionsOpen}
         colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
         initialCollegeId={effectiveCollegeFilter}
+        minimumFeeConfigs={minimumFeeConfigs}
         deskFilters={{
           collegeId: effectiveCollegeFilter || undefined,
           courseId: courseFilter || undefined,
@@ -1732,6 +1805,15 @@ const CompletedAdmissionsPage = () => {
           startDate: dateRange.from || undefined,
           endDate: statsThroughDate,
         }}
+      />
+
+      <MinimumFeeConfigDialog
+        open={minimumConfigOpen}
+        onOpenChange={setMinimumConfigOpen}
+        colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
+        initialCollegeId={effectiveCollegeFilter}
+        configs={minimumFeeConfigs}
+        onConfigsChanged={() => refetchMinimumFeeConfigs()}
       />
 
       {/* Send Pending Documents SMS Dialog */}
@@ -1884,7 +1966,7 @@ const CompletedAdmissionsPage = () => {
       {/* Combined Filters & Tabs Bar */}
       <Card className="bg-slate-50/50 p-3 sm:p-4 dark:bg-slate-900/50">
         <div className="flex flex-col gap-4 sm:gap-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-3">
             <div className="-mx-1 flex items-center gap-1 overflow-x-auto rounded-2xl bg-slate-200/50 p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden dark:bg-slate-800/50">
               {visibleAdmissionTabs.map(({ key, label }) => {
                 const TabIcon = ADMISSION_TAB_ICONS[key];
@@ -1906,7 +1988,20 @@ const CompletedAdmissionsPage = () => {
               })}
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1 lg:max-w-sm xl:max-w-md">
+              <Input
+                placeholder="Search student, admission #, phone..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+                className="h-[38px]"
+                aria-label="Search student, admission number, or phone"
+              />
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
               {activeTab === 'abstract' && !statsLoading && stats.length > 0 && (
                 <Button
                   variant="outline"
@@ -1920,16 +2015,32 @@ const CompletedAdmissionsPage = () => {
                 </Button>
               )}
               {activeTab === 'student-info' ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2 sm:w-auto"
-                  onClick={() => setPendingAdmissionsOpen(true)}
-                >
-                  <Download className="h-4 w-4" />
-                  <span className="sm:hidden">Pending</span>
-                  <span className="hidden sm:inline">Pending Fee & Docs</span>
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2 sm:w-auto"
+                    onClick={() => setPendingAdmissionsOpen(true)}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="sm:hidden">Pending</span>
+                    <span className="hidden sm:inline">Pending Fee & Docs</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2 sm:w-auto"
+                    onClick={() => setMinimumConfigOpen(true)}
+                  >
+                    <Settings2 className="h-4 w-4" />
+                    <span className="sm:hidden">Config</span>
+                    <span className="hidden sm:inline">
+                      {minimumFeeConfigs.length > 0
+                        ? `Config (${minimumFeeConfigs.length})`
+                        : 'Config'}
+                    </span>
+                  </Button>
+                </>
               ) : null}
               <Button
                 variant="outline"
@@ -1946,21 +2057,6 @@ const CompletedAdmissionsPage = () => {
           </div>
 
           <>
-              <div className="md:hidden">
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Search
-                </label>
-                <Input
-                  placeholder="Search student, admission #, phone..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setPage(1);
-                  }}
-                  className="h-[38px]"
-                />
-              </div>
-
               <div className="flex flex-wrap items-center gap-2 md:hidden">
                 <Button
                   type="button"
@@ -2055,6 +2151,27 @@ const CompletedAdmissionsPage = () => {
                 </div>
 
                 <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Quota
+                  </label>
+                  <select
+                    value={quotaFilter}
+                    onChange={(e) => {
+                      setQuotaFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <option value="">All Quotas</option>
+                    {quotaOptions.map((quota) => (
+                      <option key={quota} value={quota}>
+                        {quota}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</label>
                   <select
                     value={statusFilter}
@@ -2066,6 +2183,26 @@ const CompletedAdmissionsPage = () => {
                   >
                     {statusOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Fee Entry
+                  </label>
+                  <select
+                    value={feeEntryFilter}
+                    onChange={(e) => {
+                      setFeeEntryFilter(e.target.value as FeeEntryFilter);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    {feeEntryOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -2111,19 +2248,6 @@ const CompletedAdmissionsPage = () => {
                       className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
                     />
                   </div>
-                </div>
-
-                <div className="hidden md:col-span-2 md:block lg:col-span-2">
-                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Search</label>
-                  <Input
-                    placeholder="Search student, admission #, phone..."
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setPage(1);
-                    }}
-                    className="h-[38px]"
-                  />
                 </div>
               </div>
             </>
@@ -2365,10 +2489,18 @@ const CompletedAdmissionsPage = () => {
                     </td>
                   </tr>
                 ) : (
-                  admissions.map((record: any) => (
+                  admissions.map((record: any) => {
+                    const hasNoFeeEntry =
+                      record.feeStatus === 'no_entry' ||
+                      record.paymentSummary?.feeStatus === 'no_entry';
+                    return (
                     <tr
                       key={record._id}
-                      className="cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60"
+                      className={
+                        hasNoFeeEntry
+                          ? 'cursor-pointer bg-pink-50/90 transition hover:bg-pink-100/90 dark:bg-pink-950/30 dark:hover:bg-pink-950/45'
+                          : 'cursor-pointer transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60'
+                      }
                       onClick={(event) => {
                         event.stopPropagation();
                         setStudentInfoViewRecord(record);
@@ -2381,7 +2513,11 @@ const CompletedAdmissionsPage = () => {
                       }}
                       role="button"
                       tabIndex={0}
-                      title="View admission details"
+                      title={
+                        hasNoFeeEntry
+                          ? 'Lateral course with non-lateral quota and no TUI01/OTH1 ledger'
+                          : 'View admission details'
+                      }
                     >
                       <td className={`${tableTdClass} font-bold text-blue-600 dark:text-blue-400`}>
                         {record.admissionNumber}
@@ -2510,7 +2646,8 @@ const CompletedAdmissionsPage = () => {
                         )}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

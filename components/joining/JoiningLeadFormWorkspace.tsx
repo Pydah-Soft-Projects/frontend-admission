@@ -103,6 +103,7 @@ import {
   resolveBtechSemesterFromLateral,
   resolveJoiningStepOneAcademicYear,
   resolveJoiningStudentYearOfStudy,
+  resolveJoiningFeeYearColumns,
   resolveTotalYearsFromCourseSettings,
   sanitizeJoiningRegistrationBatchFieldValue,
   type JoiningRegistrationFixedGate,
@@ -3756,9 +3757,36 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       resolveJoiningStudentYearOfStudy({
         registrationExtras,
         admissionNumber: admissionNumberDisplay,
+        course: formState.courseInfo.course,
+        quota: formState.courseInfo.quota,
       }),
-    [registrationExtras, admissionNumberDisplay]
+    [
+      registrationExtras,
+      admissionNumberDisplay,
+      formState.courseInfo.course,
+      formState.courseInfo.quota,
+    ]
   );
+
+  const feeYearColumns = useMemo(
+    () =>
+      resolveJoiningFeeYearColumns({
+        programTotalYears,
+        studentYearOfStudy,
+      }),
+    [programTotalYears, studentYearOfStudy]
+  );
+
+  // Step 4 / Collect Payment: laterals never stay on Year 1.
+  useEffect(() => {
+    setBuilderPaymentYear((prev) => {
+      const total = programTotalYears || 1;
+      const minYear = Math.max(1, Math.min(studentYearOfStudy, total));
+      if (prev < minYear) return minYear;
+      if (prev > total) return total;
+      return prev;
+    });
+  }, [studentYearOfStudy, programTotalYears]);
 
   const joiningRegistrationPatch = useMemo(
     () => ({
@@ -4965,7 +4993,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         paymentConfigId: '',
       });
     } else {
-      setBuilderPaymentYear(1);
+      setBuilderPaymentYear(studentYearOfStudy > 0 ? studentYearOfStudy : 1);
       setBuilderPaymentTargets([]);
       setBuilderPaymentForm({
         amount: '',
@@ -7234,9 +7262,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           <tr className={STEP_FOUR_TABLE_HEAD_ROW}>
                             <th className={STEP_FOUR_TABLE_HEAD_CELL}>Fee Head</th>
                             <th className={STEP_FOUR_TABLE_HEAD_CELL}>Type</th>
-                            {Array.from({ length: programTotalYears }).map((_, idx) => (
-                              <th key={idx} className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>
-                                Year {idx + 1}
+                            {feeYearColumns.map((year) => (
+                              <th key={year} className={`${STEP_FOUR_TABLE_HEAD_CELL} text-right`}>
+                                Year {year}
                               </th>
                             ))}
                             <th className={`${STEP_FOUR_TABLE_HEAD_CELL} text-center w-16`}>Action</th>
@@ -7324,8 +7352,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                     <option value="CONCESSION">Concession</option>
                                   </select>
                                 </td>
-                                {Array.from({ length: programTotalYears }).map((_, idx) => {
-                                  const year = idx + 1;
+                                {feeYearColumns.map((year) => {
                                   const matchingCatalog = feeStructureCatalogRows.find(
                                     (c) => String(c.feeHead) === String(head.id) && c.studentYear === year
                                   );
@@ -7380,7 +7407,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   };
 
                                   return (
-                                    <td key={idx} className="px-4 py-3 text-right whitespace-nowrap">
+                                    <td key={year} className="px-4 py-3 text-right whitespace-nowrap">
                                       <div className="inline-flex w-32 flex-col items-end gap-1">
                                         <input
                                           type="number"
@@ -7406,8 +7433,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const structureIds = Array.from({ length: programTotalYears }).map((_, idx) => {
-                                        const year = idx + 1;
+                                      const structureIds = feeYearColumns.map((year) => {
                                         const matchingCatalog = feeStructureCatalogRows.find(
                                           (c) => String(c.feeHead) === String(head.id) && c.studentYear === year
                                         );
@@ -7525,9 +7551,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     disabled={builderPaymentForm.isProcessing}
                   >
-                    {Array.from({ length: programTotalYears }).map((_, idx) => (
-                      <option key={idx + 1} value={idx + 1}>
-                        Year {idx + 1}
+                    {feeYearColumns.map((year) => (
+                      <option key={year} value={year}>
+                        Year {year}
                       </option>
                     ))}
                   </select>

@@ -129,6 +129,11 @@ export type FeeStructureSectionProps = {
   batch?: string | number | null;
   college?: string | null;
   studentYear?: number | null;
+  /**
+   * Hide fee years below this value (e.g. laterals: 2 → Year 1 omitted).
+   * Does not filter the Fee Management API — only the displayed rows/pivot.
+   */
+  minStudentYear?: number | null;
   studentStatus?: string | null;
   title?: string;
   description?: string;
@@ -190,6 +195,7 @@ export function FeeStructureSection({
   batch,
   college,
   studentYear,
+  minStudentYear,
   studentStatus,
   title = 'Fee Structure',
   description = 'Pulled live from the Fee Management database. Amounts are per academic year unless terms are configured.',
@@ -384,17 +390,32 @@ export function FeeStructureSection({
    * Admission view mode: show TUI01, Special Fee (OTH1), and transport only when
    * a transport row actually exists. Keeping the individual rows (rather than
    * summary buckets) preserves their exact head-wise amounts and codes.
+   * Laterals: omit years below minStudentYear (typically Year 1).
    */
   const displayItems = useMemo(() => {
-    if (pivotFeeColumns !== 'tuition-special-transport') return items;
-    return items.filter((row) => {
-      const code = String(row.feeHeadCode || '').trim().toUpperCase();
-      const name = String(row.feeHeadName || '').trim().toUpperCase();
-      if (code === 'TUI01') return true;
-      if (code === 'OTH1' || name === 'SPECIAL FEE') return true;
-      return classifyPrintFeeColumn(row) === 'transport';
-    });
-  }, [items, pivotFeeColumns]);
+    const minYearRaw = Number(minStudentYear);
+    const minYear =
+      Number.isFinite(minYearRaw) && minYearRaw > 1 ? Math.trunc(minYearRaw) : null;
+
+    let rows = items;
+    if (pivotFeeColumns === 'tuition-special-transport') {
+      rows = rows.filter((row) => {
+        const code = String(row.feeHeadCode || '').trim().toUpperCase();
+        const name = String(row.feeHeadName || '').trim().toUpperCase();
+        if (code === 'TUI01') return true;
+        if (code === 'OTH1' || name === 'SPECIAL FEE') return true;
+        return classifyPrintFeeColumn(row) === 'transport';
+      });
+    }
+    if (minYear != null) {
+      rows = rows.filter((row) => {
+        const year = Number(row.studentYear);
+        if (!Number.isFinite(year)) return true;
+        return year >= minYear;
+      });
+    }
+    return rows;
+  }, [items, pivotFeeColumns, minStudentYear]);
 
   /** Row id (`_id`) whose fee edit + payment panel is open (panel mode only). */
   const [editingRowId, setEditingRowId] = useState<string | null>(null);

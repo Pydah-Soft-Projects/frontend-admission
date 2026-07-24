@@ -115,6 +115,34 @@ export function isLateralRegistrationExtras(
   return false;
 }
 
+/**
+ * True for any lateral-track student (Step 4 / hostel / fee desk).
+ * Includes registration extras, course label `(LATERAL)`, and Lateral Entry / Spot quotas.
+ */
+export function isJoiningLateralFeeStudent(args: {
+  registrationExtras?: Record<string, unknown> | null;
+  admissionNumber?: string | null;
+  course?: string | null;
+  quota?: string | null;
+}): boolean {
+  if (isLateralRegistrationExtras(args.registrationExtras, args.admissionNumber)) return true;
+
+  const course = String(args.course ?? '').trim();
+  if (/\(lateral\)/i.test(course) || /\blateral\b/i.test(course)) return true;
+
+  const q = String(args.quota ?? '').trim().toUpperCase();
+  if (!q) return false;
+  if (q.includes('LATERAL') && q.includes('ENTRY')) return true;
+  if (
+    q === 'LATERAL SPOT' ||
+    q.includes('LATERAL SPOT') ||
+    (q.includes('LATERAL') && (q.includes('SPOT') || q.includes('MANG')))
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Display label for B.Tech lateral batch (idempotent if suffix already present). */
 export function formatBtechCourseDisplayLabel(courseName: string, isLateral: boolean): string {
   const base = String(courseName ?? '').trim();
@@ -203,6 +231,8 @@ export function parseSemesterYearOfStudy(semesterToken: unknown): number | null 
 export function resolveJoiningStudentYearOfStudy(args: {
   registrationExtras?: Record<string, unknown> | null;
   admissionNumber?: string | null;
+  course?: string | null;
+  quota?: string | null;
 }): number {
   const extras = args.registrationExtras;
   const fromSemester = parseSemesterYearOfStudy(
@@ -211,9 +241,25 @@ export function resolveJoiningStudentYearOfStudy(args: {
       extras?.currentSemester ??
       extras?.semister
   );
+  const lateral = isJoiningLateralFeeStudent(args);
+  // Laterals always start at Year 2 (2-1) — never show Year 1 as the desk year.
+  if (lateral) {
+    if (fromSemester != null && fromSemester >= 2) return fromSemester;
+    return 2;
+  }
   if (fromSemester != null) return fromSemester;
-  if (isLateralRegistrationExtras(extras, args.admissionNumber)) return 2;
   return 1;
+}
+
+/** Year numbers to show on Step 4 fee grids (laterals: 2…N; regulars: 1…N). */
+export function resolveJoiningFeeYearColumns(args: {
+  programTotalYears: number;
+  studentYearOfStudy?: number | null;
+}): number[] {
+  const total = Math.max(1, Math.trunc(Number(args.programTotalYears) || 1));
+  const startRaw = Number(args.studentYearOfStudy);
+  const start = Number.isFinite(startRaw) && startRaw >= 1 ? Math.min(Math.trunc(startRaw), total) : 1;
+  return Array.from({ length: total - start + 1 }, (_, i) => start + i);
 }
 
 /** Student-DB registration field names that look like free-text remarks (auto-filled for B.Tech intake). */

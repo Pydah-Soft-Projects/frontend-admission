@@ -20,6 +20,10 @@ import {
 } from '@/lib/studentQuotaCatalog';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { Download, Printer } from 'lucide-react';
+import {
+  resolveMinimumFeeAmount,
+  type MinimumFeeConfigEntry,
+} from '@/components/admission/MinimumFeeConfigDialog';
 
 export type PendingDocumentsDeskFilters = {
   collegeId?: string;
@@ -39,6 +43,8 @@ type PendingAdmissionsDownloadModalProps = {
   colleges: CollegeOption[];
   initialCollegeId?: string;
   deskFilters?: PendingDocumentsDeskFilters;
+  /** From Student Info Config popup — drives unpaid amounts + Print PDF. */
+  minimumFeeConfigs?: MinimumFeeConfigEntry[];
 };
 
 type PendingFeeRow = {
@@ -99,6 +105,94 @@ const formatInr = (value: number) =>
     maximumFractionDigits: 0,
   }).format(Number(value) || 0);
 
+const FEE_UNPAID_TOLERANCE = 0.5;
+
+/**
+ * Unpaid uses Year-1 tuition + other by default.
+ * When a matching minimum fee config exists for the row, unpaid is
+ * max(minFee − paid, 0) instead of full tuition + other remaining.
+ */
+function resolvePendingFeeAmounts(
+  row: Pick<
+    PendingFeeRow,
+    | 'totalPayable'
+    | 'tuitionPayable'
+    | 'otherPayable'
+    | 'totalPaid'
+    | 'tuitionPaid'
+    | 'totalPending'
+    | 'quota'
+    | 'course'
+  >,
+  minimumFeeConfigs: MinimumFeeConfigEntry[],
+  filterContext?: {
+    collegeId?: string;
+    courseId?: string;
+    courseName?: string;
+    quota?: string;
+  }
+) {
+  const totalPaid = Number(row.totalPaid ?? row.tuitionPaid ?? 0) || 0;
+  const fullPayable =
+    Number(row.totalPayable ?? (row.tuitionPayable || 0) + (row.otherPayable || 0)) || 0;
+  const minimumFeeRequired = resolveMinimumFeeAmount(minimumFeeConfigs, {
+    collegeId: filterContext?.collegeId,
+    courseId: filterContext?.courseId,
+    courseName: row.course || filterContext?.courseName,
+    quota: row.quota || filterContext?.quota,
+  });
+  const usingMinFee = minimumFeeRequired > FEE_UNPAID_TOLERANCE;
+  const requiredAmount = usingMinFee ? minimumFeeRequired : fullPayable;
+  const unpaid = usingMinFee
+    ? Math.max(requiredAmount - totalPaid, 0)
+    : Number(row.totalPending ?? Math.max(fullPayable - totalPaid, 0)) || 0;
+
+  return {
+    fullPayable,
+    requiredAmount,
+    totalPaid,
+    unpaid,
+    usingMinFee,
+    minimumFeeRequired,
+  };
+}
+
+/** True when this row should appear on the fee-pending list (vs min fee when configured). */
+function isFeeStillPending(
+  row: Pick<
+    PendingFeeRow,
+    | 'totalPayable'
+    | 'tuitionPayable'
+    | 'otherPayable'
+    | 'totalPaid'
+    | 'tuitionPaid'
+    | 'totalPending'
+    | 'quota'
+    | 'course'
+    | 'feeStatus'
+  >,
+  minimumFeeConfigs: MinimumFeeConfigEntry[],
+  filterContext?: {
+    collegeId?: string;
+    courseId?: string;
+    courseName?: string;
+    quota?: string;
+  }
+) {
+  if (!minimumFeeConfigs.length) {
+    return row.feeStatus === 'unpaid' || Number(row.totalPending || 0) > FEE_UNPAID_TOLERANCE;
+  }
+  const { unpaid, usingMinFee } = resolvePendingFeeAmounts(
+    row,
+    minimumFeeConfigs,
+    filterContext
+  );
+  // Configured quota/course: only below-minimum students are "pending".
+  if (usingMinFee) return unpaid > FEE_UNPAID_TOLERANCE;
+  // No matching config for this row — keep original tuition+other pending rule.
+  return row.feeStatus === 'unpaid' || Number(row.totalPending || 0) > FEE_UNPAID_TOLERANCE;
+}
+
 function FeeStatusCell({
   feeStatus,
   displayLabel,
@@ -128,7 +222,7 @@ function FeeStatusCell({
           Paid
         </span>
         <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-          {formatInr(displayAmount)}
+          {formatInr(0)}
         </span>
       </div>
     );
@@ -172,6 +266,7 @@ export function PendingAdmissionsDownloadModal({
   colleges,
   initialCollegeId = '',
   deskFilters,
+  minimumFeeConfigs = [],
 }: PendingAdmissionsDownloadModalProps) {
   const [view, setView] = useState<'combined' | 'fee' | 'documents'>('combined');
   const [collegeId, setCollegeId] = useState(initialCollegeId);
@@ -181,6 +276,8 @@ export function PendingAdmissionsDownloadModal({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  const hasAnyMinimumFeeConfig = minimumFeeConfigs.length > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -222,6 +319,24 @@ export function PendingAdmissionsDownloadModal({
     return match?.name ? String(match.name) : '';
   }, [courses, courseId]);
 
+  const minFeeFilterContext = useMemo(
+    () => ({
+      collegeId: collegeId || deskFilters?.collegeId || undefined,
+      courseId: courseId || deskFilters?.courseId || undefined,
+      courseName: selectedCourseName || deskFilters?.courseName || undefined,
+      quota: quota || undefined,
+    }),
+    [
+      collegeId,
+      courseId,
+      selectedCourseName,
+      quota,
+      deskFilters?.collegeId,
+      deskFilters?.courseId,
+      deskFilters?.courseName,
+    ]
+  );
+
   const { data: studentQuotasResponse, isLoading: quotasLoading } = useQuery({
     queryKey: ['courses', 'student-quotas', 'pending-combined'],
     queryFn: async () => courseAPI.listStudentQuotas(),
@@ -248,9 +363,21 @@ export function PendingAdmissionsDownloadModal({
       startDate: deskFilters?.startDate || undefined,
       endDate: deskFilters?.endDate || undefined,
       quota: quota || undefined,
-      ...(view !== 'combined' ? { page, limit: PAGE_LIMIT } : { limit: 1000 }),
+      // When min-fee config is active we filter client-side — need the full fee set.
+      ...(view !== 'combined' && !hasAnyMinimumFeeConfig
+        ? { page, limit: PAGE_LIMIT }
+        : { limit: 1000, ...(hasAnyMinimumFeeConfig ? { all: true } : {}) }),
     }),
-    [collegeId, courseId, selectedCourseName, quota, deskFilters, page, view]
+    [
+      collegeId,
+      courseId,
+      selectedCourseName,
+      quota,
+      deskFilters,
+      page,
+      view,
+      hasAnyMinimumFeeConfig,
+    ]
   );
 
   const {
@@ -322,27 +449,97 @@ export function PendingAdmissionsDownloadModal({
     return combined;
   }, [pendingFeesData?.rows, pendingDocsData?.rows]);
 
+  /** Fee rows still pending after applying minimum-fee config (when set). */
+  const pendingFeeRows = useMemo(() => {
+    const rows = (pendingFeesData?.rows || []) as PendingFeeRow[];
+    if (!hasAnyMinimumFeeConfig) return rows;
+    return rows.filter((row) =>
+      isFeeStillPending(row, minimumFeeConfigs, minFeeFilterContext)
+    );
+  }, [pendingFeesData?.rows, hasAnyMinimumFeeConfig, minimumFeeConfigs, minFeeFilterContext]);
+
+  /**
+   * Combined pending list when min fee is active: only students still below minimum.
+   * (Docs columns remain as context — fee-settled-vs-min students are excluded.)
+   */
+  const pendingCombinedRows = useMemo(() => {
+    if (!hasAnyMinimumFeeConfig) return combinedRows;
+
+    const docsById = new Map<string, PendingDocsRow>();
+    (pendingDocsData?.rows || []).forEach((row: PendingDocsRow) => {
+      docsById.set(row.id, row);
+    });
+
+    return pendingFeeRows.map((feeRow) => {
+      const docs = docsById.get(feeRow.id);
+      return {
+        ...feeRow,
+        importantDocumentsPending: docs?.importantDocumentsPending || [],
+        otherDocumentsPending: docs?.otherDocumentsPending || [],
+        importantDocumentsPendingText: docs?.importantDocumentsPendingText,
+        otherDocumentsPendingText: docs?.otherDocumentsPendingText,
+        pendingCertificatesText: docs?.pendingCertificatesText,
+      } as CombinedPendingRow;
+    });
+  }, [
+    hasAnyMinimumFeeConfig,
+    combinedRows,
+    pendingFeeRows,
+    pendingDocsData?.rows,
+  ]);
+
+  const minFeeListStats = useMemo(() => {
+    if (!hasAnyMinimumFeeConfig) return null;
+    const allFeeRows = (pendingFeesData?.rows || []) as PendingFeeRow[];
+    let metMinimum = 0;
+    let belowMinimum = 0;
+    let noMatch = 0;
+    for (const row of allFeeRows) {
+      const { unpaid, usingMinFee } = resolvePendingFeeAmounts(
+        row,
+        minimumFeeConfigs,
+        minFeeFilterContext
+      );
+      if (!usingMinFee) {
+        noMatch += 1;
+        continue;
+      }
+      if (unpaid > FEE_UNPAID_TOLERANCE) belowMinimum += 1;
+      else metMinimum += 1;
+    }
+    return { metMinimum, belowMinimum, noMatch, evaluated: allFeeRows.length };
+  }, [
+    hasAnyMinimumFeeConfig,
+    pendingFeesData?.rows,
+    minimumFeeConfigs,
+    minFeeFilterContext,
+  ]);
+
   const currentPendingData =
     view === 'fee' ? pendingFeesData : view === 'documents' ? pendingDocsData : undefined;
-  const currentRows = view === 'combined' ? combinedRows : currentPendingData?.rows ?? [];
+  const currentRows =
+    view === 'combined'
+      ? pendingCombinedRows
+      : view === 'fee'
+      ? pendingFeeRows
+      : currentPendingData?.rows ?? [];
   
   const currentPageRows = useMemo(() => {
-    if (view === 'combined') {
+    if (view === 'combined' || (view === 'fee' && hasAnyMinimumFeeConfig)) {
       const start = (page - 1) * PAGE_LIMIT;
       const end = start + PAGE_LIMIT;
       return currentRows.slice(start, end);
     }
     return currentRows;
-  }, [view, currentRows, page]);
+  }, [view, currentRows, page, hasAnyMinimumFeeConfig]);
   
-  const currentStats = currentPendingData?.stats;
   const currentPagination =
-    view === 'combined'
+    view === 'combined' || (view === 'fee' && hasAnyMinimumFeeConfig)
       ? {
           page: page,
-          pages: Math.ceil(combinedRows.length / PAGE_LIMIT),
+          pages: Math.max(1, Math.ceil(currentRows.length / PAGE_LIMIT)),
           limit: PAGE_LIMIT,
-          total: combinedRows.length,
+          total: currentRows.length,
         }
       : currentPendingData?.pagination ?? {
           page: 1,
@@ -351,8 +548,8 @@ export function PendingAdmissionsDownloadModal({
           total: currentPendingData?.total ?? 0,
         };
   const currentTotal =
-    view === 'combined'
-      ? combinedRows.length
+    view === 'combined' || (view === 'fee' && hasAnyMinimumFeeConfig)
+      ? currentRows.length
       : currentPendingData?.total ?? 0;
   const currentLoading =
     view === 'fee'
@@ -365,16 +562,16 @@ export function PendingAdmissionsDownloadModal({
     pendingFeesData?.stats?.totalStudents ?? 0,
     pendingDocsData?.stats?.totalStudents ?? 0
   );
-  const feePaidStudents = pendingFeesData?.stats?.tuitionPaidStudents ?? 0;
-  const feeUnpaidStudents = pendingFeesData?.stats?.tuitionUnpaidStudents ?? 0;
+  const feePaidStudents = minFeeListStats
+    ? minFeeListStats.metMinimum
+    : pendingFeesData?.stats?.tuitionPaidStudents ?? 0;
+  const feeUnpaidStudents = minFeeListStats
+    ? minFeeListStats.belowMinimum
+    : pendingFeesData?.stats?.tuitionUnpaidStudents ?? 0;
   const feeNoEntryStudents = pendingFeesData?.stats?.tuitionNoEntryStudents ?? 0;
-  const feePendingStudents = pendingFeesData?.stats?.pendingStudents ?? 0;
   const importantPendingStudents = pendingDocsData?.stats?.importantPendingStudents ?? 0;
   const otherPendingStudents = pendingDocsData?.stats?.otherPendingStudents ??
     pendingDocsData?.stats?.pendingStudents ??
-    0;
-  const docsCompletedStudents = pendingDocsData?.stats?.otherCompletedStudents ??
-    pendingDocsData?.stats?.completedStudents ??
     0;
 
   const handleLoad = async () => {
@@ -504,26 +701,45 @@ export function PendingAdmissionsDownloadModal({
               return combined;
             })()
           : [];
-          const finalPrintRows = view === 'combined' ? combinedPrintRows : printRows;
+          const rawPrintRows = view === 'combined' ? combinedPrintRows : printRows;
+      // Pending-only: when min fee is configured, drop anyone who already met it.
+      const finalPrintRows =
+        view !== 'documents' && hasAnyMinimumFeeConfig
+          ? rawPrintRows.filter((row) =>
+              isFeeStillPending(row, minimumFeeConfigs, minFeeFilterContext)
+            )
+          : rawPrintRows;
+
       if (finalPrintRows.length === 0) {
         showToast.error(
           view === 'fee'
-            ? 'No pending fee records to print for the selected filters.'
+            ? hasAnyMinimumFeeConfig
+              ? 'No students below the minimum fee required for the selected filters.'
+              : 'No pending fee records to print for the selected filters.'
             : view === 'documents'
             ? 'No pending document records to print for the selected filters.'
+            : hasAnyMinimumFeeConfig
+            ? 'No students below the minimum fee required for the selected filters.'
             : 'No pending combined records to print for the selected filters.'
         );
         return;
       }
 
+      const usingMinFee = hasAnyMinimumFeeConfig;
+      const requiredFeeLabel = usingMinFee ? 'Minimum Fee Required' : 'Tuition + Other Payable';
+      const feeSubtitle = usingMinFee
+        ? `Unpaid vs configured minimum fee (${minimumFeeConfigs.length} config${minimumFeeConfigs.length === 1 ? '' : 's'})`
+        : 'Year 1 Tuition + Other combined — remaining balance';
+
       const esc = escapePrintHtml;
       const bodyRows = finalPrintRows
         .map((row, index) => {
           if (view === 'fee') {
-            const totalPayable =
-              row.totalPayable ?? (row.tuitionPayable || 0) + (row.otherPayable || 0);
-            const totalPaid = row.totalPaid ?? row.tuitionPaid ?? 0;
-            const totalUnpaid = row.totalPending ?? Math.max(totalPayable - totalPaid, 0);
+            const { requiredAmount, totalPaid, unpaid } = resolvePendingFeeAmounts(
+              row,
+              minimumFeeConfigs,
+              minFeeFilterContext
+            );
             return `
       <tr>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">${index + 1}</td>
@@ -533,9 +749,9 @@ export function PendingAdmissionsDownloadModal({
         <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.parentMobile || '—')}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.studentMobile || '—')}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">${esc(row.quota || '—')}</td>
-        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${esc(formatInr(totalPayable))}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${esc(formatInr(requiredAmount))}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;color:#059669;font-weight:700;">${esc(formatInr(totalPaid))}</td>
-        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;color:#b45309;font-weight:700;">${esc(formatInr(totalUnpaid))}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;color:#b45309;font-weight:700;">${esc(formatInr(unpaid))}</td>
       </tr>`;
           }
 
@@ -561,10 +777,11 @@ export function PendingAdmissionsDownloadModal({
       </tr>`;
           }
 
-          const totalPayable =
-            row.totalPayable ?? (row.tuitionPayable || 0) + (row.otherPayable || 0);
-          const totalPaid = row.totalPaid ?? row.tuitionPaid ?? 0;
-          const totalUnpaid = row.totalPending ?? Math.max(totalPayable - totalPaid, 0);
+          const { requiredAmount, totalPaid, unpaid } = resolvePendingFeeAmounts(
+            row,
+            minimumFeeConfigs,
+            minFeeFilterContext
+          );
 
           return `
       <tr>
@@ -575,9 +792,9 @@ export function PendingAdmissionsDownloadModal({
         <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.parentMobile || '—')}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(row.studentMobile || '—')}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">${esc(row.quota || '—')}</td>
-        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${esc(formatInr(totalPayable))}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${esc(formatInr(requiredAmount))}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;color:#059669;font-weight:700;">${esc(formatInr(totalPaid))}</td>
-        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;color:#b45309;font-weight:700;">${esc(formatInr(totalUnpaid))}</td>
+        <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;color:#b45309;font-weight:700;">${esc(formatInr(unpaid))}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(importantText)}</td>
         <td style="padding:6px 8px;border:1px solid #e2e8f0;">${esc(otherText)}</td>
       </tr>`;
@@ -604,7 +821,20 @@ export function PendingAdmissionsDownloadModal({
 <body>
   <div class="page-header">
     <h1>${view === 'fee' ? 'Pending Tuition & Other Fee' : view === 'documents' ? 'Pending Documents' : 'Pending Combined Fee & Documents'}</h1>
-    <p>${view === 'fee' ? 'Year 1 Tuition + Other combined — remaining balance' : view === 'documents' ? 'Other documents pending' : 'Combined pending fee and documents'} — ${finalPrintRows.length} student(s)</p>
+    <p>${
+      view === 'fee'
+        ? feeSubtitle
+        : view === 'documents'
+        ? 'Other documents pending'
+        : usingMinFee
+        ? `Combined pending fee & documents — ${feeSubtitle}`
+        : 'Combined pending fee and documents'
+    } — ${finalPrintRows.length} student(s)</p>
+    ${
+      usingMinFee && view !== 'documents'
+        ? `<p>Minimum Config active · ${minimumFeeConfigs.length} saved amount(s) · unpaid = min fee − paid where configured</p>`
+        : ''
+    }
     <p>Generated ${esc(new Date().toLocaleString('en-IN'))}</p>
   </div>
   <table>
@@ -619,16 +849,26 @@ export function PendingAdmissionsDownloadModal({
         <th style="text-align:center;">Quota</th>
         ${
           view === 'fee'
-            ? '<th style="text-align:right;">Tuition + Other Payable</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Unpaid</th>'
+            ? `<th style="text-align:right;">${esc(requiredFeeLabel)}</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Unpaid</th>`
             : view === 'documents'
             ? '<th>Important Documents</th><th>Other Documents Pending</th>'
-            : '<th style="text-align:right;">Tuition + Other Payable</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Unpaid</th><th>Important Documents</th><th>Other Documents Pending</th>'
+            : `<th style="text-align:right;">${esc(requiredFeeLabel)}</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Unpaid</th><th>Important Documents</th><th>Other Documents Pending</th>`
         }
       </tr>
     </thead>
     <tbody>${bodyRows}</tbody>
   </table>
-  <div class="footer">Admissions CRM — ${view === 'fee' ? 'Pending Fee report (Tuition + Other combined)' : view === 'documents' ? 'Pending Documents report' : 'Pending Combined Fee & Documents report'}</div>
+  <div class="footer">Admissions CRM — ${
+    view === 'fee'
+      ? usingMinFee
+        ? 'Pending Fee report (vs minimum fee required)'
+        : 'Pending Fee report (Tuition + Other combined)'
+      : view === 'documents'
+      ? 'Pending Documents report'
+      : usingMinFee
+      ? 'Pending Combined Fee & Documents report (vs minimum fee required)'
+      : 'Pending Combined Fee & Documents report'
+  }</div>
 </body>
 </html>`;
 
@@ -661,7 +901,8 @@ export function PendingAdmissionsDownloadModal({
           <DialogTitle>Pending fee & documents</DialogTitle>
           <DialogDescription>
             Active admissions only, using the same date and desk filters as the Abstract tab. Use the
-            tabs to switch between combined and separate pending fee/document lists.
+            tabs to switch between combined and separate pending fee/document lists. Minimum fee is
+            set from the Config button on Student Info.
           </DialogDescription>
         </DialogHeader>
 
@@ -804,6 +1045,16 @@ export function PendingAdmissionsDownloadModal({
               Download XLSX
             </Button>
           </div>
+          {hasAnyMinimumFeeConfig ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              Config active:{' '}
+              <span className="font-semibold">
+                {minimumFeeConfigs.length} minimum fee amount
+                {minimumFeeConfigs.length === 1 ? '' : 's'} saved
+              </span>
+              {' — '}list and Print PDF show only students still below the matching minimum.
+            </div>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-4 sm:px-6">
@@ -827,17 +1078,27 @@ export function PendingAdmissionsDownloadModal({
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/30">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Fee paid</p>
                   <p className="mt-1 text-2xl font-bold text-emerald-800 dark:text-emerald-300">{feePaidStudents}</p>
-                  <p className="mt-0.5 text-[10px] text-emerald-700/80 dark:text-emerald-400/80">Paid any amount on tuition + other</p>
+                  <p className="mt-0.5 text-[10px] text-emerald-700/80 dark:text-emerald-400/80">
+                    {hasAnyMinimumFeeConfig
+                      ? 'Met configured minimum fee (among tuition-pending set)'
+                      : 'Paid any amount on tuition + other'}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Fee unpaid</p>
                   <p className="mt-1 text-2xl font-bold text-amber-800 dark:text-amber-300">{feeUnpaidStudents}</p>
-                  <p className="mt-0.5 text-[10px] text-amber-700/80 dark:text-amber-400/80">No tuition + other payment yet</p>
+                  <p className="mt-0.5 text-[10px] text-amber-700/80 dark:text-amber-400/80">
+                    {hasAnyMinimumFeeConfig
+                      ? 'Still below configured minimum fee'
+                      : 'Remaining tuition + other balance'}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 dark:border-sky-900/50 dark:bg-sky-950/30">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-400">No fee entry</p>
                   <p className="mt-1 text-2xl font-bold text-sky-800 dark:text-sky-300">{feeNoEntryStudents}</p>
-                  <p className="mt-0.5 text-[10px] text-sky-700/80 dark:text-sky-400/80">Pending but no Year 1 fee entry</p>
+                  <p className="mt-0.5 text-[10px] text-sky-700/80 dark:text-sky-400/80">
+                    Pending but no Fee Management ledger (Year 2+ for lateral)
+                  </p>
                 </div>
                 <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/30">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-red-700 dark:text-red-400">Important docs pending</p>
@@ -856,9 +1117,13 @@ export function PendingAdmissionsDownloadModal({
                   <div>
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {view === 'fee'
-                        ? 'Year 1 tuition + other fee — remaining balance'
+                        ? hasAnyMinimumFeeConfig
+                          ? 'Pending fee vs configured minimum amounts'
+                          : 'Year 1 tuition + other fee — remaining balance'
                         : view === 'documents'
                         ? 'Other documents pending'
+                        : hasAnyMinimumFeeConfig
+                        ? 'Combined pending — unpaid vs configured minimum'
                         : 'Combined pending fee + documents'}
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -893,7 +1158,9 @@ export function PendingAdmissionsDownloadModal({
                             <th className={`${tableThClass} text-center`}>Quota</th>
                             {view === 'fee' ? (
                               <>
-                                <th className={`${tableThClass} text-right`}>Tuition + Other</th>
+                                <th className={`${tableThClass} text-right`}>
+                                  {hasAnyMinimumFeeConfig ? 'Min. Fee Required' : 'Tuition + Other'}
+                                </th>
                                 <th className={`${tableThClass} text-right`}>Paid</th>
                                 <th className={`${tableThClass} text-right`}>Unpaid</th>
                               </>
@@ -904,7 +1171,9 @@ export function PendingAdmissionsDownloadModal({
                               </>
                             ) : (
                               <>
-                                <th className={`${tableThClass} text-right`}>Tuition + Other</th>
+                                <th className={`${tableThClass} text-right`}>
+                                  {hasAnyMinimumFeeConfig ? 'Min. Fee Required' : 'Tuition + Other'}
+                                </th>
                                 <th className={`${tableThClass} text-right`}>Paid</th>
                                 <th className={`${tableThClass} text-right`}>Unpaid</th>
                                 <th className={tableThClass}>Important Documents</th>
@@ -916,10 +1185,12 @@ export function PendingAdmissionsDownloadModal({
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {currentPageRows.map((row) => {
                             if (view === 'fee') {
-                              const totalPayable =
-                                row.totalPayable ?? (row.tuitionPayable || 0) + (row.otherPayable || 0);
-                              const totalPaid = row.totalPaid ?? row.tuitionPaid ?? 0;
-                              const totalUnpaid = row.totalPending ?? Math.max(totalPayable - totalPaid, 0);
+                              const { requiredAmount, totalPaid, unpaid } =
+                                resolvePendingFeeAmounts(
+                                  row,
+                                  minimumFeeConfigs,
+                                  minFeeFilterContext
+                                );
                               return (
                                 <tr key={row.id}>
                                   <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
@@ -940,7 +1211,7 @@ export function PendingAdmissionsDownloadModal({
                                       {row.quota || '—'}
                                     </span>
                                   </td>
-                                  <td className={`${tableTdClass} text-right font-semibold`}>{formatInr(totalPayable)}</td>
+                                  <td className={`${tableTdClass} text-right font-semibold`}>{formatInr(requiredAmount)}</td>
                                   <td className={`${tableTdClass} text-right`}>
                                     <div className="flex flex-col items-end gap-0.5">
                                       <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -953,10 +1224,10 @@ export function PendingAdmissionsDownloadModal({
                                   </td>
                                   <td className={`${tableTdClass} text-right`}>
                                     <FeeStatusCell
-                                      feeStatus={row.feeStatus}
-                                      displayLabel={row.displayLabel}
-                                      displayAmount={totalUnpaid}
-                                      hasFeeEntry={row.hasFeeEntry}
+                                      feeStatus="unpaid"
+                                      displayLabel="Unpaid"
+                                      displayAmount={unpaid}
+                                      hasFeeEntry={true}
                                     />
                                   </td>
                                 </tr>
@@ -997,10 +1268,12 @@ export function PendingAdmissionsDownloadModal({
                               );
                             }
 
-                            const totalPayable =
-                              row.totalPayable ?? (row.tuitionPayable || 0) + (row.otherPayable || 0);
-                            const totalPaid = row.totalPaid ?? row.tuitionPaid ?? 0;
-                            const totalUnpaid = row.totalPending ?? Math.max(totalPayable - totalPaid, 0);
+                            const { requiredAmount, totalPaid, unpaid } =
+                              resolvePendingFeeAmounts(
+                                row,
+                                minimumFeeConfigs,
+                                minFeeFilterContext
+                              );
 
                             return (
                               <tr key={row.id}>
@@ -1022,7 +1295,7 @@ export function PendingAdmissionsDownloadModal({
                                     {row.quota || '—'}
                                   </span>
                                 </td>
-                                <td className={`${tableTdClass} text-right font-semibold`}>{formatInr(totalPayable)}</td>
+                                <td className={`${tableTdClass} text-right font-semibold`}>{formatInr(requiredAmount)}</td>
                                 <td className={`${tableTdClass} text-right`}>
                                   <div className="flex flex-col items-end gap-0.5">
                                     <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -1035,10 +1308,10 @@ export function PendingAdmissionsDownloadModal({
                                 </td>
                                 <td className={`${tableTdClass} text-right`}>
                                   <FeeStatusCell
-                                    feeStatus={row.feeStatus}
-                                    displayLabel={row.displayLabel}
-                                    displayAmount={totalUnpaid}
-                                    hasFeeEntry={row.hasFeeEntry}
+                                    feeStatus="unpaid"
+                                    displayLabel="Unpaid"
+                                    displayAmount={unpaid}
+                                    hasFeeEntry={true}
                                   />
                                 </td>
                                 <td className={tableTdClass}>{importantText}</td>

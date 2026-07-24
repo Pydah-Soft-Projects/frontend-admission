@@ -33,6 +33,7 @@ import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layo
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
+import { resolveJoiningStudentYearOfStudy } from '@/lib/joiningAcademicYearRegistration';
 import {
   communicationAddressHasDisplayValues,
 } from '@/lib/formatJoiningAddressDisplay';
@@ -452,6 +453,23 @@ export default function AdmissionDetailPage() {
         ''
     ).trim();
   }, [joiningForReference?.registrationFormData, admission?.registrationFormData]);
+
+  /** Step 4: laterals start at Year 2 (hide Year 1 rows in the fee pivot). */
+  const feeStudentYearOfStudy = useMemo(
+    () =>
+      resolveJoiningStudentYearOfStudy({
+        registrationExtras: registrationSource,
+        admissionNumber: admission?.admissionNumber,
+        course: feeCourseInfo.course,
+        quota: feeCourseInfo.quota,
+      }),
+    [
+      registrationSource,
+      admission?.admissionNumber,
+      feeCourseInfo.course,
+      feeCourseInfo.quota,
+    ]
+  );
 
   // Same fee portal concession/revised lines the joining workspace payment builder uses,
   // so the read-only Step 4 table resolves head-wise amounts identically to the edit view.
@@ -1021,14 +1039,19 @@ export default function AdmissionDetailPage() {
                 branch={feeCourseInfo.branch}
                 quota={feeCourseInfo.quota}
                 batch={feeConfigurationBatch}
-                studentStatus={feeStudentStatus}
+                studentStatus={feeStudentStatus || (feeStudentYearOfStudy >= 2 ? 'Lateral' : undefined)}
+                minStudentYear={feeStudentYearOfStudy >= 2 ? feeStudentYearOfStudy : null}
                 studentFeeDetails={studentFeeDetails}
                 overallConcessionLines={overallConcessionLines}
                 feeDetailsEditable={false}
                 showActualAndRevisedFees
                 pivotView
                 pivotFeeColumns="tuition-special-transport"
-                description="Year-wise Tuition Fee, Special Fee, and applicable Transport Fee."
+                description={
+                  feeStudentYearOfStudy >= 2
+                    ? 'Lateral entry — Year 2 onwards. Tuition Fee, Special Fee, and applicable Transport Fee.'
+                    : 'Year-wise Tuition Fee, Special Fee, and applicable Transport Fee.'
+                }
               />
 
               <div className="rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">

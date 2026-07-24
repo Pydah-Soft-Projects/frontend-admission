@@ -1684,6 +1684,10 @@ export const admissionAPI = {
     branchName?: string;
     /** Filter by lead source (e.g. `Self Registration`, `Website`). */
     source?: string;
+    /** Filter by Year-1 TUI01/OTH1 fee entry: `no_entry` | `has_entry`. */
+    feeEntry?: 'no_entry' | 'has_entry' | string;
+    /** Filter by stored admission quota label (e.g. `Convenor Quota`). */
+    quota?: string;
   }) => {
     const queryParams = new URLSearchParams();
     if (params) {
@@ -1751,6 +1755,8 @@ export const admissionAPI = {
     branchName?: string;
     /** Filter by lead source (e.g. `Self Registration`, `Website`). */
     source?: string;
+    /** Filter by stored admission quota label (e.g. `Convenor Quota`). */
+    quota?: string;
   }) => {
     const queryParams = new URLSearchParams();
     if (filters) {
@@ -1933,6 +1939,72 @@ export const admissionAPI = {
       responseType: 'blob',
     });
     return response.data;
+  },
+
+  /** List minimum fee configs (college + course + quota amounts) from admissions DB. */
+  listMinimumFeeConfigs: async (filters?: { collegeId?: string; courseId?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(
+      `/admissions/minimum-fee-configs${query ? `?${query}` : ''}`
+    );
+    return (response.data?.data || response.data) as {
+      configs: Array<{
+        id?: string;
+        collegeId: string;
+        collegeName: string;
+        courseId: string;
+        courseName: string;
+        quota: string;
+        amount: number;
+      }>;
+      total: number;
+    };
+  },
+
+  /** Replace quota amounts for one college + course. */
+  upsertMinimumFeeConfigsForCourse: async (payload: {
+    collegeId: string;
+    collegeName: string;
+    courseId: string;
+    courseName: string;
+    entries: Array<{ quota: string; amount: number }>;
+  }) => {
+    const response = await api.put('/admissions/minimum-fee-configs/course', payload);
+    return (response.data?.data || response.data) as {
+      configs: Array<{
+        id?: string;
+        collegeId: string;
+        collegeName: string;
+        courseId: string;
+        courseName: string;
+        quota: string;
+        amount: number;
+      }>;
+      total: number;
+    };
+  },
+
+  clearMinimumFeeConfigsForCourse: async (collegeId: string, courseId: string) => {
+    const queryParams = new URLSearchParams({ collegeId, courseId });
+    const response = await api.delete(
+      `/admissions/minimum-fee-configs/course?${queryParams.toString()}`
+    );
+    return response.data?.data || response.data;
+  },
+
+  clearMinimumFeeConfigsForCollege: async (collegeId: string) => {
+    const response = await api.delete(
+      `/admissions/minimum-fee-configs/college/${encodeURIComponent(collegeId)}`
+    );
+    return response.data?.data || response.data;
   },
 };
 
