@@ -898,6 +898,26 @@ const CompletedAdmissionsPage = () => {
   const pagination = data?.pagination ?? { page: 1, pages: 1, limit: 20, total: 0 };
   const isEmpty = !isLoading && admissions.length === 0;
 
+  const PAGE_BLOCK_SIZE = 5;
+  const paginationBlock = useMemo(() => {
+    const totalPages = Math.max(1, pagination.pages || 1);
+    const currentPage = Math.min(Math.max(1, pagination.page || 1), totalPages);
+    const blockIndex = Math.floor((currentPage - 1) / PAGE_BLOCK_SIZE);
+    const blockStart = blockIndex * PAGE_BLOCK_SIZE + 1;
+    const blockEnd = Math.min(blockStart + PAGE_BLOCK_SIZE - 1, totalPages);
+    const pageNumbers = Array.from(
+      { length: blockEnd - blockStart + 1 },
+      (_, i) => blockStart + i
+    );
+    return {
+      pageNumbers,
+      hasPrevBlock: blockStart > 1,
+      hasNextBlock: blockEnd < totalPages,
+      prevBlockPage: Math.max(1, blockStart - PAGE_BLOCK_SIZE),
+      nextBlockPage: Math.min(totalPages, blockEnd + 1),
+    };
+  }, [pagination.page, pagination.pages]);
+
   const cancelAdmissionMutation = useMutation({
     mutationFn: async () => {
       if (!cancelTarget?._id) {
@@ -2657,10 +2677,60 @@ const CompletedAdmissionsPage = () => {
             <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4 dark:border-slate-700 dark:text-slate-300">
               <div className="text-center sm:text-left">
                 Page {pagination.page} of {pagination.pages}
+                {pagination.total > 0 ? (
+                  <span className="text-slate-400 dark:text-slate-500">
+                    {' '}
+                    · {pagination.total} total
+                  </span>
+                ) : null}
               </div>
-              <div className="flex items-center justify-center gap-2">
-                <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => setPage(prev => Math.max(prev - 1, 1))} disabled={pagination.page === 1 || isFetching}>Previous</Button>
-                <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => setPage(prev => Math.min(prev + 1, pagination.pages))} disabled={pagination.page === pagination.pages || isFetching}>Next</Button>
+              <div className="flex items-center justify-center gap-1.5">
+                {paginationBlock.hasPrevBlock ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 min-w-[36px] px-2.5"
+                    onClick={() => setPage(paginationBlock.prevBlockPage)}
+                    disabled={isFetching}
+                    title="Previous pages"
+                  >
+                    <span aria-hidden="true">&lt;&lt;</span>
+                  </Button>
+                ) : null}
+                {paginationBlock.pageNumbers.map((pageNum) => {
+                  const isActive = pagination.page === pageNum;
+                  return (
+                    <Button
+                      key={pageNum}
+                      type="button"
+                      variant={isActive ? 'primary' : 'outline'}
+                      size="sm"
+                      className={cn(
+                        'h-9 min-w-[36px] px-2',
+                        isActive && '!bg-blue-600 !border-blue-600 hover:!bg-blue-700'
+                      )}
+                      onClick={() => setPage(pageNum)}
+                      disabled={isFetching}
+                      aria-current={isActive ? 'page' : undefined}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                {paginationBlock.hasNextBlock ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 min-w-[36px] px-2.5"
+                    onClick={() => setPage(paginationBlock.nextBlockPage)}
+                    disabled={isFetching}
+                    title="Next pages"
+                  >
+                    <span aria-hidden="true">&gt;&gt;</span>
+                  </Button>
+                ) : null}
               </div>
             </div>
           )}
