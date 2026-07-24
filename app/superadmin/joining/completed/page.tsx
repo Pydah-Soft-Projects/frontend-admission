@@ -33,7 +33,7 @@ import {
   resolveAdmissionStatCourseLabel,
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
-import { JOINING_DOCUMENT_LABELS } from '@/lib/joiningDocumentsDisplay';
+import { buildImportantDocumentTabItems } from '@/lib/joiningDocumentsDisplay';
 import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer, Settings2 } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { cn } from '@/lib/utils';
@@ -1696,15 +1696,15 @@ const CompletedAdmissionsPage = () => {
                 type="button"
                 className="w-full gap-2 sm:w-auto"
                 onClick={() => {
-                  // Initialize selected documents with all pending documents
-                  const pendingDocs: string[] = [];
-                  const docs = studentInfoViewRecord.documents;
-                  Object.entries(JOINING_DOCUMENT_LABELS).forEach(([key, label]) => {
-                    const status = docs[key as keyof typeof docs];
-                    if (status !== 'received') {
-                      pendingDocs.push(label);
-                    }
-                  });
+                  // Important Documents only (certificate checklist / paper important cols)
+                  const importantItems = buildImportantDocumentTabItems(
+                    studentInfoViewRecord.documents,
+                    studentInfoViewRecord.courseInfo?.quota,
+                    studentInfoViewRecord.registrationFormData
+                  );
+                  const pendingDocs = importantItems
+                    .filter((item) => String(item.status || '').toLowerCase() !== 'received')
+                    .map((item) => item.label);
                   setSelectedDocuments(pendingDocs);
                   setShowDocumentSmsDialog(true);
                 }}
@@ -1836,7 +1836,7 @@ const CompletedAdmissionsPage = () => {
         onConfigsChanged={() => refetchMinimumFeeConfigs()}
       />
 
-      {/* Send Pending Documents SMS Dialog */}
+      {/* Send Pending Documents SMS Dialog — Important Documents only */}
       <Dialog
         open={showDocumentSmsDialog}
         onOpenChange={(open) => {
@@ -1847,7 +1847,8 @@ const CompletedAdmissionsPage = () => {
           <DialogHeader>
             <DialogTitle>Send Pending Documents SMS</DialogTitle>
             <DialogDescription>
-              Select which pending documents to include in the SMS to the student.
+              Select which pending Important Documents to include in the SMS. Other documents are
+              not sent.
             </DialogDescription>
           </DialogHeader>
 
@@ -1863,38 +1864,46 @@ const CompletedAdmissionsPage = () => {
                 </p>
               </div>
 
-              {/* Document checkboxes - two columns */}
+              {/* Important Documents checkboxes */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {Object.entries(JOINING_DOCUMENT_LABELS).map(([key, label]) => {
-                  const docs = studentInfoViewRecord.documents;
-                  const status = docs[key as keyof typeof docs];
-                  const isPending = status !== 'received';
+                {(() => {
+                  const importantItems = buildImportantDocumentTabItems(
+                    studentInfoViewRecord.documents,
+                    studentInfoViewRecord.courseInfo?.quota,
+                    studentInfoViewRecord.registrationFormData
+                  ).filter((item) => String(item.status || '').toLowerCase() !== 'received');
 
-                  if (!isPending) return null;
+                  if (importantItems.length === 0) {
+                    return (
+                      <p className="col-span-full text-sm text-slate-500">
+                        No pending Important Documents for this student.
+                      </p>
+                    );
+                  }
 
-                  return (
+                  return importantItems.map((item) => (
                     <label
-                      key={key}
+                      key={item.key}
                       className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700"
                     >
                       <input
                         type="checkbox"
                         className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        checked={selectedDocuments.includes(label)}
+                        checked={selectedDocuments.includes(item.label)}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedDocuments([...selectedDocuments, label]);
+                            setSelectedDocuments([...selectedDocuments, item.label]);
                           } else {
-                            setSelectedDocuments(selectedDocuments.filter((d) => d !== label));
+                            setSelectedDocuments(selectedDocuments.filter((d) => d !== item.label));
                           }
                         }}
                       />
                       <span className="text-sm text-slate-700 dark:text-slate-200">
-                        {label}
+                        {item.label}
                       </span>
                     </label>
-                  );
-                })}
+                  ));
+                })()}
               </div>
             </div>
           )}

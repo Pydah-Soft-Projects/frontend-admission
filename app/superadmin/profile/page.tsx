@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { userAPI, userSettingsAPI } from '@/lib/api';
+import { userSettingsAPI } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -11,16 +11,21 @@ import { useDashboardHeader } from '@/components/layout/DashboardShell';
 import { auth } from '@/lib/auth';
 import type { User } from '@/types';
 
+const normalizeMobile = (value: string) => value.replace(/\D/g, '').slice(0, 10);
+
 export default function ProfilePage() {
     const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
     const queryClient = useQueryClient();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [mobileNumber, setMobileNumber] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isPasswordExpanded, setIsPasswordExpanded] = useState(false);
 
     useEffect(() => {
-        setCurrentUser(auth.getUser());
+        const user = auth.getUser();
+        setCurrentUser(user);
+        setMobileNumber(normalizeMobile(String(user?.mobileNumber || '')));
     }, []);
 
     const headerContent = useMemo(
@@ -42,6 +47,28 @@ export default function ProfilePage() {
         return () => clearHeaderContent();
     }, [headerContent, setHeaderContent, clearHeaderContent]);
 
+    const savedMobile = normalizeMobile(String(currentUser?.mobileNumber || ''));
+    const mobileDirty = mobileNumber !== savedMobile;
+
+    const updateMobileMutation = useMutation({
+        mutationFn: async (nextMobile: string) => {
+            return userSettingsAPI.updateMyProfile({
+                mobileNumber: nextMobile || '',
+            });
+        },
+        onSuccess: (updatedUser) => {
+            const nextMobile = normalizeMobile(String(updatedUser?.mobileNumber || mobileNumber || ''));
+            auth.updateUser({ mobileNumber: nextMobile || null });
+            setCurrentUser(auth.getUser());
+            setMobileNumber(nextMobile);
+            showToast.success('Mobile number updated successfully');
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+        },
+        onError: (error: any) => {
+            showToast.error(error.response?.data?.message || 'Failed to update mobile number');
+        },
+    });
+
     const updatePasswordMutation = useMutation({
         mutationFn: async (password: string) => {
             if (!currentUser) throw new Error('User not found');
@@ -58,6 +85,15 @@ export default function ProfilePage() {
             showToast.error(error.response?.data?.message || 'Failed to update password');
         },
     });
+
+    const handleUpdateMobile = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (mobileNumber && mobileNumber.length !== 10) {
+            showToast.error('Enter a valid 10-digit mobile number');
+            return;
+        }
+        updateMobileMutation.mutate(mobileNumber);
+    };
 
     const handleUpdatePassword = (e: React.FormEvent) => {
         e.preventDefault();
@@ -106,6 +142,39 @@ export default function ProfilePage() {
                             {currentUser.roleName}
                         </div>
                     </div>
+                    <form onSubmit={handleUpdateMobile} className="space-y-3 md:col-span-2">
+                        <Input
+                            label="Mobile Number"
+                            type="tel"
+                            inputMode="numeric"
+                            autoComplete="tel"
+                            value={mobileNumber}
+                            onChange={(e) => setMobileNumber(normalizeMobile(e.target.value))}
+                            placeholder="Enter 10-digit mobile number"
+                            maxLength={10}
+                        />
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                disabled={!mobileDirty || updateMobileMutation.isPending}
+                                className="w-full sm:w-auto"
+                            >
+                                {updateMobileMutation.isPending ? 'Saving...' : 'Save Mobile Number'}
+                            </Button>
+                            {mobileDirty ? (
+                                <Button
+                                    type="button"
+                                    variant="light"
+                                    onClick={() => setMobileNumber(savedMobile)}
+                                    disabled={updateMobileMutation.isPending}
+                                    className="w-full sm:w-auto"
+                                >
+                                    Reset
+                                </Button>
+                            ) : null}
+                        </div>
+                    </form>
                 </div>
             </Card>
 

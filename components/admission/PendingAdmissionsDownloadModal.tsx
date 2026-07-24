@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { admissionAPI, courseAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import {
@@ -19,7 +19,7 @@ import {
   quotaLabelsFromCatalog,
 } from '@/lib/studentQuotaCatalog';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
-import { Download, Printer } from 'lucide-react';
+import { Download, MessageSquare, Printer } from 'lucide-react';
 import {
   resolveMinimumFeeAmount,
   type MinimumFeeConfigEntry,
@@ -276,6 +276,8 @@ export function PendingAdmissionsDownloadModal({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [confirmBulkSmsOpen, setConfirmBulkSmsOpen] = useState(false);
 
   const hasAnyMinimumFeeConfig = minimumFeeConfigs.length > 0;
 
@@ -287,10 +289,13 @@ export function PendingAdmissionsDownloadModal({
     setQuota('');
     setPage(1);
     setHasLoadedOnce(false);
+    setSelectedIds(new Set());
+    setConfirmBulkSmsOpen(false);
   }, [open, initialCollegeId]);
   
   useEffect(() => {
     setPage(1);
+    setSelectedIds(new Set());
   }, [view]);
 
   const { data: coursesData, isLoading: coursesLoading } = useQuery({
@@ -557,6 +562,95 @@ export function PendingAdmissionsDownloadModal({
       : view === 'documents'
       ? pendingDocsLoading || pendingDocsFetching
       : pendingFeesLoading || pendingDocsLoading || pendingFeesFetching || pendingDocsFetching;
+
+  const selectableRowIds = useMemo(
+    () => currentRows.map((row) => String(row.id)).filter(Boolean),
+    [currentRows]
+  );
+
+  const selectedCount = selectedIds.size;
+  const allSelectableSelected =
+    selectableRowIds.length > 0 && selectableRowIds.every((id) => selectedIds.has(id));
+  const someSelectableSelected =
+    selectableRowIds.some((id) => selectedIds.has(id)) && !allSelectableSelected;
+
+  const pageSelectableIds = useMemo(
+    () => currentPageRows.map((row) => String(row.id)).filter(Boolean),
+    [currentPageRows]
+  );
+  const allPageSelected =
+    pageSelectableIds.length > 0 && pageSelectableIds.every((id) => selectedIds.has(id));
+
+  const toggleRowSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllLoaded = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        selectableRowIds.forEach((id) => next.add(id));
+      } else {
+        selectableRowIds.forEach((id) => next.delete(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllPage = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        pageSelectableIds.forEach((id) => next.add(id));
+      } else {
+        pageSelectableIds.forEach((id) => next.delete(id));
+      }
+      return next;
+    });
+  };
+
+  const bulkSmsMutation = useMutation({
+    mutationFn: async (admissionIds: string[]) =>
+      admissionAPI.sendDocumentNotificationSmsBulk(admissionIds),
+    onSuccess: (response) => {
+      const data = (response?.data || response) as {
+        sent?: number;
+        skipped?: number;
+        failed?: number;
+        message?: string;
+      };
+      const sent = Number(data?.sent ?? 0);
+      const skipped = Number(data?.skipped ?? 0);
+      const failed = Number(data?.failed ?? 0);
+      if (sent > 0 && failed === 0) {
+        showToast.success(
+          `Important Documents SMS sent to ${sent} student(s)${
+            skipped ? ` (${skipped} skipped — no pending important docs or phone)` : ''
+          }.`
+        );
+      } else if (sent > 0) {
+        showToast.success(
+          `Sent ${sent}, skipped ${skipped}, failed ${failed}. SMS uses Important Documents only.`
+        );
+      } else {
+        showToast.error(
+          `No SMS sent — skipped ${skipped}, failed ${failed}. Students need pending Important Documents and a valid phone.`
+        );
+      }
+      setSelectedIds(new Set());
+      setConfirmBulkSmsOpen(false);
+    },
+    onError: (error: any) => {
+      showToast.error(
+        error?.response?.data?.message || error?.message || 'Failed to send bulk document SMS'
+      );
+    },
+  });
 
   const totalStudents = Math.max(
     pendingFeesData?.stats?.totalStudents ?? 0,
@@ -895,6 +989,7 @@ export function PendingAdmissionsDownloadModal({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[95vw] max-w-[75vw] flex-col overflow-hidden p-0 sm:max-w-[75vw]">
         <DialogHeader className="shrink-0 border-b border-slate-200 px-4 py-4 sm:px-6 dark:border-slate-800">
@@ -954,6 +1049,7 @@ export function PendingAdmissionsDownloadModal({
                   setCourseId('');
                   setPage(1);
                   setHasLoadedOnce(false);
+                  setSelectedIds(new Set());
                 }}
                 className={selectClassName}
               >
@@ -975,6 +1071,7 @@ export function PendingAdmissionsDownloadModal({
                   setCourseId(e.target.value);
                   setPage(1);
                   setHasLoadedOnce(false);
+                  setSelectedIds(new Set());
                 }}
                 className={selectClassName}
                 disabled={coursesLoading}
@@ -1001,6 +1098,7 @@ export function PendingAdmissionsDownloadModal({
                   setQuota(e.target.value);
                   setPage(1);
                   setHasLoadedOnce(false);
+                  setSelectedIds(new Set());
                 }}
                 className={selectClassName}
                 disabled={quotasLoading}
@@ -1131,7 +1229,23 @@ export function PendingAdmissionsDownloadModal({
                       {currentPagination.pages > 1 ? ` — page ${currentPagination.page} of ${currentPagination.pages}` : ''}.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedCount > 0 ? (
+                      <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                        {selectedCount} selected
+                      </span>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5"
+                      disabled={selectedCount === 0 || bulkSmsMutation.isPending}
+                      onClick={() => setConfirmBulkSmsOpen(true)}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Send SMS
+                    </Button>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {view === 'fee' ? 'Fee view' : view === 'documents' ? 'Documents view' : 'Combined view'}
                     </span>
@@ -1148,10 +1262,44 @@ export function PendingAdmissionsDownloadModal({
                   </p>
                 ) : (
                   <>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                      <label className="inline-flex cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          checked={allSelectableSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = someSelectableSelected;
+                          }}
+                          onChange={(e) => toggleSelectAllLoaded(e.target.checked)}
+                        />
+                        <span>
+                          Select all {selectableRowIds.length} student(s) in this list
+                        </span>
+                      </label>
+                      <span className="text-[11px] text-slate-500">
+                        SMS includes pending Important Documents only
+                      </span>
+                    </div>
                     <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
                       <table className="min-w-[800px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                         <thead className="bg-slate-50 dark:bg-slate-900/70">
                           <tr>
+                            <th className={`${tableThClass} w-10`}>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                checked={allPageSelected}
+                                ref={(el) => {
+                                  if (el) {
+                                    el.indeterminate = !allPageSelected && pageSelectableIds.some((id) => selectedIds.has(id));
+                                  }
+                                }}
+                                onChange={(e) => toggleSelectAllPage(e.target.checked)}
+                                aria-label="Select all on this page"
+                                title="Select all on this page"
+                              />
+                            </th>
                             <th className={tableThClass}>Student</th>
                             <th className={`${tableThClass} hidden md:table-cell`}>Parent Mobile No</th>
                             <th className={`${tableThClass} hidden md:table-cell`}>Student Mobile No</th>
@@ -1184,6 +1332,20 @@ export function PendingAdmissionsDownloadModal({
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {currentPageRows.map((row) => {
+                            const rowId = String(row.id);
+                            const rowChecked = selectedIds.has(rowId);
+                            const selectCell = (
+                              <td className={`${tableTdClass} w-10`}>
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                  checked={rowChecked}
+                                  onChange={(e) => toggleRowSelected(rowId, e.target.checked)}
+                                  aria-label={`Select ${row.studentName || row.admissionNumber || 'student'}`}
+                                />
+                              </td>
+                            );
+
                             if (view === 'fee') {
                               const { requiredAmount, totalPaid, unpaid } =
                                 resolvePendingFeeAmounts(
@@ -1193,6 +1355,7 @@ export function PendingAdmissionsDownloadModal({
                                 );
                               return (
                                 <tr key={row.id}>
+                                  {selectCell}
                                   <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
                                     <div className="flex flex-col gap-0.5">
                                       <span>{row.studentName || '—'}</span>
@@ -1244,6 +1407,7 @@ export function PendingAdmissionsDownloadModal({
                             if (view === 'documents') {
                               return (
                                 <tr key={row.id}>
+                                  {selectCell}
                                   <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
                                     <div className="flex flex-col gap-0.5">
                                       <span>{row.studentName || '—'}</span>
@@ -1277,6 +1441,7 @@ export function PendingAdmissionsDownloadModal({
 
                             return (
                               <tr key={row.id}>
+                                {selectCell}
                                 <td className={`${tableTdClass} font-medium text-slate-900 dark:text-slate-100`}>
                                   <div className="flex flex-col gap-0.5">
                                     <span>{row.studentName || '—'}</span>
@@ -1364,5 +1529,39 @@ export function PendingAdmissionsDownloadModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+      <Dialog open={confirmBulkSmsOpen} onOpenChange={setConfirmBulkSmsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Important Documents SMS</DialogTitle>
+            <DialogDescription>
+              Send pending Important Documents SMS to {selectedCount} selected student(s). Other
+              documents are not included.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Students without pending Important Documents or a valid phone number will be skipped.
+          </p>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmBulkSmsOpen(false)}
+              disabled={bulkSmsMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              isLoading={bulkSmsMutation.isPending}
+              disabled={selectedCount === 0}
+              onClick={() => bulkSmsMutation.mutate([...selectedIds])}
+            >
+              Send SMS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
