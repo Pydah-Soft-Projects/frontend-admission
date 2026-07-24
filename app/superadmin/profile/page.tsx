@@ -142,7 +142,7 @@ export default function ProfilePage() {
                             {currentUser.roleName}
                         </div>
                     </div>
-                    <form onSubmit={handleUpdateMobile} className="space-y-3 md:col-span-2">
+                    <form onSubmit={handleUpdateMobile} className="space-y-2">
                         <Input
                             label="Mobile Number"
                             type="tel"
@@ -153,27 +153,27 @@ export default function ProfilePage() {
                             placeholder="Enter 10-digit mobile number"
                             maxLength={10}
                         />
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                disabled={!mobileDirty || updateMobileMutation.isPending}
-                                className="w-full sm:w-auto"
-                            >
-                                {updateMobileMutation.isPending ? 'Saving...' : 'Save Mobile Number'}
-                            </Button>
-                            {mobileDirty ? (
+                        {mobileDirty ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="submit"
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={updateMobileMutation.isPending}
+                                >
+                                    {updateMobileMutation.isPending ? 'Saving...' : 'Save'}
+                                </Button>
                                 <Button
                                     type="button"
                                     variant="light"
+                                    size="sm"
                                     onClick={() => setMobileNumber(savedMobile)}
                                     disabled={updateMobileMutation.isPending}
-                                    className="w-full sm:w-auto"
                                 >
                                     Reset
                                 </Button>
-                            ) : null}
-                        </div>
+                            </div>
+                        ) : null}
                     </form>
                 </div>
             </Card>
