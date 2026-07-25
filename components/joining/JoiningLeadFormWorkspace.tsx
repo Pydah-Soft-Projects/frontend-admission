@@ -4930,8 +4930,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       );
     };
 
-    // Collect Payment only shows heads that appear in the Revised Fee builder
-    // (or Step 3 bus/hostel). Catalog-only heads like APPL01 / SCH01 stay out.
+    // Collect Payment shows Revised Fee builder heads + Step 3 bus/hostel + Application Fee.
+    // Other catalog-only heads (e.g. SCH01) stay out.
     const builderHeadIds = new Set(currentBuilderHeads.map((h) => String(h.id)));
     const builderHeadCodes = new Set(
       currentBuilderHeads
@@ -4940,22 +4940,33 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         .map((code) => (code === 'OTH02' ? 'OTH1' : code))
     );
 
-    const isBuilderHead = (row: {
+    const isApplicationFeeHead = (row: {
+      feeHeadCode?: string | null;
+      feeHeadName?: string | null;
+    }) => {
+      const code = String(row.feeHeadCode || '').trim().toUpperCase();
+      const name = String(row.feeHeadName || '').trim().toLowerCase();
+      return code === 'APPL01' || /^appl/i.test(code) || /\bapplication\b/.test(name);
+    };
+
+    const isCollectableHead = (row: {
       feeHead?: string | null;
       feeHeadCode?: string | null;
+      feeHeadName?: string | null;
     }) => {
       const headId = String(row.feeHead || '').trim();
       let code = String(row.feeHeadCode || '').trim().toUpperCase();
       if (code === 'OTH02') code = 'OTH1';
       if (headId && builderHeadIds.has(headId)) return true;
       if (code && builderHeadCodes.has(code)) return true;
+      if (isApplicationFeeHead(row)) return true;
       return false;
     };
 
     // Bus/hostel heads only appear when Step 3 selected them (injected rows) —
     // never straight from the fee catalog.
     const catalogRows = feeStructureCatalogRows.filter(
-      (row) => !isCatalogAccommodationRow(row) && isBuilderHead(row)
+      (row) => !isCatalogAccommodationRow(row) && isCollectableHead(row)
     );
 
     const combinedRows = [...catalogRows, ...accommodationInjectedRows];
@@ -5075,7 +5086,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
     // Include builder custom lines (e.g. Bus Fee TRN01 as custom-{headId}-{year}) that are
     // not present in fee catalog / accommodation injection — otherwise Collect Payment omits them.
-    // Only builder heads (or Step 3 bus/hostel codes) are allowed so APPL01 / SCH01 stay out.
+    // Only builder heads, Application Fee, or Step 3 bus/hostel codes are allowed.
     for (const line of studentFeeDetails.lines || []) {
       const structureId = String(line.structureId || '').trim();
       if (!structureId || coveredStructureIds.has(structureId)) continue;
@@ -5094,7 +5105,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         (feeHeadId && builderHeadIds.has(feeHeadId)) ||
         (feeHeadCode && builderHeadCodes.has(feeHeadCode.toUpperCase())) ||
         feeHeadCode === 'TRN01' ||
-        feeHeadCode === 'HST01';
+        feeHeadCode === 'HST01' ||
+        isApplicationFeeHead({ feeHeadCode, feeHeadName });
       if (!isAllowedHead) continue;
 
       // Same head (by id OR normalized code) already rendered from catalog/injected rows —
