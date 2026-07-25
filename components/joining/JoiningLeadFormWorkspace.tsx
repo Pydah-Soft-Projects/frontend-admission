@@ -260,6 +260,43 @@ const mapRevisedFeeLinesWithOth1 = (lines: JoiningStudentFeeLineOverride[]): Joi
   });
 };
 
+/**
+ * Step 4 / Collect Payment display labels.
+ * Normalizes legacy OTH02 → OTH1 and resolves the label from the Fee Management
+ * feeheads master (by code, then by id) — structure rows can carry stale names
+ * (e.g. OTH1 stored as "BUS/HOSTEL/OTHERS"), so the master DB name wins.
+ */
+const resolveStepFourFeeHeadDisplay = (
+  input: { feeHeadId?: string | null; feeHeadCode?: string | null; feeHeadName?: string | null },
+  masterHeads: Array<{ _id?: string; id?: string; name?: string; code?: string }>
+): { feeHeadCode: string; feeHeadName: string } => {
+  let code = String(input.feeHeadCode || '').trim().toUpperCase();
+  if (code === 'OTH02') code = 'OTH1';
+  const headId = String(input.feeHeadId || '').trim();
+  const rawName = String(input.feeHeadName || '').trim();
+
+  const master =
+    (code
+      ? masterHeads.find((h) => String(h.code || '').trim().toUpperCase() === code)
+      : undefined) ||
+    (headId
+      ? masterHeads.find((h) => String(h._id || h.id || '').trim() === headId)
+      : undefined);
+
+  if (master) {
+    const masterCode = String(master.code || '').trim().toUpperCase();
+    return {
+      feeHeadCode: code || masterCode,
+      feeHeadName: String(master.name || '').trim() || rawName || code,
+    };
+  }
+
+  return {
+    feeHeadCode: code,
+    feeHeadName: rawName || code,
+  };
+};
+
 const formatDateTime = (value?: string) => {
   if (!value) return '—';
   const parsed = new Date(value);
@@ -4742,35 +4779,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }) => {
       const headId = String(item.feeHead || item.feeHeadId || '').trim();
       if (headId && !map.has(headId)) {
-        const rawCode = String(item.feeHeadCode || '').trim();
-        const normalizedCode = rawCode.toUpperCase();
-        let finalCodeValue = normalizedCode === 'OTH02' ? 'OTH1' : normalizedCode;
-        
-        let finalName = item.feeHeadName || finalCodeValue || headId;
-        if (finalCodeValue === 'TUI01') finalName = 'Tuition Fee';
-        else if (finalCodeValue === 'OTH1') finalName = 'SPECIAL FEE';
-        else if (finalCodeValue === 'TRN01') finalName = 'Transport Fee';
-
-        const masterHead = feeHeadRows.find(h => 
-          String(h.code || '').trim().toUpperCase() === finalCodeValue.toUpperCase()
-        ) || feeHeadRows.find(h => 
-          String(h._id || h.id) === headId
+        const display = resolveStepFourFeeHeadDisplay(
+          { feeHeadId: headId, feeHeadCode: item.feeHeadCode, feeHeadName: item.feeHeadName },
+          feeHeadRows
         );
-        if (masterHead) {
-          if (!finalCodeValue) {
-            finalCodeValue = String(masterHead.code || '').trim().toUpperCase();
-          }
-          finalName = masterHead.name;
-        }
-
-        if (finalCodeValue === 'TUI01') finalName = 'Tuition Fee';
-        else if (finalCodeValue === 'OTH1') finalName = 'SPECIAL FEE';
-        else if (finalCodeValue === 'TRN01') finalName = 'Transport Fee';
 
         map.set(headId, {
           id: headId,
-          name: finalName,
-          code: finalCodeValue,
+          name: display.feeHeadName || headId,
+          code: display.feeHeadCode,
         });
       }
     };
@@ -4784,15 +4801,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
     for (const item of allFeeStructureRows) addToMap(item);
     for (const item of feeStructureCatalogRows) addToMap(item);
+    for (const item of accommodationInjectedRows) addToMap(item);
 
     const sortedList = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
     return sortedList.filter(h =>
-      h.code === 'TUI01' || h.code === 'OTH1' || h.code === 'TRN01' ||
+      h.code === 'TUI01' || h.code === 'OTH1' || h.code === 'TRN01' || h.code === 'HST01' ||
       /tuition|tution/i.test(h.name) ||
+      /special\s*fee/i.test(h.name) ||
       /other/i.test(h.name) ||
-      /transport|bus/i.test(h.name)
+      /transport|bus|hostel/i.test(h.name)
     );
-  }, [feeHeadRows, allFeeStructureRows, feeStructureCatalogRows]);
+  }, [feeHeadRows, allFeeStructureRows, feeStructureCatalogRows, accommodationInjectedRows]);
 
   const persistableBuilderLines = useMemo(
     () => filterPersistableBuilderConcessionLines(studentFeeDetails.lines || []),
@@ -4801,15 +4820,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const currentBuilderHeads = useMemo(() => {
     const map = new Map<string, { id: string; name: string; code: string }>();
+    const accommodationType = accommodationTransportDetails?.accommodationType;
 
-    // Pre-populate with our 3 primary fee heads by default if they exist
+    // Tuition + Special Fee are always available; bus/hostel only when Step 3 picked one.
     const tutionHead = allUniqueFeeHeads.find(h => h.code === 'TUI01') || allUniqueFeeHeads.find(h => /tuition|tution/i.test(h.name));
-    const othersHead = allUniqueFeeHeads.find(h => h.code === 'OTH1') || allUniqueFeeHeads.find(h => /other/i.test(h.name));
-    const transportHead = allUniqueFeeHeads.find(h => h.code === 'TRN01') || allUniqueFeeHeads.find(h => /transport|bus/i.test(h.name));
+    const othersHead =
+      allUniqueFeeHeads.find(h => h.code === 'OTH1') ||
+      allUniqueFeeHeads.find(h => /special\s*fee/i.test(h.name));
+    const accommodationHead =
+      accommodationType === 'hostel'
+        ? allUniqueFeeHeads.find(h => h.code === 'HST01') ||
+          allUniqueFeeHeads.find(h => /hostel/i.test(h.name))
+        : accommodationType === 'bus'
+          ? allUniqueFeeHeads.find(h => h.code === 'TRN01') ||
+            allUniqueFeeHeads.find(h => /transport|bus/i.test(h.name))
+          : undefined;
 
     if (tutionHead) map.set(tutionHead.id, tutionHead);
     if (othersHead) map.set(othersHead.id, othersHead);
-    if (transportHead) map.set(transportHead.id, transportHead);
+    if (accommodationHead) map.set(accommodationHead.id, accommodationHead);
 
     for (const line of studentFeeDetails.lines || []) {
       if (line.concessionType !== 'CONCESSION' && line.concessionType !== 'REVISED_FEE') {
@@ -4828,22 +4857,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         }
       }
 
-      if (feeHeadCode) {
-        feeHeadCode = String(feeHeadCode).trim().toUpperCase();
-        if (feeHeadCode === 'OTH02') {
-          feeHeadCode = 'OTH1';
-        }
-      }
-
-      if (feeHeadCode === 'TUI01') feeHeadName = 'Tuition Fee';
-      else if (feeHeadCode === 'OTH1') feeHeadName = 'SPECIAL FEE';
-      else if (feeHeadCode === 'TRN01') feeHeadName = 'Transport Fee';
+      const display = resolveStepFourFeeHeadDisplay(
+        { feeHeadId, feeHeadCode, feeHeadName },
+        feeHeadRows
+      );
+      feeHeadCode = display.feeHeadCode;
+      feeHeadName = display.feeHeadName;
 
       // Resolve the master fee head name from allUniqueFeeHeads using code or ID
       if (feeHeadCode) {
         const masterHead = allUniqueFeeHeads.find(h => h.code === feeHeadCode);
         if (masterHead) {
           feeHeadName = masterHead.name;
+          if (!feeHeadId) feeHeadId = masterHead.id;
         }
       } else if (feeHeadId) {
         const masterHead = allUniqueFeeHeads.find(h => h.id === feeHeadId);
@@ -4853,11 +4879,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         }
       }
 
-      if (feeHeadCode === 'TUI01') feeHeadName = 'Tuition Fee';
-      else if (feeHeadCode === 'OTH1') feeHeadName = 'SPECIAL FEE';
-      else if (feeHeadCode === 'TRN01') feeHeadName = 'Transport Fee';
-
       if (feeHeadId && !map.has(feeHeadId)) {
+        const codeAlreadyPresent = Boolean(
+          feeHeadCode &&
+            Array.from(map.values()).some(
+              (head) => String(head.code || '').toUpperCase() === feeHeadCode!.toUpperCase()
+            )
+        );
+        if (codeAlreadyPresent) continue;
         map.set(feeHeadId, {
           id: feeHeadId,
           name: feeHeadName || feeHeadCode || feeHeadId,
@@ -4875,22 +4904,126 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
 
     return Array.from(map.values()).filter(h =>
-      h.code === 'TUI01' || h.code === 'OTH1' || h.code === 'TRN01' ||
+      h.code === 'TUI01' || h.code === 'OTH1' || h.code === 'TRN01' || h.code === 'HST01' ||
       /tuition|tution/i.test(h.name) ||
+      /special\s*fee/i.test(h.name) ||
       /other/i.test(h.name) ||
-      /transport|bus/i.test(h.name)
+      /transport|bus|hostel/i.test(h.name)
     );
-  }, [studentFeeDetails.lines, feeStructureCatalogRows, builderAddedHeadIds, allUniqueFeeHeads]);
+  }, [studentFeeDetails.lines, feeStructureCatalogRows, feeHeadRows, builderAddedHeadIds, allUniqueFeeHeads, accommodationTransportDetails?.accommodationType]);
 
   const builderPaymentRows = useMemo(() => {
-    const combinedRows = [...feeStructureCatalogRows, ...accommodationInjectedRows];
-    return combinedRows.flatMap((row) => {
+    const isCatalogAccommodationRow = (row: {
+      feeHeadCode?: string | null;
+      feeHeadName?: string | null;
+    }) => {
+      const code = String(row.feeHeadCode || '').trim().toUpperCase();
+      const name = String(row.feeHeadName || '').trim().toLowerCase();
+      return (
+        code === 'TRN01' ||
+        code === 'HST01' ||
+        /^trn/i.test(code) ||
+        /^hst/i.test(code) ||
+        /\btransport\b/.test(name) ||
+        /\bbus\b/.test(name) ||
+        /\bhostel\b/.test(name)
+      );
+    };
+
+    // Collect Payment only shows heads that appear in the Revised Fee builder
+    // (or Step 3 bus/hostel). Catalog-only heads like APPL01 / SCH01 stay out.
+    const builderHeadIds = new Set(currentBuilderHeads.map((h) => String(h.id)));
+    const builderHeadCodes = new Set(
+      currentBuilderHeads
+        .map((h) => String(h.code || '').trim().toUpperCase())
+        .filter(Boolean)
+        .map((code) => (code === 'OTH02' ? 'OTH1' : code))
+    );
+
+    const isBuilderHead = (row: {
+      feeHead?: string | null;
+      feeHeadCode?: string | null;
+    }) => {
+      const headId = String(row.feeHead || '').trim();
+      let code = String(row.feeHeadCode || '').trim().toUpperCase();
+      if (code === 'OTH02') code = 'OTH1';
+      if (headId && builderHeadIds.has(headId)) return true;
+      if (code && builderHeadCodes.has(code)) return true;
+      return false;
+    };
+
+    // Bus/hostel heads only appear when Step 3 selected them (injected rows) —
+    // never straight from the fee catalog.
+    const catalogRows = feeStructureCatalogRows.filter(
+      (row) => !isCatalogAccommodationRow(row) && isBuilderHead(row)
+    );
+
+    const combinedRows = [...catalogRows, ...accommodationInjectedRows];
+    const coveredStructureIds = new Set(combinedRows.map((row) => String(row._id)));
+    const coveredHeadYears = new Set<string>();
+
+    type PaymentRow = {
+      structureId: string;
+      feeHeadId: string;
+      feeHeadName: string;
+      feeHeadCode: string;
+      studentYear: number;
+      semester: number | string | null;
+      catalogAmount: number;
+      adjustmentAmount: number | null;
+      payableAmount: number;
+      paidAmount: number;
+      concessionType: string;
+    };
+
+    const rows: PaymentRow[] = [];
+
+    const resolvePaid = (feeHeadId: string, feeHeadCode: string, year: number) =>
+      (feeHeadId ? feeMongoPaidByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ??
+      (feeHeadCode
+        ? feeMongoPaidByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
+        : undefined) ??
+      0;
+
+    for (const row of combinedRows) {
       const feeHeadId = String(row.feeHead || '').trim();
-      const feeHeadCode = String(row.feeHeadCode || '').trim();
+      const rawFeeHeadCode = String(row.feeHeadCode || '').trim();
+      const display = resolveStepFourFeeHeadDisplay(
+        { feeHeadId, feeHeadCode: rawFeeHeadCode, feeHeadName: row.feeHeadName },
+        feeHeadRows
+      );
+      const feeHeadCode = display.feeHeadCode;
+      const feeHeadName = display.feeHeadName;
       const year = Number(row.studentYear) || 1;
       const catalogAmount = Number(row.amount) || 0;
       const structureId = String(row._id);
-      const localLine = (studentFeeDetails.lines || []).find((line) => String(line.structureId) === structureId);
+
+      // Builder edits live as custom-{headId}-{year} lines whenever the grid found no
+      // catalog row for its head id (injected bus/hostel rows, or a catalog row whose
+      // feeHead id differs from the master head id) — prefer that amount so Collect
+      // matches the Revised Fee builder.
+      const customStructureId = feeHeadId ? `custom-${feeHeadId}-${year}` : '';
+      const localLine =
+        (studentFeeDetails.lines || []).find((line) => String(line.structureId) === structureId) ||
+        (customStructureId
+          ? (studentFeeDetails.lines || []).find((line) => String(line.structureId) === customStructureId)
+          : undefined) ||
+        (studentFeeDetails.lines || []).find((line) => {
+          if (!String(line.structureId || '').startsWith('custom-')) return false;
+          const lineYear = Number(line.studentYear) || 1;
+          if (lineYear !== year) return false;
+          if (feeHeadId && line.feeHeadId && String(line.feeHeadId) === feeHeadId) return true;
+          let lineCode = String(line.feeHeadCode || '').trim().toUpperCase();
+          if (lineCode === 'OTH02') lineCode = 'OTH1';
+          return Boolean(feeHeadCode && lineCode && lineCode === feeHeadCode.toUpperCase());
+        });
+
+      if (localLine?.structureId) coveredStructureIds.add(String(localLine.structureId));
+      if (feeHeadId) coveredHeadYears.add(`${feeHeadId}::${year}`);
+      if (feeHeadCode) coveredHeadYears.add(`code:${feeHeadCode.toUpperCase()}::${year}`);
+      if (rawFeeHeadCode) coveredHeadYears.add(`code:${rawFeeHeadCode.toUpperCase()}::${year}`);
+      if (localLine?.feeHeadId) coveredHeadYears.add(`${String(localLine.feeHeadId)}::${year}`);
+
       const localAmount =
         localLine?.amount !== undefined && localLine?.amount !== null ? Number(localLine.amount) || 0 : null;
       const localType = localLine?.concessionType || undefined;
@@ -4899,6 +5032,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         (feeHeadId ? overallConcessionByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ||
         (feeHeadCode
           ? overallConcessionByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
+          : undefined) ||
+        (rawFeeHeadCode
+          ? overallConcessionByHeadYear.get(`code:${rawFeeHeadCode.toUpperCase()}::${year}`)
           : undefined);
 
       const resolvedFromLocal =
@@ -4919,31 +5055,124 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const adjustmentAmount =
         resolved && resolved.concessionType === 'CONCESSION' ? resolved.adjustmentAmount : null;
       const payableAmount = resolved ? resolved.payableAmount : catalogAmount;
-      const paidAmount =
-        (feeHeadId ? feeMongoPaidByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ??
-        (feeHeadCode
-          ? feeMongoPaidByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
-          : undefined) ??
-        0;
 
-      if (catalogAmount <= 0 && payableAmount <= 0) return [];
-      return [
-        {
-          structureId,
-          feeHeadId,
-          feeHeadName: row.feeHeadName || feeHeadCode || feeHeadId,
-          feeHeadCode,
-          studentYear: year,
-          semester: row.semester ?? null,
-          catalogAmount,
-          adjustmentAmount,
-          payableAmount,
-          paidAmount,
-          concessionType,
-        },
-      ];
-    });
-  }, [feeMongoPaidByHeadYear, feeStructureCatalogRows, overallConcessionByHeadYear, studentFeeDetails.lines, accommodationInjectedRows]);
+      if (catalogAmount <= 0 && payableAmount <= 0) continue;
+
+      rows.push({
+        structureId: localLine?.structureId ? String(localLine.structureId) : structureId,
+        feeHeadId,
+        feeHeadName,
+        feeHeadCode,
+        studentYear: year,
+        semester: row.semester ?? null,
+        catalogAmount,
+        adjustmentAmount,
+        payableAmount,
+        paidAmount: resolvePaid(feeHeadId, feeHeadCode, year),
+        concessionType,
+      });
+    }
+
+    // Include builder custom lines (e.g. Bus Fee TRN01 as custom-{headId}-{year}) that are
+    // not present in fee catalog / accommodation injection — otherwise Collect Payment omits them.
+    // Only builder heads (or Step 3 bus/hostel codes) are allowed so APPL01 / SCH01 stay out.
+    for (const line of studentFeeDetails.lines || []) {
+      const structureId = String(line.structureId || '').trim();
+      if (!structureId || coveredStructureIds.has(structureId)) continue;
+
+      const year = Number(line.studentYear) > 0 ? Number(line.studentYear) : 1;
+      const feeHeadId = String(line.feeHeadId || '').trim();
+      const rawCode = String(line.feeHeadCode || '').trim();
+      const display = resolveStepFourFeeHeadDisplay(
+        { feeHeadId, feeHeadCode: rawCode, feeHeadName: line.feeHeadName },
+        feeHeadRows
+      );
+      const feeHeadCode = display.feeHeadCode;
+      const feeHeadName = display.feeHeadName;
+
+      const isAllowedHead =
+        (feeHeadId && builderHeadIds.has(feeHeadId)) ||
+        (feeHeadCode && builderHeadCodes.has(feeHeadCode.toUpperCase())) ||
+        feeHeadCode === 'TRN01' ||
+        feeHeadCode === 'HST01';
+      if (!isAllowedHead) continue;
+
+      // Same head (by id OR normalized code) already rendered from catalog/injected rows —
+      // skip so e.g. OTH1 never shows twice when the builder line has a different head id.
+      if (
+        (feeHeadId && coveredHeadYears.has(`${feeHeadId}::${year}`)) ||
+        (feeHeadCode && coveredHeadYears.has(`code:${feeHeadCode.toUpperCase()}::${year}`)) ||
+        (rawCode && coveredHeadYears.has(`code:${rawCode.toUpperCase()}::${year}`))
+      ) {
+        continue;
+      }
+
+      const injectedMatch = accommodationInjectedRows.find((row) => {
+        if (Number(row.studentYear) !== year) return false;
+        if (feeHeadId && String(row.feeHead || '') === feeHeadId) return true;
+        return (
+          feeHeadCode &&
+          String(row.feeHeadCode || '')
+            .trim()
+            .toUpperCase() === feeHeadCode.toUpperCase()
+        );
+      });
+      const catalogAmount = injectedMatch ? Number(injectedMatch.amount) || 0 : 0;
+      const localAmount =
+        line.amount !== undefined && line.amount !== null ? Number(line.amount) || 0 : null;
+      const localType = line.concessionType || undefined;
+
+      const overallLine =
+        (feeHeadId ? overallConcessionByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ||
+        (feeHeadCode
+          ? overallConcessionByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
+          : undefined);
+
+      const resolvedFromLocal =
+        localType && localAmount !== null && localAmount > 0
+          ? resolveOverallConcessionLine(
+              { concessionType: localType, amount: localAmount },
+              catalogAmount
+            )
+          : null;
+      const resolvedFromOverall = overallLine
+        ? resolveOverallConcessionLine(overallLine, catalogAmount)
+        : null;
+      const resolved = resolvedFromLocal || resolvedFromOverall;
+      const payableAmount = resolved ? resolved.payableAmount : localAmount && localAmount > 0 ? localAmount : catalogAmount;
+
+      if (catalogAmount <= 0 && payableAmount <= 0) continue;
+
+      coveredStructureIds.add(structureId);
+      if (feeHeadId) coveredHeadYears.add(`${feeHeadId}::${year}`);
+      if (feeHeadCode) coveredHeadYears.add(`code:${feeHeadCode.toUpperCase()}::${year}`);
+
+      rows.push({
+        structureId,
+        feeHeadId,
+        feeHeadName,
+        feeHeadCode,
+        studentYear: year,
+        semester: null,
+        catalogAmount,
+        adjustmentAmount:
+          resolved && resolved.concessionType === 'CONCESSION' ? resolved.adjustmentAmount : null,
+        payableAmount,
+        paidAmount: resolvePaid(feeHeadId, feeHeadCode, year),
+        concessionType: resolved ? resolved.concessionType : localType || 'CONFIGURED_FEE',
+      });
+    }
+
+    return rows;
+  }, [
+    feeMongoPaidByHeadYear,
+    feeStructureCatalogRows,
+    feeHeadRows,
+    currentBuilderHeads,
+    overallConcessionByHeadYear,
+    studentFeeDetails.lines,
+    accommodationInjectedRows,
+  ]);
 
   const builderPaymentYearRows = useMemo(
     () => builderPaymentRows.filter((row) => row.studentYear === builderPaymentYear),
