@@ -274,6 +274,17 @@ const resolveStepFourFeeHeadDisplay = (
   if (code === 'OTH02') code = 'OTH1';
   const headId = String(input.feeHeadId || '').trim();
   const rawName = String(input.feeHeadName || '').trim();
+  const nameLower = rawName.toLowerCase();
+
+  // Fee DB often stores OTH1 as "BUS/HOSTEL/OTHERS" — treat that as OTH1 even when code is blank.
+  if (
+    !code &&
+    (/special\s*fee/.test(nameLower) ||
+      /bus\s*\/\s*hostel\s*\/\s*others/.test(nameLower) ||
+      nameLower === 'bus/hostel/others')
+  ) {
+    code = 'OTH1';
+  }
 
   const master =
     (code
@@ -281,13 +292,17 @@ const resolveStepFourFeeHeadDisplay = (
       : undefined) ||
     (headId
       ? masterHeads.find((h) => String(h._id || h.id || '').trim() === headId)
+      : undefined) ||
+    (nameLower
+      ? masterHeads.find((h) => String(h.name || '').trim().toLowerCase() === nameLower)
       : undefined);
 
   if (master) {
-    const masterCode = String(master.code || '').trim().toUpperCase();
+    let masterCode = String(master.code || '').trim().toUpperCase();
+    if (masterCode === 'OTH02') masterCode = 'OTH1';
     return {
       feeHeadCode: code || masterCode,
-      feeHeadName: String(master.name || '').trim() || rawName || code,
+      feeHeadName: String(master.name || '').trim() || rawName || code || masterCode,
     };
   }
 
@@ -4826,7 +4841,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const tutionHead = allUniqueFeeHeads.find(h => h.code === 'TUI01') || allUniqueFeeHeads.find(h => /tuition|tution/i.test(h.name));
     const othersHead =
       allUniqueFeeHeads.find(h => h.code === 'OTH1') ||
-      allUniqueFeeHeads.find(h => /special\s*fee/i.test(h.name));
+      allUniqueFeeHeads.find(h => /special\s*fee/i.test(h.name)) ||
+      allUniqueFeeHeads.find(h => /bus\s*\/\s*hostel\s*\/\s*others/i.test(h.name)) ||
+      allUniqueFeeHeads.find(h => /other/i.test(h.name)) ||
+      (() => {
+        const master = feeHeadRows.find((h) => {
+          const code = String(h.code || '').trim().toUpperCase();
+          return code === 'OTH1' || code === 'OTH02';
+        });
+        if (!master) return undefined;
+        const id = String(master._id || master.id || '').trim();
+        if (!id) return undefined;
+        return { id, name: String(master.name || 'OTH1'), code: 'OTH1' };
+      })();
     const accommodationHead =
       accommodationType === 'hostel'
         ? allUniqueFeeHeads.find(h => h.code === 'HST01') ||
@@ -4913,11 +4940,35 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   }, [studentFeeDetails.lines, feeStructureCatalogRows, feeHeadRows, builderAddedHeadIds, allUniqueFeeHeads, accommodationTransportDetails?.accommodationType]);
 
   const builderPaymentRows = useMemo(() => {
+    const normalizeHeadCode = (raw?: string | null) => {
+      let code = String(raw || '').trim().toUpperCase();
+      if (code === 'OTH02') code = 'OTH1';
+      return code;
+    };
+
+    // OTH1 is often stored in Fee Management as "BUS/HOSTEL/OTHERS" — that name must
+    // NEVER be treated as a Step 3 accommodation head or Collect drops Special Fee.
+    const isOtherSpecialFeeHead = (row: {
+      feeHeadCode?: string | null;
+      feeHeadName?: string | null;
+    }) => {
+      const code = normalizeHeadCode(row.feeHeadCode);
+      const name = String(row.feeHeadName || '').trim().toLowerCase();
+      return (
+        code === 'OTH1' ||
+        /^oth\d*/i.test(code) ||
+        /special\s*fee/.test(name) ||
+        /bus\s*\/\s*hostel\s*\/\s*others/.test(name) ||
+        name === 'bus/hostel/others'
+      );
+    };
+
     const isCatalogAccommodationRow = (row: {
       feeHeadCode?: string | null;
       feeHeadName?: string | null;
     }) => {
-      const code = String(row.feeHeadCode || '').trim().toUpperCase();
+      if (isOtherSpecialFeeHead(row)) return false;
+      const code = normalizeHeadCode(row.feeHeadCode);
       const name = String(row.feeHeadName || '').trim().toLowerCase();
       return (
         code === 'TRN01' ||
@@ -4925,26 +4976,30 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         /^trn/i.test(code) ||
         /^hst/i.test(code) ||
         /\btransport\b/.test(name) ||
-        /\bbus\b/.test(name) ||
-        /\bhostel\b/.test(name)
+        // Match standalone bus/hostel labels only — not the OTH1 "BUS/HOSTEL/OTHERS" blob.
+        name === 'bus fee' ||
+        name === 'bus' ||
+        name === 'hostel fee' ||
+        name === 'hostel'
       );
     };
 
-    // Collect Payment shows Revised Fee builder heads + Step 3 bus/hostel + Application Fee.
+    // Collect Payment shows Revised Fee builder heads + Step 3 bus/hostel + Application Fee + OTH1.
     // Other catalog-only heads (e.g. SCH01) stay out.
     const builderHeadIds = new Set(currentBuilderHeads.map((h) => String(h.id)));
     const builderHeadCodes = new Set(
       currentBuilderHeads
-        .map((h) => String(h.code || '').trim().toUpperCase())
+        .map((h) => normalizeHeadCode(h.code))
         .filter(Boolean)
-        .map((code) => (code === 'OTH02' ? 'OTH1' : code))
     );
+    // Always keep Special Fee (OTH1) collectable even if the builder head list missed it.
+    builderHeadCodes.add('OTH1');
 
     const isApplicationFeeHead = (row: {
       feeHeadCode?: string | null;
       feeHeadName?: string | null;
     }) => {
-      const code = String(row.feeHeadCode || '').trim().toUpperCase();
+      const code = normalizeHeadCode(row.feeHeadCode);
       const name = String(row.feeHeadName || '').trim().toLowerCase();
       return code === 'APPL01' || /^appl/i.test(code) || /\bapplication\b/.test(name);
     };
@@ -4955,16 +5010,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       feeHeadName?: string | null;
     }) => {
       const headId = String(row.feeHead || '').trim();
-      let code = String(row.feeHeadCode || '').trim().toUpperCase();
-      if (code === 'OTH02') code = 'OTH1';
+      const code = normalizeHeadCode(row.feeHeadCode);
       if (headId && builderHeadIds.has(headId)) return true;
       if (code && builderHeadCodes.has(code)) return true;
       if (isApplicationFeeHead(row)) return true;
+      if (isOtherSpecialFeeHead(row)) return true;
       return false;
     };
 
     // Bus/hostel heads only appear when Step 3 selected them (injected rows) —
-    // never straight from the fee catalog.
+    // never straight from the fee catalog. OTH1 is never treated as accommodation.
     const catalogRows = feeStructureCatalogRows.filter(
       (row) => !isCatalogAccommodationRow(row) && isCollectableHead(row)
     );
@@ -5106,7 +5161,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         (feeHeadCode && builderHeadCodes.has(feeHeadCode.toUpperCase())) ||
         feeHeadCode === 'TRN01' ||
         feeHeadCode === 'HST01' ||
-        isApplicationFeeHead({ feeHeadCode, feeHeadName });
+        isApplicationFeeHead({ feeHeadCode, feeHeadName }) ||
+        isOtherSpecialFeeHead({ feeHeadCode: feeHeadCode || rawCode, feeHeadName });
       if (!isAllowedHead) continue;
 
       // Same head (by id OR normalized code) already rendered from catalog/injected rows —
