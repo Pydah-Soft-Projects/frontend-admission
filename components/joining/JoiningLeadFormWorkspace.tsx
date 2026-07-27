@@ -903,6 +903,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     semester?: number | string | null;
     amount: string;
   }>>([]);
+  /** Extra fee heads added only in Collect Payment (not part of fee structure / builder). */
+  const [selectedCollectFeeHeadId, setSelectedCollectFeeHeadId] = useState('');
+  const [builderPaymentExtraHeads, setBuilderPaymentExtraHeads] = useState<
+    Array<{ id: string; name: string; code: string }>
+  >([]);
   const [builderPaymentYear, setBuilderPaymentYear] = useState<number>(1);
   const [builderPaymentForm, setBuilderPaymentForm] = useState<{
     amount: string;
@@ -5242,15 +5247,113 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     accommodationInjectedRows,
   ]);
 
-  const builderPaymentYearRows = useMemo(
-    () => builderPaymentRows.filter((row) => row.studentYear === builderPaymentYear),
-    [builderPaymentRows, builderPaymentYear]
-  );
+  /** All master fee heads available for ad-hoc collection in the payment dialog. */
+  const collectMasterFeeHeads = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; code: string }>();
+    for (const item of feeHeadRows) {
+      const id = String(item._id || item.id || '').trim();
+      if (!id || map.has(id)) continue;
+      let code = String(item.code || '').trim().toUpperCase();
+      if (code === 'OTH02') code = 'OTH1';
+      map.set(id, {
+        id,
+        name: String(item.name || '').trim() || id,
+        code,
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [feeHeadRows]);
+
+  const builderPaymentYearRows = useMemo(() => {
+    const base = builderPaymentRows.filter((row) => row.studentYear === builderPaymentYear);
+    const existingIds = new Set(base.map((row) => String(row.feeHeadId || '').trim()).filter(Boolean));
+    const existingCodes = new Set(
+      base
+        .map((row) => String(row.feeHeadCode || '').trim().toUpperCase())
+        .filter(Boolean)
+    );
+
+    const resolvePaid = (feeHeadId: string, feeHeadCode: string, year: number) =>
+      (feeHeadId ? feeMongoPaidByHeadYear.get(`${feeHeadId}::${year}`) : undefined) ??
+      (feeHeadCode
+        ? feeMongoPaidByHeadYear.get(`code:${feeHeadCode.toUpperCase()}::${year}`)
+        : undefined) ??
+      0;
+
+    const extras = builderPaymentExtraHeads
+      .filter((head) => {
+        if (existingIds.has(head.id)) return false;
+        if (head.code && existingCodes.has(head.code.toUpperCase())) return false;
+        return true;
+      })
+      .map((head) => ({
+        structureId: `extra-collect-${head.id}-${builderPaymentYear}`,
+        feeHeadId: head.id,
+        feeHeadName: head.name,
+        feeHeadCode: head.code,
+        studentYear: builderPaymentYear,
+        semester: null as number | string | null,
+        catalogAmount: 0,
+        // Open amount — user enters what to collect; no catalog payable ceiling.
+        payableAmount: Number.POSITIVE_INFINITY,
+        adjustmentAmount: null as number | null,
+        paidAmount: resolvePaid(head.id, head.code, builderPaymentYear),
+        concessionType: 'ADHOC_FEE' as const,
+        isAdhoc: true as const,
+      }));
+
+    return [...base.map((row) => ({ ...row, isAdhoc: false as const })), ...extras];
+  }, [
+    builderPaymentRows,
+    builderPaymentYear,
+    builderPaymentExtraHeads,
+    feeMongoPaidByHeadYear,
+  ]);
+
+  const collectFeeHeadOptions = useMemo(() => {
+    const shownIds = new Set(
+      builderPaymentYearRows.map((row) => String(row.feeHeadId || '').trim()).filter(Boolean)
+    );
+    const shownCodes = new Set(
+      builderPaymentYearRows
+        .map((row) => String(row.feeHeadCode || '').trim().toUpperCase())
+        .filter(Boolean)
+    );
+    return collectMasterFeeHeads.filter((head) => {
+      if (shownIds.has(head.id)) return false;
+      if (head.code && shownCodes.has(head.code.toUpperCase())) return false;
+      return true;
+    });
+  }, [collectMasterFeeHeads, builderPaymentYearRows]);
 
   const builderPaymentSelectedTotal = useMemo(
     () => builderPaymentTargets.reduce((sum, target) => sum + (Number(target.amount) || 0), 0),
     [builderPaymentTargets]
   );
+
+  const handleAddCollectFeeHead = () => {
+    if (!selectedCollectFeeHeadId) return;
+    const targetHead = collectMasterFeeHeads.find((h) => h.id === selectedCollectFeeHeadId);
+    if (!targetHead) return;
+
+    const alreadyInTable = builderPaymentYearRows.some(
+      (row) =>
+        String(row.feeHeadId) === targetHead.id ||
+        (targetHead.code &&
+          String(row.feeHeadCode || '')
+            .trim()
+            .toUpperCase() === targetHead.code.toUpperCase())
+    );
+    if (alreadyInTable || builderPaymentExtraHeads.some((h) => h.id === targetHead.id)) {
+      showToast.error('This fee head is already listed for collection.');
+      return;
+    }
+
+    setBuilderPaymentExtraHeads((prev) =>
+      prev.some((h) => h.id === targetHead.id) ? prev : [...prev, targetHead]
+    );
+    setSelectedCollectFeeHeadId('');
+  };
 
   const handleAddBuilderFeeHead = () => {
     if (!selectedBuilderFeeHeadId) return;
@@ -5294,6 +5397,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       return;
     }
     setIsBuilderPaymentDialogOpen(true);
+    setSelectedCollectFeeHeadId('');
+    setBuilderPaymentExtraHeads([]);
     if (target) {
       setBuilderPaymentYear(target.studentYear);
       setBuilderPaymentTargets([target]);
@@ -5323,6 +5428,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     if (builderPaymentForm.isProcessing) return;
     setIsBuilderPaymentDialogOpen(false);
     setBuilderPaymentTargets([]);
+    setBuilderPaymentExtraHeads([]);
+    setSelectedCollectFeeHeadId('');
     setRazorpayQrData(null);
     setQrError(null);
   };
@@ -7492,7 +7599,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           !canWritePayments ||
                           !joiningRecord?._id ||
                           !admissionRecord?._id ||
-                          builderPaymentRows.length === 0
+                          (builderPaymentRows.length === 0 && collectMasterFeeHeads.length === 0)
                         }
                       >
                         Collect Payment
@@ -7843,8 +7950,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   Collect fee payment
                 </h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Select configured fee heads for the chosen year, record manual Cash or Bank payments, or review Fee
-                  Management transactions.
+                  Select configured fee heads (including hostel/transport), or add another fee head from the master
+                  list, then record Cash or Bank payments. Transactions are stored against the selected fee head.
                 </p>
               </div>
               <div className="flex items-start gap-3">
@@ -7918,6 +8025,43 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
               {builderPaymentTab === 'collect' ? (
               <>
+              <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                <label className="min-w-[14rem] flex-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Add fee head
+                  <select
+                    value={selectedCollectFeeHeadId}
+                    onChange={(event) => setSelectedCollectFeeHeadId(event.target.value)}
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    disabled={builderPaymentForm.isProcessing || collectFeeHeadOptions.length === 0}
+                  >
+                    <option value="">
+                      {collectFeeHeadOptions.length === 0
+                        ? 'All fee heads already listed'
+                        : 'Select fee head to collect…'}
+                    </option>
+                    {collectFeeHeadOptions.map((head) => (
+                      <option key={head.id} value={head.id}>
+                        {head.name}
+                        {head.code ? ` (${head.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleAddCollectFeeHead}
+                  disabled={
+                    builderPaymentForm.isProcessing ||
+                    !selectedCollectFeeHeadId ||
+                    collectFeeHeadOptions.length === 0
+                  }
+                >
+                  Add to collect list
+                </Button>
+              </div>
+
               <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
                 <table className="min-w-full text-sm">
                   <thead>
@@ -7935,6 +8079,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {builderPaymentYearRows.map((row) => {
+                      const isAdhoc = Boolean(row.isAdhoc);
+                      const isFullyPaid =
+                        !isAdhoc &&
+                        Number.isFinite(row.payableAmount) &&
+                        row.paidAmount >= row.payableAmount;
                       const selected = builderPaymentTargets.some(
                         (target) =>
                           target.structureId === row.structureId && target.studentYear === row.studentYear
@@ -7943,17 +8092,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         <tr
                           key={`${row.structureId}-${row.studentYear}`}
                           className={
-                            row.paidAmount >= row.payableAmount
+                            isFullyPaid
                               ? 'opacity-60 bg-slate-50/50 dark:bg-slate-900/30'
                               : selected
                                 ? 'bg-blue-50/70 dark:bg-blue-950/30'
-                                : undefined
+                                : isAdhoc
+                                  ? 'bg-orange-50/40 dark:bg-orange-950/20'
+                                  : undefined
                           }
                         >
                           <td className="px-4 py-3">
                             <input
                               type="checkbox"
-                              checked={selected && row.paidAmount < row.payableAmount}
+                              checked={selected && !isFullyPaid}
                               onChange={(event) => {
                                 const nextTarget = {
                                   structureId: row.structureId,
@@ -7963,6 +8114,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   studentYear: row.studentYear,
                                   semester: row.semester,
                                   amount: (() => {
+                                    if (isAdhoc) return '';
                                     const balance = Math.max(row.payableAmount - row.paidAmount, 0);
                                     return balance > 0 ? String(balance) : '';
                                   })(),
@@ -7993,7 +8145,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                 });
                               }}
                               className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              disabled={builderPaymentForm.isProcessing || row.paidAmount >= row.payableAmount}
+                              disabled={builderPaymentForm.isProcessing || isFullyPaid}
                               aria-label={`Select ${row.feeHeadName || row.feeHeadCode || 'fee head'}`}
                             />
                           </td>
@@ -8004,12 +8156,65 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                             {row.feeHeadCode ? (
                               <div className="font-mono text-[10px] text-slate-400">{row.feeHeadCode}</div>
                             ) : null}
+                            {isAdhoc ? (
+                              <div className="mt-0.5 flex items-center gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-300">
+                                  Extra fee head
+                                </span>
+                                <button
+                                  type="button"
+                                  className="text-[10px] font-semibold text-rose-600 hover:underline disabled:opacity-50 dark:text-rose-400"
+                                  disabled={builderPaymentForm.isProcessing}
+                                  onClick={() => {
+                                    setBuilderPaymentExtraHeads((prev) =>
+                                      prev.filter((head) => head.id !== row.feeHeadId)
+                                    );
+                                    setBuilderPaymentTargets((prev) => {
+                                      const next = prev.filter(
+                                        (target) =>
+                                          !(
+                                            target.structureId === row.structureId &&
+                                            target.studentYear === row.studentYear
+                                          )
+                                      );
+                                      const nextTotal = next.reduce(
+                                        (sum, target) => sum + (Number(target.amount) || 0),
+                                        0
+                                      );
+                                      setBuilderPaymentForm((form) => ({
+                                        ...form,
+                                        amount: nextTotal > 0 ? String(nextTotal) : '',
+                                        remarks:
+                                          next.length > 0
+                                            ? next
+                                                .map(
+                                                  (target) =>
+                                                    target.feeHeadName ||
+                                                    target.feeHeadCode ||
+                                                    'Fee payment'
+                                                )
+                                                .join(' / ')
+                                            : '',
+                                      }));
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : null}
                           </td>
  
                           <td className="px-4 py-3 text-right text-slate-500">
-                            {formatCurrency(row.catalogAmount)}
+                            {isAdhoc ? '—' : formatCurrency(row.catalogAmount)}
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-slate-100">
+                            {isAdhoc ? (
+                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                Enter amount
+                              </span>
+                            ) : (
                             <div className="inline-flex flex-col items-end gap-0.5">
                               <span>{formatCurrency(row.payableAmount)}</span>
                               {row.adjustmentAmount !== null && row.concessionType === 'CONCESSION' ? (
@@ -8018,19 +8223,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                 </span>
                               ) : null}
                             </div>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="inline-flex flex-col items-end gap-0.5">
                               <span className="font-semibold text-blue-700 dark:text-blue-300">
                                 {formatCurrency(row.paidAmount)}
                               </span>
-                              {row.paidAmount >= row.payableAmount ? (
+                              {!isAdhoc && row.paidAmount >= row.payableAmount ? (
                                 <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                                   Fully Paid
                                 </span>
                               ) : row.paidAmount > 0 ? (
                                 <span className="text-[10px] text-slate-400">
-                                  Balance {formatCurrency(Math.max(row.payableAmount - row.paidAmount, 0))}
+                                  {isAdhoc
+                                    ? 'Already collected'
+                                    : `Balance ${formatCurrency(Math.max(row.payableAmount - row.paidAmount, 0))}`}
                                 </span>
                               ) : null}
                             </div>
@@ -8069,7 +8277,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                               }}
                               className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
                               placeholder="0"
-                              disabled={!selected || builderPaymentForm.isProcessing || row.paidAmount >= row.payableAmount}
+                              disabled={!selected || builderPaymentForm.isProcessing || isFullyPaid}
                               aria-label={`Collect amount for ${row.feeHeadName || row.feeHeadCode || 'fee head'}`}
                             />
                           </td>
@@ -8084,7 +8292,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 </table>
                 {builderPaymentYearRows.length === 0 ? (
                   <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No configured fee heads found for Year {builderPaymentYear}.
+                    No configured fee heads for Year {builderPaymentYear}. Use &quot;Add fee head&quot; above to collect
+                    against any master fee head.
                   </p>
                 ) : null}
               </div>
