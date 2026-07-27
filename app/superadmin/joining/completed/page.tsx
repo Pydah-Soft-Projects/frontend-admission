@@ -498,7 +498,8 @@ const CompletedAdmissionsPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
-  const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
+  const { canEditReference, canEditAdmission, canAccessJoiningPage } = useJoiningDeskPermissions();
+  const canAccessAdmissionsPage = canAccessJoiningPage('admissions');
   const isSuperAdmin = auth.getUser()?.roleName === 'Super Admin';
   const showSourceReferenceColumns = isSuperAdmin;
   const tableColumnCount = showSourceReferenceColumns ? 14 : 12;
@@ -1572,6 +1573,15 @@ const CompletedAdmissionsPage = () => {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
         You do not have access to the Joining Desk.
+      </div>
+    );
+  }
+
+  if (!canAccessAdmissionsPage) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        You do not have access to Admissions. Ask a Super Admin to enable it under User Management → Joining
+        Desk pages.
       </div>
     );
   }

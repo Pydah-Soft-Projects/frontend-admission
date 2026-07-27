@@ -23,9 +23,11 @@ import {
   resolveAdmissionTabAccess,
   resolveJoiningEditAdmission,
   resolveJoiningEditReference,
+  resolveJoiningPageAccess,
   resolveSubmitFeeRequest,
   resolveApproveFeeRequest,
   type AdmissionTabKey,
+  type JoiningDeskPageKey,
 } from '@/lib/joiningPermissions';
 import { NotificationBell } from '../NotificationBell';
 import { MobileBottomNav, flattenNavItemsForMobile } from './MobileBottomNav';
@@ -155,6 +157,7 @@ type PermissionContextValue = {
   canJoiningEditAdmission: () => boolean;
   canSubmitFeeRequest: () => boolean;
   canApproveFeeRequest: () => boolean;
+  canAccessJoiningPage: (page: JoiningDeskPageKey) => boolean;
   canAccessAdmissionTab: (tab: AdmissionTabKey) => boolean;
   getAllowedAdmissionTabs: () => AdmissionTabKey[];
 };
@@ -219,6 +222,7 @@ export const useJoiningDeskPermissions = () => {
     canEditAdmission: false,
     canSubmitFeeRequest: false,
     canApproveFeeRequest: false,
+    canAccessJoiningPage: (_page: JoiningDeskPageKey) => false,
   };
   if (!ctx) {
     return denyEdits;
@@ -229,6 +233,7 @@ export const useJoiningDeskPermissions = () => {
     canEditAdmission: ctx.canJoiningEditAdmission(),
     canSubmitFeeRequest: ctx.canSubmitFeeRequest(),
     canApproveFeeRequest: ctx.canApproveFeeRequest(),
+    canAccessJoiningPage: ctx.canAccessJoiningPage,
   };
 };
 
@@ -239,6 +244,8 @@ export type DashboardNavItem = {
   badge?: string;
   children?: DashboardNavItem[];
   permissionKey?: string;
+  /** Hide unless the user has this joining-desk page (in addition to module access). */
+  joiningPage?: JoiningDeskPageKey;
   /** Hide unless the user has this joining-desk capability (in addition to module access). */
   joiningCapability?: 'approveFeeRequest';
   hideInBottomNav?: boolean;
@@ -459,6 +466,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     [joiningPermissionEntry, isSuperAdminRole]
   );
 
+  const canAccessJoiningPage = useCallback(
+    (page: JoiningDeskPageKey) =>
+      resolveJoiningPageAccess(page, joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
+  );
+
   const canAccessAdmissionTab = useCallback(
     (tab: AdmissionTabKey) =>
       resolveAdmissionTabAccess(tab, joiningPermissionEntry, isSuperAdminRole),
@@ -481,10 +494,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         .map((item) => {
           const children = item.children ? filterNavItems(item.children) : [];
           const moduleAccessible = hasAccessForKey(item.permissionKey);
+          const joiningPageOk = !item.joiningPage || canAccessJoiningPage(item.joiningPage);
           const joiningCapabilityOk =
             !item.joiningCapability ||
             (item.joiningCapability === 'approveFeeRequest' ? canApproveFeeRequest() : true);
-          const accessible = moduleAccessible && joiningCapabilityOk;
+          const accessible = moduleAccessible && joiningPageOk && joiningCapabilityOk;
 
           if (!accessible && children.length === 0) {
             return null;
@@ -496,7 +510,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           };
         })
         .filter(Boolean) as DashboardNavItem[],
-    [hasAccessForKey, canApproveFeeRequest, canSubmitFeeRequest]
+    [hasAccessForKey, canAccessJoiningPage, canApproveFeeRequest]
   );
 
   const filteredNavItems = useMemo(() => filterNavItems(navItems), [filterNavItems, navItems]);
@@ -914,6 +928,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       canJoiningEditAdmission,
       canSubmitFeeRequest,
       canApproveFeeRequest,
+      canAccessJoiningPage,
       canAccessAdmissionTab,
       getAllowedAdmissionTabs,
     }),
@@ -921,10 +936,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       normalizedPermissions,
       hasAccessForKey,
       canWriteForKey,
+      getModulePermission,
       canJoiningEditReference,
       canJoiningEditAdmission,
       canSubmitFeeRequest,
       canApproveFeeRequest,
+      canAccessJoiningPage,
       canAccessAdmissionTab,
       getAllowedAdmissionTabs,
     ]

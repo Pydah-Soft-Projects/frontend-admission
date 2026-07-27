@@ -14,6 +14,12 @@ export interface ModulePermission {
   approveFeeRequest?: boolean;
   /** Limit joining admission edit scope by college id. */
   allowedColleges?: string[];
+  /** Joining desk list pages (requires joining module access). */
+  pageConfirmedLeads?: boolean;
+  pageSelfRegistration?: boolean;
+  pageJoiningPipeline?: boolean;
+  pageFeeRequests?: boolean;
+  pageAdmissions?: boolean;
   /** Admissions page (`/joining/completed`) tab access (requires joining module access). */
   admissionTabAbstract?: boolean;
   admissionTabStudentInfo?: boolean;

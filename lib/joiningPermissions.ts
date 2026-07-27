@@ -7,12 +7,49 @@ export type JoiningPermissionExtras = Pick<
   'editReference' | 'editAdmission' | 'approveFeeRequest'
 >;
 
+export type JoiningDeskPageKey =
+  | 'confirmed'
+  | 'self-registration'
+  | 'pipeline'
+  | 'fee-requests'
+  | 'admissions';
+
 export type AdmissionTabKey =
   | 'abstract'
   | 'student-info'
   | 'reference-list'
   | 'source-list'
   | 'date-wise';
+
+/** Labels match Joining Desk sidebar pages. */
+export const JOINING_DESK_PAGES: { key: JoiningDeskPageKey; label: string }[] = [
+  { key: 'confirmed', label: 'Confirmed Leads' },
+  { key: 'self-registration', label: 'Self Registration' },
+  { key: 'pipeline', label: 'Joining Pipeline' },
+  { key: 'fee-requests', label: 'Fee Requests' },
+  { key: 'admissions', label: 'Admissions' },
+];
+
+const JOINING_PAGE_FLAG_KEYS = {
+  confirmed: 'pageConfirmedLeads',
+  'self-registration': 'pageSelfRegistration',
+  pipeline: 'pageJoiningPipeline',
+  'fee-requests': 'pageFeeRequests',
+  admissions: 'pageAdmissions',
+} as const satisfies Record<JoiningDeskPageKey, keyof ModulePermission>;
+
+export type JoiningDeskPagePermissionExtras = Pick<
+  ModulePermission,
+  | 'pageConfirmedLeads'
+  | 'pageSelfRegistration'
+  | 'pageJoiningPipeline'
+  | 'pageFeeRequests'
+  | 'pageAdmissions'
+>;
+
+export function joiningPagePermissionKey(page: JoiningDeskPageKey): keyof ModulePermission {
+  return JOINING_PAGE_FLAG_KEYS[page];
+}
 
 /** Labels match the Admissions page (`/superadmin/joining/completed`) tab bar. */
 export const ADMISSION_PAGE_TABS: { key: AdmissionTabKey; label: string }[] = [
@@ -53,6 +90,17 @@ export function defaultJoiningPermissionExtras(): JoiningPermissionExtras {
   };
 }
 
+/** Default joining desk page flags (none selected). */
+export function defaultJoiningPageExtras(): JoiningDeskPagePermissionExtras {
+  return {
+    pageConfirmedLeads: false,
+    pageSelfRegistration: false,
+    pageJoiningPipeline: false,
+    pageFeeRequests: false,
+    pageAdmissions: false,
+  };
+}
+
 /** Default admissions page tab flags (none selected). */
 export function defaultAdmissionTabExtras(): AdmissionTabPermissionExtras {
   return {
@@ -64,10 +112,66 @@ export function defaultAdmissionTabExtras(): AdmissionTabPermissionExtras {
   };
 }
 
+/** Legacy joining access without per-page flags: all desk pages allowed. */
+export function isLegacyJoiningPages(entry?: ModulePermission): boolean {
+  if (!entry?.access) return false;
+  return JOINING_DESK_PAGES.every(({ key }) => entry[joiningPagePermissionKey(key)] === undefined);
+}
+
 /** Legacy joining access without per-tab flags: all admissions tabs allowed. */
 export function isLegacyAdmissionTabs(entry?: ModulePermission): boolean {
   if (!entry?.access) return false;
   return ADMISSION_PAGE_TABS.every(({ key }) => entry[admissionTabPermissionKey(key)] === undefined);
+}
+
+export function resolveJoiningPageAccess(
+  page: JoiningDeskPageKey,
+  entry?: ModulePermission,
+  isSuperAdmin = false
+): boolean {
+  if (isSuperAdmin) return true;
+  if (!entry?.access) return false;
+  if (isLegacyJoiningPages(entry)) return true;
+  if (page === 'fee-requests' && resolveApproveFeeRequest(entry, isSuperAdmin)) return true;
+  return Boolean(entry[joiningPagePermissionKey(page)]);
+}
+
+export function joiningPagesFromStored(entry?: ModulePermission): JoiningDeskPagePermissionExtras {
+  const defaults = defaultJoiningPageExtras();
+  if (!entry?.access) return defaults;
+  if (isLegacyJoiningPages(entry)) {
+    return {
+      pageConfirmedLeads: true,
+      pageSelfRegistration: true,
+      pageJoiningPipeline: true,
+      pageFeeRequests: true,
+      pageAdmissions: true,
+    };
+  }
+  return {
+    pageConfirmedLeads: Boolean(entry.pageConfirmedLeads),
+    pageSelfRegistration: Boolean(entry.pageSelfRegistration),
+    pageJoiningPipeline: Boolean(entry.pageJoiningPipeline),
+    pageFeeRequests: Boolean(entry.pageFeeRequests) || Boolean(entry.approveFeeRequest),
+    pageAdmissions: Boolean(entry.pageAdmissions),
+  };
+}
+
+export function enabledJoiningPageLabels(entry?: ModulePermission): string[] {
+  const flags = joiningPagesFromStored(entry);
+  return JOINING_DESK_PAGES.filter(
+    ({ key }) => flags[joiningPagePermissionKey(key) as keyof JoiningDeskPagePermissionExtras]
+  ).map(({ label }) => label);
+}
+
+function joiningPageFlagsForSave(value: ModulePermission): JoiningDeskPagePermissionExtras {
+  return {
+    pageConfirmedLeads: Boolean(value.pageConfirmedLeads),
+    pageSelfRegistration: Boolean(value.pageSelfRegistration),
+    pageJoiningPipeline: Boolean(value.pageJoiningPipeline),
+    pageFeeRequests: Boolean(value.pageFeeRequests),
+    pageAdmissions: Boolean(value.pageAdmissions),
+  };
 }
 
 export function resolveAdmissionTabAccess(
@@ -184,10 +288,15 @@ export function joiningExtrasFromStored(entry?: ModulePermission): JoiningPermis
 /** Build joining slice for API save (Sub Super Admin). */
 export function joiningPermissionForSave(value: ModulePermission): ModulePermission {
   const permission = value.permission === 'write' ? 'write' : 'read';
+  const pageFlags = joiningPageFlagsForSave(value);
   const tabFlags = admissionTabFlagsForSave(value);
   const collegeScope = Array.isArray(value.allowedColleges) ? value.allowedColleges.filter((id) => typeof id === 'string') : [];
+  // Approving fee requests implies Fee Requests page access.
+  if (permission === 'write' && value.approveFeeRequest) {
+    pageFlags.pageFeeRequests = true;
+  }
   if (permission === 'read') {
-    return { access: true, permission: 'read', allowedColleges: collegeScope, ...tabFlags };
+    return { access: true, permission: 'read', allowedColleges: collegeScope, ...pageFlags, ...tabFlags };
   }
   return {
     access: true,
@@ -196,6 +305,7 @@ export function joiningPermissionForSave(value: ModulePermission): ModulePermiss
     editAdmission: Boolean(value.editAdmission),
     approveFeeRequest: Boolean(value.approveFeeRequest),
     allowedColleges: collegeScope,
+    ...pageFlags,
     ...tabFlags,
   };
 }

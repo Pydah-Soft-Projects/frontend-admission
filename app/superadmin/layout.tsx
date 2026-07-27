@@ -24,7 +24,11 @@ import {
   DASHBOARD_PERMISSION_KEY,
   PermissionModuleKey,
 } from '@/constants/permissions';
-import { admissionTabsFromStored, joiningExtrasFromStored } from '@/lib/joiningPermissions';
+import {
+  admissionTabsFromStored,
+  joiningExtrasFromStored,
+  joiningPagesFromStored,
+} from '@/lib/joiningPermissions';
 import { TestNotificationsButton } from '@/components/TestNotificationsButton';
 import { Loading } from '@/components/Loading';
 
@@ -42,11 +46,11 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
     icon: AcademicIcon,
     permissionKey: 'joining',
     children: [
-      { href: '/superadmin/joining/confirmed', label: 'Confirmed Leads', icon: ListIcon, permissionKey: 'joining' },
-      { href: '/superadmin/joining/self-registration', label: 'Self Registration', icon: TemplateIcon, permissionKey: 'joining' },
-      { href: '/superadmin/joining', label: 'Joining Pipeline', icon: AcademicIcon, permissionKey: 'joining' },
-      { href: '/superadmin/joining/fee-requests', label: 'Fee Requests', icon: CurrencyIcon, permissionKey: 'joining', joiningCapability: 'approveFeeRequest' },
-      { href: '/superadmin/joining/completed', label: 'Admissions', icon: AcademicIcon, permissionKey: 'joining' },
+      { href: '/superadmin/joining/confirmed', label: 'Confirmed Leads', icon: ListIcon, permissionKey: 'joining', joiningPage: 'confirmed' },
+      { href: '/superadmin/joining/self-registration', label: 'Self Registration', icon: TemplateIcon, permissionKey: 'joining', joiningPage: 'self-registration' },
+      { href: '/superadmin/joining', label: 'Joining Pipeline', icon: AcademicIcon, permissionKey: 'joining', joiningPage: 'pipeline' },
+      { href: '/superadmin/joining/fee-requests', label: 'Fee Requests', icon: CurrencyIcon, permissionKey: 'joining', joiningPage: 'fee-requests' },
+      { href: '/superadmin/joining/completed', label: 'Admissions', icon: AcademicIcon, permissionKey: 'joining', joiningPage: 'admissions' },
     ],
   },
   {
@@ -91,6 +95,11 @@ const buildFullAccessPermissions = (): Record<PermissionModuleKey, ModulePermiss
             editReference: true,
             editAdmission: true,
             approveFeeRequest: true,
+            pageConfirmedLeads: true,
+            pageSelfRegistration: true,
+            pageJoiningPipeline: true,
+            pageFeeRequests: true,
+            pageAdmissions: true,
             admissionTabAbstract: true,
             admissionTabStudentInfo: true,
             admissionTabReference: true,
@@ -127,6 +136,7 @@ const sanitizeSubAdminPermissions = (
         sanitized[module.key] = {
           access: true,
           permission,
+          ...joiningPagesFromStored(typedEntry),
           ...admissionTabsFromStored(typedEntry),
           ...(permission === 'write'
             ? {

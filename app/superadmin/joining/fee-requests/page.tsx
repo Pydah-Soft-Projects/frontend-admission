@@ -31,7 +31,8 @@ const formatDateTime = (value?: string | null) => {
 export default function FeeRequestsPage() {
   const router = useRouter();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
-  const { canApproveFeeRequest } = useJoiningDeskPermissions();
+  const { canApproveFeeRequest, canAccessJoiningPage } = useJoiningDeskPermissions();
+  const canAccessPage = canAccessJoiningPage('fee-requests');
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
@@ -59,7 +60,7 @@ export default function FeeRequestsPage() {
         search: debouncedSearch || undefined,
         status: statusFilter,
       }),
-    enabled: canApproveFeeRequest,
+    enabled: canAccessPage,
     placeholderData: (previousData) => previousData,
     staleTime: 30_000,
   });
@@ -111,18 +112,27 @@ export default function FeeRequestsPage() {
   );
 
   useEffect(() => {
-    if (!canApproveFeeRequest) {
+    if (!canAccessPage) {
       router.replace('/superadmin/joining');
     }
-  }, [canApproveFeeRequest, router]);
+  }, [canAccessPage, router]);
 
   useEffect(() => {
     setHeaderContent(headerContent);
     return () => clearHeaderContent();
   }, [headerContent, setHeaderContent, clearHeaderContent]);
 
-  if (!canApproveFeeRequest) {
+  if (!canAccessPage) {
     return null;
+  }
+
+  if (!canApproveFeeRequest) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        You can open Fee Requests, but approving requires the &quot;Approve fee requests&quot; permission under
+        User Management → Joining Desk.
+      </div>
+    );
   }
 
   const isEmpty = !isLoading && feeRequests.length === 0;
