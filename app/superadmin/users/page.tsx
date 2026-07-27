@@ -19,9 +19,12 @@ import { JoiningModulePermissionExtras } from '@/components/users/JoiningModuleP
 import {
   admissionTabsFromStored,
   defaultAdmissionTabExtras,
+  defaultJoiningPageExtras,
   defaultJoiningPermissionExtras,
   enabledAdmissionTabLabels,
+  enabledJoiningPageLabels,
   joiningExtrasFromStored,
+  joiningPagesFromStored,
   JOINING_PERMISSION_KEY,
   modulePermissionForSave,
 } from '@/lib/joiningPermissions';
@@ -168,7 +171,11 @@ const UserManagementPage = () => {
           access: false,
           permission: 'read' as ModulePermission['permission'],
           ...(module.key === JOINING_PERMISSION_KEY
-            ? { ...defaultJoiningPermissionExtras(), ...defaultAdmissionTabExtras() }
+            ? {
+                ...defaultJoiningPermissionExtras(),
+                ...defaultJoiningPageExtras(),
+                ...defaultAdmissionTabExtras(),
+              }
             : {}),
         },
       }),
@@ -684,7 +691,11 @@ const UserManagementPage = () => {
           access: nextAccess,
           permission: nextAccess ? prev[moduleKey].permission || 'read' : prev[moduleKey].permission,
           ...(moduleKey === JOINING_PERMISSION_KEY && nextAccess && !prev[moduleKey].access
-            ? { ...defaultJoiningPermissionExtras(), ...defaultAdmissionTabExtras() }
+            ? {
+                ...defaultJoiningPermissionExtras(),
+                ...defaultJoiningPageExtras(),
+                ...defaultAdmissionTabExtras(),
+              }
             : {}),
         },
       };
@@ -1224,6 +1235,10 @@ const UserManagementPage = () => {
                                 module.key === JOINING_PERMISSION_KEY && isWrite
                                   ? joiningExtrasFromStored(entry)
                                   : null;
+                              const joiningPageLabels =
+                                module.key === JOINING_PERMISSION_KEY
+                                  ? enabledJoiningPageLabels(entry)
+                                  : null;
                               const admissionTabLabels =
                                 module.key === JOINING_PERMISSION_KEY
                                   ? enabledAdmissionTabLabels(entry)
@@ -1237,6 +1252,14 @@ const UserManagementPage = () => {
                                   <p className="mt-0.5 text-slate-500 dark:text-slate-400">
                                     {isWrite ? 'Read & Write' : 'Read only'}
                                   </p>
+                                  {joiningPageLabels && (
+                                    <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
+                                      Desk pages:{' '}
+                                      {joiningPageLabels.length > 0
+                                        ? joiningPageLabels.join(' · ')
+                                        : 'None selected'}
+                                    </p>
+                                  )}
                                   {joiningExtras && (
                                     <p className="mt-1 text-[11px] text-blue-700 dark:text-blue-300">
                                       Desk edits:{' '}
@@ -1264,7 +1287,7 @@ const UserManagementPage = () => {
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Use Edit User to change Joining Desk reference/admission edits, admissions tabs, or fee request approval.
+                        Use Edit User to change Joining Desk pages, reference/admission edits, admissions tabs, or fee request approval.
                       </p>
                     </div>
                   )}
@@ -1380,6 +1403,7 @@ const UserManagementPage = () => {
                             ? {
                                 access: true,
                                 permission,
+                                ...joiningPagesFromStored(entry),
                                 ...admissionTabsFromStored(entry),
                                 ...(permission === 'write' ? joiningExtrasFromStored(entry) : {}),
                                 allowedColleges: Array.isArray(entry.allowedColleges)
@@ -2076,6 +2100,7 @@ const UserManagementPage = () => {
                                               !prev[module.key].access
                                                 ? {
                                                     ...defaultJoiningPermissionExtras(),
+                                                    ...defaultJoiningPageExtras(),
                                                     ...defaultAdmissionTabExtras(),
                                                   }
                                                 : {}),

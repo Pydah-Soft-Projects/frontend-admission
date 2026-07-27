@@ -30,7 +30,7 @@ export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
     key: 'joining',
     label: 'Joining Desk',
     description:
-      'Oversee joining progress, admissions, and the desk. Grant Admissions page tabs and optional edit actions for Read & Write users.',
+      'Oversee joining progress, admissions, and the desk. Grant specific desk pages, Admissions tabs, and optional edit actions for Read & Write users.',
   },
   {
     key: 'payments',

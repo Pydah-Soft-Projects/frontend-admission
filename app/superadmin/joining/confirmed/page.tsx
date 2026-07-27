@@ -11,13 +11,15 @@ import { Lead } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { useDashboardHeader, useModulePermission } from '@/components/layout/DashboardShell';
+import { useDashboardHeader, useModulePermission, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { showToast } from '@/lib/toast';
 import { History, MessageSquare, FileCheck } from 'lucide-react';
 
 const ConfirmedLeadsPage = () => {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const { canWrite: canWriteJoining } = useModulePermission('joining');
+  const { canAccessJoiningPage } = useJoiningDeskPermissions();
+  const canAccessPage = canAccessJoiningPage('confirmed');
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -71,6 +73,7 @@ const ConfirmedLeadsPage = () => {
       });
       return response.data || response;
     },
+    enabled: canAccessPage,
     placeholderData: (previousData) => previousData,
   });
 
@@ -94,6 +97,15 @@ const ConfirmedLeadsPage = () => {
   const leads = (data?.leads ?? []) as Lead[];
   const pagination = data?.pagination ?? { page: 1, pages: 1, total: 0, limit };
   const isEmpty = !isLoading && leads.length === 0;
+
+  if (!canAccessPage) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        You do not have access to Confirmed Leads. Ask a Super Admin to enable it under User Management →
+        Joining Desk pages.
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-6">

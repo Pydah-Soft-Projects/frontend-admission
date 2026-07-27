@@ -11,7 +11,7 @@ import { Joining, JoiningListResponse } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { useDashboardHeader } from '@/components/layout/DashboardShell';
+import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { showToast } from '@/lib/toast';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
@@ -41,6 +41,8 @@ export default function SelfRegistrationPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
+  const { canAccessJoiningPage } = useJoiningDeskPermissions();
+  const canAccessPage = canAccessJoiningPage('self-registration');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,6 +70,7 @@ export default function SelfRegistrationPage() {
       });
       return response;
     },
+    enabled: canAccessPage,
     placeholderData: (previousData) => previousData,
     staleTime: 30_000,
   });
@@ -123,6 +126,15 @@ export default function SelfRegistrationPage() {
 
   const routeIdFor = (joining: (typeof joinings)[number]) =>
     String(joining.leadId || joining._id || '');
+
+  if (!canAccessPage) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        You do not have access to Self Registration. Ask a Super Admin to enable it under User Management →
+        Joining Desk pages.
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-6">
