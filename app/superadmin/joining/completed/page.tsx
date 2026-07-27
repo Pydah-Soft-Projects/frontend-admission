@@ -34,10 +34,11 @@ import {
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
 import { buildImportantDocumentTabItems } from '@/lib/joiningDocumentsDisplay';
-import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer, Settings2 } from 'lucide-react';
+import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer, Settings2, Clock } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { cn } from '@/lib/utils';
 import { PendingAdmissionsDownloadModal } from '@/components/admission/PendingAdmissionsDownloadModal';
+import { PendingFeeDocsSmsSchedulerDialog } from '@/components/admission/PendingFeeDocsSmsSchedulerDialog';
 import {
   parseStudentQuotasResponse,
   quotaLabelsFromCatalog,
@@ -577,6 +578,7 @@ const CompletedAdmissionsPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [pendingAdmissionsOpen, setPendingAdmissionsOpen] = useState(false);
   const [minimumConfigOpen, setMinimumConfigOpen] = useState(false);
+  const [smsSchedulerOpen, setSmsSchedulerOpen] = useState(false);
   const [showDocumentSmsDialog, setShowDocumentSmsDialog] = useState(false);
 
   const {
@@ -2074,6 +2076,11 @@ const CompletedAdmissionsPage = () => {
         onConfigsChanged={() => refetchMinimumFeeConfigs()}
       />
 
+      <PendingFeeDocsSmsSchedulerDialog
+        open={smsSchedulerOpen}
+        onOpenChange={setSmsSchedulerOpen}
+      />
+
       {/* Send Pending Documents SMS Dialog — Important Documents only */}
       <Dialog
         open={showDocumentSmsDialog}
@@ -2292,6 +2299,16 @@ const CompletedAdmissionsPage = () => {
                     <Download className="h-4 w-4" />
                     <span className="sm:hidden">Pending</span>
                     <span className="hidden sm:inline">Pending Fee & Docs</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2 sm:w-auto"
+                    onClick={() => setSmsSchedulerOpen(true)}
+                  >
+                    <Clock className="h-4 w-4" />
+                    <span className="sm:hidden">SMS</span>
+                    <span className="hidden sm:inline">SMS Scheduler</span>
                   </Button>
                   <Button
                     variant="outline"

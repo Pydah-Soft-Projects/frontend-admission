@@ -615,31 +615,46 @@ export function PendingAdmissionsDownloadModal({
   };
 
   const bulkSmsMutation = useMutation({
-    mutationFn: async (admissionIds: string[]) =>
-      admissionAPI.sendDocumentNotificationSmsBulk(admissionIds),
+    mutationFn: async (admissionIds: string[]) => {
+      const pendingFeeAmountById = new Map<string, number>(
+        pendingFeeRows.map((r) => {
+          if (!hasAnyMinimumFeeConfig) return [String(r.id), Number(r.totalPending ?? 0) || 0];
+          const { unpaid } = resolvePendingFeeAmounts(r, minimumFeeConfigs, minFeeFilterContext);
+          return [String(r.id), Number(unpaid) || 0];
+        })
+      );
+      const pendingFeeAmountsByAdmissionId = Object.fromEntries(
+        admissionIds.map((id) => [String(id), pendingFeeAmountById.get(String(id)) ?? 0])
+      );
+      return admissionAPI.sendDocumentNotificationSmsBulk(admissionIds, pendingFeeAmountsByAdmissionId);
+    },
     onSuccess: (response) => {
       const data = (response?.data || response) as {
         sent?: number;
         skipped?: number;
         failed?: number;
+        confirmationPendingSms?: { sent?: number; skipped?: number; failed?: number };
         message?: string;
       };
       const sent = Number(data?.sent ?? 0);
       const skipped = Number(data?.skipped ?? 0);
       const failed = Number(data?.failed ?? 0);
-      if (sent > 0 && failed === 0) {
+
+      const conf = data?.confirmationPendingSms || {};
+      const confSent = Number(conf?.sent ?? 0);
+      const confSkipped = Number(conf?.skipped ?? 0);
+      const confFailed = Number(conf?.failed ?? 0);
+
+      if (sent > 0 || confSent > 0) {
         showToast.success(
-          `Important Documents SMS sent to ${sent} student(s)${
-            skipped ? ` (${skipped} skipped — no pending important docs or phone)` : ''
-          }.`
-        );
-      } else if (sent > 0) {
-        showToast.success(
-          `Sent ${sent}, skipped ${skipped}, failed ${failed}. SMS uses Important Documents only.`
+          `SMS notifications finished. ` +
+            `Important Documents: ${sent} sent, ${skipped} skipped, ${failed} failed. ` +
+            `Admission Confirmation Pending: ${confSent} sent, ${confSkipped} skipped, ${confFailed} failed.`
         );
       } else {
         showToast.error(
-          `No SMS sent — skipped ${skipped}, failed ${failed}. Students need pending Important Documents and a valid phone.`
+          `No SMS sent — Important Documents skipped ${skipped}, failed ${failed}. ` +
+            `Admission Confirmation Pending skipped ${confSkipped}, failed ${confFailed}.`
         );
       }
       setSelectedIds(new Set());
@@ -1278,7 +1293,7 @@ export function PendingAdmissionsDownloadModal({
                         </span>
                       </label>
                       <span className="text-[11px] text-slate-500">
-                        SMS includes pending Important Documents only
+                        SMS includes pending Important Documents + Admission Confirmation Pending
                       </span>
                     </div>
                     <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
@@ -1533,14 +1548,15 @@ export function PendingAdmissionsDownloadModal({
       <Dialog open={confirmBulkSmsOpen} onOpenChange={setConfirmBulkSmsOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Send Important Documents SMS</DialogTitle>
+            <DialogTitle>Send Pending Fee & Certificates SMS</DialogTitle>
             <DialogDescription>
-              Send pending Important Documents SMS to {selectedCount} selected student(s). Other
-              documents are not included.
+              Send pending Important Documents SMS and Admission Confirmation Pending SMS to{' '}
+              {selectedCount} selected student(s).
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            Students without pending Important Documents or a valid phone number will be skipped.
+            Students without pending Important Documents / pending fee amount (or without a valid phone number)
+            will be skipped.
           </p>
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
             <Button

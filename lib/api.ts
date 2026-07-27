@@ -1731,9 +1731,15 @@ export const admissionAPI = {
     const response = await api.post(`/admissions/id/${admissionId}/send-document-notification`, { selectedDocuments });
     return response.data;
   },
-  /** Bulk Important Documents pending SMS for selected admissions. */
-  sendDocumentNotificationSmsBulk: async (admissionIds: string[]) => {
-    const response = await api.post(`/admissions/send-document-notification-bulk`, { admissionIds });
+  /** Bulk Important Documents + Admission Confirmation Pending SMS for selected admissions. */
+  sendDocumentNotificationSmsBulk: async (
+    admissionIds: string[],
+    pendingFeeAmountsByAdmissionId?: Record<string, number>
+  ) => {
+    const response = await api.post(`/admissions/send-document-notification-bulk`, {
+      admissionIds,
+      pendingFeeAmountsByAdmissionId: pendingFeeAmountsByAdmissionId ?? undefined,
+    });
     return response.data;
   },
   updateByLeadId: async (leadId: string, data: any) => {
@@ -2009,6 +2015,29 @@ export const admissionAPI = {
     const response = await api.delete(
       `/admissions/minimum-fee-configs/college/${encodeURIComponent(collegeId)}`
     );
+    return response.data?.data || response.data;
+  },
+
+  /** Super Admin: Get once-daily AM/PM-window scheduler for Pending Fee + Documents SMS. */
+  getPendingFeeDocsSmsSchedulerConfig: async () => {
+    const response = await api.get('/admissions/pending-fees-docs-sms-scheduler');
+    return (response.data?.data || response.data) as {
+      id: string;
+      enabled: boolean;
+      period: 'am' | 'pm';
+      time: string;
+      lastRunDate: string | null;
+      updatedAt: string | null;
+    };
+  },
+
+  /** Super Admin: Save once-daily AM/PM-window scheduler for Pending Fee + Documents SMS. */
+  upsertPendingFeeDocsSmsSchedulerConfig: async (payload: {
+    enabled: boolean;
+    period: 'am' | 'pm';
+    time: string;
+  }) => {
+    const response = await api.put('/admissions/pending-fees-docs-sms-scheduler', payload);
     return response.data?.data || response.data;
   },
 };
