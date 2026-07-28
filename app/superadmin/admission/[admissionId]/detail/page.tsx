@@ -203,10 +203,10 @@ export default function AdmissionDetailPage() {
   const lead =
     (admission?.leadData as AdmissionLeadData | undefined) ||
     (data?.data?.lead as AdmissionLeadData | undefined);
-  const cancellationDetails = admission?.leadData?._admissionCancellation as
-    | AdmissionCancellationDetails
-    | undefined;
+  const cancellationDetails = (admission?.leadData?._admissionCancellation ||
+    lead?._admissionCancellation) as AdmissionCancellationDetails | undefined;
   const isAdmissionCancelled = admission?.status === ADMISSION_CANCELLED_STATUS;
+  const cancellationRemark = String(cancellationDetails?.reason || '').trim();
 
   const cancelAdmissionMutation = useMutation({
     mutationFn: async () => {
@@ -904,20 +904,28 @@ export default function AdmissionDetailPage() {
       {isAdmissionCancelled && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-300">
                 Admission Cancelled
               </p>
-              <p className="mt-2 text-sm font-medium text-rose-950 dark:text-rose-100">
-                {cancellationDetails?.reason || 'Cancellation reason not available'}
+              <p className="mt-2 text-base font-semibold text-rose-950 dark:text-rose-100">
+                Cancelled
               </p>
             </div>
-            <div className="grid gap-2 text-sm text-rose-900 dark:text-rose-100 sm:grid-cols-2 md:text-right">
+            <div className="grid gap-3 text-sm text-rose-900 dark:text-rose-100 sm:grid-cols-3 md:text-right">
+              <div className="min-w-0 sm:col-span-1 md:max-w-xs md:justify-self-end">
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-300">
+                  Remark
+                </p>
+                <p className="font-semibold whitespace-pre-wrap break-words">
+                  {cancellationRemark || '—'}
+                </p>
+              </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-300">
                   Approved by
                 </p>
-                <p className="font-semibold">{cancellationDetails?.approvedBy || '-'}</p>
+                <p className="font-semibold">{cancellationDetails?.approvedBy || '—'}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-300">

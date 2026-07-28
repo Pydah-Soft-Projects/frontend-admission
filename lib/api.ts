@@ -1367,6 +1367,11 @@ export const joiningAPI = {
     const response = await api.post(`/joinings/${leadId}/approve`);
     return response.data;
   },
+  /** Delete a draft/pending self-registration joining + lead (Super Admin). */
+  deleteSelfRegistration: async (leadId: string) => {
+    const response = await api.delete(`/joinings/${leadId}`);
+    return response.data;
+  },
   /** Mint a time-limited public URL to edit a draft joining form (default TTL 5 minutes on server). */
   createPublicEditLink: async (leadId: string) => {
     const response = await api.post(`/joinings/${leadId}/public-edit-link`);

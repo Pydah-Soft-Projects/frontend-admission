@@ -717,6 +717,14 @@ export interface Joining {
   paymentSummary?: PaymentSummary;
   createdAt: string;
   updatedAt: string;
+  /** List payload: linked admissions row id when present. */
+  admissionId?: string;
+  /** List payload: admission number when an admissions entry exists. */
+  admissionNumber?: string;
+  /** List payload: admissions.status (e.g. active / Admission Cancelled). */
+  admissionStatus?: string;
+  /** List payload: true when an active admission entry with number exists. */
+  admissionConfirmed?: boolean;
   /** List/detail when API joins or embeds lead summary (e.g. enquiry # on pipeline). */
   lead?: Pick<
     Lead,
@@ -744,9 +752,16 @@ export interface JoiningListItem extends Joining {
   lead?: Lead;
 }
 
+export interface JoiningStatusCounts {
+  draft: number;
+  pending_approval: number;
+  approved: number;
+}
+
 export interface JoiningListPayload {
   joinings: JoiningListItem[];
   pagination: Pagination;
+  statusCounts?: JoiningStatusCounts;
 }
 
 export interface JoiningListResponse {

@@ -2,19 +2,34 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { joiningAPI } from '@/lib/api';
+import { admissionAPI, joiningAPI } from '@/lib/api';
 import { SELF_REGISTRATION_SOURCE } from '@/lib/joiningSelfRegistration';
 import { ShareSelfRegistrationModal } from '@/components/joining/ShareSelfRegistrationModal';
-import { Joining, JoiningListResponse } from '@/types';
+import { Admission, Joining, JoiningListResponse, JoiningStatusCounts } from '@/types';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/Dialog';
 import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layout/DashboardShell';
 import { showToast } from '@/lib/toast';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
+
+type SelfRegTab = 'draft' | 'pending' | 'approved';
+
+const INR_CURRENCY_FORMAT = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+});
 
 function joiningRegistrationHasCollege(j: Joining): boolean {
   const r = j.registrationFormData;
@@ -37,8 +52,70 @@ const joiningHasManagedCourseAndBranch = (joining: Joining): boolean => {
   return joiningRegistrationHasCollege(joining);
 };
 
+const tabToStatus = (tab: SelfRegTab): 'draft' | 'pending_approval' | 'approved' => {
+  if (tab === 'pending') return 'pending_approval';
+  if (tab === 'approved') return 'approved';
+  return 'draft';
+};
+
+const EMPTY_STATUS_COUNTS: JoiningStatusCounts = {
+  draft: 0,
+  pending_approval: 0,
+  approved: 0,
+};
+
+const formatReservationEws = (reservation?: Admission['reservation']) => {
+  if (reservation?.isEws === true) return 'Yes';
+  if (reservation?.isEws === false) return 'No';
+  if (reservation?.general === 'ews' || reservation?.other?.includes('EWS')) return 'Yes';
+  return 'No';
+};
+
+const formatQualificationMerit = (qualifications?: { merit?: boolean | null }) => {
+  if (qualifications?.merit === true) return 'Yes';
+  if (qualifications?.merit === false) return 'No';
+  return '—';
+};
+
+const resolveAdmissionReference1 = (record: Admission) => {
+  const anyRecord = record as unknown as Record<string, unknown>;
+  const fromList =
+    (typeof record.referenceName === 'string' ? record.referenceName : '') ||
+    (typeof anyRecord.reference_name === 'string' ? (anyRecord.reference_name as string) : '') ||
+    (typeof anyRecord.reference1 === 'string' ? (anyRecord.reference1 as string) : '');
+  const direct = String(fromList ?? '').trim();
+  if (direct) return direct;
+  const ld = (record.leadData as Record<string, unknown> | undefined) ?? undefined;
+  return String(ld?.reference1 ?? ld?.referenceName ?? ld?.reference_name ?? '').trim();
+};
+
+const resolveAdmissionSource = (record: Admission) => {
+  const fromLead = String(record.leadSource || '').trim();
+  if (fromLead) return fromLead;
+  const ld = (record.leadData as Record<string, unknown> | undefined) ?? undefined;
+  return String(ld?.source ?? ld?.leadSource ?? '').trim();
+};
+
+const extractAdmissionFromApi = (response: unknown): Admission | null => {
+  if (!response || typeof response !== 'object') return null;
+  const root = response as Record<string, unknown>;
+  const nested = root.data;
+  if (nested && typeof nested === 'object') {
+    const data = nested as Record<string, unknown>;
+    if (data.admission && typeof data.admission === 'object') {
+      return data.admission as Admission;
+    }
+    if (data._id || data.admissionNumber) {
+      return data as unknown as Admission;
+    }
+  }
+  if (root._id || root.admissionNumber) {
+    return root as unknown as Admission;
+  }
+  return null;
+};
+
 export default function SelfRegistrationPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const { canAccessJoiningPage } = useJoiningDeskPermissions();
@@ -47,8 +124,11 @@ export default function SelfRegistrationPage() {
   const [limit, setLimit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'draft' | 'pending'>('draft');
+  const [activeTab, setActiveTab] = useState<SelfRegTab>('draft');
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
+  const [viewAdmissionId, setViewAdmissionId] = useState<string | null>(null);
+  const [isResolvingAdmissionView, setIsResolvingAdmissionView] = useState(false);
   const { getCourseName, getBranchName } = useCourseLookup();
 
   useEffect(() => {
@@ -59,12 +139,11 @@ export default function SelfRegistrationPage() {
   const { data, isLoading, isFetching } = useQuery<JoiningListResponse>({
     queryKey: ['self-registration', page, limit, debouncedSearch, activeTab],
     queryFn: async () => {
-      const statusValue = activeTab === 'pending' ? 'pending_approval' : 'draft';
       const response = await joiningAPI.list({
         page,
         limit,
         search: debouncedSearch || undefined,
-        status: statusValue,
+        status: tabToStatus(activeTab),
         source: SELF_REGISTRATION_SOURCE,
         requireEnquiry: true,
       });
@@ -75,30 +154,69 @@ export default function SelfRegistrationPage() {
     staleTime: 30_000,
   });
 
+  const {
+    data: admissionViewRecord,
+    isLoading: isAdmissionViewLoading,
+    isError: isAdmissionViewError,
+  } = useQuery({
+    queryKey: ['admission', 'self-registration-view', viewAdmissionId],
+    enabled: Boolean(viewAdmissionId),
+    queryFn: async () => {
+      const response = await admissionAPI.getById(viewAdmissionId as string);
+      const admission = extractAdmissionFromApi(response);
+      if (!admission?._id) {
+        throw new Error('Admission record not found');
+      }
+      return admission;
+    },
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (isAdmissionViewError && viewAdmissionId) {
+      showToast.error('Failed to load admission details');
+      setViewAdmissionId(null);
+    }
+  }, [isAdmissionViewError, viewAdmissionId]);
+
   const payload = data?.data ?? {
     joinings: [],
     pagination: { page: 1, pages: 1, total: 0, limit },
+    statusCounts: EMPTY_STATUS_COUNTS,
   };
   const joinings = payload.joinings ?? [];
   const pagination = payload.pagination ?? { page: 1, pages: 1, total: 0, limit };
+  const statusCounts = payload.statusCounts ?? EMPTY_STATUS_COUNTS;
   const isEmpty = !isLoading && joinings.length === 0;
 
   const approveMutation = useMutation({
     mutationFn: async (routeId: string) => joiningAPI.approve(routeId),
-    onSuccess: (res) => {
-      const admissionId = (res as { data?: { admissionId?: string } })?.data?.admissionId;
-      showToast.success('Self-registration approved — opening admission record');
+    onSuccess: () => {
+      showToast.success('Self-registration approved — it stays on this page under Approved');
       void queryClient.invalidateQueries({ queryKey: ['self-registration'] });
       void queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
       void queryClient.invalidateQueries({ queryKey: ['admissions'] });
-      if (admissionId) {
-        router.push(`/superadmin/admission/${admissionId}/detail`);
-      } else {
-        router.push('/superadmin/joining/completed');
-      }
+      void queryClient.invalidateQueries({ queryKey: ['confirmed-leads'] });
+      setActiveTab('approved');
+      setPage(1);
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
       showToast.error(error?.response?.data?.message || 'Failed to approve self-registration');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (routeId: string) => joiningAPI.deleteSelfRegistration(routeId),
+    onSuccess: () => {
+      showToast.success('Self-registration deleted');
+      setDeletingRouteId(null);
+      void queryClient.invalidateQueries({ queryKey: ['self-registration'] });
+      void queryClient.invalidateQueries({ queryKey: ['confirmed-leads'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining-pipeline'] });
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      setDeletingRouteId(null);
+      showToast.error(error?.response?.data?.message || 'Failed to delete self-registration');
     },
   });
 
@@ -108,7 +226,8 @@ export default function SelfRegistrationPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Self Registration</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Student-submitted applications stay here until approved, then move to Admissions.
+            Student-submitted applications stay on this page through draft, pending, and approved — they do not
+            appear on Confirmed Leads.
           </p>
         </div>
         <Button type="button" variant="primary" className="whitespace-nowrap" onClick={() => setIsShareModalOpen(true)}>
@@ -127,6 +246,45 @@ export default function SelfRegistrationPage() {
   const routeIdFor = (joining: (typeof joinings)[number]) =>
     String(joining.leadId || joining._id || '');
 
+  const handleDelete = (routeId: string, label: string) => {
+    if (!routeId) return;
+    const ok = window.confirm(
+      `Delete self-registration${label ? ` for ${label}` : ''}? This cannot be undone.`
+    );
+    if (!ok) return;
+    setDeletingRouteId(routeId);
+    deleteMutation.mutate(routeId);
+  };
+
+  const openAdmissionViewDialog = async (joining: Joining) => {
+    const directAdmissionId = String(joining.admissionId || '').trim();
+    if (directAdmissionId) {
+      setViewAdmissionId(directAdmissionId);
+      return;
+    }
+
+    const joiningId = String(joining._id || '').trim();
+    if (!joiningId) {
+      showToast.error('No admission entry for this record');
+      return;
+    }
+
+    setIsResolvingAdmissionView(true);
+    try {
+      const response = await admissionAPI.getByJoiningId(joiningId);
+      const admission = extractAdmissionFromApi(response);
+      if (!admission?._id) {
+        showToast.error('No admission entry for this record');
+        return;
+      }
+      setViewAdmissionId(String(admission._id));
+    } catch {
+      showToast.error('No admission entry for this record');
+    } finally {
+      setIsResolvingAdmissionView(false);
+    }
+  };
+
   if (!canAccessPage) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
@@ -136,32 +294,41 @@ export default function SelfRegistrationPage() {
     );
   }
 
+  const tabButtonClass = (tab: SelfRegTab, activeClass: string) =>
+    `rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+      activeTab === tab
+        ? activeClass
+        : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+    }`;
+
+  const colSpan = activeTab === 'approved' ? 7 : 6;
+
   return (
     <div className="w-full space-y-6">
-      <Card className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Input
-            placeholder="Search by student, phone, or enquiry number…"
-            value={searchTerm}
-            onChange={(event) => {
-              setSearchTerm(event.target.value);
-              setPage(1);
-            }}
-          />
-          <div className="flex items-center gap-2">
+      <Card className="space-y-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="w-full max-w-xs">
+            <Input
+              compact
+              placeholder="Search student, phone, enquiry…"
+              value={searchTerm}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('draft');
                 setPage(1);
               }}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                activeTab === 'draft'
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200'
-                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-              }`}
+              className={tabButtonClass('draft', 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200')}
             >
-              Draft
+              Draft{' '}
+              <span className="ml-1 tabular-nums opacity-80">({statusCounts.draft})</span>
             </button>
             <button
               type="button"
@@ -169,18 +336,43 @@ export default function SelfRegistrationPage() {
                 setActiveTab('pending');
                 setPage(1);
               }}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                activeTab === 'pending'
-                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
-                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-              }`}
+              className={tabButtonClass(
+                'pending',
+                'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
+              )}
             >
-              Pending Approval
+              Pending{' '}
+              <span className="ml-1 tabular-nums opacity-80">({statusCounts.pending_approval})</span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('approved');
+                setPage(1);
+              }}
+              className={tabButtonClass(
+                'approved',
+                'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
+              )}
+            >
+              Approved{' '}
+              <span className="ml-1 tabular-nums opacity-80">({statusCounts.approved})</span>
+            </button>
+            <span className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:inline-block" aria-hidden />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Draft <span className="font-semibold text-blue-600 dark:text-blue-300">{statusCounts.draft}</span>
+              <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+              Pending{' '}
+              <span className="font-semibold text-amber-600 dark:text-amber-300">
+                {statusCounts.pending_approval}
+              </span>
+              <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+              Approved{' '}
+              <span className="font-semibold text-emerald-600 dark:text-emerald-300">
+                {statusCounts.approved}
+              </span>
+            </p>
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Total: <span className="font-semibold text-blue-600 dark:text-blue-300">{pagination.total}</span>
-          </p>
         </div>
       </Card>
 
@@ -206,6 +398,11 @@ export default function SelfRegistrationPage() {
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Quota
                 </th>
+                {activeTab === 'approved' ? (
+                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Admission
+                  </th>
+                ) : null}
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Updated
                 </th>
@@ -217,18 +414,19 @@ export default function SelfRegistrationPage() {
             <tbody className="divide-y divide-slate-100 bg-white/80 dark:divide-slate-800 dark:bg-slate-900/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
+                  <td colSpan={colSpan} className="px-6 py-16 text-center text-sm text-slate-500">
                     Loading self-registration requests…
                   </td>
                 </tr>
               ) : isEmpty ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-slate-500">
+                  <td colSpan={colSpan} className="px-6 py-16 text-center text-sm text-slate-500">
                     <p className="font-medium text-slate-600 dark:text-slate-400">
                       No self-registration requests in this tab.
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Use <span className="font-medium">Show QR / Print</span> above to display or print the campus link for students.
+                      Use <span className="font-medium">Show QR / Print</span> above to display or print the campus
+                      link for students.
                     </p>
                   </td>
                 </tr>
@@ -236,6 +434,13 @@ export default function SelfRegistrationPage() {
                 joinings.map((joining) => {
                   const routeId = routeIdFor(joining);
                   const canApprove = activeTab === 'pending' && joiningHasManagedCourseAndBranch(joining);
+                  const studentLabel =
+                    joining.studentInfo?.name || joining.lead?.name || joining.leadData?.name || '';
+                  const isDeleting = deletingRouteId === routeId && deleteMutation.isPending;
+                  const admissionConfirmed = Boolean(joining.admissionConfirmed);
+                  const admissionNumber = String(joining.admissionNumber || '').trim();
+                  const admissionStatus = String(joining.admissionStatus || '').trim();
+                  const isCancelled = admissionStatus.toLowerCase() === 'admission cancelled';
                   return (
                     <tr key={joining._id} className="transition hover:bg-blue-50/60 dark:hover:bg-slate-800/60">
                       <td className="px-6 py-4">
@@ -244,7 +449,7 @@ export default function SelfRegistrationPage() {
                             {joining.lead?.enquiryNumber || joining.leadData?.enquiryNumber || '—'}
                           </span>
                           <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {joining.studentInfo?.name || joining.lead?.name || joining.leadData?.name || '—'}
+                            {studentLabel || '—'}
                           </span>
                         </div>
                       </td>
@@ -269,6 +474,43 @@ export default function SelfRegistrationPage() {
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
                         {joining.courseInfo?.quota || joining.lead?.quota || '—'}
                       </td>
+                      {activeTab === 'approved' ? (
+                        <td className="px-6 py-4">
+                          {admissionConfirmed ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex w-fit rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
+                                Admission confirmed
+                              </span>
+                              {admissionNumber ? (
+                                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                  {admissionNumber}
+                                </span>
+                              ) : null}
+                              {joining.admissionId ? (
+                                <Link
+                                  href={`/superadmin/admission/${joining.admissionId}/detail`}
+                                  className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-300"
+                                >
+                                  Open admission
+                                </Link>
+                              ) : null}
+                            </div>
+                          ) : isCancelled ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex w-fit rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800 dark:bg-rose-900/40 dark:text-rose-200">
+                                Admission cancelled
+                              </span>
+                              {admissionNumber ? (
+                                <span className="text-xs text-slate-500">{admissionNumber}</span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              No admission entry
+                            </span>
+                          )}
+                        </td>
+                      ) : null}
                       <td className="px-6 py-4 text-sm text-slate-500">
                         {joining.updatedAt ? new Date(joining.updatedAt).toLocaleString() : '—'}
                       </td>
@@ -289,16 +531,37 @@ export default function SelfRegistrationPage() {
                               {approveMutation.isPending ? 'Approving…' : 'Approve'}
                             </Button>
                           ) : null}
+                          {activeTab !== 'approved' ? (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              disabled={isDeleting || deleteMutation.isPending}
+                              onClick={() => handleDelete(routeId, studentLabel)}
+                            >
+                              {isDeleting ? 'Deleting…' : 'Delete'}
+                            </Button>
+                          ) : null}
                           <Link href={`/superadmin/joining/${routeId}`}>
                             <Button variant="outline" size="sm">
                               Edit
                             </Button>
                           </Link>
-                          <Link href={`/superadmin/joining/${routeId}/detail`}>
-                            <Button variant="light" size="sm">
+                          {joining.admissionId || activeTab === 'approved' ? (
+                            <Button
+                              variant="light"
+                              size="sm"
+                              disabled={isResolvingAdmissionView || isAdmissionViewLoading}
+                              onClick={() => void openAdmissionViewDialog(joining)}
+                            >
                               View
                             </Button>
-                          </Link>
+                          ) : (
+                            <Link href={`/superadmin/joining/${routeId}/detail`}>
+                              <Button variant="light" size="sm">
+                                View
+                              </Button>
+                            </Link>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -350,6 +613,135 @@ export default function SelfRegistrationPage() {
           </div>
         ) : null}
       </Card>
+
+      <Dialog
+        open={Boolean(viewAdmissionId)}
+        onOpenChange={(open) => {
+          if (!open) setViewAdmissionId(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] w-[95vw] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Student information</DialogTitle>
+            <DialogDescription>
+              Quick admission view for this self-registration. Open the full admission page for payments,
+              documents, and Step 2.
+            </DialogDescription>
+          </DialogHeader>
+          {isAdmissionViewLoading || !admissionViewRecord ? (
+            <p className="py-8 text-center text-sm text-slate-500">Loading admission details…</p>
+          ) : (
+            <div className="grid gap-4 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission</p>
+                <p className="mt-1 font-mono text-base font-semibold text-blue-600 dark:text-blue-400">
+                  {admissionViewRecord.admissionNumber || '—'}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Status:{' '}
+                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                    {admissionViewRecord.status || '—'}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Recorded:{' '}
+                  {admissionViewRecord.createdAt
+                    ? new Date(admissionViewRecord.createdAt).toLocaleString()
+                    : '—'}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Student</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {admissionViewRecord.studentInfo?.name ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contact</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {admissionViewRecord.studentInfo?.phone ?? '—'}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course / branch</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {resolveJoiningOrAdmissionCourseLabel(admissionViewRecord, getCourseName) || '—'}{' '}
+                    <span className="text-slate-500">·</span>{' '}
+                    {admissionViewRecord.courseInfo?.branch ||
+                      getBranchName(admissionViewRecord.courseInfo?.branchId) ||
+                      '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quota</p>
+                  <p className="mt-0.5 font-medium uppercase text-slate-900 dark:text-slate-100">
+                    {admissionViewRecord.courseInfo?.quota || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Caste</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {(admissionViewRecord.reservation?.general || 'OC').toUpperCase()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">EWS</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {formatReservationEws(admissionViewRecord.reservation)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {formatQualificationMerit(admissionViewRecord.qualifications)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paid</p>
+                  <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
+                    {INR_CURRENCY_FORMAT.format(admissionViewRecord.paymentSummary?.yearOnePaid ?? 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {resolveAdmissionReference1(admissionViewRecord) || '—'}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
+                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                    {resolveAdmissionSource(admissionViewRecord) || SELF_REGISTRATION_SOURCE}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            {admissionViewRecord?.joiningId ? (
+              <Link
+                href={`/superadmin/joining/${admissionViewRecord.joiningId}?from=self-registration`}
+                className="w-full sm:w-auto"
+              >
+                <Button type="button" variant="outline" className="w-full sm:w-auto">
+                  Edit joining form
+                </Button>
+              </Link>
+            ) : null}
+            {admissionViewRecord?._id ? (
+              <Link
+                href={`/superadmin/admission/${admissionViewRecord._id}/detail?from=self-registration`}
+                className="w-full sm:w-auto"
+              >
+                <Button type="button" className="w-full sm:w-auto">
+                  Full admission page
+                </Button>
+              </Link>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ShareSelfRegistrationModal open={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />
     </div>
