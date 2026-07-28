@@ -64,7 +64,7 @@ const EMPTY_STATUS_COUNTS: JoiningStatusCounts = {
   approved: 0,
 };
 
-const formatReservationEws = (reservation?: Admission['reservation']) => {
+const formatReservationEws = (reservation?: Joining['reservation'] | Admission['reservation']) => {
   if (reservation?.isEws === true) return 'Yes';
   if (reservation?.isEws === false) return 'No';
   if (reservation?.general === 'ews' || reservation?.other?.includes('EWS')) return 'Yes';
@@ -127,8 +127,13 @@ export default function SelfRegistrationPage() {
   const [activeTab, setActiveTab] = useState<SelfRegTab>('draft');
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
-  const [viewAdmissionId, setViewAdmissionId] = useState<string | null>(null);
-  const [isResolvingAdmissionView, setIsResolvingAdmissionView] = useState(false);
+  /** Admissions-style view dialog: Step 1 (draft/pending) or full admission (approved). */
+  const [viewDialog, setViewDialog] = useState<
+    | { kind: 'step1'; routeId: string }
+    | { kind: 'admission'; admissionId: string; routeId: string }
+    | null
+  >(null);
+  const [isResolvingView, setIsResolvingView] = useState(false);
   const { getCourseName, getBranchName } = useCourseLookup();
 
   useEffect(() => {
@@ -154,6 +159,9 @@ export default function SelfRegistrationPage() {
     staleTime: 30_000,
   });
 
+  const viewAdmissionId = viewDialog?.kind === 'admission' ? viewDialog.admissionId : null;
+  const viewStep1RouteId = viewDialog?.kind === 'step1' ? viewDialog.routeId : null;
+
   const {
     data: admissionViewRecord,
     isLoading: isAdmissionViewLoading,
@@ -172,12 +180,40 @@ export default function SelfRegistrationPage() {
     staleTime: 60_000,
   });
 
+  const {
+    data: step1Joining,
+    isLoading: isStep1ViewLoading,
+    isError: isStep1ViewError,
+  } = useQuery({
+    queryKey: ['joining', 'self-registration-step1-view', viewStep1RouteId],
+    enabled: Boolean(viewStep1RouteId),
+    queryFn: async () => {
+      const response = await joiningAPI.getByLeadId(viewStep1RouteId as string);
+      const joining =
+        (response as { data?: { joining?: Joining } })?.data?.joining ||
+        (response as { joining?: Joining })?.joining ||
+        null;
+      if (!joining?._id) {
+        throw new Error('Self-registration not found');
+      }
+      return joining;
+    },
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
     if (isAdmissionViewError && viewAdmissionId) {
       showToast.error('Failed to load admission details');
-      setViewAdmissionId(null);
+      setViewDialog(null);
     }
   }, [isAdmissionViewError, viewAdmissionId]);
+
+  useEffect(() => {
+    if (isStep1ViewError && viewStep1RouteId) {
+      showToast.error('Failed to load Step 1 details');
+      setViewDialog(null);
+    }
+  }, [isStep1ViewError, viewStep1RouteId]);
 
   const payload = data?.data ?? {
     joinings: [],
@@ -256,10 +292,26 @@ export default function SelfRegistrationPage() {
     deleteMutation.mutate(routeId);
   };
 
-  const openAdmissionViewDialog = async (joining: Joining) => {
+  const openViewDialog = async (joining: Joining) => {
+    const routeId = routeIdFor(joining);
+    if (!routeId) {
+      showToast.error('Record id is missing');
+      return;
+    }
+
+    const wantsAdmission =
+      activeTab === 'approved' ||
+      joining.status === 'approved' ||
+      Boolean(String(joining.admissionId || '').trim());
+
+    if (!wantsAdmission) {
+      setViewDialog({ kind: 'step1', routeId });
+      return;
+    }
+
     const directAdmissionId = String(joining.admissionId || '').trim();
     if (directAdmissionId) {
-      setViewAdmissionId(directAdmissionId);
+      setViewDialog({ kind: 'admission', admissionId: directAdmissionId, routeId });
       return;
     }
 
@@ -269,7 +321,7 @@ export default function SelfRegistrationPage() {
       return;
     }
 
-    setIsResolvingAdmissionView(true);
+    setIsResolvingView(true);
     try {
       const response = await admissionAPI.getByJoiningId(joiningId);
       const admission = extractAdmissionFromApi(response);
@@ -277,11 +329,11 @@ export default function SelfRegistrationPage() {
         showToast.error('No admission entry for this record');
         return;
       }
-      setViewAdmissionId(String(admission._id));
+      setViewDialog({ kind: 'admission', admissionId: String(admission._id), routeId });
     } catch {
       showToast.error('No admission entry for this record');
     } finally {
-      setIsResolvingAdmissionView(false);
+      setIsResolvingView(false);
     }
   };
 
@@ -541,27 +593,19 @@ export default function SelfRegistrationPage() {
                               {isDeleting ? 'Deleting…' : 'Delete'}
                             </Button>
                           ) : null}
-                          <Link href={`/superadmin/joining/${routeId}`}>
+                          <Link href={`/superadmin/joining/${routeId}?from=self-registration`}>
                             <Button variant="outline" size="sm">
                               Edit
                             </Button>
                           </Link>
-                          {joining.admissionId || activeTab === 'approved' ? (
-                            <Button
-                              variant="light"
-                              size="sm"
-                              disabled={isResolvingAdmissionView || isAdmissionViewLoading}
-                              onClick={() => void openAdmissionViewDialog(joining)}
-                            >
-                              View
-                            </Button>
-                          ) : (
-                            <Link href={`/superadmin/joining/${routeId}/detail`}>
-                              <Button variant="light" size="sm">
-                                View
-                              </Button>
-                            </Link>
-                          )}
+                          <Button
+                            variant="light"
+                            size="sm"
+                            disabled={isResolvingView || isAdmissionViewLoading || isStep1ViewLoading}
+                            onClick={() => void openViewDialog(joining)}
+                          >
+                            View
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -615,131 +659,297 @@ export default function SelfRegistrationPage() {
       </Card>
 
       <Dialog
-        open={Boolean(viewAdmissionId)}
+        open={Boolean(viewDialog)}
         onOpenChange={(open) => {
-          if (!open) setViewAdmissionId(null);
+          if (!open) setViewDialog(null);
         }}
       >
         <DialogContent className="max-h-[90vh] w-[95vw] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Student information</DialogTitle>
-            <DialogDescription>
-              Quick admission view for this self-registration. Open the full admission page for payments,
-              documents, and Step 2.
-            </DialogDescription>
-          </DialogHeader>
-          {isAdmissionViewLoading || !admissionViewRecord ? (
-            <p className="py-8 text-center text-sm text-slate-500">Loading admission details…</p>
+          {viewDialog?.kind === 'step1' ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Student information</DialogTitle>
+                <DialogDescription>
+                  Step 1 details only for this self-registration
+                  {step1Joining?.status === 'pending_approval'
+                    ? ' (pending approval)'
+                    : ' (draft)'}
+                  . Full admission details appear after approval.
+                </DialogDescription>
+              </DialogHeader>
+              {isStep1ViewLoading || !step1Joining ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading Step 1 details…</p>
+              ) : (
+                <div className="grid gap-4 text-sm">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Enquiry</p>
+                    <p className="mt-1 font-mono text-base font-semibold text-blue-600 dark:text-blue-400">
+                      {step1Joining.lead?.enquiryNumber ||
+                        step1Joining.leadData?.enquiryNumber ||
+                        '—'}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Status:{' '}
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        {step1Joining.status === 'pending_approval'
+                          ? 'Pending approval'
+                          : step1Joining.status === 'draft'
+                            ? 'Draft'
+                            : step1Joining.status}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Updated:{' '}
+                      {step1Joining.updatedAt
+                        ? new Date(step1Joining.updatedAt).toLocaleString()
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Student</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {step1Joining.studentInfo?.name ||
+                          step1Joining.lead?.name ||
+                          step1Joining.leadData?.name ||
+                          '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contact</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {step1Joining.studentInfo?.phone || step1Joining.lead?.phone || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Gender</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {step1Joining.studentInfo?.gender || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Date of birth
+                      </p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {step1Joining.studentInfo?.dateOfBirth || '—'}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Course / branch
+                      </p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {resolveJoiningOrAdmissionCourseLabel(step1Joining, getCourseName) || '—'}{' '}
+                        <span className="text-slate-500">·</span>{' '}
+                        {step1Joining.courseInfo?.branch ||
+                          getBranchName(step1Joining.courseInfo?.branchId) ||
+                          '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quota</p>
+                      <p className="mt-0.5 font-medium uppercase text-slate-900 dark:text-slate-100">
+                        {step1Joining.courseInfo?.quota || step1Joining.lead?.quota || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Caste</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {(step1Joining.reservation?.general || 'OC').toUpperCase()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">EWS</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {formatReservationEws(step1Joining.reservation)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {formatQualificationMerit(step1Joining.qualifications)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Father</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {step1Joining.parents?.father?.name ||
+                          step1Joining.leadData?.fatherName ||
+                          '—'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {step1Joining.parents?.father?.phone ||
+                          step1Joining.lead?.fatherPhone ||
+                          step1Joining.leadData?.fatherPhone ||
+                          '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mother</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {step1Joining.parents?.mother?.name ||
+                          step1Joining.leadData?.motherName ||
+                          '—'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {step1Joining.parents?.mother?.phone || '—'}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {SELF_REGISTRATION_SOURCE}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+                {viewDialog.routeId ? (
+                  <Link
+                    href={`/superadmin/joining/${viewDialog.routeId}?from=self-registration`}
+                    className="w-full sm:w-auto"
+                  >
+                    <Button type="button" className="w-full sm:w-auto">
+                      Edit Step 1 form
+                    </Button>
+                  </Link>
+                ) : null}
+              </DialogFooter>
+            </>
           ) : (
-            <div className="grid gap-4 text-sm">
-              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission</p>
-                <p className="mt-1 font-mono text-base font-semibold text-blue-600 dark:text-blue-400">
-                  {admissionViewRecord.admissionNumber || '—'}
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  Status:{' '}
-                  <span className="font-medium text-slate-700 dark:text-slate-200">
-                    {admissionViewRecord.status || '—'}
-                  </span>
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Recorded:{' '}
-                  {admissionViewRecord.createdAt
-                    ? new Date(admissionViewRecord.createdAt).toLocaleString()
-                    : '—'}
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Student</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {admissionViewRecord.studentInfo?.name ?? '—'}
-                  </p>
+            <>
+              <DialogHeader>
+                <DialogTitle>Student information</DialogTitle>
+                <DialogDescription>
+                  Full admission view for this approved self-registration. Open the admission page for
+                  payments, documents, and later steps.
+                </DialogDescription>
+              </DialogHeader>
+              {isAdmissionViewLoading || !admissionViewRecord ? (
+                <p className="py-8 text-center text-sm text-slate-500">Loading admission details…</p>
+              ) : (
+                <div className="grid gap-4 text-sm">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission</p>
+                    <p className="mt-1 font-mono text-base font-semibold text-blue-600 dark:text-blue-400">
+                      {admissionViewRecord.admissionNumber || '—'}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Status:{' '}
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        {admissionViewRecord.status || '—'}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Recorded:{' '}
+                      {admissionViewRecord.createdAt
+                        ? new Date(admissionViewRecord.createdAt).toLocaleString()
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Student</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {admissionViewRecord.studentInfo?.name ?? '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contact</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {admissionViewRecord.studentInfo?.phone ?? '—'}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Course / branch
+                      </p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {resolveJoiningOrAdmissionCourseLabel(admissionViewRecord, getCourseName) ||
+                          '—'}{' '}
+                        <span className="text-slate-500">·</span>{' '}
+                        {admissionViewRecord.courseInfo?.branch ||
+                          getBranchName(admissionViewRecord.courseInfo?.branchId) ||
+                          '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quota</p>
+                      <p className="mt-0.5 font-medium uppercase text-slate-900 dark:text-slate-100">
+                        {admissionViewRecord.courseInfo?.quota || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Caste</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {(admissionViewRecord.reservation?.general || 'OC').toUpperCase()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">EWS</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {formatReservationEws(admissionViewRecord.reservation)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {formatQualificationMerit(admissionViewRecord.qualifications)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paid</p>
+                      <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
+                        {INR_CURRENCY_FORMAT.format(
+                          admissionViewRecord.paymentSummary?.yearOnePaid ?? 0
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Reference
+                      </p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {resolveAdmissionReference1(admissionViewRecord) || '—'}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {resolveAdmissionSource(admissionViewRecord) || SELF_REGISTRATION_SOURCE}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contact</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {admissionViewRecord.studentInfo?.phone ?? '—'}
-                  </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course / branch</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {resolveJoiningOrAdmissionCourseLabel(admissionViewRecord, getCourseName) || '—'}{' '}
-                    <span className="text-slate-500">·</span>{' '}
-                    {admissionViewRecord.courseInfo?.branch ||
-                      getBranchName(admissionViewRecord.courseInfo?.branchId) ||
-                      '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quota</p>
-                  <p className="mt-0.5 font-medium uppercase text-slate-900 dark:text-slate-100">
-                    {admissionViewRecord.courseInfo?.quota || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Caste</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {(admissionViewRecord.reservation?.general || 'OC').toUpperCase()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">EWS</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {formatReservationEws(admissionViewRecord.reservation)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {formatQualificationMerit(admissionViewRecord.qualifications)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paid</p>
-                  <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
-                    {INR_CURRENCY_FORMAT.format(admissionViewRecord.paymentSummary?.yearOnePaid ?? 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {resolveAdmissionReference1(admissionViewRecord) || '—'}
-                  </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {resolveAdmissionSource(admissionViewRecord) || SELF_REGISTRATION_SOURCE}
-                  </p>
-                </div>
-              </div>
-            </div>
+              )}
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+                {admissionViewRecord?.joiningId || viewDialog?.routeId ? (
+                  <Link
+                    href={`/superadmin/joining/${
+                      admissionViewRecord?.joiningId || viewDialog?.routeId
+                    }?from=self-registration`}
+                    className="w-full sm:w-auto"
+                  >
+                    <Button type="button" variant="outline" className="w-full sm:w-auto">
+                      Edit joining form
+                    </Button>
+                  </Link>
+                ) : null}
+                {admissionViewRecord?._id ? (
+                  <Link
+                    href={`/superadmin/admission/${admissionViewRecord._id}/detail?from=self-registration`}
+                    className="w-full sm:w-auto"
+                  >
+                    <Button type="button" className="w-full sm:w-auto">
+                      Full admission page
+                    </Button>
+                  </Link>
+                ) : null}
+              </DialogFooter>
+            </>
           )}
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            {admissionViewRecord?.joiningId ? (
-              <Link
-                href={`/superadmin/joining/${admissionViewRecord.joiningId}?from=self-registration`}
-                className="w-full sm:w-auto"
-              >
-                <Button type="button" variant="outline" className="w-full sm:w-auto">
-                  Edit joining form
-                </Button>
-              </Link>
-            ) : null}
-            {admissionViewRecord?._id ? (
-              <Link
-                href={`/superadmin/admission/${admissionViewRecord._id}/detail?from=self-registration`}
-                className="w-full sm:w-auto"
-              >
-                <Button type="button" className="w-full sm:w-auto">
-                  Full admission page
-                </Button>
-              </Link>
-            ) : null}
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
