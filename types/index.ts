@@ -910,6 +910,10 @@ export interface Admission {
   updatedAt: string;
   createdBy?: User | string;
   updatedBy?: User | string;
+  /** Display name for createdBy (detail API). */
+  createdByName?: string;
+  /** Display name for updatedBy (detail API). */
+  updatedByName?: string;
   /** Excel Reference 1 (from lead_data.reference1 on list API). */
   referenceName?: string;
   /** Lead source / quota label on list API. */

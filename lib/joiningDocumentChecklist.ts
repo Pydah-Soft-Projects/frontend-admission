@@ -1,11 +1,20 @@
 import type { JoiningDocuments } from '@/types';
 import { isManagementQuotaLabel } from '@/lib/joiningScholarshipQuotaDefault';
 
+/**
+ * Docs no longer collected on admissions / joining Step 2 checklists
+ * (kept in types/DB for legacy rows only).
+ */
+export const DOCUMENT_KEYS_RETIRED_FROM_CHECKLIST = new Set<keyof JoiningDocuments>([
+  'bankPassBook',
+  'rationCard',
+  'ugOrPgCmm',
+]);
+
 /** Paper checklist items tracked on the certificate checklist (Step 2) instead. */
 export const DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST = new Set<keyof JoiningDocuments>([
   'ssc',
   'inter',
-  'ugOrPgCmm',
   'transferCertificate',
   'studyCertificate',
 ]);
@@ -20,7 +29,7 @@ export const DOCUMENT_KEYS_HIDDEN_FOR_MANAGEMENT_QUOTA = new Set<keyof JoiningDo
 
 export type JoiningDocumentChecklistVisibilityOptions = {
   /**
-   * When true (default), SSC / Inter / TC / study / UG CMM are omitted — they live on the
+   * When true (default), SSC / Inter / TC / study are omitted — they live on the
    * certificate checklist. Set false for read-only admission views and full application print.
    */
   paperChecklist?: boolean;
@@ -31,6 +40,7 @@ export function isJoiningDocumentChecklistKeyVisible(
   quota: string | undefined | null,
   options?: JoiningDocumentChecklistVisibilityOptions
 ): boolean {
+  if (DOCUMENT_KEYS_RETIRED_FROM_CHECKLIST.has(key)) return false;
   const paperChecklist = options?.paperChecklist !== false;
   if (paperChecklist && DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key)) return false;
   if (

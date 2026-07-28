@@ -52,6 +52,7 @@ import {
 import { AdmissionWorkflowStepButtons } from '@/components/admission/AdmissionWorkflowSteps';
 import { AdmissionStudentProfileView } from '@/components/admission/AdmissionStudentProfileView';
 import { AdmissionReferenceEditor } from '@/components/admission/AdmissionReferenceEditor';
+import { AdmissionApplicationHistoryDialog } from '@/components/admission/AdmissionApplicationHistoryDialog';
 import { FeeStructureSection } from '@/components/fee/FeeStructureSection';
 import {
   pickJoiningCourseQuotaRegistrationEntries,
@@ -153,6 +154,23 @@ const formatAdmissionStatus = (status?: string) => {
   return status || '—';
 };
 
+const resolveAdmissionActorLabel = (
+  displayName?: string | null,
+  actor?: Admission['createdBy']
+): string => {
+  const named = String(displayName || '').trim();
+  if (named) return named;
+  if (!actor) return '—';
+  if (typeof actor === 'object' && actor) {
+    const fromUser = String(actor.name || '').trim();
+    return fromUser || '—';
+  }
+  // Avoid showing raw user UUIDs when the name lookup is missing.
+  const raw = String(actor).trim();
+  if (!raw || /^[0-9a-f-]{36}$/i.test(raw)) return '—';
+  return raw;
+};
+
 export default function AdmissionDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -188,6 +206,7 @@ export default function AdmissionDetailPage() {
     approvedBy: '',
   });
   const [isSendSmsDialogOpen, setIsSendSmsDialogOpen] = useState(false);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admission', admissionId],
@@ -1166,7 +1185,54 @@ export default function AdmissionDetailPage() {
             </div>
           </div>
         </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Application edit details
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsHistoryDialogOpen(true)}
+            >
+              View history
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/40">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                First entry
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {resolveAdmissionActorLabel(admission.createdByName, admission.createdBy)}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                {formatDateTime(admission.createdAt)}
+              </p>
+            </div>
+            <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/40">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Last entry
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {resolveAdmissionActorLabel(admission.updatedByName, admission.updatedBy)}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                {formatDateTime(admission.updatedAt)}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <AdmissionApplicationHistoryDialog
+        open={isHistoryDialogOpen}
+        onOpenChange={setIsHistoryDialogOpen}
+        admissionId={String(admission._id)}
+        admissionNumber={admission.admissionNumber}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { courseAPI } from '@/lib/api';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { listCertificateItemOptions, parseCertificateChecklistEntry } from '@/lib/certificateChecklistEntry';
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
+import { normalizeJoiningDocumentsFromApi } from '@/lib/joiningDocumentsNormalize';
 import { showToast } from '@/lib/toast';
 import type {
   Admission,
@@ -52,13 +53,12 @@ export type AdmitCardPrintStudent = {
 
 type AcknowledgementChecklistDocumentKey = Exclude<
   keyof JoiningDocuments,
-  'bankPassBook' | 'rationCard'
+  'bankPassBook' | 'rationCard' | 'ugOrPgCmm'
 >;
 
 const ACKNOWLEDGEMENT_DOCUMENT_LABELS: Record<AcknowledgementChecklistDocumentKey, string> = {
   ssc: 'SSC',
   inter: 'Intermediate',
-  ugOrPgCmm: 'UG / PG CMM',
   transferCertificate: 'Transfer Certificate',
   studyCertificate: 'Study Certificate',
   aadhaarCard: 'Aadhaar Card',
@@ -75,13 +75,14 @@ export function buildAdmitCardDocumentChecklist(
   documents: JoiningDocuments,
   quota?: string | null
 ): AdmitCardDocumentChecklist {
+  const normalized = normalizeJoiningDocumentsFromApi(documents);
   const labels: Record<string, string> = {};
   const statuses: Record<string, JoiningDocumentStatus | undefined> = {};
   (Object.entries(ACKNOWLEDGEMENT_DOCUMENT_LABELS) as [AcknowledgementChecklistDocumentKey, string][]).forEach(
     ([key, label]) => {
       if (!isJoiningDocumentChecklistKeyVisible(key, quota)) return;
       labels[key] = label;
-      statuses[key] = documents[key] || 'pending';
+      statuses[key] = normalized[key] || 'pending';
     }
   );
   return { labels, documents: statuses };

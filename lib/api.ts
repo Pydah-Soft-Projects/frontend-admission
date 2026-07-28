@@ -1720,6 +1720,10 @@ export const admissionAPI = {
     const response = await api.get(`/admissions/id/${admissionId}`);
     return response.data;
   },
+  getApplicationHistory: async (admissionId: string) => {
+    const response = await api.get(`/admissions/id/${admissionId}/history`);
+    return response.data;
+  },
   updateById: async (admissionId: string, data: any) => {
     const response = await api.put(`/admissions/id/${admissionId}`, data);
     return response.data;

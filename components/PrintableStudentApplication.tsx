@@ -585,8 +585,6 @@ const OTHER_DOCUMENTS_PRINT: Array<{ id: keyof JoiningDocuments; label: string }
   { id: 'cetHallTicket', label: 'CET Hall Ticket' },
   { id: 'allotmentLetter', label: 'Allotment Letter' },
   { id: 'joiningReport', label: 'Joining Report' },
-  { id: 'bankPassBook', label: 'Bank Pass Book' },
-  { id: 'rationCard', label: 'Ration Card' },
 ];
 
 function appendOtherDocumentsToPrintSummary(
@@ -941,16 +939,13 @@ function getPrintApplicationHtml(props: {
       { id: 'casteCertificate', label: 'Caste Certificate' },
       { id: 'inter', label: 'Inter' },
       { id: 'cetRankCard', label: 'CET Rank Card' },
-      { id: 'ugOrPgCmm', label: 'U.G - P.C / C.M.M' },
       { id: 'cetHallTicket', label: 'CET Hall Ticket' },
       { id: 'transferCertificate', label: 'TC' },
       { id: 'allotmentLetter', label: 'Allotment Letter' },
       { id: 'studyCertificate', label: 'Study Certificate' },
       { id: 'joiningReport', label: 'Joining Report' },
       { id: 'aadhaarCard', label: 'Aadhar Card' },
-      { id: 'bankPassBook', label: 'Bank Pass Book' },
       { id: 'photos', label: 'Photos(5)' },
-      { id: 'rationCard', label: 'Ration Card' },
       { id: 'incomeCertificate', label: 'Income Certificate' },
     ] satisfies DocListItem[]
   ).filter((d): d is DocListItem =>

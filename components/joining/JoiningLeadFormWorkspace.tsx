@@ -7436,7 +7436,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </div>
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500 dark:text-slate-400">
-                      Mark each document as received. SSC, Intermediate, UG/PG CMM, Transfer Certificate, and Study
+                      Mark each document as received. SSC, Intermediate, Transfer Certificate, and Study
                       Certificate are tracked under{' '}
                       <span className="font-medium">Important Documents</span>.
                       {isManagementQuotaSelected ? (

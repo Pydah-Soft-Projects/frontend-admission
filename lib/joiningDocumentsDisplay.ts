@@ -2,8 +2,10 @@ import type { CertificateGuidance, JoiningDocuments, JoiningDocumentStatus } fro
 import { buildAdmitCardCertificateChecklistFromRegistration } from '@/components/joining/PrintableAdmitCard';
 import {
   DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST,
+  DOCUMENT_KEYS_RETIRED_FROM_CHECKLIST,
   isJoiningDocumentChecklistKeyVisible,
 } from '@/lib/joiningDocumentChecklist';
+import { normalizeJoiningDocumentsFromApi } from '@/lib/joiningDocumentsNormalize';
 
 export const JOINING_DOCUMENT_LABELS: Record<keyof JoiningDocuments, string> = {
   ssc: 'SSC',
@@ -57,8 +59,13 @@ export function buildImportantDocumentTabItems(
   }
 
   if (!documents) return [];
-  return Object.entries(documents)
-    .filter(([key]) => DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key as keyof JoiningDocuments))
+  const normalized = normalizeJoiningDocumentsFromApi(documents);
+  return (Object.entries(normalized) as [keyof JoiningDocuments, JoiningDocumentStatus][])
+    .filter(
+      ([key]) =>
+        DOCUMENT_KEYS_HIDDEN_FROM_CHECKLIST.has(key) &&
+        !DOCUMENT_KEYS_RETIRED_FROM_CHECKLIST.has(key)
+    )
     .map(([key, value]) => ({
       key,
       label: formatJoiningDocumentLabel(key),
@@ -71,9 +78,10 @@ export function buildOtherDocumentTabItems(
   quota: string | undefined | null
 ): DocumentChecklistTabItem[] {
   if (!documents) return [];
-  return Object.entries(documents)
+  const normalized = normalizeJoiningDocumentsFromApi(documents);
+  return (Object.entries(normalized) as [keyof JoiningDocuments, JoiningDocumentStatus][])
     .filter(([key]) =>
-      isJoiningDocumentChecklistKeyVisible(key as keyof JoiningDocuments, quota, {
+      isJoiningDocumentChecklistKeyVisible(key, quota, {
         paperChecklist: true,
       })
     )
