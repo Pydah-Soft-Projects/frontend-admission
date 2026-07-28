@@ -25,13 +25,19 @@ import {
 } from '@/components/ui/Dialog';
 import type {
   HostelCategorySummary,
-  HostelRoomSummary,
-  HostelRoomsPayload,
+  HostelFeeSummary,
   HostelSummary,
   JoiningTransportDetails,
   TransportRouteDetail,
   TransportRouteSummary,
 } from '@/types';
+
+type HostelFeePayload = {
+  yearlyFees?: HostelFeeSummary[];
+  fee?: HostelFeeSummary | null;
+  resolvedAcademicYear?: string;
+  feeMatchedBy?: 'exact' | 'fallback' | 'feestructures' | 'none';
+};
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -46,6 +52,14 @@ const formatCurrency = (amount?: number | null) => {
   } catch {
     return String(amount);
   }
+};
+
+/** Local calendar date as YYYY-MM-DD (for date inputs). */
+const localIsoDate = (date = new Date()) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 type AccommodationTab = 'bus' | 'hostel' | 'none';
@@ -158,6 +172,23 @@ export function parseJoiningTransportDetails(raw: unknown): JoiningTransportDeta
     categoryName: source.categoryName != null ? String(source.categoryName) : undefined,
     roomId: source.roomId != null ? String(source.roomId) : undefined,
     roomNumber: source.roomNumber != null ? String(source.roomNumber) : undefined,
+    admitDate: (() => {
+      const raw =
+        source.admitDate != null
+          ? String(source.admitDate)
+          : source.admit_date != null
+            ? String(source.admit_date)
+            : undefined;
+      if (!raw?.trim()) return undefined;
+      const trimmed = raw.trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+      const parsed = new Date(trimmed);
+      if (Number.isNaN(parsed.getTime())) return undefined;
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    })(),
     hostelFee:
       source.hostelFee === null || source.hostelFee === undefined
         ? null
@@ -458,24 +489,34 @@ export function AdmissionStepThreeBusHostelPanel({
     [categoriesResponse]
   );
 
-  const { data: roomsResponse, isLoading: isLoadingRooms, isError: roomsError } = useQuery({
+  const { data: feeResponse, isLoading: isLoadingHostelFee, isError: hostelFeeError } = useQuery({
     queryKey: [
       'hostel',
-      'rooms',
+      'fee',
       value.hostelId,
       value.categoryId,
       effectiveAcademicYear,
       courseName,
       programTotalYears,
     ],
-    queryFn: async () =>
-      hostelAPI.listRooms({
-        hostelId: value.hostelId as string,
-        categoryId: value.categoryId as string,
-        academicYear: effectiveAcademicYear,
-        course: courseName || undefined,
-        totalYears: programTotalYears,
-      }),
+    queryFn: async () => {
+      try {
+        return await hostelAPI.getFee({
+          hostelId: value.hostelId as string,
+          categoryId: value.categoryId as string,
+          academicYear: effectiveAcademicYear,
+          course: courseName || undefined,
+          totalYears: programTotalYears,
+        });
+      } catch (error: unknown) {
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        // 404 = fee not configured for this selection — treat as empty, not a hard failure.
+        if (status === 404) {
+          return { data: { yearlyFees: [], fee: null, feeMatchedBy: 'none' } };
+        }
+        throw error;
+      }
+    },
     enabled:
       displayTab === 'hostel' &&
       Boolean(value.hostelId) &&
@@ -484,14 +525,13 @@ export function AdmissionStepThreeBusHostelPanel({
     staleTime: 60_000,
   });
 
-  const roomsPayload = useMemo(
-    () => unwrapData<HostelRoomsPayload>(roomsResponse),
-    [roomsResponse]
+  const feePayload = useMemo(
+    () => unwrapData<HostelFeePayload>(feeResponse),
+    [feeResponse]
   );
-  const rooms = roomsPayload?.rooms || [];
   const resolvedHostelFeesByYear = useMemo(
-    () => normalizeHostelFeesByYear(roomsPayload?.yearlyFees),
-    [roomsPayload?.yearlyFees]
+    () => normalizeHostelFeesByYear(feePayload?.yearlyFees),
+    [feePayload?.yearlyFees]
   );
   const effectiveStudentYear = Math.max(1, Math.min(studentYearOfStudy, programTotalYears));
   const currentYearHostelFee = useMemo(
@@ -502,7 +542,6 @@ export function AdmissionStepThreeBusHostelPanel({
   useEffect(() => {
     if (!canEdit || !onChange || displayTab !== 'hostel') return;
     if (!value.categoryId || !currentYearHostelFee) return;
-    if (!value.roomId && !value.roomNumber) return;
 
     const nextFees = [currentYearHostelFee];
     const nextFirstFee = currentYearHostelFee.amount ?? null;
@@ -521,12 +560,21 @@ export function AdmissionStepThreeBusHostelPanel({
     onChange,
     currentYearHostelFee,
     value.categoryId,
-    value.roomId,
-    value.roomNumber,
     value.hostelFee,
     value.hostelFeesByYear,
     value,
   ]);
+
+  // Prefill admit date to today when hostel is selected and no date is set yet.
+  useEffect(() => {
+    if (!canEdit || !onChange || displayTab !== 'hostel') return;
+    if (value.admitDate) return;
+    if (value.accommodationType !== 'hostel' && !value.hostelId) return;
+    onChange({
+      ...value,
+      admitDate: localIsoDate(),
+    });
+  }, [displayTab, canEdit, onChange, value]);
 
   const patchValue = (patch: Partial<JoiningTransportDetails>) => {
     if (!canEdit || !onChange) return;
@@ -551,6 +599,7 @@ export function AdmissionStepThreeBusHostelPanel({
     categoryName: undefined,
     roomId: undefined,
     roomNumber: undefined,
+    admitDate: undefined,
     hostelFee: null,
     hostelFeesByYear: undefined,
   });
@@ -603,7 +652,10 @@ export function AdmissionStepThreeBusHostelPanel({
       accommodationType: tab,
       ...(tab === 'bus'
         ? clearHostelFields()
-        : withHostelAcademicYear(clearBusFields())),
+        : withHostelAcademicYear({
+            ...clearBusFields(),
+            admitDate: value.admitDate || localIsoDate(),
+          })),
     });
   };
 
@@ -647,6 +699,7 @@ export function AdmissionStepThreeBusHostelPanel({
         categoryName: undefined,
         roomId: undefined,
         roomNumber: undefined,
+        admitDate: value.admitDate || localIsoDate(),
         hostelFee: null,
         hostelFeesByYear: undefined,
       })
@@ -661,17 +714,16 @@ export function AdmissionStepThreeBusHostelPanel({
         categoryName: selected?.name || undefined,
         roomId: undefined,
         roomNumber: undefined,
+        admitDate: value.admitDate || localIsoDate(),
         hostelFee: null,
         hostelFeesByYear: undefined,
       })
     );
   };
 
-  const handleRoomChange = (roomId: string) => {
-    const selected = rooms.find((room) => room._id === roomId);
+  const handleAdmitDateChange = (admitDate: string) => {
     patchValue({
-      roomId: roomId || undefined,
-      roomNumber: selected?.roomNumber || undefined,
+      admitDate: admitDate.trim() || undefined,
     });
   };
 
@@ -745,13 +797,13 @@ export function AdmissionStepThreeBusHostelPanel({
     hasExternalBusApplication,
     hasExternalHostelApplication,
   ]);
-  const resolvedFeeAcademicYear = roomsPayload?.resolvedAcademicYear || effectiveAcademicYear;
+  const resolvedFeeAcademicYear = feePayload?.resolvedAcademicYear || effectiveAcademicYear;
   const feeUsedFallback =
-    roomsPayload?.feeMatchedBy === 'fallback' &&
+    feePayload?.feeMatchedBy === 'fallback' &&
     resolvedFeeAcademicYear &&
     effectiveAcademicYear &&
     resolvedFeeAcademicYear !== effectiveAcademicYear;
-  const resolvedFeeCourse = roomsPayload?.yearlyFees?.[0]?.course || roomsPayload?.fee?.course || '';
+  const resolvedFeeCourse = feePayload?.yearlyFees?.[0]?.course || feePayload?.fee?.course || '';
   const feeCourseMismatch =
     Boolean(courseName && resolvedFeeCourse) &&
     resolvedFeeCourse.toLowerCase() !== String(courseName).toLowerCase();
@@ -1122,7 +1174,12 @@ export function AdmissionStepThreeBusHostelPanel({
                   <span className="text-slate-500">Hostel:</span> <strong className="text-slate-900 dark:text-slate-100">{hostelStudentDetails.hostelName || '—'}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-500">Room &amp; Bed:</span> <strong className="text-slate-900 dark:text-slate-100">Room {hostelStudentDetails.roomNumber || '—'} · Bed {hostelStudentDetails.bedNumber || '—'}</strong>
+                  <span className="text-slate-500">Room:</span>{' '}
+                  <strong className="text-slate-900 dark:text-slate-100">
+                    {hostelStudentDetails.roomNumber
+                      ? `Room ${hostelStudentDetails.roomNumber}${hostelStudentDetails.bedNumber ? ` · Bed ${hostelStudentDetails.bedNumber}` : ''}`
+                      : 'Pending assignment'}
+                  </strong>
                 </div>
                 {hostelStudentDetails.hostelId && (
                   <div>
@@ -1132,6 +1189,14 @@ export function AdmissionStepThreeBusHostelPanel({
                 <div>
                   <span className="text-slate-500">Academic Year:</span> <strong className="text-slate-900 dark:text-slate-100">{effectiveAcademicYear}</strong>
                 </div>
+                {(hostelStudentDetails as { admitDate?: string }).admitDate ? (
+                  <div>
+                    <span className="text-slate-500">Admit Date:</span>{' '}
+                    <strong className="text-slate-900 dark:text-slate-100">
+                      {String((hostelStudentDetails as { admitDate?: string }).admitDate).slice(0, 10)}
+                    </strong>
+                  </div>
+                ) : null}
                 <div className="col-span-2 sm:col-span-4 mt-3 flex justify-end">
                   <PrintActionButton
                     label="Print Hostel Admit"
@@ -1210,57 +1275,24 @@ export function AdmissionStepThreeBusHostelPanel({
 
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Available room
+                Admit date
               </label>
-              <select
+              <input
+                type="date"
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                value={value.roomId || ''}
-                disabled={
-                  !canEdit ||
-                  hostelSelectionLocked ||
-                  !value.categoryId ||
-                  !effectiveAcademicYear ||
-                  isLoadingRooms ||
-                  rooms.length === 0
-                }
-                onChange={(event) => handleRoomChange(event.target.value)}
-              >
-                <option value="">
-                  {!value.categoryId
-                    ? 'Select category first'
-                    : !effectiveAcademicYear
-                      ? 'Academic year not set from Step 1'
-                      : isLoadingRooms
-                        ? 'Loading rooms…'
-                        : rooms.length === 0
-                          ? 'No rooms in this category'
-                          : 'Select room'}
-                </option>
-                {rooms.map((room) => {
-                  const filledBeds = Math.max(
-                    0,
-                    room.totalOccupancy ??
-                      room.occupiedBeds ??
-                      Math.max(0, room.bedCount - room.availableBeds)
-                  );
-                  return (
-                  <option key={room._id} value={room._id} disabled={!room.isAvailable}>
-                    Room {room.roomNumber} · {filledBeds}/{room.bedCount} filled
-                  </option>
-                  );
-                })}
-              </select>
-              {roomsError ? (
-                <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
-                  Could not load rooms from the Hostel database.
-                </p>
-              ) : null}
+                value={value.admitDate || localIsoDate()}
+                disabled={!canEdit || hostelSelectionLocked || !value.categoryId}
+                onChange={(event) => handleAdmitDateChange(event.target.value)}
+              />
+              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                Defaults to today. Room and joining date are handled later in the hostel portal.
+              </p>
             </div>
           </div>
           ) : null}
 
-          {value.categoryId && effectiveAcademicYear && (isLoadingRooms || roomsPayload) ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {value.categoryId && effectiveAcademicYear && (isLoadingHostelFee || feePayload || hostelFeeError) ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Hostel selection
@@ -1271,6 +1303,11 @@ export function AdmissionStepThreeBusHostelPanel({
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                   {value.categoryName ? `Category ${value.categoryName}` : 'Pick a category'}
                 </p>
+                {(value.admitDate || localIsoDate()) ? (
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                    Admit {value.admitDate || localIsoDate()}
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
@@ -1295,7 +1332,7 @@ export function AdmissionStepThreeBusHostelPanel({
                 </p>
                 {!hasHostelFeeRows ? (
                   <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-300">
-                    {isLoadingRooms
+                    {isLoadingHostelFee
                       ? 'Loading hostel fees for this category…'
                       : `No hostel fee configured for ${effectiveAcademicYear || 'this academic year'} in HMS. Configure fee structures for this session in the hostel portal, then reselect the category here.`}
                   </p>
@@ -1315,23 +1352,6 @@ export function AdmissionStepThreeBusHostelPanel({
                   {feeCourseMismatch
                     ? ` · Using ${resolvedFeeCourse} category fee (no ${courseName} config yet)`
                     : ''}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Room availability
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {isLoadingRooms
-                    ? 'Loading…'
-                    : `${roomsPayload?.availableCount ?? 0} of ${roomsPayload?.total ?? 0} rooms have free beds`}
-                </p>
-                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  {effectiveAcademicYear
-                    ? `Counts for academic year ${effectiveAcademicYear} from HMS occupancy history`
-                    : 'Academic year required for availability'}
-                  {value.roomNumber ? ` · Selected room ${value.roomNumber}` : ''}
                 </p>
               </div>
             </div>

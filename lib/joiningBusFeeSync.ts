@@ -140,7 +140,8 @@ export function shouldApplyBusFee(transport: JoiningTransportDetails): boolean {
 export function shouldApplyHostelFee(transport: JoiningTransportDetails): boolean {
   if (transport.accommodationType !== 'hostel') return false;
   if (!transport.academicYear || !transport.hostelId || !transport.categoryId) return false;
-  if (!transport.roomId && !transport.roomNumber) return false;
+  // Category-only registration — room is assigned later by warden.
+  if (!String(transport.admitDate || '').trim()) return false;
 
   const byYear = transport.hostelFeesByYear;
   if (byYear?.length) {
@@ -179,7 +180,7 @@ export function joiningTransportDetailsCompletenessScore(
   } else if (transport.accommodationType === 'hostel') {
     if (transport.hostelId) score += 2;
     if (transport.categoryId) score += 2;
-    if (transport.roomId || transport.roomNumber) score += 1;
+    if (transport.admitDate) score += 1;
   }
   return score;
 }

@@ -577,8 +577,14 @@ export interface JoiningTransportDetails {
   hostelType?: 'boys' | 'girls' | 'other';
   categoryId?: string;
   categoryName?: string;
+  /** Optional until warden assigns a room (category-only registration). */
   roomId?: string;
   roomNumber?: string;
+  /**
+   * Hostel application / admit date (YYYY-MM-DD). Prefills to today in Step 3.
+   * Joining date is not collected or updated from admissions.
+   */
+  admitDate?: string;
   /** Live seat availability count from transport app. */
   busSeatsAvailable?: number;
   /** Legacy first-year amount; kept for backward compatibility. */
