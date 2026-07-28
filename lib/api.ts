@@ -1952,8 +1952,8 @@ export const admissionAPI = {
     return response.data;
   },
 
-  /** List minimum fee configs (college + course + quota amounts) from admissions DB. */
-  listMinimumFeeConfigs: async (filters?: { collegeId?: string; courseId?: string }) => {
+  /** List minimum fee configs (college + course + branch + quota amounts) from admissions DB. */
+  listMinimumFeeConfigs: async (filters?: { collegeId?: string; courseId?: string; branchId?: string }) => {
     const queryParams = new URLSearchParams();
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
@@ -1973,6 +1973,8 @@ export const admissionAPI = {
         collegeName: string;
         courseId: string;
         courseName: string;
+        branchId: string;
+        branchName: string;
         quota: string;
         amount: number;
       }>;
@@ -1980,12 +1982,13 @@ export const admissionAPI = {
     };
   },
 
-  /** Replace quota amounts for one college + course. */
+  /** Replace quota amounts for selected branches under one college + course. */
   upsertMinimumFeeConfigsForCourse: async (payload: {
     collegeId: string;
     collegeName: string;
     courseId: string;
     courseName: string;
+    branches: Array<{ branchId: string; branchName: string }>;
     entries: Array<{ quota: string; amount: number }>;
   }) => {
     const response = await api.put('/admissions/minimum-fee-configs/course', payload);
@@ -1996,6 +1999,8 @@ export const admissionAPI = {
         collegeName: string;
         courseId: string;
         courseName: string;
+        branchId: string;
+        branchName: string;
         quota: string;
         amount: number;
       }>;
@@ -2003,11 +2008,14 @@ export const admissionAPI = {
     };
   },
 
-  clearMinimumFeeConfigsForCourse: async (collegeId: string, courseId: string) => {
+  clearMinimumFeeConfigsForCourse: async (
+    collegeId: string,
+    courseId: string,
+    branchIds?: string[]
+  ) => {
     const queryParams = new URLSearchParams({ collegeId, courseId });
-    const response = await api.delete(
-      `/admissions/minimum-fee-configs/course?${queryParams.toString()}`
-    );
+    if (branchIds?.length) queryParams.set('branchIds', branchIds.join(','));
+    const response = await api.delete(`/admissions/minimum-fee-configs/course?${queryParams.toString()}`);
     return response.data?.data || response.data;
   },
 

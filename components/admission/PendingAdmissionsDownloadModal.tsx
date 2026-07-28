@@ -129,6 +129,8 @@ function resolvePendingFeeAmounts(
     collegeId?: string;
     courseId?: string;
     courseName?: string;
+    branchId?: string;
+    branchName?: string;
     quota?: string;
   }
 ) {
@@ -139,6 +141,8 @@ function resolvePendingFeeAmounts(
     collegeId: filterContext?.collegeId,
     courseId: filterContext?.courseId,
     courseName: row.course || filterContext?.courseName,
+    branchId: filterContext?.branchId,
+    branchName: filterContext?.branchName,
     quota: row.quota || filterContext?.quota,
   });
   const usingMinFee = minimumFeeRequired > FEE_UNPAID_TOLERANCE;
@@ -176,6 +180,8 @@ function isFeeStillPending(
     collegeId?: string;
     courseId?: string;
     courseName?: string;
+    branchId?: string;
+    branchName?: string;
     quota?: string;
   }
 ) {
@@ -189,8 +195,8 @@ function isFeeStillPending(
   );
   // Configured quota/course: only below-minimum students are "pending".
   if (usingMinFee) return unpaid > FEE_UNPAID_TOLERANCE;
-  // No matching config for this row — keep original tuition+other pending rule.
-  return row.feeStatus === 'unpaid' || Number(row.totalPending || 0) > FEE_UNPAID_TOLERANCE;
+  // Minimum-fee mode is active, but this student has no matching config — exclude from list.
+  return false;
 }
 
 function FeeStatusCell({
@@ -329,6 +335,8 @@ export function PendingAdmissionsDownloadModal({
       collegeId: collegeId || deskFilters?.collegeId || undefined,
       courseId: courseId || deskFilters?.courseId || undefined,
       courseName: selectedCourseName || deskFilters?.courseName || undefined,
+      branchId: deskFilters?.branchId || undefined,
+      branchName: deskFilters?.branchName || undefined,
       quota: quota || undefined,
     }),
     [
@@ -339,6 +347,8 @@ export function PendingAdmissionsDownloadModal({
       deskFilters?.collegeId,
       deskFilters?.courseId,
       deskFilters?.courseName,
+      deskFilters?.branchId,
+      deskFilters?.branchName,
     ]
   );
 

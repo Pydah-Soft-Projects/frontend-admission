@@ -635,6 +635,10 @@ const CompletedAdmissionsPage = () => {
     const allowedSet = new Set(joiningAllowedCollegeIds);
     return colleges.filter((c) => allowedSet.has(c.id));
   }, [colleges, joiningAllowedCollegeIds]);
+  const collegeOptionsForDialogs = useMemo(
+    () => visibleColleges.map((c) => ({ id: c.id, name: c.name })),
+    [visibleColleges]
+  );
 
   /**
    * Effective college scope for API calls: the explicit filter the user picked, OR (when the
@@ -2063,7 +2067,7 @@ const CompletedAdmissionsPage = () => {
       <PendingAdmissionsDownloadModal
         open={pendingAdmissionsOpen}
         onOpenChange={setPendingAdmissionsOpen}
-        colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
+        colleges={collegeOptionsForDialogs}
         initialCollegeId={effectiveCollegeFilter}
         minimumFeeConfigs={minimumFeeConfigs}
         deskFilters={{
@@ -2080,7 +2084,7 @@ const CompletedAdmissionsPage = () => {
       <MinimumFeeConfigDialog
         open={minimumConfigOpen}
         onOpenChange={setMinimumConfigOpen}
-        colleges={visibleColleges.map((c) => ({ id: c.id, name: c.name }))}
+        colleges={collegeOptionsForDialogs}
         initialCollegeId={effectiveCollegeFilter}
         configs={minimumFeeConfigs}
         onConfigsChanged={() => refetchMinimumFeeConfigs()}
