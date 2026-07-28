@@ -199,7 +199,7 @@ export default function JoiningDetailPage() {
               </Button>
             </Link>
           )}
-          <Link href="/superadmin/joining">
+          <Link href="/superadmin/joining/pipeline">
             <Button variant="outline">Back to List</Button>
           </Link>
         </div>
@@ -232,7 +232,7 @@ export default function JoiningDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <p className="text-lg text-slate-600 dark:text-slate-400">Joining form not found</p>
-        <Link href="/superadmin/joining" className="mt-4">
+        <Link href="/superadmin/joining/pipeline" className="mt-4">
           <Button variant="outline">Back to List</Button>
         </Link>
       </div>

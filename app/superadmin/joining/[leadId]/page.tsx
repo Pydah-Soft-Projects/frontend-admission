@@ -21,7 +21,7 @@ export default function JoiningLeadWorkspacePage() {
           New joinings must be created with a CRM enquiry. Use <strong>Add Joining Form</strong> from the Joining
           Pipeline so the lead gets an enquiry number and a linked draft.
         </p>
-        <Link href="/superadmin/joining">
+        <Link href="/superadmin/joining/pipeline">
           <Button variant="primary">Go to Joining Pipeline</Button>
         </Link>
       </Card>

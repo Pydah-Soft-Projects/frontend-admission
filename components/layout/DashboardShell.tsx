@@ -258,6 +258,18 @@ function pathMatchesNav(href: string, currentPath: string): boolean {
   return currentPath.startsWith(`${href}/`);
 }
 
+/** Among sibling nav items, prefer the longest matching href (e.g. `/joining/confirmed` over `/joining`). */
+function resolveActiveNavHref(items: DashboardNavItem[], currentPath: string): string | null {
+  let best: string | null = null;
+  for (const item of items) {
+    if (!pathMatchesNav(item.href, currentPath)) continue;
+    if (!best || item.href.length > best.length) {
+      best = item.href;
+    }
+  }
+  return best;
+}
+
 /** `/superadmin/leads/:id` (dynamic lead), not the list or static sub-routes */
 function isSuperadminLeadDetailPath(pathname: string): boolean {
   const m = pathname.match(/^\/superadmin\/leads\/([^/]+)$/);
@@ -273,10 +285,11 @@ const JOINING_LIST_SEGMENTS = [
   'in-progress',
   'self-registration',
   'fee-requests',
+  'pipeline',
 ] as const;
 
 function isJoiningListPath(pathname: string): boolean {
-  if (pathname === '/superadmin/joining') return true;
+  if (pathname === '/superadmin/joining' || pathname === '/superadmin/joining/pipeline') return true;
   const m = pathname.match(/^\/superadmin\/joining\/([^/]+)\/?$/);
   return !!m && (JOINING_LIST_SEGMENTS as readonly string[]).includes(m[1]);
 }
@@ -608,7 +621,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       } else if (typeof window !== 'undefined' && window.history.length > 1) {
         router.back();
       } else {
-        router.push('/superadmin/joining');
+        router.push('/superadmin/joining/pipeline');
       }
     } else if (pathname.includes('/superadmin/payments/')) {
       // If on payments detail page, go to payments list
@@ -637,13 +650,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   ].includes(pathname) || isJoiningListPath(pathname);
 
   const renderNavItems = useCallback(
-    (items: DashboardNavItem[], level = 0): ReactNode =>
-      items.map((item) => {
+    (items: DashboardNavItem[], level = 0): ReactNode => {
+      const activeLeafHref = resolveActiveNavHref(items, pathname);
+      return items.map((item) => {
         const hasChildren = !!(item.children && item.children.length > 0);
         const Icon = item.icon;
         const isActive = hasChildren
           ? item.children!.some((child) => pathMatchesNav(child.href, pathname))
-          : pathMatchesNav(item.href, pathname);
+          : activeLeafHref === item.href;
         const isGroupOpen = openGroups.has(item.href);
         const paddingLeft = isCollapsed ? undefined : level * 16;
         const rowClassName = cn(
@@ -768,7 +782,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             )}
           </div>
         );
-      }),
+      });
+    },
     [isCollapsed, openGroups, pathname, toggleGroup]
   );
 

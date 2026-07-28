@@ -113,7 +113,7 @@ export default function FeeRequestsPage() {
 
   useEffect(() => {
     if (!canAccessPage) {
-      router.replace('/superadmin/joining');
+      router.replace('/superadmin/joining/pipeline');
     }
   }, [canAccessPage, router]);
 

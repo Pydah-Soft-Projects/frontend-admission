@@ -802,8 +802,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const effectiveAdminLeadId = (adminLeadId ?? routeLeadFromParams) as string | undefined;
 
   const joiningListReturnPath = useMemo(() => {
-    if (searchParams.get('from') !== 'admissions') {
-      return '/superadmin/joining';
+    const from = searchParams.get('from');
+    if (from === 'self-registration') {
+      return '/superadmin/joining/self-registration';
+    }
+    if (from === 'confirmed') {
+      return '/superadmin/joining/confirmed';
+    }
+    if (from !== 'admissions') {
+      return '/superadmin/joining/pipeline';
     }
     const tab = searchParams.get('tab');
     const admissionsTab = tab && ['abstract', 'student-info', 'reference-list', 'source-list', 'date-wise'].includes(tab)
