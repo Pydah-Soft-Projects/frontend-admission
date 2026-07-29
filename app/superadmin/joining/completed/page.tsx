@@ -373,7 +373,7 @@ const StudentInfoRow = memo(function StudentInfoRow({
       tabIndex={0}
       title={
         hasNoFeeEntry
-          ? 'Lateral course with non-lateral quota and no TUI01/OTH1 ledger'
+          ? 'No Step 4 revised fee entries — view admission details'
           : 'View admission details'
       }
     >

@@ -141,9 +141,9 @@ export interface PaymentSummary {
   tuitionPaid?: number;
   /** Combined Year 1 paid amount for Tuition (TUI01) + Special Fee (OTH1) only. */
   yearOnePaid?: number;
-  /** True when Year-1 TUI01/OTH1 fee entry or payment exists (same as Pending Fee & Docs). */
+  /** True when Step 4 has at least one revised/concession fee amount. */
   hasFeeEntry?: boolean;
-  /** Year-1 tuition+other status: paid | unpaid | no_entry. */
+  /** Student Info fee entry: paid | unpaid | no_entry (no Step 4 revised fees). */
   feeStatus?: 'paid' | 'unpaid' | 'no_entry';
   balance: number;
   currency: string;
