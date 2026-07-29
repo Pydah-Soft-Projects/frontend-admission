@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   WorkflowNextStepButton,
@@ -320,42 +319,7 @@ export function AdmissionStepTwoPanel({
     );
   }
 
-  if (joining.status !== 'approved') {
-    const isPendingApproval = joining.status === 'pending_approval';
-    return (
-      <div
-        id="admission-step-two"
-        className="scroll-mt-24 rounded-2xl border border-amber-200 bg-amber-50/80 p-6 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
-      >
-        <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
-          Step 2 — Certificate checklist &amp; admission fee
-        </p>
-        <p className="mt-2">
-          Step 2 unlocks after the joining is <span className="font-semibold">approved</span>. Current status:{' '}
-          <span className="font-mono">{joining.status}</span>.
-        </p>
-        {isPendingApproval ? (
-          <WorkflowStickyActionBar
-            id="admission-step-two-pending-actions"
-            stepLabel="Step 1 actions required first"
-            className="mt-6 border-amber-300/80 bg-amber-50/95 dark:border-amber-800 dark:bg-amber-950/50"
-            hint="Save any last edits on the joining form, then approve the application to unlock certificate checklist and fee lines here."
-          >
-            <Link href={`/superadmin/joining/${joiningId}#joining-wizard-step-3`}>
-              <Button type="button" variant="outline" size="sm">
-                Save Draft
-              </Button>
-            </Link>
-            <Link href={`/superadmin/joining/${joiningId}#joining-step-one-actions`}>
-              <Button type="button" variant="primary" size="sm">
-                Approve
-              </Button>
-            </Link>
-          </WorkflowStickyActionBar>
-        ) : null}
-      </div>
-    );
-  }
+  // Steps stay open for draft joinings; admission number is minted on fee collect.
 
   return (
     <section

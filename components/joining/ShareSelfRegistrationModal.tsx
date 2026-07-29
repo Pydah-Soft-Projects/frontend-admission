@@ -28,7 +28,7 @@ export function ShareSelfRegistrationModal({ open, onClose }: Props) {
               Show QR / Print
             </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Campus self-registration link for Step 1. Source is{' '}
+              Campus self-registration link for Step 1 (save draft). Source is{' '}
               <span className="font-medium text-slate-700 dark:text-slate-200">Self Registration</span>
               ; reference is not collected.
             </p>

@@ -851,18 +851,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const advanceApplicationWizard = useCallback(
     (step: AdmissionWorkflowStep) => {
-      if (!isPublicEdit && step >= 2 && status !== 'approved') {
-        showToast.error(
-          status === 'pending_approval'
-            ? 'Approve the joining form on Step 1 before continuing.'
-            : 'Submit and approve the joining form on Step 1 before continuing.'
-        );
-        return;
-      }
+      // Staff: all 4 steps stay open. Public/QR stays Step 1 only (panels hidden).
       setApplicationWizardStep(step);
       requestAnimationFrame(() => scrollToWorkflowAnchor(`joining-wizard-step-${step}`));
     },
-    [isPublicEdit, status]
+    []
   );
 
   const handleJoiningWizardStepSelect = useCallback(
@@ -1041,8 +1034,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   /** All public token links (staff invite and self-registration QR) are Step 1 only. */
   const usePublicWizard = false;
   const useWizard = useJoiningPageWizard || usePublicWizard;
-  /** After approval: admin sees bus/hostel (Step 3) and fee desk (Step 4) on this joining page. */
-  const showAdminPostAdmissionStep3 = !isPublicEdit && status === 'approved';
+  /** Staff joining desk: Steps 3–4 stay available without approval gate. */
+  const showAdminPostAdmissionStep3 = !isPublicEdit;
   const showAdminPostAdmissionStep4 = showAdminPostAdmissionStep3;
   /** Status/enquiry/student summary and course headings duplicate the workflow strip on Step 1. */
   const hideJoiningStepOneRedundantIntro = useWizard && applicationWizardStep === 1;
@@ -2681,8 +2674,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     [transactionsResponse]
   );
 
-  /** Steps 2–4 unlock once the joining is approved (admission number generated). */
-  const canProceedFromWizardStep1 = isPublicEdit || status === 'approved';
+  /** Steps 2–4 are open for staff; admission number is generated on first fee collect. */
+  const canProceedFromWizardStep1 = !isPublicEdit;
 
 
   useEffect(() => {
@@ -2851,21 +2844,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     refetch: refetchAdmission,
   } = useQuery({
     queryKey: ['admission', leadId, status],
-    enabled: !isPublicEdit && !!leadId && status === 'approved',
+    enabled: !isPublicEdit && !!leadId,
     queryFn: async () => {
       const candidateJoiningId = joiningRecord?._id || (leadId as string);
       if (candidateJoiningId && String(candidateJoiningId).length === 36) {
         try {
           return await admissionAPI.getByJoiningId(String(candidateJoiningId));
         } catch {
-          /* fall through to lead lookup */
+          /* fall through to lead lookup — draft joinings may not have an admission yet */
         }
       }
       const candidateLeadId = lead?.id || joiningRecord?.leadId;
       if (candidateLeadId && String(candidateLeadId).length === 36) {
-        return await admissionAPI.getByLeadId(String(candidateLeadId));
+        try {
+          return await admissionAPI.getByLeadId(String(candidateLeadId));
+        } catch {
+          return null;
+        }
       }
-      throw new Error('Admission record not found for this joining');
+      return null;
     },
     staleTime: 10_000,
   });
@@ -2877,7 +2874,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const res = await feeRequestAPI.getPendingForJoining(joiningRecord._id);
       return (res?.data ?? null) as import('@/types').FeeRequest | null;
     },
-    enabled: Boolean(joiningRecord?._id) && status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
+    enabled: Boolean(joiningRecord?._id) && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 15_000,
   });
   const pendingFeeRequest = pendingFeeRequestQuery.data;
@@ -4046,14 +4043,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const stepOneNextBlockedHint = useMemo(() => {
     if (isPublicEdit) return undefined;
-    if (status === 'draft') {
-      return 'Submit and approve the joining form on Step 1 before continuing.';
-    }
-    if (status === 'pending_approval') {
-      return 'Approve the joining form on Step 1 before continuing.';
-    }
     return undefined;
-  }, [isPublicEdit, status]);
+  }, [isPublicEdit]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -4554,7 +4545,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const res = await feeStructureAPI.list({});
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
+    enabled: !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 60_000,
   });
 
@@ -4584,7 +4575,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       });
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
+    enabled: !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 60_000,
   });
 
@@ -4594,7 +4585,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       const res = await feeStructureAPI.feeHeads();
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
+    enabled: !isPublicEdit && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
     staleTime: 60_000,
   });
 
@@ -5399,10 +5390,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       showToast.error('Save the joining form before recording payments');
       return;
     }
-    if (!admissionRecord?._id) {
-      showToast.error('Admission record is required before recording payments');
+    if (!hasManagedCourseAndBranch) {
+      showToast.error(
+        'Select college, quota, managed course, and managed branch before collecting payment.'
+      );
       return;
     }
+    // Admission number is created on the server when the first payment amount is recorded.
     setIsBuilderPaymentDialogOpen(true);
     setSelectedCollectFeeHeadId('');
     setBuilderPaymentExtraHeads([]);
@@ -5578,7 +5572,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
     setBuilderPaymentForm((prev) => ({ ...prev, isProcessing: true }));
     try {
-      await Promise.all(
+      const paymentResults = await Promise.all(
         payableTargets.map((target) =>
           paymentAPI.recordFeeManagementTransaction({
             joiningId,
@@ -5600,16 +5594,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           })
         )
       );
+      const mintedAdmissionNumber = paymentResults
+        .map((res: any) => String(res?.data?.admissionNumber || res?.admissionNumber || '').trim())
+        .find(Boolean);
       showToast.success(
-        payableTargets.length === 1
-          ? 'Fee payment transaction recorded'
-          : `${payableTargets.length} fee payment transactions recorded`
+        mintedAdmissionNumber
+          ? `Fee payment recorded. Admission number: ${mintedAdmissionNumber}`
+          : payableTargets.length === 1
+            ? 'Fee payment transaction recorded'
+            : `${payableTargets.length} fee payment transactions recorded`
       );
       // Switch to transactions tab so the user can see the recorded entry
       // instead of closing the dialog
       setBuilderPaymentTab('transactions');
       setBuilderPaymentTargets([]);
       void queryClient.invalidateQueries({ queryKey: ['fee-mongo-transactions'] });
+      void queryClient.invalidateQueries({ queryKey: ['admission'] });
+      void queryClient.invalidateQueries({ queryKey: ['joining'] });
+      void refetch();
+      void refetchAdmission();
       setBuilderPaymentForm((prev) => ({
         ...prev,
         amount: '',
@@ -5966,7 +5969,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const stepOneCourseHint =
     !isPublicEdit && !hasManagedCourseAndBranch && (status === 'draft' || status === 'pending_approval')
-      ? 'Complete course, college, branch, and quota before submit or approve.'
+      ? 'Complete course, college, branch, and quota before saving or collecting fees.'
       : undefined;
 
   const canSaveJoiningDraft =
@@ -5974,24 +5977,23 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     (isPublicEdit ? status === 'draft' : status === 'draft' || status === 'pending_approval');
 
   const renderWizardStepFooter = (panelStep: AdmissionWorkflowStep) => {
-    // All public token links (staff invite + self-registration) are Step 1 only.
-    // Show Submit for Approval on Step 1 while the form is still a draft.
+    // Public / QR: Step 1 only — Save Draft (no submit for approval).
     if (isPublicEdit) {
       if (panelStep !== 1 || status !== 'draft') return null;
       return (
         <WorkflowStickyActionBar
           id="joining-step-one-actions"
-          stepLabel="Submit application"
+          stepLabel="Save application"
           className="-mx-3 border-x-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:mx-0"
         >
           <Button
             variant="primary"
             size="sm"
             className="w-full sm:w-auto"
-            disabled={!canSubmit || isSubmitting}
-            onClick={() => submitMutation.mutate()}
+            disabled={!canSaveJoiningDraft || isSaving}
+            onClick={() => saveDraftMutation.mutate()}
           >
-            {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
+            {isSaving ? 'Saving…' : 'Save Draft'}
           </Button>
         </WorkflowStickyActionBar>
       );
@@ -6045,7 +6047,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           className={stickyClass}
         >
           <WorkflowPreviousStepButton onClick={() => advanceApplicationWizard(3)} />
-          {status === 'approved' && canWriteJoining && canEditAdmission ? (
+          {canWriteJoining ? (
             <Button
               variant="primary"
               size="sm"
@@ -6103,29 +6105,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             {isSaving ? 'Saving…' : 'Save Draft'}
           </Button>
         ) : null}
-        {panelStep === 1 && status === 'draft' ? (
-          <Button
-            variant="primary"
-            size="sm"
-            className={cn(JOINING_ACTION_BTN_CLASS, isPublicEdit ? 'w-full sm:w-auto' : undefined)}
-            disabled={!canSubmit || isSubmitting || (!isPublicEdit && !hasManagedCourseAndBranch)}
-            onClick={() => {
-              if (!canWriteJoining) {
-                showToast.error('You have read-only access to the joining desk');
-                return;
-              }
-              if (!isPublicEdit && !hasManagedCourseAndBranch) {
-                showToast.error(
-                  'Select college, quota, managed course, and managed branch before submitting for approval.'
-                );
-                return;
-              }
-              submitMutation.mutate();
-            }}
-          >
-            {isSubmitting ? 'Submitting…' : 'Submit for Approval'}
-          </Button>
-        ) : null}
         {panelStep === 1 && isAdmissionEditable ? (
           <Button
             variant="primary"
@@ -6148,29 +6127,6 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             }
           >
             {isUpdatingAdmission ? 'Updating…' : 'Update Admission'}
-          </Button>
-        ) : null}
-        {panelStep === 1 && canApprove ? (
-          <Button
-            variant="primary"
-            size="sm"
-            className={JOINING_ACTION_BTN_CLASS}
-            disabled={isApproving || !hasManagedCourseAndBranch}
-            onClick={() => {
-              if (!canWriteJoining) {
-                showToast.error('You have read-only access to the joining desk');
-                return;
-              }
-              if (!hasManagedCourseAndBranch) {
-                showToast.error(
-                  'Select college, quota, managed course, and managed branch before approving.'
-                );
-                return;
-              }
-              approveMutation.mutate();
-            }}
-          >
-            {isApproving ? 'Approving…' : 'Approve'}
           </Button>
         ) : null}
         {panelStep === 2 && canWriteJoining && !isPublicEdit && status !== 'approved' ? (
@@ -6292,22 +6248,15 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       {isPublicEdit && usePublicWizard ? (
         <AdmissionWorkflowStepBanner step={applicationWizardStep} />
       ) : null}
-      {!isPublicEdit && status === 'pending_approval' && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-          <p className="font-semibold">Awaiting approval (Step 1)</p>
+      {!isPublicEdit && status === 'draft' && !admissionNumberDisplay ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-950 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100">
+          <p className="font-semibold">Draft application</p>
           <p className="mt-1 text-xs leading-relaxed">
-            Save any edits with <span className="font-medium">Save Draft</span>, then use{' '}
-            <span className="font-medium">Approve</span> below the form to unlock Steps 2 and 3.{' '}
-            <button
-              type="button"
-              className="font-semibold text-amber-900 underline underline-offset-2 dark:text-amber-100"
-              onClick={() => scrollToWorkflowAnchor('joining-step-one-actions')}
-            >
-              Jump to actions
-            </button>
+            All steps are open. Use <span className="font-medium">Save Draft</span> anytime. The admission
+            number is generated when you collect the first fee payment on Step 4.
           </p>
         </div>
-      )}
+      ) : null}
       {isPublicEdit && publicExpiresAt && !isSelfRegistrationPublic && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           Secure public form · This link expires at{' '}
@@ -7588,31 +7537,41 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 </div>
               </ApplicationInfoCard>
 
-              {/* Concessions / Revised Fees Builder Section */}
-              {status === 'approved' && canWriteJoining && canEditAdmission && (
+              {/* Concessions / Revised Fees Builder — open for staff drafts; admission # on first collect */}
+              {!isPublicEdit && canWriteJoining && (status !== 'approved' || canEditAdmission) && (
                 <div className="mt-8 rounded-2xl border border-blue-200 bg-white p-6 shadow-lg dark:border-blue-900/40 dark:bg-slate-900/70">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
                     <h3 className="text-lg font-bold text-blue-700 dark:text-blue-200 flex items-center gap-2">
                       <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-300" />
                       Revised Fee & Concessions Builder
                     </h3>
-                    {status === 'approved' && (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        onClick={() => openBuilderPaymentDialog()}
-                        disabled={
-                          !canWritePayments ||
-                          !joiningRecord?._id ||
-                          !admissionRecord?._id ||
-                          (builderPaymentRows.length === 0 && collectMasterFeeHeads.length === 0)
-                        }
-                      >
-                        Collect Payment
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => openBuilderPaymentDialog()}
+                      disabled={
+                        !canWritePayments ||
+                        !joiningRecord?._id ||
+                        !hasManagedCourseAndBranch ||
+                        (builderPaymentRows.length === 0 && collectMasterFeeHeads.length === 0)
+                      }
+                      title={
+                        !hasManagedCourseAndBranch
+                          ? 'Complete course, college, branch, and quota on Step 1 first'
+                          : !admissionNumberDisplay
+                            ? 'First payment assigns the admission number'
+                            : undefined
+                      }
+                    >
+                      Collect Payment
+                    </Button>
                   </div>
+                  {!admissionNumberDisplay ? (
+                    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                      No admission number yet. Entering a collect-payment amount will generate it automatically.
+                    </div>
+                  ) : null}
 
                   {/* Pending approval notice — shown inside builder when a request is awaiting */}
                   {pendingFeeRequest ? (

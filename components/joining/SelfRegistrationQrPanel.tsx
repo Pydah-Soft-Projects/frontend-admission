@@ -117,7 +117,7 @@ function buildSelfRegistrationPrintHtml(url: string, qrSrc: string) {
 <body>
   <div class="a4-page">
     <h1 class="title">Self Registration</h1>
-    <p class="subtitle">Scan the QR code below to open the online application (Step 1)</p>
+    <p class="subtitle">Scan the QR code below to open the online application (Step 1 — save draft)</p>
     <div class="qr-frame">
       <img src="${safeQrSrc}" alt="Self registration QR code" />
     </div>
