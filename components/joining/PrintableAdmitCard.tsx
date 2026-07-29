@@ -207,7 +207,7 @@ function formatAdmitCardDate(value?: string | null): string {
 }
 
 export const DEFAULT_ADMISSION_CONTACT_DETAILS =
-  'Mobile: +91 73820 15999\nMail: admissions@pydah.edu.in';
+  'Mobile: +91 73823 15999\nMail: admissions@pydah.edu.in';
 
 export const EMPTY_COLLEGE_ADDRESS_PLACEHOLDER = '(_____)';
 
