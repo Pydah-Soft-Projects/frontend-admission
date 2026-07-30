@@ -470,11 +470,14 @@ export interface JoiningParentInfo {
 }
 
 export interface JoiningReservation {
-  /** Caste name from secondary `castes` (stored in reservation_general). */
+  /**
+   * Stored in reservation_general.
+   * Category name when caste is blank; caste name when a caste is selected.
+   */
   general: string;
-  /** Optional secondary `caste_categories.id`. */
+  /** Secondary `caste_categories.id` (required in the form). */
   categoryId?: string;
-  /** Optional secondary `castes.id`. */
+  /** Secondary `castes.id` (optional in the form). */
   casteId?: string;
   isEws?: boolean;
   other?: string[];

@@ -1994,6 +1994,29 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     return allCastes.filter((c) => String(c.categoryId) === String(selectedCasteCategoryId));
   }, [allCastes, selectedCasteCategoryId]);
 
+  /** Caste is optional; only show a selected caste when explicitly chosen or legacy general ≠ category name. */
+  const selectedCasteSelectValue = useMemo(() => {
+    if (formState.reservation.casteId) return String(formState.reservation.casteId);
+    const general = String(formState.reservation.general || '').trim();
+    if (!general) return '';
+    const category = casteCategories.find(
+      (c) => String(c.id) === String(selectedCasteCategoryId || '')
+    );
+    if (category && general.toLowerCase() === String(category.name || '').trim().toLowerCase()) {
+      return '';
+    }
+    return (
+      resolveCasteForValue(general, castesForSelectedCategory, selectedCasteCategoryId)?.id ||
+      general
+    );
+  }, [
+    formState.reservation.casteId,
+    formState.reservation.general,
+    casteCategories,
+    selectedCasteCategoryId,
+    castesForSelectedCategory,
+  ]);
+
   const filteredCourseSettings = useMemo(() => {
     const collegeKey = (selectedCollegeId || '').trim();
     let list = courseSettings;
@@ -3528,36 +3551,46 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const handleReservationCategoryChange = (categoryId: string) => {
     const category = casteCategories.find((c) => String(c.id) === String(categoryId));
-    const castesInCategory = allCastes.filter((c) => String(c.categoryId) === String(categoryId));
-    const firstCaste = castesInCategory[0];
     setFormState((prev) => ({
       ...prev,
       reservation: {
         ...prev.reservation,
         categoryId: categoryId || undefined,
-        casteId: firstCaste?.id,
-        general: firstCaste?.name || category?.name || '',
-        isEws:
-          /ews/i.test(String(category?.name || '')) ||
-          /ews/i.test(String(firstCaste?.name || ''))
-            ? true
-            : prev.reservation.isEws,
+        // Caste is optional — do not auto-select when category changes.
+        casteId: undefined,
+        general: category?.name || '',
+        isEws: /ews/i.test(String(category?.name || '')) ? true : prev.reservation.isEws,
       },
     }));
   };
 
   const handleReservationCasteChange = (casteIdOrName: string) => {
-    const byId = castesForSelectedCategory.find((c) => String(c.id) === String(casteIdOrName));
+    const trimmed = String(casteIdOrName || '').trim();
+    if (!trimmed) {
+      const category = casteCategories.find(
+        (c) => String(c.id) === String(selectedCasteCategoryId || formState.reservation.categoryId || '')
+      );
+      setFormState((prev) => ({
+        ...prev,
+        reservation: {
+          ...prev.reservation,
+          casteId: undefined,
+          general: category?.name || '',
+        },
+      }));
+      return;
+    }
+    const byId = castesForSelectedCategory.find((c) => String(c.id) === String(trimmed));
     const byName = castesForSelectedCategory.find(
-      (c) => c.name.toLowerCase() === String(casteIdOrName).trim().toLowerCase()
+      (c) => c.name.toLowerCase() === trimmed.toLowerCase()
     );
-    const caste = byId || byName || resolveCasteForValue(casteIdOrName, allCastes, selectedCasteCategoryId);
-    const name = caste?.name || casteIdOrName;
+    const caste = byId || byName || resolveCasteForValue(trimmed, allCastes, selectedCasteCategoryId);
+    const name = caste?.name || trimmed;
     setFormState((prev) => ({
       ...prev,
       reservation: {
         ...prev.reservation,
-        categoryId: caste?.categoryId || prev.reservation.categoryId,
+        categoryId: caste?.categoryId || prev.reservation.categoryId || selectedCasteCategoryId || undefined,
         casteId: caste?.id,
         general: name,
         isEws: /ews/i.test(name) ? true : prev.reservation.isEws,
@@ -4064,11 +4097,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         registrationExtras as Record<string, unknown>
       ),
       parents: formState.parents,
-      reservation: {
-        general: formState.reservation.general,
-        isEws: formState.reservation.isEws || false,
-        other: formState.reservation.other || [],
-      },
+      reservation: (() => {
+        const categoryId =
+          formState.reservation.categoryId || selectedCasteCategoryId || undefined;
+        const categoryName =
+          casteCategories.find((c) => String(c.id) === String(categoryId || ''))?.name || '';
+        return {
+          // Persist category name when caste is left blank (caste is optional).
+          general: formState.reservation.general || categoryName,
+          categoryId: categoryId || undefined,
+          casteId: formState.reservation.casteId || undefined,
+          isEws: formState.reservation.isEws || false,
+          other: formState.reservation.other || [],
+        };
+      })(),
       address: formState.address,
       qualifications: formState.qualifications,
       educationHistory: formState.educationHistory,
@@ -4131,6 +4173,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     status,
     feeConfigurationBatch,
     reference1,
+    selectedCasteCategoryId,
+    casteCategories,
   ]);
 
   const stepOneNextBlockedHint = useMemo(() => {
@@ -5737,6 +5781,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       );
       return;
     }
+    if (!selectedCasteCategoryId) {
+      showToast.error(
+        'Select a reservation category under Course & Quota before updating the admission record.'
+      );
+      return;
+    }
 
     const canSyncExternalSystems =
       status === 'approved' &&
@@ -6624,18 +6674,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           </div>
                           <div className="min-w-0">
                             <label className={JOINING_FORM_LABEL_CLASS}>
-                              Caste<span className="text-red-500">*</span>
+                              Caste
                             </label>
                             <select
-                              value={
-                                formState.reservation.casteId ||
-                                resolveCasteForValue(
-                                  formState.reservation.general,
-                                  castesForSelectedCategory,
-                                  selectedCasteCategoryId
-                                )?.id ||
-                                ''
-                              }
+                              value={selectedCasteSelectValue}
                               onChange={(event) =>
                                 handleReservationCasteChange(event.target.value)
                               }
@@ -6653,21 +6695,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                     ? 'Select category first…'
                                     : castesForSelectedCategory.length === 0
                                       ? 'Add castes in student database'
-                                      : 'Select caste…'}
+                                      : 'Select caste (optional)…'}
                               </option>
                               {castesForSelectedCategory.map((caste) => (
                                 <option key={caste.id} value={caste.id}>
                                   {caste.name}
                                 </option>
                               ))}
-                              {formState.reservation.general &&
-                              !resolveCasteForValue(
-                                formState.reservation.general,
-                                castesForSelectedCategory,
-                                selectedCasteCategoryId
+                              {selectedCasteSelectValue &&
+                              !castesForSelectedCategory.some(
+                                (c) => String(c.id) === String(selectedCasteSelectValue)
                               ) ? (
-                                <option value={formState.reservation.general}>
-                                  {formState.reservation.general}
+                                <option value={selectedCasteSelectValue}>
+                                  {selectedCasteSelectValue}
                                 </option>
                               ) : null}
                             </select>
@@ -6713,18 +6753,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           </div>
                           <div className="min-w-0">
                             <label className={JOINING_FORM_LABEL_CLASS}>
-                              Caste<span className="text-red-500">*</span>
+                              Caste
                             </label>
                             <select
-                              value={
-                                formState.reservation.casteId ||
-                                resolveCasteForValue(
-                                  formState.reservation.general,
-                                  castesForSelectedCategory,
-                                  selectedCasteCategoryId
-                                )?.id ||
-                                ''
-                              }
+                              value={selectedCasteSelectValue}
                               onChange={(event) =>
                                 handleReservationCasteChange(event.target.value)
                               }
@@ -6742,21 +6774,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                     ? 'Select category first…'
                                     : castesForSelectedCategory.length === 0
                                       ? 'Add castes in student database'
-                                      : 'Select caste…'}
+                                      : 'Select caste (optional)…'}
                               </option>
                               {castesForSelectedCategory.map((caste) => (
                                 <option key={caste.id} value={caste.id}>
                                   {caste.name}
                                 </option>
                               ))}
-                              {formState.reservation.general &&
-                              !resolveCasteForValue(
-                                formState.reservation.general,
-                                castesForSelectedCategory,
-                                selectedCasteCategoryId
+                              {selectedCasteSelectValue &&
+                              !castesForSelectedCategory.some(
+                                (c) => String(c.id) === String(selectedCasteSelectValue)
                               ) ? (
-                                <option value={formState.reservation.general}>
-                                  {formState.reservation.general}
+                                <option value={selectedCasteSelectValue}>
+                                  {selectedCasteSelectValue}
                                 </option>
                               ) : null}
                             </select>
