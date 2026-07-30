@@ -49,7 +49,7 @@ const BASE_NAV_ITEMS: DashboardNavItem[] = [
       { href: '/superadmin/joining/confirmed', label: 'Confirmed Leads', icon: ListIcon, permissionKey: 'joining', joiningPage: 'confirmed' },
       { href: '/superadmin/joining/self-registration', label: 'Self Registration', icon: TemplateIcon, permissionKey: 'joining', joiningPage: 'self-registration' },
       { href: '/superadmin/joining/pipeline', label: 'Joining Pipeline', icon: AcademicIcon, permissionKey: 'joining', joiningPage: 'pipeline' },
-      { href: '/superadmin/joining/fee-requests', label: 'Fee Requests', icon: CurrencyIcon, permissionKey: 'joining', joiningPage: 'fee-requests' },
+      // { href: '/superadmin/joining/fee-requests', label: 'Fee Requests', icon: CurrencyIcon, permissionKey: 'joining', joiningPage: 'fee-requests' },
       { href: '/superadmin/joining/completed', label: 'Admissions', icon: AcademicIcon, permissionKey: 'joining', joiningPage: 'admissions' },
     ],
   },
