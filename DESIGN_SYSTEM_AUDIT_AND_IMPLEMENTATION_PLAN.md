@@ -14,6 +14,7 @@
 
 **Finding:** No separate `tailwind.config.js` — Tailwind v4 uses `@import "tailwindcss"` and `@theme inline` in CSS. Theme is driven by CSS variables + `html.dark` class.
 
+
 ---
 
 ### 1.2 Relationship: Global Styles ↔ Components
