@@ -911,6 +911,19 @@ export const courseAPI = {
     const response = await api.get('/courses/student-quotas');
     return response.data;
   },
+  /** Active caste categories (+ castes) from secondary `caste_categories` / `castes`. */
+  listCasteCategories: async () => {
+    const response = await api.get('/courses/caste-categories');
+    return response.data;
+  },
+  /** Active castes from secondary `castes` (optional categoryId filter). */
+  listCastes: async (params?: { categoryId?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.categoryId) queryParams.append('categoryId', params.categoryId);
+    const query = queryParams.toString();
+    const response = await api.get(`/courses/castes${query ? `?${query}` : ''}`);
+    return response.data;
+  },
   /** Certificate / document copy from secondary `settings` for a program level. */
   getCertificateGuidance: async (level: string) => {
     const q = new URLSearchParams();

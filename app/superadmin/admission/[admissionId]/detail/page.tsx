@@ -178,7 +178,7 @@ export default function AdmissionDetailPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const admissionId = Array.isArray(params?.admissionId) ? params.admissionId[0] : params?.admissionId;
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
-  const { canEditReference } = useJoiningDeskPermissions();
+  const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
 
   const admissionsListHref = useMemo(() => {
     const tab = searchParams.get('tab');
@@ -188,6 +188,12 @@ export default function AdmissionDetailPage() {
         ? tab
         : 'student-info';
     return `/superadmin/joining/completed?tab=${encodeURIComponent(validTab)}`;
+  }, [searchParams]);
+
+  const editApplicationHref = useMemo(() => {
+    const from = searchParams.get('from') || 'admissions';
+    const tab = searchParams.get('tab') || 'student-info';
+    return `from=${encodeURIComponent(from)}&tab=${encodeURIComponent(tab)}`;
   }, [searchParams]);
 
   const [revealedAadhaars, setRevealedAadhaars] = useState<{
@@ -205,7 +211,7 @@ export default function AdmissionDetailPage() {
     reason: '',
     approvedBy: '',
   });
-  const [isSendSmsDialogOpen, setIsSendSmsDialogOpen] = useState(false);
+  const [isPendingDocsFeeSmsDialogOpen, setIsPendingDocsFeeSmsDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
@@ -249,25 +255,51 @@ export default function AdmissionDetailPage() {
     },
   });
 
-  const sendAdmissionSmsMutation = useMutation({
+  const sendPendingDocsFeeSmsMutation = useMutation({
     mutationFn: async () => {
       if (!admission?._id) {
         throw new Error('Admission record is not loaded');
       }
-      return admissionAPI.sendConfirmationSms(admission._id);
+      return admissionAPI.sendDocumentNotificationSmsBulk([admission._id]);
     },
-    onSuccess: (response: { data?: { sentTo?: string; admissionNumber?: string } } | undefined) => {
-      const sentTo = response?.data?.sentTo;
-      showToast.success(
-        sentTo
-          ? `Admission confirmation SMS sent to ${sentTo}.`
-          : 'Admission confirmation SMS sent.'
-      );
-      setIsSendSmsDialogOpen(false);
+    onSuccess: (response: {
+      data?: {
+        sent?: number;
+        skipped?: number;
+        failed?: number;
+        confirmationPendingSms?: { sent?: number; skipped?: number; failed?: number };
+      };
+      sent?: number;
+      skipped?: number;
+      failed?: number;
+      confirmationPendingSms?: { sent?: number; skipped?: number; failed?: number };
+    }) => {
+      const data = response?.data || response;
+      const sent = Number(data?.sent ?? 0);
+      const skipped = Number(data?.skipped ?? 0);
+      const failed = Number(data?.failed ?? 0);
+      const conf = data?.confirmationPendingSms || {};
+      const confSent = Number(conf?.sent ?? 0);
+      const confSkipped = Number(conf?.skipped ?? 0);
+      const confFailed = Number(conf?.failed ?? 0);
+
+      if (sent > 0 || confSent > 0) {
+        showToast.success(
+          `SMS notifications finished. ` +
+            `Important Documents: ${sent} sent, ${skipped} skipped, ${failed} failed. ` +
+            `Pending Fee: ${confSent} sent, ${confSkipped} skipped, ${confFailed} failed.`
+        );
+      } else {
+        showToast.error(
+          `No SMS sent — Important Documents skipped ${skipped}, failed ${failed}. ` +
+            `Pending Fee skipped ${confSkipped}, failed ${confFailed}.`
+        );
+      }
+      setIsPendingDocsFeeSmsDialogOpen(false);
     },
     onError: (error: ApiError) => {
       showToast.error(
-        error.response?.data?.message || 'Failed to send admission confirmation SMS'
+        error.response?.data?.message || 'Failed to send pending documents & fee SMS'
       );
     },
   });
@@ -713,19 +745,17 @@ export default function AdmissionDetailPage() {
           {admission && !isAdmissionCancelled && admission.admissionNumber && admission.studentInfo?.phone ? (
             <Button
               variant="outline"
-              onClick={() => setIsSendSmsDialogOpen(true)}
-              title={`Send the DLT-approved admission confirmation SMS to ${admission.studentInfo.phone}`}
+              onClick={() => setIsPendingDocsFeeSmsDialogOpen(true)}
+              title={`Send pending Important Documents and pending fee SMS to ${admission.studentInfo.phone}`}
             >
-              Send Admission SMS
+              Pending Docs & Fee SMS
             </Button>
           ) : null}
-          {admission?.joiningId && (
-            <Link href={`/superadmin/joining/${admission.joiningId}/detail`}>
-              <Button variant="outline">
-                View Joining Form
-              </Button>
+          {canEditAdmission && admission?.joiningId && !isAdmissionCancelled ? (
+            <Link href={`/superadmin/joining/${admission.joiningId}?${editApplicationHref}`}>
+              <Button variant="outline">Edit Application</Button>
             </Link>
-          )}
+          ) : null}
           {admission && !isAdmissionCancelled && (
             <Button variant="danger" onClick={() => setIsCancelDialogOpen(true)}>
               Cancel Admission
@@ -747,6 +777,8 @@ export default function AdmissionDetailPage() {
     getCollegeNameForCourse,
     joiningStatus,
     admissionsListHref,
+    editApplicationHref,
+    canEditAdmission,
     setHeaderContent,
     clearHeaderContent,
   ]);
@@ -861,12 +893,13 @@ export default function AdmissionDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isSendSmsDialogOpen} onOpenChange={setIsSendSmsDialogOpen}>
+      <Dialog open={isPendingDocsFeeSmsDialogOpen} onOpenChange={setIsPendingDocsFeeSmsDialogOpen}>
         <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
-            <DialogTitle>Send Admission SMS</DialogTitle>
+            <DialogTitle>Send Pending Documents & Fee SMS</DialogTitle>
             <DialogDescription>
-              Send the DLT-approved admission confirmation SMS to the student.
+              Send pending Important Documents SMS and Admission Confirmation Pending (fee) SMS to this
+              student.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm dark:border-slate-800 dark:bg-slate-900/40">
@@ -895,24 +928,23 @@ export default function AdmissionDetailPage() {
               </span>
             </div>
             <p className="border-t border-slate-200 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
-              Template: <span className="font-mono">Admission · confirmation on approval</span> (DLT id is read live from{' '}
-              <span className="font-mono">message_templates</span>). The student name and admission number are filled into the
-              two <span className="font-mono">{'{#var#}'}</span> slots.
+              Students without pending Important Documents / pending fee amount (or without a valid phone
+              number) will be skipped for that part of the message.
             </p>
           </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsSendSmsDialogOpen(false)}
-              disabled={sendAdmissionSmsMutation.isPending}
+              onClick={() => setIsPendingDocsFeeSmsDialogOpen(false)}
+              disabled={sendPendingDocsFeeSmsMutation.isPending}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              onClick={() => sendAdmissionSmsMutation.mutate()}
-              isLoading={sendAdmissionSmsMutation.isPending}
+              onClick={() => sendPendingDocsFeeSmsMutation.mutate()}
+              isLoading={sendPendingDocsFeeSmsMutation.isPending}
             >
               Send SMS
             </Button>

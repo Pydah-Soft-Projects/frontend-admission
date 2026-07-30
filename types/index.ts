@@ -470,7 +470,12 @@ export interface JoiningParentInfo {
 }
 
 export interface JoiningReservation {
-  general: 'oc' | 'ews' | 'bc-a' | 'bc-b' | 'bc-c' | 'bc-d' | 'bc-e' | 'sc' | 'st';
+  /** Caste name from secondary `castes` (stored in reservation_general). */
+  general: string;
+  /** Optional secondary `caste_categories.id`. */
+  categoryId?: string;
+  /** Optional secondary `castes.id`. */
+  casteId?: string;
   isEws?: boolean;
   other?: string[];
 }

@@ -80,6 +80,13 @@ import {
   parseStudentQuotasResponse,
   quotaLabelsFromCatalog,
 } from '@/lib/studentQuotaCatalog';
+import {
+  parseCasteCatalogResponse,
+  resolveCasteCategoryIdForValue,
+  resolveCasteForValue,
+  type CasteCatalogItem,
+  type CasteCategoryCatalogItem,
+} from '@/lib/casteCatalog';
 import { isManagementQuotaLabel } from '@/lib/joiningScholarshipQuotaDefault';
 import {
   findBranchInCatalog,
@@ -633,7 +640,9 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       },
     },
     reservation: {
-      general: joining?.reservation?.general || 'oc',
+      general: joining?.reservation?.general || '',
+      categoryId: joining?.reservation?.categoryId || undefined,
+      casteId: joining?.reservation?.casteId || undefined,
       isEws: joining?.reservation?.isEws || false,
       other: joining?.reservation?.other || [],
     },
@@ -1905,6 +1914,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     enabled: !isPublicEdit,
   });
 
+  const { data: casteCatalogResponse, isLoading: isCasteCatalogLoading } = useQuery({
+    queryKey: ['courses', 'castes-catalog'],
+    queryFn: async () => courseAPI.listCastes(),
+    staleTime: 60_000,
+    enabled: !isPublicEdit,
+  });
+
   const programLevels: string[] = useMemo(() => {
     if (isPublicEdit) {
       const pl = (publicBootstrapQuery.data?.data as { programLevels?: string[] } | undefined)?.programLevels;
@@ -1935,6 +1951,48 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     studentQuotasResponse,
     formState.courseInfo.quota,
   ]);
+
+  const casteCatalog = useMemo(() => {
+    if (isPublicEdit) {
+      const bootstrap = publicBootstrapQuery.data?.data as
+        | { casteCatalog?: unknown; castes?: unknown; casteCategories?: unknown }
+        | undefined;
+      if (bootstrap?.casteCatalog) {
+        return parseCasteCatalogResponse(bootstrap.casteCatalog);
+      }
+      return parseCasteCatalogResponse({
+        categories: bootstrap?.casteCategories,
+        castes: bootstrap?.castes,
+      });
+    }
+    return parseCasteCatalogResponse(casteCatalogResponse);
+  }, [isPublicEdit, publicBootstrapQuery.data, casteCatalogResponse]);
+
+  const casteCategories: CasteCategoryCatalogItem[] = casteCatalog.categories;
+  const allCastes: CasteCatalogItem[] = casteCatalog.castes;
+  const casteCatalogReady = casteCategories.length > 0 && allCastes.length > 0;
+  const casteCatalogLoading = isPublicEdit
+    ? Boolean(publicBootstrapQuery.isLoading)
+    : isCasteCatalogLoading;
+
+  const selectedCasteCategoryId = useMemo(() => {
+    if (formState.reservation.categoryId) return String(formState.reservation.categoryId);
+    return resolveCasteCategoryIdForValue(
+      formState.reservation.general,
+      casteCategories,
+      allCastes
+    );
+  }, [
+    formState.reservation.categoryId,
+    formState.reservation.general,
+    casteCategories,
+    allCastes,
+  ]);
+
+  const castesForSelectedCategory = useMemo(() => {
+    if (!selectedCasteCategoryId) return allCastes;
+    return allCastes.filter((c) => String(c.categoryId) === String(selectedCasteCategoryId));
+  }, [allCastes, selectedCasteCategoryId]);
 
   const filteredCourseSettings = useMemo(() => {
     const collegeKey = (selectedCollegeId || '').trim();
@@ -3468,14 +3526,47 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }));
   };
 
-  const handleReservationGeneralChange = (value: JoiningReservation['general']) => {
+  const handleReservationCategoryChange = (categoryId: string) => {
+    const category = casteCategories.find((c) => String(c.id) === String(categoryId));
+    const castesInCategory = allCastes.filter((c) => String(c.categoryId) === String(categoryId));
+    const firstCaste = castesInCategory[0];
     setFormState((prev) => ({
       ...prev,
       reservation: {
         ...prev.reservation,
-        general: value,
+        categoryId: categoryId || undefined,
+        casteId: firstCaste?.id,
+        general: firstCaste?.name || category?.name || '',
+        isEws:
+          /ews/i.test(String(category?.name || '')) ||
+          /ews/i.test(String(firstCaste?.name || ''))
+            ? true
+            : prev.reservation.isEws,
       },
     }));
+  };
+
+  const handleReservationCasteChange = (casteIdOrName: string) => {
+    const byId = castesForSelectedCategory.find((c) => String(c.id) === String(casteIdOrName));
+    const byName = castesForSelectedCategory.find(
+      (c) => c.name.toLowerCase() === String(casteIdOrName).trim().toLowerCase()
+    );
+    const caste = byId || byName || resolveCasteForValue(casteIdOrName, allCastes, selectedCasteCategoryId);
+    const name = caste?.name || casteIdOrName;
+    setFormState((prev) => ({
+      ...prev,
+      reservation: {
+        ...prev.reservation,
+        categoryId: caste?.categoryId || prev.reservation.categoryId,
+        casteId: caste?.id,
+        general: name,
+        isEws: /ews/i.test(name) ? true : prev.reservation.isEws,
+      },
+    }));
+  };
+
+  const handleReservationGeneralChange = (value: JoiningReservation['general']) => {
+    handleReservationCasteChange(value);
   };
 
   const addOtherReservation = () => {
@@ -6507,26 +6598,78 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           </div>
                           <div className="min-w-0">
                             <label className={JOINING_FORM_LABEL_CLASS}>
-                              General Reservation Category<span className="text-red-500">*</span>
+                              Category<span className="text-red-500">*</span>
                             </label>
                             <select
-                              value={formState.reservation.general}
+                              value={selectedCasteCategoryId}
                               onChange={(event) =>
-                                handleReservationGeneralChange(
-                                  event.target.value as JoiningReservation['general']
-                                )
+                                handleReservationCategoryChange(event.target.value)
                               }
                               className={JOINING_FORM_CONTROL_CLASS}
+                              disabled={casteCatalogLoading || !casteCatalogReady}
                             >
-                              <option value="oc">OC</option>
-                              <option value="ews">EWS</option>
-                              <option value="bc-a">BC-A</option>
-                              <option value="bc-b">BC-B</option>
-                              <option value="bc-c">BC-C</option>
-                              <option value="bc-d">BC-D</option>
-                              <option value="bc-e">BC-E</option>
-                              <option value="sc">SC</option>
-                              <option value="st">ST</option>
+                              <option value="">
+                                {casteCatalogLoading
+                                  ? 'Loading categories…'
+                                  : !casteCatalogReady
+                                    ? 'Add categories in student database'
+                                    : 'Select category…'}
+                              </option>
+                              {casteCategories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="min-w-0">
+                            <label className={JOINING_FORM_LABEL_CLASS}>
+                              Caste<span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={
+                                formState.reservation.casteId ||
+                                resolveCasteForValue(
+                                  formState.reservation.general,
+                                  castesForSelectedCategory,
+                                  selectedCasteCategoryId
+                                )?.id ||
+                                ''
+                              }
+                              onChange={(event) =>
+                                handleReservationCasteChange(event.target.value)
+                              }
+                              className={JOINING_FORM_CONTROL_CLASS}
+                              disabled={
+                                casteCatalogLoading ||
+                                !selectedCasteCategoryId ||
+                                castesForSelectedCategory.length === 0
+                              }
+                            >
+                              <option value="">
+                                {casteCatalogLoading
+                                  ? 'Loading castes…'
+                                  : !selectedCasteCategoryId
+                                    ? 'Select category first…'
+                                    : castesForSelectedCategory.length === 0
+                                      ? 'Add castes in student database'
+                                      : 'Select caste…'}
+                              </option>
+                              {castesForSelectedCategory.map((caste) => (
+                                <option key={caste.id} value={caste.id}>
+                                  {caste.name}
+                                </option>
+                              ))}
+                              {formState.reservation.general &&
+                              !resolveCasteForValue(
+                                formState.reservation.general,
+                                castesForSelectedCategory,
+                                selectedCasteCategoryId
+                              ) ? (
+                                <option value={formState.reservation.general}>
+                                  {formState.reservation.general}
+                                </option>
+                              ) : null}
                             </select>
                           </div>
                           {courseQuotaIntakeFields}
@@ -6541,30 +6684,84 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         </div>
                       ) : null}
                       {filteredCourseSettings.length === 0 ? (
-                        <div className="min-w-0">
-                          <label className={JOINING_FORM_LABEL_CLASS}>
-                            General Reservation Category<span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={formState.reservation.general}
-                            onChange={(event) =>
-                              handleReservationGeneralChange(
-                                event.target.value as JoiningReservation['general']
-                              )
-                            }
-                            className={JOINING_FORM_CONTROL_CLASS}
-                          >
-                            <option value="oc">OC</option>
-                            <option value="ews">EWS</option>
-                            <option value="bc-a">BC-A</option>
-                            <option value="bc-b">BC-B</option>
-                            <option value="bc-c">BC-C</option>
-                            <option value="bc-d">BC-D</option>
-                            <option value="bc-e">BC-E</option>
-                            <option value="sc">SC</option>
-                            <option value="st">ST</option>
-                          </select>
-                        </div>
+                        <>
+                          <div className="min-w-0">
+                            <label className={JOINING_FORM_LABEL_CLASS}>
+                              Category<span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={selectedCasteCategoryId}
+                              onChange={(event) =>
+                                handleReservationCategoryChange(event.target.value)
+                              }
+                              className={JOINING_FORM_CONTROL_CLASS}
+                              disabled={casteCatalogLoading || !casteCatalogReady}
+                            >
+                              <option value="">
+                                {casteCatalogLoading
+                                  ? 'Loading categories…'
+                                  : !casteCatalogReady
+                                    ? 'Add categories in student database'
+                                    : 'Select category…'}
+                              </option>
+                              {casteCategories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="min-w-0">
+                            <label className={JOINING_FORM_LABEL_CLASS}>
+                              Caste<span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={
+                                formState.reservation.casteId ||
+                                resolveCasteForValue(
+                                  formState.reservation.general,
+                                  castesForSelectedCategory,
+                                  selectedCasteCategoryId
+                                )?.id ||
+                                ''
+                              }
+                              onChange={(event) =>
+                                handleReservationCasteChange(event.target.value)
+                              }
+                              className={JOINING_FORM_CONTROL_CLASS}
+                              disabled={
+                                casteCatalogLoading ||
+                                !selectedCasteCategoryId ||
+                                castesForSelectedCategory.length === 0
+                              }
+                            >
+                              <option value="">
+                                {casteCatalogLoading
+                                  ? 'Loading castes…'
+                                  : !selectedCasteCategoryId
+                                    ? 'Select category first…'
+                                    : castesForSelectedCategory.length === 0
+                                      ? 'Add castes in student database'
+                                      : 'Select caste…'}
+                              </option>
+                              {castesForSelectedCategory.map((caste) => (
+                                <option key={caste.id} value={caste.id}>
+                                  {caste.name}
+                                </option>
+                              ))}
+                              {formState.reservation.general &&
+                              !resolveCasteForValue(
+                                formState.reservation.general,
+                                castesForSelectedCategory,
+                                selectedCasteCategoryId
+                              ) ? (
+                                <option value={formState.reservation.general}>
+                                  {formState.reservation.general}
+                                </option>
+                              ) : null}
+                            </select>
+                          </div>
+                        </>
                       ) : null}
                       {filteredCourseSettings.length === 0 ? courseQuotaIntakeFields : null}
                       <div className="min-w-0">

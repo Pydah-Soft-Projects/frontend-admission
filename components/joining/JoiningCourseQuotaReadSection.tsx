@@ -53,7 +53,7 @@ export function JoiningCourseQuotaReadSection({
       <ReadCell label="Course" value={courseName || joining.courseInfo?.course || '—'} />
       <ReadCell label="Branch" value={branchName || joining.courseInfo?.branch || '—'} />
       <ReadCell
-        label="General reservation category"
+        label="Caste"
         value={formatJoiningReservationGeneral(reservation?.general)}
       />
       {intakeRegistrationEntries.map(([key, raw]) => (

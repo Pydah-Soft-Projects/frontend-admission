@@ -33,7 +33,6 @@ import {
   resolveAdmissionStatCourseLabel,
   resolveJoiningOrAdmissionCourseLabel,
 } from '@/lib/admissionCourseDisplay';
-import { buildImportantDocumentTabItems } from '@/lib/joiningDocumentsDisplay';
 import { LayoutGrid, Calendar, Filter, Download, UserCircle, CalendarDays, Pencil, X, Megaphone, Printer, Settings2, Clock } from 'lucide-react';
 import { escapePrintHtml, printHtmlDocument } from '@/lib/printHtml';
 import { cn } from '@/lib/utils';
@@ -330,7 +329,6 @@ type StudentInfoRowProps = {
   tableTdClass: string;
   onOpenDetails: (record: Admission) => void;
   onEditReference: (record: Admission) => void;
-  onEditApplication: (joiningId: string) => void;
 };
 
 const StudentInfoRow = memo(function StudentInfoRow({
@@ -340,7 +338,6 @@ const StudentInfoRow = memo(function StudentInfoRow({
   tableTdClass,
   onOpenDetails,
   onEditReference,
-  onEditApplication,
 }: StudentInfoRowProps) {
   const hasNoFeeEntry =
     (record as Admission & { feeStatus?: string }).feeStatus === 'no_entry' ||
@@ -474,22 +471,6 @@ const StudentInfoRow = memo(function StudentInfoRow({
           </td>
         </>
       ) : null}
-      <td className={`${tableTdClass} text-right`}>
-        {record.joiningId ? (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onEditApplication(String(record.joiningId));
-            }}
-            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-          >
-            Edit Application
-          </button>
-        ) : (
-          '—'
-        )}
-      </td>
     </tr>
   );
 });
@@ -502,7 +483,7 @@ const CompletedAdmissionsPage = () => {
   const canAccessAdmissionsPage = canAccessJoiningPage('admissions');
   const isSuperAdmin = auth.getUser()?.roleName === 'Super Admin';
   const showSourceReferenceColumns = isSuperAdmin;
-  const tableColumnCount = showSourceReferenceColumns ? 14 : 12;
+  const tableColumnCount = showSourceReferenceColumns ? 13 : 11;
   const { allowedTabs, canAccessTab, hasAccess: hasJoiningAccess } = useAdmissionTabPermissions();
   const allowedTabsKey = allowedTabs.join('|');
   const visibleAdmissionTabs = useMemo(
@@ -568,7 +549,6 @@ const CompletedAdmissionsPage = () => {
   });
   const [intakeEditTarget, setIntakeEditTarget] = useState<AbstractIntakeEditRow | null>(null);
   const [intakeForm, setIntakeForm] = useState({ cqIntake: '', mqIntake: '' });
-  const [studentInfoViewRecord, setStudentInfoViewRecord] = useState<Admission | null>(null);
   const [referenceEditTarget, setReferenceEditTarget] = useState<Admission | null>(null);
   const [referenceEditValue, setReferenceEditValue] = useState('');
   const [referenceDepartmentFilter, setReferenceDepartmentFilter] = useState('');
@@ -580,7 +560,6 @@ const CompletedAdmissionsPage = () => {
   const [pendingAdmissionsOpen, setPendingAdmissionsOpen] = useState(false);
   const [minimumConfigOpen, setMinimumConfigOpen] = useState(false);
   const [smsSchedulerOpen, setSmsSchedulerOpen] = useState(false);
-  const [showDocumentSmsDialog, setShowDocumentSmsDialog] = useState(false);
 
   const {
     data: minimumFeeConfigs = [],
@@ -593,7 +572,6 @@ const CompletedAdmissionsPage = () => {
     },
     staleTime: 30_000,
   });
-  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 350);
@@ -1168,19 +1146,6 @@ const CompletedAdmissionsPage = () => {
     },
   });
 
-  const sendDocumentSmsMutation = useMutation({
-    mutationFn: async ({ admissionId, selectedDocuments }: { admissionId: string; selectedDocuments?: string[] }) => {
-      return admissionAPI.sendDocumentNotificationSms(admissionId, selectedDocuments);
-    },
-    onSuccess: () => {
-      showToast.success('Pending documents SMS sent successfully');
-      setShowDocumentSmsDialog(false);
-    },
-    onError: (error: ApiError) => {
-      showToast.error(error.response?.data?.message || 'Failed to send SMS');
-    },
-  });
-
   const openCancelDialog = (record: Admission) => {
     setCancelTarget(record);
     setCancelForm({ reason: '', approvedBy: '' });
@@ -1227,13 +1192,10 @@ const CompletedAdmissionsPage = () => {
     [canEditReference]
   );
 
-  const handleOpenStudentInfoDetails = useCallback((record: Admission) => {
-    setStudentInfoViewRecord(record);
-  }, []);
-
-  const handleEditApplicationFromList = useCallback(
-    (joiningId: string) => {
-      router.push(`/superadmin/joining/${joiningId}?${admissionsEditQuery}`);
+  const handleOpenStudentInfoDetails = useCallback(
+    (record: Admission) => {
+      if (!record._id) return;
+      router.push(`/superadmin/admission/${record._id}/detail?${admissionsEditQuery}`);
     },
     [router, admissionsEditQuery]
   );
@@ -1825,179 +1787,6 @@ const CompletedAdmissionsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={!!studentInfoViewRecord}
-        onOpenChange={(open) => {
-          if (!open) setStudentInfoViewRecord(null);
-        }}
-      >
-        <DialogContent className="max-h-[90vh] w-[95vw] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Student information</DialogTitle>
-            <DialogDescription>
-              Quick view for this admission. Use Edit joining form to change joining data, or open the full admission
-              page for payments, documents, and Step 2.
-            </DialogDescription>
-          </DialogHeader>
-          {studentInfoViewRecord && (
-            <div className="grid gap-4 text-sm">
-              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Admission</p>
-                <p className="mt-1 font-mono text-base font-semibold text-blue-600 dark:text-blue-400">
-                  {studentInfoViewRecord.admissionNumber}
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  Recorded:{' '}
-                  {studentInfoViewRecord.createdAt
-                    ? new Date(studentInfoViewRecord.createdAt).toLocaleString()
-                    : '—'}
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Student</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {studentInfoViewRecord.studentInfo?.name ?? '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contact</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {studentInfoViewRecord.studentInfo?.phone ?? '—'}
-                  </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course / branch</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {resolveJoiningOrAdmissionCourseLabel(studentInfoViewRecord, getCourseName) || '—'}{' '}
-                    <span className="text-slate-500">·</span>{' '}
-                    {studentInfoViewRecord.courseInfo?.branch ||
-                      getBranchName(studentInfoViewRecord.courseInfo?.branchId) ||
-                      '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quota</p>
-                  <p className="mt-0.5 font-medium uppercase text-slate-900 dark:text-slate-100">
-                    {studentInfoViewRecord.courseInfo?.quota || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Caste</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {(studentInfoViewRecord.reservation?.general || 'OC').toUpperCase()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">EWS</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {formatReservationEws(studentInfoViewRecord.reservation)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</p>
-                  <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                    {formatQualificationMerit(studentInfoViewRecord.qualifications)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paid</p>
-                  <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
-                    {INR_CURRENCY_FORMAT.format(studentInfoViewRecord.paymentSummary?.yearOnePaid ?? 0)}
-                  </p>
-                </div>
-                {isSuperAdmin ? (
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference</p>
-                    <div className="mt-0.5 flex items-center gap-2">
-                      <p className="font-medium text-slate-900 dark:text-slate-100">
-                        {resolveAdmissionReference1(studentInfoViewRecord) || '—'}
-                      </p>
-                      {canEditReference &&
-                      studentInfoViewRecord.status !== ADMISSION_CANCELLED_STATUS ? (
-                        <button
-                          type="button"
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
-                          title="Edit reference"
-                          onClick={() => openReferenceEditor(studentInfoViewRecord)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-                {isSuperAdmin ? (
-                  <div className="sm:col-span-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
-                    <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
-                      {resolveAdmissionSource(studentInfoViewRecord) || '—'}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            {studentInfoViewRecord?._id && (
-              <Button
-                type="button"
-                className="w-full gap-2 sm:w-auto"
-                onClick={() => {
-                  // Important Documents only (certificate checklist / paper important cols)
-                  const importantItems = buildImportantDocumentTabItems(
-                    studentInfoViewRecord.documents,
-                    studentInfoViewRecord.courseInfo?.quota,
-                    studentInfoViewRecord.registrationFormData
-                  );
-                  const pendingDocs = importantItems
-                    .filter((item) => String(item.status || '').toLowerCase() !== 'received')
-                    .map((item) => item.label);
-                  setSelectedDocuments(pendingDocs);
-                  setShowDocumentSmsDialog(true);
-                }}
-              >
-                Send Pending Documents SMS
-              </Button>
-            )}
-            {canEditReference &&
-            studentInfoViewRecord &&
-            studentInfoViewRecord.status !== ADMISSION_CANCELLED_STATUS ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full gap-2 sm:w-auto"
-                onClick={() => openReferenceEditor(studentInfoViewRecord)}
-              >
-                <Pencil className="h-4 w-4" />
-                Edit reference
-              </Button>
-            ) : null}
-            {canEditAdmission && studentInfoViewRecord?.joiningId ? (
-              <Link
-                href={`/superadmin/joining/${studentInfoViewRecord.joiningId}?${admissionsEditQuery}`}
-                className="w-full sm:w-auto"
-              >
-                <Button type="button" className="w-full gap-2 sm:w-auto">
-                  <Pencil className="h-4 w-4" />
-                  Edit joining form
-                </Button>
-              </Link>
-            ) : null}
-            {studentInfoViewRecord?._id ? (
-              <Link
-                href={`/superadmin/admission/${studentInfoViewRecord._id}/detail?${admissionsEditQuery}`}
-                className="w-full sm:w-auto"
-              >
-                <Button type="button" variant="outline" className="w-full sm:w-auto">
-                  Full admission page
-                </Button>
-              </Link>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={!!intakeEditTarget} onOpenChange={(open) => !open && setIntakeEditTarget(null)}>
         <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
@@ -2094,106 +1883,6 @@ const CompletedAdmissionsPage = () => {
         open={smsSchedulerOpen}
         onOpenChange={setSmsSchedulerOpen}
       />
-
-      {/* Send Pending Documents SMS Dialog — Important Documents only */}
-      <Dialog
-        open={showDocumentSmsDialog}
-        onOpenChange={(open) => {
-          if (!open) setShowDocumentSmsDialog(false);
-        }}
-      >
-        <DialogContent className="max-h-[90vh] w-[95vw] max-w-md overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Send Pending Documents SMS</DialogTitle>
-            <DialogDescription>
-              Select which pending Important Documents to include in the SMS. Other documents are
-              not sent.
-            </DialogDescription>
-          </DialogHeader>
-
-          {studentInfoViewRecord && (
-            <div className="space-y-3">
-              {/* Display student info */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {studentInfoViewRecord.studentInfo?.name || 'Student'}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {studentInfoViewRecord.studentInfo?.phone || 'No phone number'}
-                </p>
-              </div>
-
-              {/* Important Documents checkboxes */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(() => {
-                  const importantItems = buildImportantDocumentTabItems(
-                    studentInfoViewRecord.documents,
-                    studentInfoViewRecord.courseInfo?.quota,
-                    studentInfoViewRecord.registrationFormData
-                  ).filter((item) => String(item.status || '').toLowerCase() !== 'received');
-
-                  if (importantItems.length === 0) {
-                    return (
-                      <p className="col-span-full text-sm text-slate-500">
-                        No pending Important Documents for this student.
-                      </p>
-                    );
-                  }
-
-                  return importantItems.map((item) => (
-                    <label
-                      key={item.key}
-                      className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700"
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        checked={selectedDocuments.includes(item.label)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedDocuments([...selectedDocuments, item.label]);
-                          } else {
-                            setSelectedDocuments(selectedDocuments.filter((d) => d !== item.label));
-                          }
-                        }}
-                      />
-                      <span className="text-sm text-slate-700 dark:text-slate-200">
-                        {item.label}
-                      </span>
-                    </label>
-                  ));
-                })()}
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowDocumentSmsDialog(false)}
-              disabled={sendDocumentSmsMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              isLoading={sendDocumentSmsMutation.isPending}
-              disabled={!studentInfoViewRecord?._id || selectedDocuments.length === 0}
-              onClick={() => {
-                if (studentInfoViewRecord?._id) {
-                  sendDocumentSmsMutation.mutate({
-                    admissionId: studentInfoViewRecord._id,
-                    selectedDocuments,
-                  });
-                }
-              }}
-            >
-              Send SMS
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {activeTab === 'abstract' && canAccessTab('abstract') ? (
         <div className="space-y-3">
@@ -2769,7 +2458,6 @@ const CompletedAdmissionsPage = () => {
                       <th className={`${tableThClass} text-right hidden lg:table-cell`}>Reference</th>
                     </>
                   ) : null}
-                  <th className={`${tableThClass} text-right`}>Action</th>
                 </tr>
               </thead>
               <tbody
@@ -2800,7 +2488,6 @@ const CompletedAdmissionsPage = () => {
                       tableTdClass={tableTdClass}
                       onOpenDetails={handleOpenStudentInfoDetails}
                       onEditReference={openReferenceEditor}
-                      onEditApplication={handleEditApplicationFromList}
                     />
                   ))
                 )}
