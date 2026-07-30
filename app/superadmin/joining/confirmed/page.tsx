@@ -24,12 +24,22 @@ const ConfirmedLeadsPage = () => {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [smsSession, setSmsSession] = useState<{
     leadId: string;
     admissionPublicLink: { url: string; expiresAt?: string; pathToken: string };
     joiningOnlineAdmissionMode: true;
   } | null>(null);
   const [isAddJoiningModalOpen, setIsAddJoiningModalOpen] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 400);
+    return () => window.clearTimeout(id);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const sendAdmissionSmsMutation = useMutation({
     mutationFn: (leadId: string) => joiningAPI.createPublicEditLink(leadId),
@@ -60,7 +70,10 @@ const ConfirmedLeadsPage = () => {
     },
   });
 
-  const queryKey = useMemo(() => ['confirmed-leads', page, limit, searchTerm], [page, limit, searchTerm]);
+  const queryKey = useMemo(
+    () => ['confirmed-leads', page, limit, debouncedSearch],
+    [page, limit, debouncedSearch]
+  );
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey,
@@ -68,13 +81,14 @@ const ConfirmedLeadsPage = () => {
       const response = await leadAPI.getAll({
         page,
         limit,
-        search: searchTerm || undefined,
+        search: debouncedSearch || undefined,
         leadStatus: 'Confirmed',
       });
       return response.data || response;
     },
     enabled: canAccessPage,
     placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
   });
 
   const headerContent = useMemo(

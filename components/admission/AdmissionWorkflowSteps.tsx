@@ -131,7 +131,7 @@ function isStep2Available(
   isAdmissionCancelled?: boolean
 ) {
   if (isAdmissionCancelled) return false;
-  // Steps stay open once a joining exists — admission number is minted on fee collect, not on approve.
+  // Steps stay open once a joining exists — admission number is minted on Submit Fee Request, not on collect.
   if (!joiningId) return false;
   return true;
 }

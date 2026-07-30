@@ -969,6 +969,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   // payment_transactions row via the request body so payment history shows which head was paid.
   const [selectedFeeHead, setSelectedFeeHead] = useState<FeeHeadSelection | null>(null);
   const [publicLinkDialog, setPublicLinkDialog] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [admissionNumberDialog, setAdmissionNumberDialog] = useState<string | null>(null);
   const [publicLinkBusy, setPublicLinkBusy] = useState(false);
   const [publicSubmitted, setPublicSubmitted] = useState(false);
 
@@ -2674,7 +2675,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     [transactionsResponse]
   );
 
-  /** Steps 2–4 are open for staff; admission number is generated on first fee collect. */
+  /** Steps 2–4 are open for staff; admission number is generated on Submit Fee Request. */
   const canProceedFromWizardStep1 = !isPublicEdit;
 
 
@@ -5396,7 +5397,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       );
       return;
     }
-    // Admission number is created on the server when the first payment amount is recorded.
+    // Admission number is created on Submit Fee Request with revised amounts.
     setIsBuilderPaymentDialogOpen(true);
     setSelectedCollectFeeHeadId('');
     setBuilderPaymentExtraHeads([]);
@@ -5594,12 +5595,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           })
         )
       );
-      const mintedAdmissionNumber = paymentResults
+      const recordedAdmissionNumber = paymentResults
         .map((res: any) => String(res?.data?.admissionNumber || res?.admissionNumber || '').trim())
         .find(Boolean);
       showToast.success(
-        mintedAdmissionNumber
-          ? `Fee payment recorded. Admission number: ${mintedAdmissionNumber}`
+        recordedAdmissionNumber
+          ? `Fee payment recorded for admission ${recordedAdmissionNumber}`
           : payableTargets.length === 1
             ? 'Fee payment transaction recorded'
             : `${payableTargets.length} fee payment transactions recorded`
@@ -5743,15 +5744,40 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         },
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (res: any) => {
       builderConcessionsDirtyRef.current = false;
       builderConcessionsHydratedForRef.current = null;
-      showToast.success('Fee request submitted for approval');
+      const mintedAdmissionNumber = String(
+        res?.data?.admissionNumber ||
+          res?.data?.data?.admissionNumber ||
+          res?.admissionNumber ||
+          ''
+      ).trim();
+      const hadAdmissionNumberBefore = Boolean(admissionNumberDisplay);
+      if (mintedAdmissionNumber) {
+        setMeta((prev) => ({
+          ...prev,
+          admissionNumber: mintedAdmissionNumber,
+        }));
+        setStatus((prev) => (prev === 'draft' || prev === 'pending_approval' ? 'approved' : prev));
+        if (!hadAdmissionNumberBefore) {
+          setAdmissionNumberDialog(mintedAdmissionNumber);
+        }
+      }
+      showToast.success(
+        mintedAdmissionNumber && !hadAdmissionNumberBefore
+          ? 'Fee request submitted — admission number generated'
+          : 'Fee request submitted for approval'
+      );
       await refetch();
+      await refetchAdmission();
       await refreshAccommodationQueries();
       await queryClient.invalidateQueries({ queryKey: ['fee-request-pending', joiningRecord?._id] });
-      if (admissionNumberDisplay) {
-        await queryClient.invalidateQueries({ queryKey: ['overall-concessions', admissionNumberDisplay] });
+      await queryClient.invalidateQueries({ queryKey: ['admission'] });
+      await queryClient.invalidateQueries({ queryKey: ['joining'] });
+      const concessionKey = mintedAdmissionNumber || admissionNumberDisplay;
+      if (concessionKey) {
+        await queryClient.invalidateQueries({ queryKey: ['overall-concessions', concessionKey] });
       }
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
@@ -6079,14 +6105,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           />
         ) : null}
         {panelStep === 1 ? (
-          <PrintableAdmitCard
-            courseId={admitCardPrintStudent.courseId}
-            student={admitCardPrintStudent}
-            printButtonLabel="Print acknowledgement card"
-            className={JOINING_ACTION_BTN_CLASS}
-            disabled={!hasManagedCourseAndBranch}
-            disabledTitle="Select college, course, and branch before printing the acknowledgement card"
-          />
+          admissionNumberDisplay ? (
+            <PrintableAdmitCard
+              courseId={admitCardPrintStudent.courseId}
+              student={admitCardPrintStudent}
+              printButtonLabel="Print acknowledgement card"
+              className={JOINING_ACTION_BTN_CLASS}
+              disabled={!hasManagedCourseAndBranch}
+              disabledTitle="Select college, course, and branch before printing the acknowledgement card"
+            />
+          ) : null
         ) : null}
         {panelStep === 1 && canSaveJoiningDraft ? (
           <Button
@@ -6253,7 +6281,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           <p className="font-semibold">Draft application</p>
           <p className="mt-1 text-xs leading-relaxed">
             All steps are open. Use <span className="font-medium">Save Draft</span> anytime. The admission
-            number is generated when you collect the first fee payment on Step 4.
+            number is generated when you submit a fee request with revised fee amounts on Step 4.
           </p>
         </div>
       ) : null}
@@ -7537,7 +7565,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 </div>
               </ApplicationInfoCard>
 
-              {/* Concessions / Revised Fees Builder — open for staff drafts; admission # on first collect */}
+              {/* Concessions / Revised Fees Builder — open for staff drafts; admission # on Submit Fee Request */}
               {!isPublicEdit && canWriteJoining && (status !== 'approved' || canEditAdmission) && (
                 <div className="mt-8 rounded-2xl border border-blue-200 bg-white p-6 shadow-lg dark:border-blue-900/40 dark:bg-slate-900/70">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
@@ -7554,13 +7582,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         !canWritePayments ||
                         !joiningRecord?._id ||
                         !hasManagedCourseAndBranch ||
+                        !admissionNumberDisplay ||
                         (builderPaymentRows.length === 0 && collectMasterFeeHeads.length === 0)
                       }
                       title={
                         !hasManagedCourseAndBranch
                           ? 'Complete course, college, branch, and quota on Step 1 first'
                           : !admissionNumberDisplay
-                            ? 'First payment assigns the admission number'
+                            ? 'Submit a fee request with revised amounts first to generate the admission number'
                             : undefined
                       }
                     >
@@ -7569,7 +7598,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </div>
                   {!admissionNumberDisplay ? (
                     <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
-                      No admission number yet. Entering a collect-payment amount will generate it automatically.
+                      No admission number yet. Enter revised fee amounts and click Submit Fee Request to generate it.
                     </div>
                   ) : null}
 
@@ -8785,6 +8814,71 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 Copy again
               </Button>
               <Button type="button" variant="primary" onClick={() => setPublicLinkDialog(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {admissionNumberDialog && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admission-number-dialog-title"
+          onClick={() => setAdmissionNumberDialog(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-emerald-200 bg-white p-6 shadow-xl dark:border-emerald-900/50 dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                <GraduationCap className="h-6 w-6" aria-hidden />
+              </div>
+              <div>
+                <h2
+                  id="admission-number-dialog-title"
+                  className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+                >
+                  Admission number generated
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
+                  Fee request submitted for approval.
+                </p>
+              </div>
+            </div>
+            <label className="mt-5 block text-xs font-medium uppercase tracking-wide text-slate-500">
+              Admission number
+            </label>
+            <div className="mt-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center font-mono text-2xl font-bold tracking-wide text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
+              {admissionNumberDialog}
+            </div>
+            {admitCardPrintStudent.courseId ? (
+              <div className="mt-4">
+                <PrintableAdmitCard
+                  courseId={admitCardPrintStudent.courseId}
+                  student={{ ...admitCardPrintStudent, admissionNumber: admissionNumberDialog }}
+                  printButtonLabel="Print acknowledgement card"
+                  className="w-full"
+                  size="md"
+                  disabled={!hasManagedCourseAndBranch}
+                  disabledTitle="Select college, course, and branch before printing the acknowledgement card"
+                />
+              </div>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(admissionNumberDialog).catch(() => {});
+                  showToast.success('Admission number copied');
+                }}
+              >
+                Copy number
+              </Button>
+              <Button type="button" variant="primary" onClick={() => setAdmissionNumberDialog(null)}>
                 Done
               </Button>
             </div>

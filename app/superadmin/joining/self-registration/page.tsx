@@ -31,7 +31,8 @@ const INR_CURRENCY_FORMAT = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 0,
 });
 
-function joiningRegistrationHasCollege(j: Joining): boolean {
+function joiningRegistrationHasCollege(j: Joining & { hasCollege?: boolean }): boolean {
+  if (typeof j.hasCollege === 'boolean') return j.hasCollege;
   const r = j.registrationFormData;
   if (!r || typeof r !== 'object') return false;
   const o = r as Record<string, unknown>;
