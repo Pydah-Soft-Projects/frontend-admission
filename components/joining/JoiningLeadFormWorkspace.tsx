@@ -81,6 +81,7 @@ import {
   quotaLabelsFromCatalog,
 } from '@/lib/studentQuotaCatalog';
 import {
+  normalizeCasteKey,
   parseCasteCatalogResponse,
   resolveCasteCategoryIdForValue,
   resolveCasteForValue,
@@ -1994,7 +1995,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     return allCastes.filter((c) => String(c.categoryId) === String(selectedCasteCategoryId));
   }, [allCastes, selectedCasteCategoryId]);
 
-  /** Caste is optional; only show a selected caste when explicitly chosen or legacy general ≠ category name. */
+  /** Caste is optional; only show when casteId is set (or legacy nested name ≠ category). */
   const selectedCasteSelectValue = useMemo(() => {
     if (formState.reservation.casteId) return String(formState.reservation.casteId);
     const general = String(formState.reservation.general || '').trim();
@@ -2002,9 +2003,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const category = casteCategories.find(
       (c) => String(c.id) === String(selectedCasteCategoryId || '')
     );
+    // general is category name under the new contract — not a nested caste selection.
     if (category && general.toLowerCase() === String(category.name || '').trim().toLowerCase()) {
       return '';
     }
+    // Legacy rows that still stored a nested caste name in reservation_general.
     return (
       resolveCasteForValue(general, castesForSelectedCategory, selectedCasteCategoryId)?.id ||
       general
@@ -3566,16 +3569,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const handleReservationCasteChange = (casteIdOrName: string) => {
     const trimmed = String(casteIdOrName || '').trim();
+    const category = casteCategories.find(
+      (c) => String(c.id) === String(selectedCasteCategoryId || formState.reservation.categoryId || '')
+    );
+    const categoryName = category?.name || '';
     if (!trimmed) {
-      const category = casteCategories.find(
-        (c) => String(c.id) === String(selectedCasteCategoryId || formState.reservation.categoryId || '')
-      );
       setFormState((prev) => ({
         ...prev,
         reservation: {
           ...prev.reservation,
           casteId: undefined,
-          general: category?.name || '',
+          // students.caste must stay the category name.
+          general: categoryName || prev.reservation.general || '',
         },
       }));
       return;
@@ -3585,15 +3590,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       (c) => c.name.toLowerCase() === trimmed.toLowerCase()
     );
     const caste = byId || byName || resolveCasteForValue(trimmed, allCastes, selectedCasteCategoryId);
-    const name = caste?.name || trimmed;
+    const casteName = caste?.name || trimmed;
+    // Never store a category-mirror caste (BC-A → BC-A) as caste_id.
+    const isCategoryMirror =
+      Boolean(categoryName) && normalizeCasteKey(casteName) === normalizeCasteKey(categoryName);
     setFormState((prev) => ({
       ...prev,
       reservation: {
         ...prev.reservation,
         categoryId: caste?.categoryId || prev.reservation.categoryId || selectedCasteCategoryId || undefined,
-        casteId: caste?.id,
-        general: name,
-        isEws: /ews/i.test(name) ? true : prev.reservation.isEws,
+        casteId: isCategoryMirror ? undefined : caste?.id,
+        // Keep reservation.general as category name for students.caste sync.
+        general: categoryName || prev.reservation.general || '',
+        isEws:
+          /ews/i.test(categoryName) || /ews/i.test(casteName) ? true : prev.reservation.isEws,
       },
     }));
   };
@@ -4102,11 +4112,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           formState.reservation.categoryId || selectedCasteCategoryId || undefined;
         const categoryName =
           casteCategories.find((c) => String(c.id) === String(categoryId || ''))?.name || '';
+        const nestedCaste = formState.reservation.casteId
+          ? allCastes.find((c) => String(c.id) === String(formState.reservation.casteId))
+          : null;
+        const isCategoryMirror =
+          Boolean(categoryName) &&
+          Boolean(nestedCaste?.name) &&
+          normalizeCasteKey(nestedCaste.name) === normalizeCasteKey(categoryName);
         return {
-          // Persist category name when caste is left blank (caste is optional).
-          general: formState.reservation.general || categoryName,
+          // students.caste contract: always category name, never nested caste name.
+          general: categoryName || formState.reservation.general || '',
           categoryId: categoryId || undefined,
-          casteId: formState.reservation.casteId || undefined,
+          casteId: isCategoryMirror ? undefined : formState.reservation.casteId || undefined,
           isEws: formState.reservation.isEws || false,
           other: formState.reservation.other || [],
         };
@@ -4175,6 +4192,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     reference1,
     selectedCasteCategoryId,
     casteCategories,
+    allCastes,
   ]);
 
   const stepOneNextBlockedHint = useMemo(() => {

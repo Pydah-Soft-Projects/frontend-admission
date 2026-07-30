@@ -471,13 +471,13 @@ export interface JoiningParentInfo {
 
 export interface JoiningReservation {
   /**
-   * Stored in reservation_general.
-   * Category name when caste is blank; caste name when a caste is selected.
+   * Category name from secondary `caste_categories` (stored in reservation_general).
+   * Maps to students.caste — never a nested caste name.
    */
   general: string;
-  /** Secondary `caste_categories.id` (required in the form). */
+  /** Secondary `caste_categories.id` → students.category_id. */
   categoryId?: string;
-  /** Secondary `castes.id` (optional in the form). */
+  /** Secondary `castes.id` → students.caste_id (optional nested caste only). */
   casteId?: string;
   isEws?: boolean;
   other?: string[];
