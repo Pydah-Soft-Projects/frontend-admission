@@ -8,54 +8,65 @@ import { Input } from '@/components/ui/Input';
 import { authAPI } from '@/lib/api';
 import { toast } from 'react-hot-toast';
 
-// Mobile Number Schema
-const mobileSchema = z.object({
-    mobileNumber: z
+const isEmailIdentifier = (value: string) => value.includes('@');
+
+const identifierSchema = z.object({
+    identifier: z
         .string()
-        .length(10, 'Mobile number must be exactly 10 digits')
-        .regex(/^\d+$/, 'Mobile number must contain only digits'),
+        .trim()
+        .min(1, 'Mobile number or email is required')
+        .refine(
+            (value) => {
+                if (isEmailIdentifier(value)) {
+                    return z.string().email().safeParse(value).success;
+                }
+                return /^\d{10}$/.test(value);
+            },
+            { message: 'Enter a valid 10-digit mobile number or email address' }
+        ),
 });
 
-type MobileForm = z.infer<typeof mobileSchema>;
+type IdentifierForm = z.infer<typeof identifierSchema>;
 
 interface ForgotPasswordModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-
-
-
-
-
 export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProps) {
     const [step, setStep] = useState<'input' | 'confirm' | 'success'>('input');
     const [isLoading, setIsLoading] = useState(false);
     const [userName, setUserName] = useState('');
-    const [mobile, setMobile] = useState('');
+    const [identifier, setIdentifier] = useState('');
+    const [userEmail, setUserEmail] = useState<string | null>(null);
+    const [userMobile, setUserMobile] = useState<string | null>(null);
 
-    // Form
     const {
         register,
         handleSubmit,
         formState: { errors },
         reset,
-    } = useForm<MobileForm>({ resolver: zodResolver(mobileSchema) });
+    } = useForm<IdentifierForm>({ resolver: zodResolver(identifierSchema) });
 
     const handleClose = () => {
         reset();
         setStep('input');
+        setUserName('');
+        setIdentifier('');
+        setUserEmail(null);
+        setUserMobile(null);
         onClose();
     };
 
-    // Step 1: Check User
-    const onSubmitInput = async (data: MobileForm) => {
+    const onSubmitInput = async (data: IdentifierForm) => {
         setIsLoading(true);
         try {
-            const response = await authAPI.checkUser(data.mobileNumber);
-            const { name } = response.data || response; // Handle Axios structure
-            setUserName(name || 'User');
-            setMobile(data.mobileNumber);
+            const response = await authAPI.checkUser(data.identifier);
+            const payload = response.data || response;
+            setUserName(payload.name || 'User');
+            setIdentifier(data.identifier);
+            setUserEmail(payload.email || null);
+            setUserMobile(payload.mobileNumber || null);
             setStep('confirm');
         } catch (error: any) {
             const msg = error.response?.data?.message || 'User not found';
@@ -65,12 +76,11 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
         }
     };
 
-    // Step 2: Confirm & Reset
     const onConfirmReset = async () => {
         setIsLoading(true);
         try {
-            await authAPI.resetPasswordDirectly(mobile);
-            toast.success('Password reset! Check your SMS.');
+            await authAPI.resetPasswordDirectly(identifier);
+            toast.success('Password reset! Check your SMS and email.');
             setStep('success');
         } catch (error: any) {
             const msg = error.response?.data?.message || 'Failed to reset password';
@@ -79,6 +89,8 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
             setIsLoading(false);
         }
     };
+
+    const accountLabel = [userMobile, userEmail].filter(Boolean).join(' / ') || identifier;
 
     return (
         <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -91,17 +103,16 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
                     </DialogTitle>
                 </DialogHeader>
 
-                {/* Step 1: Input Mobile */}
                 {step === 'input' && (
                     <form onSubmit={handleSubmit(onSubmitInput)} className="space-y-4">
                         <div className="text-sm text-gray-500">
-                            Enter your registered mobile number to find your account.
+                            Enter your registered mobile number or email to find your account.
                         </div>
                         <Input
-                            label="Mobile Number"
-                            placeholder="e.g. 9876543210"
-                            {...register('mobileNumber')}
-                            error={errors.mobileNumber?.message}
+                            label="Mobile Number or Email"
+                            placeholder="e.g. 9876543210 or you@example.com"
+                            {...register('identifier')}
+                            error={errors.identifier?.message}
                         />
                         <div className="flex justify-end gap-2">
                             <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
@@ -110,15 +121,14 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
                     </form>
                 )}
 
-                {/* Step 2: Confirm User */}
                 {step === 'confirm' && (
                     <div className="space-y-4">
                         <div className="rounded-md bg-blue-50 p-4 text-sm text-blue-700">
                             Hello, <strong>{userName}</strong>.
                             <br /><br />
-                            We found your account linked to <strong>{mobile}</strong>.
+                            We found your account linked to <strong>{accountLabel}</strong>.
                             <br />
-                            Do you want to reset your password and receive a new one via SMS?
+                            Do you want to reset your password and receive a new one via SMS and email?
                         </div>
                         <div className="flex justify-end gap-2">
                             <Button type="button" variant="outline" onClick={() => setStep('input')}>Back</Button>
@@ -127,16 +137,19 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
                     </div>
                 )}
 
-                {/* Step 3: Success */}
                 {step === 'success' && (
                     <div className="space-y-4">
                         <div className="rounded-md bg-green-50 p-4 text-green-700">
                             <p className="font-semibold">Success!</p>
                             <p className="text-sm mt-1">
-                                A new password has been sent to <strong>{mobile}</strong> via SMS.
+                                A new password has been sent
+                                {userMobile ? <> to <strong>{userMobile}</strong> via SMS</> : null}
+                                {userMobile && userEmail ? ' and' : ''}
+                                {userEmail ? <> to <strong>{userEmail}</strong> via email</> : null}
+                                {!userMobile && !userEmail ? ' to your registered contact channels' : ''}.
                             </p>
                             <p className="text-sm mt-2">
-                                Please check your messages and use the new password to login.
+                                Please check your messages and email, then use the new password to login.
                             </p>
                         </div>
                         <div className="flex justify-end">

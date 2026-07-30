@@ -15,7 +15,7 @@ export const JOINING_DOCUMENT_LABELS: Record<keyof JoiningDocuments, string> = {
   studyCertificate: 'Study Certificate',
   aadhaarCard: 'Aadhaar Card',
   photos: 'Photos (5)',
-  incomeCertificate: 'Income Certificate',
+  incomeCertificate: 'EWS Certificate',
   casteCertificate: 'Caste Certificate',
   cetRankCard: 'CET Rank Card',
   cetHallTicket: 'CET Hall Ticket',
@@ -75,7 +75,8 @@ export function buildImportantDocumentTabItems(
 
 export function buildOtherDocumentTabItems(
   documents: JoiningDocuments | undefined | null,
-  quota: string | undefined | null
+  quota: string | undefined | null,
+  isEws?: boolean | null
 ): DocumentChecklistTabItem[] {
   if (!documents) return [];
   const normalized = normalizeJoiningDocumentsFromApi(documents);
@@ -83,6 +84,7 @@ export function buildOtherDocumentTabItems(
     .filter(([key]) =>
       isJoiningDocumentChecklistKeyVisible(key, quota, {
         paperChecklist: true,
+        isEws,
       })
     )
     .map(([key, value]) => ({

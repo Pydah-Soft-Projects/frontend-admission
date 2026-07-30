@@ -235,8 +235,8 @@ export function AdmissionStepTwoPanel({
   );
 
   const otherDocumentItems = useMemo(
-    () => buildOtherDocumentTabItems(joining?.documents, quota),
-    [joining?.documents, quota]
+    () => buildOtherDocumentTabItems(joining?.documents, quota, joining?.reservation?.isEws === true),
+    [joining?.documents, quota, joining?.reservation?.isEws]
   );
 
   const hasDocumentChecklist =

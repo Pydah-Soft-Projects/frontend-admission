@@ -133,13 +133,13 @@ export const authAPI = {
       // Ignore errors during logout
     }
   },
-  resetPasswordDirectly: async (mobileNumber: string) => {
-    const response = await api.post('/auth/forgot-password/reset-direct', { mobileNumber });
+  resetPasswordDirectly: async (identifier: string) => {
+    const response = await api.post('/auth/forgot-password/reset-direct', { identifier });
     return response.data;
   },
-  checkUser: async (mobileNumber: string) => {
-    const response = await api.post('/auth/forgot-password/check-user', { mobileNumber });
-    return response.data; // Expect { success: true, data: { exists: true, name: "Name" } }
+  checkUser: async (identifier: string) => {
+    const response = await api.post('/auth/forgot-password/check-user', { identifier });
+    return response.data; // Expect { success: true, data: { exists: true, name: "Name", ... } }
   },
   getCurrentUser: async () => {
     const response = await api.get('/auth/me');

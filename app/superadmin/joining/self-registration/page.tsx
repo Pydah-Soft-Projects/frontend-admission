@@ -78,6 +78,12 @@ const formatQualificationMerit = (qualifications?: { merit?: boolean | null }) =
   return '—';
 };
 
+const formatQualificationAc = (qualifications?: { ac?: boolean | null }) => {
+  if (qualifications?.ac === true) return 'AC';
+  if (qualifications?.ac === false) return 'Non-AC';
+  return '—';
+};
+
 const resolveAdmissionReference1 = (record: Admission) => {
   const anyRecord = record as unknown as Record<string, unknown>;
   const fromList =
@@ -773,6 +779,12 @@ export default function SelfRegistrationPage() {
                       </p>
                     </div>
                     <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">AC / Non-AC</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {formatQualificationAc(step1Joining.qualifications)}
+                      </p>
+                    </div>
+                    <div>
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Father</p>
                       <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
                         {step1Joining.parents?.father?.name ||
@@ -898,6 +910,12 @@ export default function SelfRegistrationPage() {
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</p>
                       <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
                         {formatQualificationMerit(admissionViewRecord.qualifications)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">AC / Non-AC</p>
+                      <p className="mt-0.5 font-medium text-slate-900 dark:text-slate-100">
+                        {formatQualificationAc(admissionViewRecord.qualifications)}
                       </p>
                     </div>
                     <div>

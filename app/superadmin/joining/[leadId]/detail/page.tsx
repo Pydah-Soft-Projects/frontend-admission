@@ -262,7 +262,11 @@ export default function JoiningDetailPage() {
     joining?.registrationFormData as Record<string, unknown> | undefined,
     certificateGuidance
   );
-  const otherDocumentItems = buildOtherDocumentTabItems(joining?.documents, joining?.courseInfo?.quota);
+  const otherDocumentItems = buildOtherDocumentTabItems(
+    joining?.documents,
+    joining?.courseInfo?.quota,
+    joining?.reservation?.isEws === true
+  );
   const hasDocumentChecklist =
     importantDocumentItems.length > 0 || otherDocumentItems.length > 0;
 

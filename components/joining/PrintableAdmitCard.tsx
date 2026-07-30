@@ -63,7 +63,7 @@ const ACKNOWLEDGEMENT_DOCUMENT_LABELS: Record<AcknowledgementChecklistDocumentKe
   studyCertificate: 'Study Certificate',
   aadhaarCard: 'Aadhaar Card',
   photos: 'Photos (5)',
-  incomeCertificate: 'Income Certificate',
+  incomeCertificate: 'EWS Certificate',
   casteCertificate: 'Caste Certificate',
   cetRankCard: 'CET Rank Card',
   cetHallTicket: 'CET Hall Ticket',
@@ -73,14 +73,15 @@ const ACKNOWLEDGEMENT_DOCUMENT_LABELS: Record<AcknowledgementChecklistDocumentKe
 
 export function buildAdmitCardDocumentChecklist(
   documents: JoiningDocuments,
-  quota?: string | null
+  quota?: string | null,
+  isEws?: boolean | null
 ): AdmitCardDocumentChecklist {
   const normalized = normalizeJoiningDocumentsFromApi(documents);
   const labels: Record<string, string> = {};
   const statuses: Record<string, JoiningDocumentStatus | undefined> = {};
   (Object.entries(ACKNOWLEDGEMENT_DOCUMENT_LABELS) as [AcknowledgementChecklistDocumentKey, string][]).forEach(
     ([key, label]) => {
-      if (!isJoiningDocumentChecklistKeyVisible(key, quota)) return;
+      if (!isJoiningDocumentChecklistKeyVisible(key, quota, { isEws })) return;
       labels[key] = label;
       statuses[key] = normalized[key] || 'pending';
     }
@@ -954,7 +955,11 @@ export function buildAdmitCardStudentFromForm(input: {
   const documentChecklist =
     input.documentChecklist ??
     (input.formState.documents
-      ? buildAdmitCardDocumentChecklist(input.formState.documents, quota)
+      ? buildAdmitCardDocumentChecklist(
+          input.formState.documents,
+          quota,
+          input.formState.reservation?.isEws === true
+        )
       : undefined);
   const registrationFormData =
     input.registrationFormData ??

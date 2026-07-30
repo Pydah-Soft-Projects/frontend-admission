@@ -247,6 +247,13 @@ const formatQualificationMerit = (qualifications?: { merit?: boolean | null }) =
   return '—';
 };
 
+/** AC / Non-AC from joining/admission qualifications. */
+const formatQualificationAc = (qualifications?: { ac?: boolean | null }) => {
+  if (qualifications?.ac === true) return 'AC';
+  if (qualifications?.ac === false) return 'Non-AC';
+  return '—';
+};
+
 /** Reference 1 from admission list row (lead_data.reference1 or list API referenceName). */
 const resolveAdmissionReference1 = (record: Admission) => {
   const anyRecord = record as unknown as Record<string, unknown>;
@@ -344,6 +351,7 @@ const StudentInfoRow = memo(function StudentInfoRow({
     record.paymentSummary?.feeStatus === 'no_entry';
   const ewsLabel = formatReservationEws(record.reservation);
   const meritLabel = formatQualificationMerit(record.qualifications);
+  const acLabel = formatQualificationAc(record.qualifications);
   const docs = record.documents || {};
   const docValues = Object.values(docs);
   const receivedDocs = docValues.filter((v) => v === 'received').length;
@@ -426,6 +434,19 @@ const StudentInfoRow = memo(function StudentInfoRow({
           }`}
         >
           {meritLabel}
+        </span>
+      </td>
+      <td className={`${tableTdClass} hidden text-center lg:table-cell`}>
+        <span
+          className={`text-[10px] font-semibold sm:text-xs ${
+            acLabel === 'AC'
+              ? 'text-emerald-700 dark:text-emerald-400'
+              : acLabel === 'Non-AC'
+                ? 'text-slate-600 dark:text-slate-400'
+                : 'text-slate-500 dark:text-slate-500'
+          }`}
+        >
+          {acLabel}
         </span>
       </td>
       <td className={`${tableTdClass} hidden text-center xl:table-cell`}>
@@ -2450,6 +2471,7 @@ const CompletedAdmissionsPage = () => {
                   <th className={`${tableThClass} text-center hidden lg:table-cell`}>Caste</th>
                   <th className={`${tableThClass} text-center hidden lg:table-cell`}>EWS</th>
                   <th className={`${tableThClass} text-center hidden lg:table-cell`}>Merit</th>
+                  <th className={`${tableThClass} text-center hidden lg:table-cell`}>AC</th>
                   <th className={`${tableThClass} text-center hidden xl:table-cell`}>Certificates</th>
                   <th className={`${tableThClass} text-right`}>Paid</th>
                   {showSourceReferenceColumns ? (

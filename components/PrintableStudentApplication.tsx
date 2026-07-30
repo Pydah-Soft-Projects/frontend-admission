@@ -579,7 +579,7 @@ async function inferProgramLevelFromCourseId(courseId: string): Promise<string> 
 const OTHER_DOCUMENTS_PRINT: Array<{ id: keyof JoiningDocuments; label: string }> = [
   { id: 'aadhaarCard', label: 'Aadhar Card' },
   { id: 'photos', label: 'Photos(5)' },
-  { id: 'incomeCertificate', label: 'Income Certificate' },
+  { id: 'incomeCertificate', label: 'EWS Certificate' },
   { id: 'casteCertificate', label: 'Caste Certificate' },
   { id: 'cetRankCard', label: 'CET Rank Card' },
   { id: 'cetHallTicket', label: 'CET Hall Ticket' },
@@ -594,8 +594,9 @@ function appendOtherDocumentsToPrintSummary(
 ): void {
   const docs = normalizeJoiningDocumentsFromApi(application.documents);
   const quota = application.courseInfo?.quota;
+  const isEws = application.reservation?.isEws === true;
   for (const item of OTHER_DOCUMENTS_PRINT) {
-    if (!isJoiningDocumentChecklistKeyVisible(item.id, quota, { paperChecklist: true })) continue;
+    if (!isJoiningDocumentChecklistKeyVisible(item.id, quota, { paperChecklist: true, isEws })) continue;
     if (docs[item.id] === 'received') received.push(item.label);
     else notReceived.push(item.label);
   }
@@ -946,10 +947,13 @@ function getPrintApplicationHtml(props: {
       { id: 'joiningReport', label: 'Joining Report' },
       { id: 'aadhaarCard', label: 'Aadhar Card' },
       { id: 'photos', label: 'Photos(5)' },
-      { id: 'incomeCertificate', label: 'Income Certificate' },
+      { id: 'incomeCertificate', label: 'EWS Certificate' },
     ] satisfies DocListItem[]
   ).filter((d): d is DocListItem =>
-    isJoiningDocumentChecklistKeyVisible(d.id, course?.quota, { paperChecklist: false })
+    isJoiningDocumentChecklistKeyVisible(d.id, course?.quota, {
+      paperChecklist: false,
+      isEws: reservation?.isEws === true,
+    })
   );
 
   const receivedDocLabels = documentSummary
@@ -993,6 +997,7 @@ function getPrintApplicationHtml(props: {
   })();
 
   const displayMeritText = qualifications?.merit === true ? 'Yes' : 'No';
+  const displayAcText = qualifications?.ac === true ? 'AC' : qualifications?.ac === false ? 'Non-AC' : '—';
 
   const displayMediumText = (() => {
     const mediums = qualifications?.mediums ?? [];
@@ -2181,6 +2186,10 @@ function getPrintApplicationHtml(props: {
             <div class="qualified-exam-col">
               <span class="form-label-compact">Merit :</span>
               <span class="form-field-inline">${escapeHtml(displayMeritText || '—')}</span>
+            </div>
+            <div class="qualified-exam-col">
+              <span class="form-label-compact">AC / Non-AC :</span>
+              <span class="form-field-inline">${escapeHtml(displayAcText || '—')}</span>
             </div>
             <div class="qualified-exam-col">
               <span class="form-label-compact">Medium of Qualified Examination :</span>

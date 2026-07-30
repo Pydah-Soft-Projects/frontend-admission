@@ -27,12 +27,20 @@ export const DOCUMENT_KEYS_HIDDEN_FOR_MANAGEMENT_QUOTA = new Set<keyof JoiningDo
   'joiningReport',
 ]);
 
+/**
+ * Shown only when reservation EWS = Yes.
+ * Stored as `incomeCertificate` / `document_income_certificate` (legacy column name).
+ */
+export const DOCUMENT_KEYS_EWS_ONLY = new Set<keyof JoiningDocuments>(['incomeCertificate']);
+
 export type JoiningDocumentChecklistVisibilityOptions = {
   /**
    * When true (default), SSC / Inter / TC / study are omitted — they live on the
    * certificate checklist. Set false for read-only admission views and full application print.
    */
   paperChecklist?: boolean;
+  /** Reservation EWS Yes/No — controls EWS Certificate visibility in Other Documents. */
+  isEws?: boolean | null;
 };
 
 export function isJoiningDocumentChecklistKeyVisible(
@@ -47,6 +55,9 @@ export function isJoiningDocumentChecklistKeyVisible(
     DOCUMENT_KEYS_HIDDEN_FOR_MANAGEMENT_QUOTA.has(key) &&
     isManagementQuotaLabel(String(quota ?? '').trim())
   ) {
+    return false;
+  }
+  if (DOCUMENT_KEYS_EWS_ONLY.has(key) && options?.isEws !== true) {
     return false;
   }
   return true;

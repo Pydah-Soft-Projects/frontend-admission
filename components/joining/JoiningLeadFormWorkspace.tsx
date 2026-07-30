@@ -415,7 +415,7 @@ const documentLabels: Record<keyof JoiningDocuments, string> = {
   studyCertificate: 'Study Certificate',
   aadhaarCard: 'Aadhaar Card',
   photos: 'Photos (5)',
-  incomeCertificate: 'Income Certificate',
+  incomeCertificate: 'EWS Certificate',
   casteCertificate: 'Caste Certificate',
   cetRankCard: 'CET Rank Card',
   cetHallTicket: 'CET Hall Ticket',
@@ -679,6 +679,10 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       ug: joining?.qualifications?.ug || false,
       merit:
         joining?.qualifications?.merit === true
+          ? true
+          : false,
+      ac:
+        joining?.qualifications?.ac === true
           ? true
           : false,
       mediums: resolvedMediums,
@@ -2173,13 +2177,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     const labels: Record<string, string> = {};
     const documents: Record<string, JoiningDocumentStatus | undefined> = {};
     const quota = formState.courseInfo.quota;
+    const isEws = formState.reservation.isEws === true;
     (Object.entries(documentLabels) as [keyof JoiningDocuments, string][]).forEach(([key, label]) => {
-      if (!isJoiningDocumentChecklistKeyVisible(key, quota)) return;
+      if (!isJoiningDocumentChecklistKeyVisible(key, quota, { isEws })) return;
       labels[key] = label;
       documents[key] = formState.documents[key] || 'pending';
     });
     return { labels, documents };
-  }, [formState.documents, formState.courseInfo.quota]);
+  }, [formState.documents, formState.courseInfo.quota, formState.reservation.isEws]);
 
   const isManagementQuotaSelected = isManagementQuotaLabel(
     String(formState.courseInfo.quota ?? '').trim()
@@ -3783,6 +3788,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       qualifications: {
         ...prev.qualifications,
         merit: value,
+      },
+    }));
+  };
+
+  const setAcQualification = (value: boolean | null) => {
+    setFormState((prev) => ({
+      ...prev,
+      qualifications: {
+        ...prev.qualifications,
+        ac: value,
       },
     }));
   };
@@ -6960,6 +6975,33 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           </label>
                         </div>
                       </div>
+                      <div className="min-w-0">
+                        <label className={JOINING_FORM_LABEL_CLASS}>
+                          AC / Non-AC
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                            <input
+                              type="radio"
+                              name="joining-ac"
+                              checked={formState.qualifications.ac === true}
+                              onChange={() => setAcQualification(true)}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            AC
+                          </label>
+                          <label className={JOINING_FORM_CHOICE_PILL_CLASS}>
+                            <input
+                              type="radio"
+                              name="joining-ac"
+                              checked={formState.qualifications.ac === false}
+                              onChange={() => setAcQualification(false)}
+                              className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Non-AC
+                          </label>
+                        </div>
+                      </div>
                     </div>
                     );
                   })()}
@@ -7668,11 +7710,24 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                           <span className="font-medium">Management</span> quota.
                         </>
                       ) : null}
+                      {formState.reservation.isEws === true ? (
+                        <>
+                          {' '}
+                          <span className="font-medium">EWS Certificate</span> is required because EWS is Yes.
+                        </>
+                      ) : (
+                        <>
+                          {' '}
+                          EWS Certificate is hidden while EWS is No.
+                        </>
+                      )}
                     </p>
                     <div className={cn(JOINING_DOCUMENTS_GRID_CLASS)}>
                       {(Object.entries(documentLabels) as [keyof JoiningDocuments, string][])
                         .filter(([key]) =>
-                          isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota)
+                          isJoiningDocumentChecklistKeyVisible(key, formState.courseInfo.quota, {
+                            isEws: formState.reservation.isEws === true,
+                          })
                         )
                         .map(([key, label]) => (
                           <div

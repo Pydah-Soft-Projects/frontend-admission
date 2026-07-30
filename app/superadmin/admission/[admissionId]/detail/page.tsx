@@ -684,7 +684,11 @@ export default function AdmissionDetailPage() {
       studentPhotoSrc: pickStudentPortraitForAdmitCard(admission),
       collegeName: getCollegeNameForCourse(admission.courseInfo?.courseId) || undefined,
       documentChecklist: admission.documents
-        ? buildAdmitCardDocumentChecklist(admission.documents, admission.courseInfo?.quota)
+        ? buildAdmitCardDocumentChecklist(
+            admission.documents,
+            admission.courseInfo?.quota,
+            admission.reservation?.isEws === true
+          )
         : undefined,
       programLevel: programLevelTrimmed || undefined,
       registrationFormData: registrationSource,

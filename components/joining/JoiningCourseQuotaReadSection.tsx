@@ -97,6 +97,12 @@ export function JoiningCourseQuotaReadSection({
           qualifications?.merit === true ? 'Yes' : qualifications?.merit === false ? 'No' : '—'
         }
       />
+      <ReadCell
+        label="AC / Non-AC"
+        value={
+          qualifications?.ac === true ? 'AC' : qualifications?.ac === false ? 'Non-AC' : '—'
+        }
+      />
       {referenceSlot != null ? (
         <div className="min-w-0">{referenceSlot}</div>
       ) : (

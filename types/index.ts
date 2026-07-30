@@ -507,6 +507,8 @@ export interface JoiningQualifications {
   ug?: boolean;
   /** Yes = true, No = false, not answered = null (persisted as SQL NULL when supported). */
   merit?: boolean | null;
+  /** AC = true, Non-AC = false, not answered = null (persisted as SQL NULL when supported). */
+  ac?: boolean | null;
   mediums?: Array<'english' | 'telugu' | 'other'>;
   otherMediumLabel?: string;
 }
