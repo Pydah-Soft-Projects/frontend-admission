@@ -603,6 +603,7 @@ export default function AssignLeadsPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const stats = statsData?.data;
@@ -630,6 +631,7 @@ export default function AssignLeadsPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const statsBreakdowns = statsBreakdownsData?.data;
@@ -668,6 +670,7 @@ export default function AssignLeadsPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const { data: mandalGeoStatsRaw, isFetching: isMandalGeoFetching } = useQuery({
@@ -699,6 +702,7 @@ export default function AssignLeadsPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const { data: villageGeoStatsRaw, isFetching: isVillageGeoFetching } = useQuery({
@@ -732,6 +736,7 @@ export default function AssignLeadsPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const districtAssignmentRows = useMemo(
