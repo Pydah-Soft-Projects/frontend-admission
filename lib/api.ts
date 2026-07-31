@@ -1500,6 +1500,10 @@ export const feeRequestAPI = {
     joiningId: string;
     studentFeeDetails?: JoiningStudentFeeDetails;
     registrationFormData?: { transport_details?: unknown };
+    builderFeeHeadCheck?: {
+      heads: Array<{ id: string; name?: string; code?: string }>;
+      years: number[];
+    };
   }) => {
     const response = await api.post('/fee-requests/submit', data);
     return response.data;

@@ -96,6 +96,7 @@ import {
 } from '@/lib/feePortalBranchLabel';
 import {
   filterPersistableBuilderConcessionLines,
+  getMissingBuilderHeadYearAmounts,
   overallConcessionLinesToBuilderLines,
   resolveOverallConcessionLine,
   type OverallConcessionLine,
@@ -5111,6 +5112,24 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     );
   }, [studentFeeDetails.lines, feeStructureCatalogRows, feeHeadRows, builderAddedHeadIds, allUniqueFeeHeads, accommodationTransportDetails?.accommodationType]);
 
+  /**
+   * Admission number may only be minted when every selected Step 4 fee head
+   * (Tuition, Special Fee, accommodation head, etc.) has revised/concession
+   * amounts for all displayed years — not just one head filled.
+   */
+  const builderHeadsCompleteness = useMemo(
+    () =>
+      getMissingBuilderHeadYearAmounts({
+        heads: currentBuilderHeads,
+        years: feeYearColumns,
+        lines: studentFeeDetails.lines || [],
+      }),
+    [currentBuilderHeads, feeYearColumns, studentFeeDetails.lines]
+  );
+  const allBuilderHeadsHaveAmounts = builderHeadsCompleteness.complete;
+  const canSubmitFeeRequestForAdmission =
+    hasRevisedFeeLines && allBuilderHeadsHaveAmounts && currentBuilderHeads.length > 0;
+
   const builderPaymentRows = useMemo(() => {
     const normalizeHeadCode = (raw?: string | null) => {
       let code = String(raw || '').trim().toUpperCase();
@@ -5907,6 +5926,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       if (!joiningId) {
         throw new Error('Save the joining form first');
       }
+      if (!allBuilderHeadsHaveAmounts) {
+        const missingLabel = builderHeadsCompleteness.missing
+          .map((m) => `${m.headName} (Year ${m.year})`)
+          .join(', ');
+        throw new Error(
+          `Fill revised/concession amounts for all selected fee heads before generating the admission number: ${missingLabel}`
+        );
+      }
       return feeRequestAPI.submit({
         joiningId,
         studentFeeDetails: {
@@ -5915,6 +5942,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         },
         registrationFormData: {
           transport_details: transportDetails,
+        },
+        builderFeeHeadCheck: {
+          heads: currentBuilderHeads.map((h) => ({
+            id: h.id,
+            name: h.name,
+            code: h.code,
+          })),
+          years: feeYearColumns,
         },
       });
     },
@@ -5954,8 +5989,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         await queryClient.invalidateQueries({ queryKey: ['overall-concessions', concessionKey] });
       }
     },
-    onError: (error: { response?: { data?: { message?: string } } }) => {
-      showToast.error(error.response?.data?.message || 'Failed to submit fee request');
+    onError: (error: { message?: string; response?: { data?: { message?: string } } }) => {
+      showToast.error(
+        error.response?.data?.message ||
+          error.message ||
+          'Failed to submit fee request'
+      );
     },
   });
 
@@ -6455,7 +6494,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           <p className="font-semibold">Draft application</p>
           <p className="mt-1 text-xs leading-relaxed">
             All steps are open. Use <span className="font-medium">Save Draft</span> anytime. The admission
-            number is generated when you submit a fee request with revised fee amounts on Step 4.
+            number is generated when you submit a fee request with revised/concession amounts filled for all selected fee heads on Step 4.
           </p>
         </div>
       ) : null}
@@ -7889,7 +7928,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         !hasManagedCourseAndBranch
                           ? 'Complete course, college, branch, and quota on Step 1 first'
                           : !admissionNumberDisplay
-                            ? 'Submit a fee request with revised amounts first to generate the admission number'
+                            ? 'Fill amounts for all selected fee heads, then submit the fee request to generate the admission number'
                             : undefined
                       }
                     >
@@ -7898,7 +7937,26 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   </div>
                   {!admissionNumberDisplay ? (
                     <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
-                      No admission number yet. Enter revised fee amounts and click Submit Fee Request to generate it.
+                      No admission number yet. Enter revised/concession amounts for{' '}
+                      <span className="font-semibold">all selected fee heads</span> (every year
+                      column), then click Submit Fee Request to generate it.
+                    </div>
+                  ) : null}
+                  {!admissionNumberDisplay &&
+                  hasRevisedFeeLines &&
+                  !allBuilderHeadsHaveAmounts &&
+                  builderHeadsCompleteness.missing.length > 0 ? (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                      <span className="font-semibold">Incomplete fee heads —</span> fill amounts
+                      for:{' '}
+                      {builderHeadsCompleteness.missing
+                        .slice(0, 8)
+                        .map((m) => `${m.headName} Y${m.year}`)
+                        .join(', ')}
+                      {builderHeadsCompleteness.missing.length > 8
+                        ? ` (+${builderHeadsCompleteness.missing.length - 8} more)`
+                        : ''}
+                      .
                     </div>
                   ) : null}
 
@@ -7958,7 +8016,17 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         variant="primary"
                         size="sm"
                         onClick={() => submitFeeRequestMutation.mutate()}
-                        disabled={submitFeeRequestMutation.isPending || isBusy || !workflowJoiningId}
+                        disabled={
+                          submitFeeRequestMutation.isPending ||
+                          isBusy ||
+                          !workflowJoiningId ||
+                          !canSubmitFeeRequestForAdmission
+                        }
+                        title={
+                          !allBuilderHeadsHaveAmounts
+                            ? 'Fill revised/concession amounts for all selected fee heads and years first'
+                            : undefined
+                        }
                       >
                         {submitFeeRequestMutation.isPending
                           ? 'Submitting...'

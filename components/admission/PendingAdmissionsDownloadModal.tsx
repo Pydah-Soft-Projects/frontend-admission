@@ -1175,7 +1175,8 @@ export function PendingAdmissionsDownloadModal({
                 {minimumFeeConfigs.length} minimum fee amount
                 {minimumFeeConfigs.length === 1 ? '' : 's'} saved
               </span>
-              {' — '}list and Print PDF show only students still below the matching minimum.
+              {' — '}list, Print PDF, and Download XLSX show only students still below the matching
+              minimum, with Amount columns vs that minimum.
             </div>
           ) : null}
         </div>

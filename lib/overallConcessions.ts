@@ -143,6 +143,74 @@ export function isPersistableBuilderConcessionLine(line: {
   return filterPersistableBuilderConcessionLines([line]).length > 0;
 }
 
+const normalizeBuilderFeeHeadCode = (raw?: string | null) => {
+  let code = String(raw || '')
+    .trim()
+    .toUpperCase();
+  if (code === 'OTH02') code = 'OTH1';
+  return code;
+};
+
+function lineMatchesBuilderHead(
+  line: { feeHeadId?: string | null; feeHeadCode?: string | null },
+  head: { id?: string; code?: string }
+): boolean {
+  const headId = String(head?.id || '').trim();
+  const headCode = normalizeBuilderFeeHeadCode(head?.code);
+  const lineId = String(line?.feeHeadId || '').trim();
+  const lineCode = normalizeBuilderFeeHeadCode(line?.feeHeadCode);
+  if (headId && lineId && headId === lineId) return true;
+  if (headCode && lineCode && headCode === lineCode) return true;
+  return false;
+}
+
+export type BuilderHeadYearGap = {
+  headName: string;
+  headCode: string;
+  year: number;
+};
+
+/**
+ * Step 4: every selected builder fee head must have a revised/concession amount
+ * for every displayed year before Submit Fee Request can mint an admission number.
+ */
+export function getMissingBuilderHeadYearAmounts(params: {
+  heads?: Array<{ id: string; name?: string; code?: string }>;
+  years?: number[];
+  lines?: Array<{
+    feeHeadId?: string | null;
+    feeHeadCode?: string | null;
+    studentYear?: number | string | null;
+    concessionType?: string;
+    amount?: number | null | string;
+  }>;
+}): { complete: boolean; missing: BuilderHeadYearGap[] } {
+  const yearList = (params.years || [])
+    .map((y) => Number(y))
+    .filter((y) => Number.isFinite(y) && y > 0);
+  const headList = params.heads || [];
+  const lineList = params.lines || [];
+  const missing: BuilderHeadYearGap[] = [];
+
+  for (const head of headList) {
+    const headName = String(head.name || head.code || head.id || 'Fee head');
+    const headCode = normalizeBuilderFeeHeadCode(head.code);
+    for (const year of yearList) {
+      const found = lineList.some(
+        (line) =>
+          lineMatchesBuilderHead(line, head) &&
+          Number(line.studentYear) === year &&
+          isPersistableBuilderConcessionLine(line)
+      );
+      if (!found) {
+        missing.push({ headName, headCode, year });
+      }
+    }
+  }
+
+  return { complete: missing.length === 0, missing };
+}
+
 type FeeStructureCatalogRow = {
   _id?: string;
   feeHead?: string | null;
