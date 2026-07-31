@@ -6098,14 +6098,22 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
     setHeaderContent(
       <div className="flex w-full min-w-0 flex-col gap-1.5">
-        <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
+        <h1 className="truncate text-lg font-bold tracking-tight text-slate-950 dark:text-white sm:text-xl">
           Joining &amp; Admission Workspace
         </h1>
         <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:flex-nowrap">
-          <p className="min-w-0 truncate text-sm text-slate-500 dark:text-slate-400">
-            {lead.name}
-            {lead.enquiryNumber ? ` · Enquiry #${lead.enquiryNumber}` : ''}
-            {courseBranchSubtitle ? ` · ${courseBranchSubtitle}` : ''}
+          <p className="min-w-0 truncate text-sm font-semibold text-slate-800 dark:text-slate-100 sm:text-base">
+            <span className="text-slate-950 dark:text-white">{lead.name}</span>
+            {lead.enquiryNumber ? (
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {` · Enquiry #${lead.enquiryNumber}`}
+              </span>
+            ) : null}
+            {courseBranchSubtitle ? (
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {` · ${courseBranchSubtitle}`}
+              </span>
+            ) : null}
           </p>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <AdmissionWorkflowStepButtons
@@ -6119,7 +6127,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             <Button
               variant="outline"
               size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
+              className={cn(
+                JOINING_ACTION_BTN_CLASS,
+                '!bg-white !text-slate-900 !border-2 !border-slate-500 hover:!bg-slate-100 hover:!text-slate-900'
+              )}
               onClick={navigateBackToJoiningList}
             >
               Back to Joining Desk
@@ -6127,7 +6138,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             <Button
               variant="secondary"
               size="sm"
-              className={JOINING_ACTION_BTN_CLASS}
+              className={cn(
+                JOINING_ACTION_BTN_CLASS,
+                '!bg-slate-100 !text-slate-900 !border-2 !border-slate-400 hover:!bg-slate-200'
+              )}
               onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
             >
               View Lead

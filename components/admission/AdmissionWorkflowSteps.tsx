@@ -286,8 +286,11 @@ export function AdmissionWorkflowStepButtons({
             });
 
         const buttonClass = cn(
-          'shrink-0',
-          isActive && 'ring-2 ring-offset-1 ring-[#ea580c]/40 dark:ring-offset-slate-900'
+          // Solid fills + opaque borders — outline-only orange was hard to see on older displays.
+          'shrink-0 h-8 min-h-[32px] px-3 py-1 text-xs font-semibold border-2 shadow-sm',
+          isActive
+            ? '!bg-[#c2410c] !text-white !border-[#9a3412] hover:!bg-[#9a3412] hover:!text-white focus:!ring-[#fdba74]'
+            : '!bg-white !text-slate-900 !border-slate-500 hover:!bg-slate-100 hover:!text-slate-900 hover:!border-slate-700 focus:!ring-slate-300 dark:!bg-slate-800 dark:!text-slate-50 dark:!border-slate-400 dark:hover:!bg-slate-700'
         );
 
         if (href) {
