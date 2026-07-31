@@ -5113,9 +5113,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   }, [studentFeeDetails.lines, feeStructureCatalogRows, feeHeadRows, builderAddedHeadIds, allUniqueFeeHeads, accommodationTransportDetails?.accommodationType]);
 
   /**
-   * Admission number may only be minted when every selected Step 4 fee head
-   * (Tuition, Special Fee, accommodation head, etc.) has revised/concession
-   * amounts for all displayed years — not just one head filled.
+   * Admission number may only be minted when at least one selected Step 4 fee head
+   * has revised/concession amounts for all displayed years. Other heads may stay empty.
    */
   const builderHeadsCompleteness = useMemo(
     () =>
@@ -5931,7 +5930,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           .map((m) => `${m.headName} (Year ${m.year})`)
           .join(', ');
         throw new Error(
-          `Fill revised/concession amounts for all selected fee heads before generating the admission number: ${missingLabel}`
+          `Enter amounts for all years on at least one fee head before generating the admission number` +
+            (missingLabel ? ` — still missing: ${missingLabel}` : '')
         );
       }
       return feeRequestAPI.submit({
@@ -6494,7 +6494,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
           <p className="font-semibold">Draft application</p>
           <p className="mt-1 text-xs leading-relaxed">
             All steps are open. Use <span className="font-medium">Save Draft</span> anytime. The admission
-            number is generated when you submit a fee request with revised/concession amounts filled for all selected fee heads on Step 4.
+            number is generated when you submit a fee request with all years filled on at least one fee head on Step 4.
           </p>
         </div>
       ) : null}
@@ -7928,7 +7928,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         !hasManagedCourseAndBranch
                           ? 'Complete course, college, branch, and quota on Step 1 first'
                           : !admissionNumberDisplay
-                            ? 'Fill amounts for all selected fee heads, then submit the fee request to generate the admission number'
+                            ? 'Fill all years on at least one fee head, then submit the fee request to generate the admission number'
                             : undefined
                       }
                     >
@@ -7938,8 +7938,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   {!admissionNumberDisplay ? (
                     <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100">
                       No admission number yet. Enter revised/concession amounts for{' '}
-                      <span className="font-semibold">all selected fee heads</span> (every year
-                      column), then click Submit Fee Request to generate it.
+                      <span className="font-semibold">all years on at least one fee head</span>
+                      , then click Submit Fee Request to generate it.
                     </div>
                   ) : null}
                   {!admissionNumberDisplay &&
@@ -7947,8 +7947,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   !allBuilderHeadsHaveAmounts &&
                   builderHeadsCompleteness.missing.length > 0 ? (
                     <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                      <span className="font-semibold">Incomplete fee heads —</span> fill amounts
-                      for:{' '}
+                      <span className="font-semibold">Incomplete years —</span> fill all years on
+                      at least one fee head. Still missing:{' '}
                       {builderHeadsCompleteness.missing
                         .slice(0, 8)
                         .map((m) => `${m.headName} Y${m.year}`)
@@ -8024,7 +8024,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         }
                         title={
                           !allBuilderHeadsHaveAmounts
-                            ? 'Fill revised/concession amounts for all selected fee heads and years first'
+                            ? 'Fill all years on at least one fee head first'
                             : undefined
                         }
                       >
