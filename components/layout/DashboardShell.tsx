@@ -1041,7 +1041,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                     )}
                   >
                     {/* Left Section: Mobile Menu, Back Icon, Header Content */}
-                    <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
+                    <div
+                      className={cn(
+                        'flex gap-3 sm:gap-5 flex-1 min-w-0',
+                        isJoiningWorkspaceEdit || isAdmissionDetail ? 'items-start' : 'items-center'
+                      )}
+                    >
                       <button
                         type="button"
                         className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-200/60 bg-white p-2.5 text-slate-500 shadow-sm transition hover:border-[#fed7aa] hover:text-[#ea580c] hover:shadow-md focus:outline-none lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
@@ -1065,7 +1070,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                       )}
 
                       {/* Header Content (Lead Details, etc.) */}
-                      <div className="flex flex-col gap-1 text-left min-w-0 flex-1 ml-1">
+                      <div
+                        className={cn(
+                          'flex flex-col gap-1 text-left flex-1 ml-1',
+                          isJoiningWorkspaceEdit || isAdmissionDetail ? 'min-w-0 overflow-visible' : 'min-w-0'
+                        )}
+                      >
                         {headerContent ? (
                           headerContent
                         ) : (

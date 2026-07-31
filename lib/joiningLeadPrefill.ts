@@ -1,6 +1,9 @@
 import type { Joining } from '@/types';
 
 export type LeadLike = {
+  name?: string;
+  fatherName?: string;
+  motherName?: string;
   phone?: string;
   fatherPhone?: string;
   motherPhone?: string;
@@ -16,6 +19,8 @@ export type LeadLike = {
   studentGroup?: string;
   /** Excel / bulk upload batch (UUID) on the lead — mirrors into registration “batch” fields when empty. */
   uploadBatchId?: string;
+  courseInterested?: string;
+  quota?: string;
 };
 
 export type JoiningFormStateLike = {
@@ -49,7 +54,7 @@ export function normalizeLeadGenderForJoining(raw?: string): string {
 }
 
 /**
- * Fill empty student phone, parent phones, gender, and communication address from the lead snapshot.
+ * Fill empty student/parent fields and communication address from the CRM lead.
  * Full `address` string from the lead is placed in door/street when that line is empty.
  */
 export function mergeLeadIntoJoiningFormState<T extends JoiningFormStateLike>(
@@ -59,6 +64,9 @@ export function mergeLeadIntoJoiningFormState<T extends JoiningFormStateLike>(
   if (!lead) return state;
 
   const si = { ...state.studentInfo };
+  if (isBlank(si.name) && !isBlank(lead.name)) {
+    si.name = String(lead.name).trim();
+  }
   if (isBlank(si.phone) && !isBlank(lead.phone)) {
     const digits = toLeadPhoneDigits(lead.phone);
     if (digits) si.phone = digits;
@@ -69,6 +77,9 @@ export function mergeLeadIntoJoiningFormState<T extends JoiningFormStateLike>(
   }
 
   const father = { ...state.parents.father };
+  if (isBlank(father.name) && !isBlank(lead.fatherName)) {
+    father.name = String(lead.fatherName).trim();
+  }
   if (isBlank(father.phone) && !isBlank(lead.fatherPhone)) {
     const digits = toLeadPhoneDigits(lead.fatherPhone);
     if (digits) father.phone = digits;
@@ -82,6 +93,9 @@ export function mergeLeadIntoJoiningFormState<T extends JoiningFormStateLike>(
   }
 
   const mother = { ...state.parents.mother };
+  if (isBlank(mother.name) && !isBlank(lead.motherName)) {
+    mother.name = String(lead.motherName).trim();
+  }
   if (isBlank(mother.phone)) {
     const motherSource = !isBlank(lead.motherPhone) ? lead.motherPhone : lead.alternateMobile;
     if (!isBlank(motherSource)) {

@@ -407,6 +407,18 @@ export function AdmissionStepThreeBusHostelPanel({
     }
 
     setActiveTab(inferredTab);
+    // UI defaults to "None" visually — persist it so Step 3 can advance without re-clicking.
+    if (
+      inferredTab === 'none' &&
+      value.accommodationType !== 'none' &&
+      canEdit &&
+      onChange
+    ) {
+      onChange({
+        ...value,
+        accommodationType: 'none',
+      });
+    }
   }, [
     admissionNumber,
     canEdit,

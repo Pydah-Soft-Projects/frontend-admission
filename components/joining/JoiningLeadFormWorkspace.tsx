@@ -964,7 +964,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }));
     }
   }, [globalAccounts, builderPaymentForm.paymentMode]);
-  const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({});
+  const [transportDetails, setTransportDetails] = useState<JoiningTransportDetails>({
+    // Match Step 3 UI default ("None") so Next Step works without an extra click.
+    accommodationType: 'none',
+  });
   const [registrationFormId, setRegistrationFormId] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [openPaymentMode, setOpenPaymentMode] = useState<'cash' | 'online' | null>(null);
@@ -1027,6 +1030,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const isLoading = isPublicEdit ? publicBootstrapQuery.isLoading : adminJoiningQuery.isLoading;
   const refetch = isPublicEdit ? publicBootstrapQuery.refetch : adminJoiningQuery.refetch;
+  const joiningLoadError = !isPublicEdit
+    ? (adminJoiningQuery.error as { response?: { data?: { message?: string } }; message?: string } | null)
+    : null;
 
   const routeKey = useMemo(() => {
     if (isPublicEdit) {
@@ -2923,6 +2929,16 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       // Approved admissions are hydrated from the admission record, not stale joining draft.
       if (joining.status !== 'approved') {
         const base = buildInitialState(joining);
+        // Prefill course/quota text from CRM lead when the draft has not mapped managed course yet.
+        if (!String(base.courseInfo.course || '').trim() && lead?.courseInterested) {
+          base.courseInfo.course = String(lead.courseInterested).trim();
+        }
+        if (!String(base.courseInfo.quota || '').trim() && lead?.quota) {
+          const q = String(lead.quota).trim();
+          if (q && q.toLowerCase() !== 'not applicable') {
+            base.courseInfo.quota = q;
+          }
+        }
         setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
         setReference1(resolveJoiningReference1(null, joining, lead as LeadLike));
       }
@@ -6090,23 +6106,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       }
     }
 
-    if (!lead) {
-      return () => clearHeaderContent();
-    }
-
     const workflowAdmissionId = admissionRecord?._id;
+    const headerName =
+      String(lead?.name || formState.studentInfo?.name || joiningRecord?.studentName || '').trim() ||
+      'Application';
+    const headerEnquiry = String(lead?.enquiryNumber || '').trim();
+    const headerLeadId = String(lead?._id || lead?.id || joiningRecord?.leadId || effectiveAdminLeadId || '').trim();
 
+    // Always mount Step 1–4 + actions — do not wait on `lead` (Confirmed Apply can load joining first).
     setHeaderContent(
       <div className="flex w-full min-w-0 flex-col gap-1.5">
         <h1 className="truncate text-lg font-bold tracking-tight text-slate-950 dark:text-white sm:text-xl">
           Joining &amp; Admission Workspace
         </h1>
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:flex-nowrap">
-          <p className="min-w-0 truncate text-sm font-semibold text-slate-800 dark:text-slate-100 sm:text-base">
-            <span className="text-slate-950 dark:text-white">{lead.name}</span>
-            {lead.enquiryNumber ? (
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100 sm:text-base">
+            <span className="text-slate-950 dark:text-white">{headerName}</span>
+            {headerEnquiry ? (
               <span className="font-medium text-slate-700 dark:text-slate-200">
-                {` · Enquiry #${lead.enquiryNumber}`}
+                {` · Enquiry #${headerEnquiry}`}
               </span>
             ) : null}
             {courseBranchSubtitle ? (
@@ -6135,17 +6153,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             >
               Back to Joining Desk
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className={cn(
-                JOINING_ACTION_BTN_CLASS,
-                '!bg-slate-100 !text-slate-900 !border-2 !border-slate-400 hover:!bg-slate-200'
-              )}
-              onClick={() => router.push(`/superadmin/leads/${lead._id}`)}
-            >
-              View Lead
-            </Button>
+            {headerLeadId ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className={cn(
+                  JOINING_ACTION_BTN_CLASS,
+                  '!bg-slate-100 !text-slate-900 !border-2 !border-slate-400 hover:!bg-slate-200'
+                )}
+                onClick={() => router.push(`/superadmin/leads/${headerLeadId}`)}
+              >
+                View Lead
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -6155,6 +6175,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   }, [
     isPublicEdit,
     lead,
+    formState.studentInfo?.name,
+    joiningRecord?.studentName,
+    joiningRecord?.leadId,
+    effectiveAdminLeadId,
     router,
     navigateBackToJoiningList,
     setHeaderContent,
@@ -6500,6 +6524,27 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         isPublicEdit ? 'mx-auto max-w-2xl px-3 sm:px-4' : 'px-0'
       }`}
     >
+      {joiningLoadError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
+          <p className="font-semibold">Could not load joining / lead data</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            {joiningLoadError.response?.data?.message ||
+              joiningLoadError.message ||
+              'The draft could not be created or loaded. Try Apply again, or contact support if this continues.'}
+          </p>
+          <div className="mt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={JOINING_ACTION_BTN_CLASS}
+              onClick={() => void refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {isPublicEdit && usePublicWizard ? (
         <AdmissionWorkflowStepBanner step={applicationWizardStep} />
       ) : null}
