@@ -171,8 +171,9 @@ export type BuilderHeadYearGap = {
 };
 
 /**
- * Step 4: every selected builder fee head must have a revised/concession amount
- * for every displayed year before Submit Fee Request can mint an admission number.
+ * Step 4: at least one selected builder fee head must have a revised/concession
+ * amount for every displayed year before Submit Fee Request can mint an admission number.
+ * Other heads may remain empty.
  */
 export function getMissingBuilderHeadYearAmounts(params: {
   heads?: Array<{ id: string; name?: string; code?: string }>;
@@ -190,11 +191,21 @@ export function getMissingBuilderHeadYearAmounts(params: {
     .filter((y) => Number.isFinite(y) && y > 0);
   const headList = params.heads || [];
   const lineList = params.lines || [];
-  const missing: BuilderHeadYearGap[] = [];
+
+  if (headList.length === 0 || yearList.length === 0) {
+    return { complete: false, missing: [] };
+  }
+
+  let bestMissing: BuilderHeadYearGap[] = yearList.map((year) => ({
+    headName: String(headList[0].name || headList[0].code || headList[0].id || 'Fee head'),
+    headCode: normalizeBuilderFeeHeadCode(headList[0].code),
+    year,
+  }));
 
   for (const head of headList) {
     const headName = String(head.name || head.code || head.id || 'Fee head');
     const headCode = normalizeBuilderFeeHeadCode(head.code);
+    const missingForHead: BuilderHeadYearGap[] = [];
     for (const year of yearList) {
       const found = lineList.some(
         (line) =>
@@ -203,12 +214,18 @@ export function getMissingBuilderHeadYearAmounts(params: {
           isPersistableBuilderConcessionLine(line)
       );
       if (!found) {
-        missing.push({ headName, headCode, year });
+        missingForHead.push({ headName, headCode, year });
       }
+    }
+    if (missingForHead.length === 0) {
+      return { complete: true, missing: [] };
+    }
+    if (missingForHead.length < bestMissing.length) {
+      bestMissing = missingForHead;
     }
   }
 
-  return { complete: missing.length === 0, missing };
+  return { complete: false, missing: bestMissing };
 }
 
 type FeeStructureCatalogRow = {
