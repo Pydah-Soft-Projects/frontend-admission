@@ -599,6 +599,7 @@ type JoiningFormState = {
   address: Joining['address'];
   qualifications: Joining['qualifications'];
   educationHistory: JoiningEducationHistory[];
+  hasSiblings: boolean | null;
   siblings: JoiningSibling[];
   documents: JoiningDocuments;
 };
@@ -704,6 +705,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
         cetRank: item.cetRank || '',
       }))
       : [],
+    hasSiblings: joining?.hasSiblings ?? (joining?.siblings?.length ? true : null),
     siblings: joining?.siblings?.length
       ? joining.siblings.map((sibling) => ({
         name: sibling.name || '',
@@ -4163,7 +4165,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       address: formState.address,
       qualifications: formState.qualifications,
       educationHistory: formState.educationHistory,
-      siblings: formState.siblings,
+      hasSiblings: formState.hasSiblings,
+      siblings: formState.hasSiblings ? formState.siblings : [],
       documents: serializeJoiningDocumentsForApi(formState.documents),
       reference1: reference1.trim(),
       ...(isApprovedAdmission
@@ -7658,62 +7661,107 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               </ApplicationInfoCard>
 
               <ApplicationInfoCard
-                title="Siblings (optional)"
+                title="Siblings"
                 icon={<UserPlus className="h-4 w-4" aria-hidden />}
               >
-              <div className="mb-4 flex items-center justify-end">
-                <Button type="button" variant="secondary" onClick={addSibling}>
-                  Add Sibling
-                </Button>
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-200">
+                  Do you have any siblings studying here? <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="hasSiblings"
+                      checked={formState.hasSiblings === true}
+                      onChange={() => {
+                        setFormState((prev) => ({
+                           ...prev,
+                           hasSiblings: true,
+                           siblings: prev.siblings.length ? prev.siblings : [
+                             { name: '', relation: '', studyingStandard: '', institutionName: '' }
+                           ]
+                        }));
+                      }}
+                      className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-700 dark:text-slate-200">Yes</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="hasSiblings"
+                      checked={formState.hasSiblings === false}
+                      onChange={() => setFormState(prev => ({ ...prev, hasSiblings: false, siblings: [] }))}
+                      className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-700 dark:text-slate-200">No</span>
+                  </label>
+                </div>
               </div>
-              <div className="space-y-3">
-                {formState.siblings.length === 0 && (
-                  <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-                    No siblings recorded.
-                  </p>
-                )}
-                {formState.siblings.map((sibling, index) => (
-                  <div
-                    key={`sibling-${index}`}
-                    className="rounded-lg border border-gray-200 p-3 shadow-sm dark:border-slate-700"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">
-                        Sibling #{index + 1}
-                      </h3>
-                      <button className="text-sm text-red-500" onClick={() => removeSibling(index)}>
-                        Remove
-                      </button>
-                    </div>
-                    <div className={cn('mt-2', JOINING_FORM_GRID_CLASS)}>
-                      <Input compact
-                        label="Name"
-                        value={sibling.name || ''}
-                        onChange={(event) => updateSibling(index, 'name', event.target.value)}
-                      />
-                      <Input compact
-                        label="Relation"
-                        value={sibling.relation || ''}
-                        onChange={(event) => updateSibling(index, 'relation', event.target.value)}
-                      />
-                      <Input compact
-                        label="Studying Standard"
-                        value={sibling.studyingStandard || ''}
-                        onChange={(event) =>
-                          updateSibling(index, 'studyingStandard', event.target.value)
-                        }
-                      />
-                      <Input compact
-                        label="College / School Name"
-                        value={sibling.institutionName || ''}
-                        onChange={(event) =>
-                          updateSibling(index, 'institutionName', event.target.value)
-                        }
-                      />
-                    </div>
+              {formState.hasSiblings && (
+                <>
+                  <div className="mb-4 flex items-center justify-end">
+                    <Button type="button" variant="secondary" onClick={addSibling}>
+                      Add Sibling
+                    </Button>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-3">
+                    {formState.siblings.length === 0 && (
+                      <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                        No siblings recorded. Click &quot;Add Sibling&quot; to add one.
+                      </p>
+                    )}
+                    {formState.siblings.map((sibling, index) => (
+                      <div
+                        key={`sibling-${index}`}
+                        className="rounded-lg border border-gray-200 p-3 shadow-sm dark:border-slate-700"
+                      >
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">
+                            Sibling #{index + 1}
+                          </h3>
+                          <button className="text-sm text-red-500" onClick={() => removeSibling(index)}>
+                            Remove
+                          </button>
+                        </div>
+                        <div className={cn('mt-2', JOINING_FORM_GRID_CLASS)}>
+                          <Input compact
+                            label={<span>Name <span className="text-red-500">*</span></span> as any}
+                            value={sibling.name || ''}
+                            onChange={(event) => updateSibling(index, 'name', event.target.value)}
+                            required
+                          />
+                          <Input compact
+                            label={<span>Relation <span className="text-red-500">*</span></span> as any}
+                            value={sibling.relation || ''}
+                            onChange={(event) => updateSibling(index, 'relation', event.target.value)}
+                            required
+                          />
+                          <Input compact
+                            label={<span>Studying Standard <span className="text-red-500">*</span></span> as any}
+                            value={sibling.studyingStandard || ''}
+                            onChange={(event) =>
+                              updateSibling(index, 'studyingStandard', event.target.value)
+                            }
+                            required
+                          />
+                          <Input compact
+                            label={<span>College / School Name <span className="text-red-500">*</span></span> as any}
+                            value={sibling.institutionName || ''}
+                            onChange={(event) =>
+                              updateSibling(index, 'institutionName', event.target.value)
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
               </ApplicationInfoCard>            </JoiningStepOneShell>
 
             {renderWizardStepFooter(1)}

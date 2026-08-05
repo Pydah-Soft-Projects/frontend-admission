@@ -717,6 +717,7 @@ export interface Joining {
   };
   qualifications: JoiningQualifications;
   educationHistory: JoiningEducationHistory[];
+  hasSiblings?: boolean | null;
   siblings: JoiningSibling[];
   documents: JoiningDocuments;
   draftUpdatedAt?: string;
