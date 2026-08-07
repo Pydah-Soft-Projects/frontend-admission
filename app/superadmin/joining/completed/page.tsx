@@ -553,6 +553,7 @@ const CompletedAdmissionsPage = () => {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AdmissionStatusFilter>('active');
   const [feeEntryFilter, setFeeEntryFilter] = useState<FeeEntryFilter>('all');
+  const [meritFilter, setMeritFilter] = useState<string>('all');
   const [quotaFilter, setQuotaFilter] = useState<string>('');
   const [collegeFilter, setCollegeFilter] = useState<string>('');
   const [courseFilter, setCourseFilter] = useState<string>('');
@@ -698,6 +699,7 @@ const CompletedAdmissionsPage = () => {
     if (quotaFilter) count += 1;
     if (statusFilter !== 'active') count += 1;
     if (feeEntryFilter !== 'all') count += 1;
+    if (meritFilter !== 'all') count += 1;
     if (dateRange.from) count += 1;
     if (dateRange.to) count += 1;
     return count;
@@ -721,6 +723,7 @@ const CompletedAdmissionsPage = () => {
     setQuotaFilter('');
     setStatusFilter('active');
     setFeeEntryFilter('all');
+    setMeritFilter('all');
     setDateRange({ from: '', to: '' });
     setSearchTerm('');
     setPage(1);
@@ -1073,6 +1076,7 @@ const CompletedAdmissionsPage = () => {
       debouncedSearchTerm,
       statusFilter,
       feeEntryFilter,
+      meritFilter,
       quotaFilter,
       effectiveCollegeFilter,
       courseFilter,
@@ -1086,6 +1090,7 @@ const CompletedAdmissionsPage = () => {
       debouncedSearchTerm,
       statusFilter,
       feeEntryFilter,
+      meritFilter,
       quotaFilter,
       effectiveCollegeFilter,
       courseFilter,
@@ -1111,6 +1116,7 @@ const CompletedAdmissionsPage = () => {
         branchName: getBranchName(branchFilter) || undefined,
         source: sourceFilter || undefined,
         feeEntry: feeEntryFilter === 'all' ? undefined : feeEntryFilter,
+        merit: meritFilter === 'all' ? undefined : meritFilter,
         quota: quotaFilter || undefined,
         startDate: dateRange.from || undefined,
         endDate: statsThroughDate,
@@ -2090,7 +2096,7 @@ const CompletedAdmissionsPage = () => {
               </div>
 
               <div
-                className={`grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-9 ${
+                className={`grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-10 ${
                   showFilters ? 'grid' : 'hidden md:grid'
                 }`}
               >
@@ -2229,6 +2235,22 @@ const CompletedAdmissionsPage = () => {
                     {sourceOptions.map((src) => (
                       <option key={src} value={src}>{src}</option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Merit</label>
+                  <select
+                    value={meritFilter}
+                    onChange={(e) => {
+                      setMeritFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <option value="all">All</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
                   </select>
                 </div>
 
