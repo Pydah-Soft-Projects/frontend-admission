@@ -38,6 +38,7 @@ import {
   normalizeJoiningDateOfBirthInput,
   readMappedRegistrationField,
 } from '@/lib/joiningRegistrationFieldMap';
+import { isJoiningStudentPortraitUploadField } from '@/lib/joiningRegistrationPhotoFields';
 import {
   defaultJoiningDocuments,
   normalizeJoiningDocumentsFromApi,
@@ -2773,8 +2774,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     [transactionsResponse]
   );
 
-  /** Steps 2–4 are open for staff; admission number is generated on Submit Fee Request. */
-  const canProceedFromWizardStep1 = !isPublicEdit;
+  const isStudentPhotoRequired = Boolean(!isPublicEdit && joiningPermData?.requireStudentPhoto);
+  const studentPhotoField = registrationFormFieldsAllFilteredOut ? null : joiningRegistrationDisplayFieldsCoerced.find(isJoiningStudentPortraitUploadField);
+  const studentPhotoKey = studentPhotoField?.fieldName;
+  const hasStudentPhoto = studentPhotoKey ? Boolean(getRegistrationFieldValue(studentPhotoKey)) : false;
+
+  /** Steps 2-4 are open for staff; admission number is generated on Submit Fee Request. */
+  const canProceedFromWizardStep1 = !isPublicEdit && (!isStudentPhotoRequired || hasStudentPhoto);
 
 
   useEffect(() => {
@@ -4232,8 +4238,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const stepOneNextBlockedHint = useMemo(() => {
     if (isPublicEdit) return undefined;
+    if (isStudentPhotoRequired && !hasStudentPhoto) {
+      return 'Upload a student photo to continue. This is required by your user permissions.';
+    }
     return undefined;
-  }, [isPublicEdit]);
+  }, [isPublicEdit, isStudentPhotoRequired, hasStudentPhoto]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -7120,6 +7129,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   onChange={handleRegistrationFieldChange}
                   photoUploadContext={joiningPhotoUploadContext}
                   disabled={!canWriteJoining && !isAdmissionEditable}
+                  requireStudentPhoto={isStudentPhotoRequired}
                 />
               </ApplicationInfoCard>
 

@@ -4,7 +4,7 @@ export const JOINING_PERMISSION_KEY = 'joining';
 
 export type JoiningPermissionExtras = Pick<
   ModulePermission,
-  'editReference' | 'editAdmission' | 'approveFeeRequest'
+  'editReference' | 'editAdmission' | 'approveFeeRequest' | 'requireStudentPhoto'
 >;
 
 export type JoiningDeskPageKey =
@@ -87,6 +87,7 @@ export function defaultJoiningPermissionExtras(): JoiningPermissionExtras {
     editReference: false,
     editAdmission: false,
     approveFeeRequest: false,
+    requireStudentPhoto: false,
   };
 }
 
@@ -276,12 +277,14 @@ export function joiningExtrasFromStored(entry?: ModulePermission): JoiningPermis
       editReference: true,
       editAdmission: true,
       approveFeeRequest: true,
+      requireStudentPhoto: false,
     };
   }
   return {
     editReference: Boolean(entry.editReference),
     editAdmission: Boolean(entry.editAdmission),
     approveFeeRequest: Boolean(entry.approveFeeRequest),
+    requireStudentPhoto: Boolean(entry.requireStudentPhoto),
   };
 }
 
@@ -304,6 +307,7 @@ export function joiningPermissionForSave(value: ModulePermission): ModulePermiss
     editReference: Boolean(value.editReference),
     editAdmission: Boolean(value.editAdmission),
     approveFeeRequest: Boolean(value.approveFeeRequest),
+    requireStudentPhoto: Boolean(value.requireStudentPhoto),
     allowedColleges: collegeScope,
     ...pageFlags,
     ...tabFlags,

@@ -114,6 +114,20 @@ export function JoiningModulePermissionExtras({ moduleState, collegeOptions, onC
                 </span>
               </span>
             </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                checked={Boolean(moduleState.requireStudentPhoto)}
+                onChange={(e) => onChange({ requireStudentPhoto: e.target.checked })}
+              />
+              <span>
+                Require student photo
+                <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">
+                  Force this user to upload a student photo when saving admissions
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="mt-4 rounded-lg border border-blue-100/80 bg-white/80 p-3 text-[11px] text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200">

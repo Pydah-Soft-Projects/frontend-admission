@@ -143,6 +143,7 @@ const sanitizeSubAdminPermissions = (
                 editReference: joiningExtras.editReference,
                 editAdmission: joiningExtras.editAdmission,
                 approveFeeRequest: joiningExtras.approveFeeRequest,
+                requireStudentPhoto: joiningExtras.requireStudentPhoto,
               }
             : {}),
           ...(allowedColleges ? { allowedColleges } : {}),

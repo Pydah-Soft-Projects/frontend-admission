@@ -385,6 +385,8 @@ type Props = {
   omitIntakeYearSemesterFromGrid?: boolean;
   /** When true, student/parent portrait uploads render only via `JoiningApplicantPhotosSection`. */
   hideInlinePortraits?: boolean;
+  /** Whether the student photo is strictly required. */
+  requireStudentPhoto?: boolean;
 };
 
 type PortraitKeys = {
@@ -419,6 +421,7 @@ type JoiningApplicantPhotosSectionProps = {
     displayName: string;
   };
   disabled?: boolean;
+  requireStudentPhoto?: boolean;
 };
 
 /** Always-visible student / father / mother photo row for the joining edit form. */
@@ -428,6 +431,7 @@ export function JoiningApplicantPhotosSection({
   onChange,
   photoUploadContext,
   disabled = false,
+  requireStudentPhoto = false,
 }: JoiningApplicantPhotosSectionProps) {
   const keys = useMemo(() => resolvePortraitKeys(fields), [fields]);
   const photoBaseSlug = useMemo(
@@ -443,7 +447,15 @@ export function JoiningApplicantPhotosSection({
     <div className="rounded-lg border border-dashed border-blue-300 bg-gradient-to-br from-blue-50/90 to-indigo-50/60 p-3 shadow-sm dark:border-blue-600/70 dark:from-slate-900/80 dark:to-slate-900/40">
       <p className="text-xs font-semibold text-gray-900 dark:text-slate-100">Student &amp; parent photos</p>
       <p className="mt-0.5 text-[11px] text-gray-600 dark:text-slate-400">
-        Optional passport-style images. Use <strong>Take photo</strong> (camera) or <strong>Upload</strong> (gallery).
+        {requireStudentPhoto ? (
+          <>
+            <strong className="text-amber-600 dark:text-amber-500">Student photo is required.</strong> Father and mother photos are optional. Use <strong>Take photo</strong> (camera) or <strong>Upload</strong> (gallery).
+          </>
+        ) : (
+          <>
+            Optional passport-style images. Use <strong>Take photo</strong> (camera) or <strong>Upload</strong> (gallery).
+          </>
+        )}
       </p>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-stretch">
         <RegistrationPortraitSlot
@@ -456,6 +468,7 @@ export function JoiningApplicantPhotosSection({
           photoBaseSlug={photoBaseSlug}
           subjectDisplayName={subjectDisplayName}
           disabled={disabled}
+          required={requireStudentPhoto}
         />
         <RegistrationPortraitSlot
           label={keys.fatherLabel}
@@ -1273,9 +1286,19 @@ export function JoiningDynamicRegistrationFields({
                     Applicant & parent photos
                   </p>
                   <p className="mb-3 text-center text-[11px] text-gray-600 dark:text-slate-400 sm:text-left">
-                    Student, father, and mother photos are all optional. <strong>Take photo</strong> opens the live
-                    camera — choose <strong>Front</strong> or <strong>Rear</strong> for any photo. <strong>Upload</strong>{' '}
-                    picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
+                    {requireStudentPhoto ? (
+                      <>
+                        <strong className="text-amber-600 dark:text-amber-500">Student photo is required.</strong> Father and mother photos are optional. <strong>Take photo</strong> opens the live
+                        camera — choose <strong>Front</strong> or <strong>Rear</strong> for any photo. <strong>Upload</strong>{' '}
+                        picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
+                      </>
+                    ) : (
+                      <>
+                        Student, father, and mother photos are all optional. <strong>Take photo</strong> opens the live
+                        camera — choose <strong>Front</strong> or <strong>Rear</strong> for any photo. <strong>Upload</strong>{' '}
+                        picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
+                      </>
+                    )}
                   </p>
                   <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:justify-between md:gap-4">
                     <RegistrationPortraitSlot
@@ -1287,6 +1310,7 @@ export function JoiningDynamicRegistrationFields({
                       onChange={onChange}
                       photoBaseSlug={photoBaseSlug}
                       subjectDisplayName={subjectDisplayName}
+                      required={requireStudentPhoto}
                     />
                     <RegistrationPortraitSlot
                       label={fatherLabel}
