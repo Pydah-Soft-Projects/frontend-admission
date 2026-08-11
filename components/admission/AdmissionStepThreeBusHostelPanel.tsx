@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hostelAPI, transportAPI } from '@/lib/api';
 import {
@@ -463,6 +463,95 @@ export function AdmissionStepThreeBusHostelPanel({
   const routes = useMemo(() => unwrapList<TransportRouteSummary>(routesResponse), [routesResponse]);
   const selectedRouteId = value.routeId || '';
 
+  /** Flat list of every stage across all routes — used for the stage search. */
+  const allStages = useMemo(() => {
+    const result: Array<{
+      stageId: string;
+      stageName: string;
+      fare: number | null;
+      routeId: string;
+      routeName: string;
+      seatsFilled?: number;
+      studentRequestCount?: number;
+      employeeRequestCount?: number;
+      seatsAvailable?: number;
+      capacity?: number;
+      assignedBusNumbers?: string[];
+    }> = [];
+    for (const route of routes) {
+      for (const stage of route.stages ?? []) {
+        if (!stage._id || !stage.stageName) continue;
+        result.push({
+          stageId: stage._id,
+          stageName: stage.stageName,
+          fare: stage.fare ?? null,
+          routeId: route.routeId,
+          routeName: route.routeName,
+          seatsFilled: route.seatsFilled,
+          studentRequestCount: route.studentRequestCount,
+          employeeRequestCount: route.employeeRequestCount,
+          seatsAvailable: route.seatsAvailable,
+          capacity: route.capacity,
+          assignedBusNumbers: route.assignedBusNumbers,
+        });
+      }
+    }
+    return result;
+  }, [routes]);
+
+  const [stageQuery, setStageQuery] = useState('');
+  const [showStageSuggestions, setShowStageSuggestions] = useState(false);
+  const stageSearchRef = useRef<HTMLDivElement>(null);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (stageSearchRef.current && !stageSearchRef.current.contains(e.target as Node)) {
+        setShowStageSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filteredStages = useMemo(() => {
+    const q = stageQuery.trim().toLowerCase();
+    if (!q) return allStages.slice(0, 40);
+    return allStages
+      .filter(
+        (s) =>
+          s.stageName.toLowerCase().includes(q) ||
+          s.routeName.toLowerCase().includes(q)
+      )
+      .slice(0, 40);
+  }, [allStages, stageQuery]);
+
+  const handleStageSearchSelect = useCallback(
+    (item: typeof allStages[number]) => {
+      setStageQuery(item.stageName);
+      setShowStageSuggestions(false);
+      if (!canEdit || !onChange) return;
+      // Auto-fill both route and stage in one go
+      onChange({
+        ...value,
+        accommodationType: 'bus',
+        routeId: item.routeId,
+        routeName: item.routeName,
+        stageId: item.stageId,
+        stageName: item.stageName,
+        stageFare: item.fare,
+        // clear bus if route changed
+        ...(value.routeId !== item.routeId ? { busId: undefined, busNumber: undefined } : {}),
+      });
+    },
+    [canEdit, onChange, value]
+  );
+
+  // Sync stageQuery display text when value.stageName changes externally
+  useEffect(() => {
+    setStageQuery(value.stageName ?? '');
+  }, [value.stageName]);
+
   const {
     data: routeDetailResponse,
     isLoading: isLoadingRouteDetail,
@@ -823,7 +912,7 @@ export function AdmissionStepThreeBusHostelPanel({
   return (
     <section
       className={cn(
-        'scroll-mt-24 space-y-6 rounded-2xl border-2 border-amber-200/80 bg-gradient-to-b from-amber-50/40 to-white/95 p-6 shadow-lg shadow-amber-100/30 backdrop-blur dark:border-amber-900/50 dark:from-amber-950/20 dark:to-slate-900/70 dark:shadow-none',
+        'relative z-20 scroll-mt-24 space-y-6 rounded-2xl border-2 border-amber-200/80 bg-gradient-to-b from-amber-50/40 to-white/95 p-6 shadow-lg shadow-amber-100/30 backdrop-blur dark:border-amber-900/50 dark:from-amber-950/20 dark:to-slate-900/70 dark:shadow-none',
         className
       )}
     >
@@ -989,67 +1078,154 @@ export function AdmissionStepThreeBusHostelPanel({
 
           {!busSelectionLocked ? (
           <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Bus route
-              </label>
-              <select
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                value={selectedRouteId}
+          {/* ── Stage search – select a stage and route is auto-filled ── */}
+          <div ref={stageSearchRef} className="relative">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Search boarding stage
+            </label>
+            <div className="relative mt-2">
+              <input
+                type="text"
+                autoComplete="off"
+                placeholder={isLoadingRoutes ? 'Loading stages…' : 'Type a stage or route name to search…'}
                 disabled={!canEdit || isLoadingRoutes || busSelectionLocked}
-                onChange={(event) => handleRouteChange(event.target.value)}
-              >
-                <option value="">
-                  {isLoadingRoutes ? 'Loading routes…' : 'Select a bus route'}
-                </option>
-                {routes.map((route) => (
-                  <option key={route.routeId} value={route.routeId}>
-                    {route.routeName} ({route.routeId}){route.seatsAvailable != null ? ` — ${route.seatsAvailable} seats available` : ''}
-                  </option>
-                ))}
-              </select>
-              {routesError ? (
-                <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
-                  Could not load bus routes from the Transport database.
-                </p>
-              ) : null}
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Boarding stage
-              </label>
-              <select
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                value={value.stageId || ''}
-                disabled={!canEdit || !selectedRouteId || isLoadingRouteDetail || stages.length === 0 || busSelectionLocked || isBusFull}
-                onChange={(event) => handleStageChange(event.target.value)}
-              >
-                <option value="">
-                  {!selectedRouteId
-                    ? 'Select a route first'
-                    : isLoadingRouteDetail
-                      ? 'Loading stages…'
-                      : isBusFull
-                        ? 'No seats available on this route'
-                        : stages.length === 0
-                          ? 'No stages on this route'
-                          : 'Select boarding stage'}
-                </option>
-                {stages.map((stage) => (
-                  <option key={stage._id} value={stage._id}>
-                    {stage.stageName}
-                  </option>
-                ))}
-              </select>
-              {routeDetailError ? (
-                <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
-                  Could not load route stages from the Transport database.
-                </p>
-              ) : null}
-            </div>
+                value={stageQuery}
+                onChange={(e) => {
+                  setStageQuery(e.target.value);
+                  setShowStageSuggestions(true);
+                  // If the user clears the text, reset both route and stage
+                  if (!e.target.value.trim() && canEdit && onChange) {
+                    onChange({ ...value, routeId: undefined, routeName: undefined, stageId: undefined, stageName: undefined, stageFare: null, busId: undefined, busNumber: undefined });
+                  }
+                }}
+                onFocus={() => setShowStageSuggestions(true)}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-8 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-[#ea580c] focus:outline-none focus:ring-2 focus:ring-[#ea580c]/20 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-orange-500"
+              />
+              {stageQuery ? (
+                <button
+                  type="button"
+                  aria-label="Clear stage"
+                  onClick={() => {
+                    setStageQuery('');
+                    setShowStageSuggestions(false);
+                    if (canEdit && onChange) {
+                      onChange({ ...value, routeId: undefined, routeName: undefined, stageId: undefined, stageName: undefined, stageFare: null, busId: undefined, busNumber: undefined });
+                    }
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  ✕
+                </button>
+              ) : (
+                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+              )}
+              {/* Suggestions dropdown */}
+              {showStageSuggestions && canEdit && !busSelectionLocked && (
+                <div className="absolute left-0 top-full z-[9999] mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
+                {isLoadingRoutes ? (
+                  <p className="px-4 py-3 text-sm text-slate-500">Loading stages…</p>
+                ) : filteredStages.length === 0 ? (
+                  <p className="px-4 py-3 text-sm text-slate-500">
+                    {stageQuery.trim() ? `No stages matching "${stageQuery}"` : 'No stages available'}
+                  </p>
+                ) : (
+                  <ul className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredStages.map((item) => {
+                      const isSelected = item.stageId === value.stageId && item.routeId === value.routeId;
+                      const isFull = item.seatsAvailable != null && item.seatsAvailable <= 0;
+                      return (
+                        <li key={`${item.routeId}:${item.stageId}`}>
+                          <button
+                            type="button"
+                            disabled={isFull}
+                            onClick={() => handleStageSearchSelect(item)}
+                            className={cn(
+                              'w-full text-left px-4 py-2.5 flex items-start justify-between gap-3 transition-colors',
+                              isSelected
+                                ? 'bg-orange-50 dark:bg-orange-950/30'
+                                : isFull
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                            )}
+                          >
+                            <span className="flex flex-col gap-0.5 min-w-0">
+                              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                {item.stageName}
+                                {isSelected ? ' ✓' : ''}
+                              </span>
+                              {/* Row 1: routeId · routeName · bus */}
+                              <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                <span className="font-mono text-slate-700 dark:text-slate-300">{item.routeId}</span>
+                                {' · '}{item.routeName}
+                                {item.assignedBusNumbers && item.assignedBusNumbers.length > 0
+                                  ? ` · 🚌 ${item.assignedBusNumbers.join(', ')}`
+                                  : ''}
+                              </span>
+                              {/* Row 2: filled/capacity + student & employee breakdown */}
+                              <span className="flex items-center gap-2 mt-0.5">
+                                {item.seatsFilled != null && item.capacity != null ? (
+                                  <span className={cn(
+                                    'inline-flex items-center gap-0.5 text-[10px] font-bold',
+                                    isFull
+                                      ? 'text-rose-600 dark:text-rose-400'
+                                      : 'text-slate-700 dark:text-slate-300'
+                                  )}>
+                                    {item.seatsFilled}/{item.capacity} filled
+                                  </span>
+                                ) : null}
+                                {item.studentRequestCount ? (
+                                  <span className="text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                                    🎓 {item.studentRequestCount}
+                                  </span>
+                                ) : null}
+                                {item.employeeRequestCount ? (
+                                  <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                                    👔 {item.employeeRequestCount}
+                                  </span>
+                                ) : null}
+                                {isFull ? (
+                                  <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">● Full</span>
+                                ) : null}
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-xs font-semibold">
+                              {item.fare != null ? (
+                                <span className="text-emerald-700 dark:text-emerald-400">
+                                  {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(item.fare)}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
+          </div>
+
+          {/* Auto-filled route context — shown after a stage is selected */}
+          {selectedRouteId && value.stageName ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 border border-orange-200 px-3 py-1 text-xs font-semibold text-orange-800 dark:bg-orange-950/30 dark:border-orange-800/50 dark:text-orange-300">
+                <span>🚌</span>
+                Route: {value.routeName || selectedRouteId}
+              </span>
+              {value.stageFare != null ? (
+                <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-800/50 dark:text-emerald-300">
+                  Fare: {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(value.stageFare)}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {routesError ? (
+            <p className="text-sm text-rose-600 dark:text-rose-300">
+              Could not load stages from the Transport database.
+            </p>
+          ) : null}
 
           {isBusFull ? (
             <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-rose-900 shadow-sm dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
@@ -1057,11 +1233,11 @@ export function AdmissionStepThreeBusHostelPanel({
                 <span className="text-xl">🛑</span>
                 <div>
                   <h4 className="font-bold text-sm text-rose-900 dark:text-rose-100">
-                    No Available Bus Seats (0 / {selectedBusCapacity} Seats Remaining)
+                    Bus Full — {selectedBusSeatsFilled} Active Requests ({selectedBusCapacity} seat capacity)
                   </h4>
                   <p className="mt-1 text-xs text-rose-800 dark:text-rose-200">
-                    This bus route ({routeDetail?.routeName}{selectedBusObj?.busNumber ? ` · Bus ${selectedBusObj.busNumber}` : ''}) currently has <strong>0 available seats</strong> ({selectedBusSeatsFilled} of {selectedBusCapacity} seats filled).
-                    Request raising is stopped from here for this route due to zero availability. Please select a different bus route with available seats.
+                    This bus route ({routeDetail?.routeName}{selectedBusObj?.busNumber ? ` · Bus ${selectedBusObj.busNumber}` : ''}) has <strong>{selectedBusSeatsFilled} active requests</strong> (pending &amp; approved) against a capacity of {selectedBusCapacity} seats — no free seats remain.
+                    New requests cannot be raised for this route. Please select a different bus route.
                   </p>
                 </div>
               </div>
@@ -1114,7 +1290,7 @@ export function AdmissionStepThreeBusHostelPanel({
 
               <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Bus seat availability
+                  Active requests on this bus
                 </p>
                 <p className={cn(
                   "mt-1 text-lg font-bold",
@@ -1124,10 +1300,10 @@ export function AdmissionStepThreeBusHostelPanel({
                       ? "text-amber-600 dark:text-amber-400"
                       : "text-emerald-700 dark:text-emerald-300"
                 )}>
-                  {selectedBusSeatsAvailable} Seats Available
+                  {selectedBusSeatsFilled} Active Requests
                 </p>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  {selectedBusSeatsFilled} / {selectedBusCapacity} filled from Transport App
+                  {selectedBusSeatsAvailable} of {selectedBusCapacity} seats free (approved only)
                 </p>
               </div>
 

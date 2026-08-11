@@ -668,7 +668,12 @@ export interface TransportRouteSummary {
   stageCount?: number;
   capacity?: number;
   seatsFilled?: number;
+  studentRequestCount?: number;
+  employeeRequestCount?: number;
   seatsAvailable?: number;
+  assignedBusNumbers?: string[];
+  /** Stages embedded in the list response — used for the flat stage search in Step 3. */
+  stages?: TransportRouteStage[];
 }
 
 export interface TransportRouteStage {
