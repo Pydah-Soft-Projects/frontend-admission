@@ -380,6 +380,8 @@ type Props = {
     showAadhaar: boolean;
     onToggleShowAadhaar: () => void;
     contactFieldsDisabled?: boolean;
+    isScholarApplicable?: boolean;
+    onIsScholarApplicableChange?: (value: boolean | undefined) => void;
   };
   /** Current academic year / semester are shown beside Course & Quota on the joining page. */
   omitIntakeYearSemesterFromGrid?: boolean;
@@ -630,6 +632,7 @@ export function JoiningDynamicRegistrationFields({
       | { kind: 'field'; field: RegistrationFormField }
       | { kind: 'student-mobile' }
       | { kind: 'student-aadhaar' }
+      | { kind: 'student-scholar-applicable' }
       | { kind: 'apaar'; field: RegistrationFormField };
 
     const seq: SeqItem[] = fieldsBeforePreviousCollegeContactRow.map((field) => ({
@@ -640,6 +643,7 @@ export function JoiningDynamicRegistrationFields({
     if (studentContactFields) {
       seq.push({ kind: 'student-mobile' });
       seq.push({ kind: 'student-aadhaar' });
+      seq.push({ kind: 'student-scholar-applicable' });
     }
 
     if (!contactBesidePreviousCollege) {
@@ -985,12 +989,42 @@ export function JoiningDynamicRegistrationFields({
             );
           }
 
+          if (item.kind === 'student-scholar-applicable' && studentContactFields) {
+            return (
+              <div key="joining-student-scholar-applicable" className="min-w-0">
+                <label className={JOINING_FORM_LABEL_CLASS}>
+                  Scholar Applicable <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={studentContactFields.isScholarApplicable === undefined ? '' : String(studentContactFields.isScholarApplicable)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    studentContactFields.onIsScholarApplicableChange?.(
+                      val === 'true' ? true : val === 'false' ? false : undefined
+                    );
+                  }}
+                  disabled={studentContactFields.contactFieldsDisabled}
+                  className={JOINING_FORM_CONTROL_CLASS}
+                  required
+                >
+                  <option value="">Select</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+            );
+          }
+
           if (item.kind === 'apaar') {
             return (
               <div key={item.field._id || item.field.fieldName} className="min-w-0">
                 {renderApaarFieldControl(item.field)}
               </div>
             );
+          }
+
+          if (item.kind !== 'field') {
+            return null;
           }
 
           const field = item.field;

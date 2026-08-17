@@ -626,6 +626,7 @@ const buildInitialState = (joining?: Joining): JoiningFormState => {
       preferredMobileNumber: joining?.studentInfo?.preferredMobileNumber || '',
       gender: joining?.studentInfo?.gender || '',
       dateOfBirth: normalizeJoiningDateOfBirthInput(joining?.studentInfo?.dateOfBirth),
+      isScholarApplicable: joining?.studentInfo?.isScholarApplicable,
     },
     parents: {
       father: {
@@ -2780,7 +2781,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const hasStudentPhoto = studentPhotoKey ? Boolean(getRegistrationFieldValue(studentPhotoKey)) : false;
 
   /** Steps 2-4 are open for staff; admission number is generated on Submit Fee Request. */
-  const canProceedFromWizardStep1 = !isPublicEdit && (!isStudentPhotoRequired || hasStudentPhoto);
+  const canProceedFromWizardStep1 =
+    !isPublicEdit &&
+    (!isStudentPhotoRequired || hasStudentPhoto) &&
+    formState.studentInfo.isScholarApplicable !== undefined;
 
 
   useEffect(() => {
@@ -3555,7 +3559,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     }
   };
 
-  const handleStudentInfoChange = (field: keyof JoiningFormState['studentInfo'], value: string) => {
+  const handleStudentInfoChange = (field: keyof JoiningFormState['studentInfo'], value: any) => {
     setFormState((prev) => ({
       ...prev,
       studentInfo: {
@@ -4241,12 +4245,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     if (isStudentPhotoRequired && !hasStudentPhoto) {
       return 'Upload a student photo to continue. This is required by your user permissions.';
     }
+    if (formState.studentInfo.isScholarApplicable === undefined) {
+      return 'Select whether Scholar is Applicable to continue.';
+    }
     return undefined;
-  }, [isPublicEdit, isStudentPhotoRequired, hasStudentPhoto]);
+  }, [isPublicEdit, isStudentPhotoRequired, hasStudentPhoto, formState.studentInfo.isScholarApplicable]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
       if (!leadId) return null;
+      if (formState.studentInfo.isScholarApplicable === undefined) {
+        throw new Error('Select whether Scholar is Applicable.');
+      }
       const payload = {
         ...payloadForSave,
         ...(joiningRecord?._id ? { _id: joiningRecord._id } : {}),
@@ -5866,6 +5876,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       );
       return;
     }
+    if (formState.studentInfo.isScholarApplicable === undefined) {
+      showToast.error('Select whether Scholar is Applicable before updating the admission record.');
+      return;
+    }
 
     const canSyncExternalSystems =
       status === 'approved' &&
@@ -7183,6 +7197,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                         showAadhaar: showStudentAadhaar,
                         onToggleShowAadhaar: () => setShowStudentAadhaar((prev) => !prev),
                         contactFieldsDisabled: !canWriteJoining && !isAdmissionEditable,
+                        isScholarApplicable: formState.studentInfo.isScholarApplicable,
+                        onIsScholarApplicableChange: (value) =>
+                          handleStudentInfoChange('isScholarApplicable', value),
                       }}
                       omitIntakeYearSemesterFromGrid
                       hideInlinePortraits
@@ -7256,7 +7273,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
               ) : null}
               {!regHasDyn &&
               (!hideJoiningStudentName || !hideJoiningStudentGender || !hideJoiningDateOfBirth) ? (
-                <div className="mt-2 grid gap-3 md:grid-cols-3">
+                <div className="mt-2 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                   {!hideJoiningStudentName ? (
                     <div>
                       <Input compact
@@ -7295,6 +7312,28 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                       </select>
                     </div>
                   ) : null}
+                  <div>
+                    <label className={JOINING_FORM_LABEL_CLASS}>
+                      Scholar Applicable <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formState.studentInfo.isScholarApplicable === undefined ? '' : String(formState.studentInfo.isScholarApplicable)}
+                      onChange={(event) => {
+                        const val = event.target.value;
+                        handleStudentInfoChange(
+                          'isScholarApplicable',
+                          val === 'true' ? true : val === 'false' ? false : undefined
+                        );
+                      }}
+                      className={JOINING_FORM_CONTROL_CLASS}
+                      disabled={!canWriteJoining && !isAdmissionEditable}
+                      required
+                    >
+                      <option value="">Select</option>
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </div>
                 </div>
               ) : null}
               </ApplicationInfoCard>

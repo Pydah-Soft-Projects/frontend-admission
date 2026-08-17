@@ -459,6 +459,7 @@ export interface JoiningStudentInfo {
   preferredMobileNumber?: string;
   gender?: string;
   dateOfBirth?: string;
+  isScholarApplicable?: boolean;
 }
 
 export interface JoiningParentInfo {
