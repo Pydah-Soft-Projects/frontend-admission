@@ -1070,6 +1070,15 @@ export default function AdmissionDetailPage() {
                   value={transportDetails}
                   disabled
                   courseName={courseName}
+                  studentYearOfStudy={feeStudentYearOfStudy}
+                  joiningAcademicYear={feeConfigurationBatch}
+                  managedCourseId={
+                    admission.courseInfo?.courseId
+                      ? Number(admission.courseInfo.courseId)
+                      : null
+                  }
+                  admissionNumber={admission.admissionNumber}
+                  joiningId={admission.joiningId}
                   embedded
                   className="scroll-mt-0 space-y-4 rounded-none border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
                 />

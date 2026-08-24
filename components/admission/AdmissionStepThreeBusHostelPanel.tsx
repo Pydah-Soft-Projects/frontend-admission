@@ -369,6 +369,7 @@ export function AdmissionStepThreeBusHostelPanel({
 
   const hostelStudentDetails = hostelStudentResponse?.data || null;
   const isActiveHostelRequest = Boolean(hostelStudentDetails?.isAssigned);
+  const hostelPrintStudentId = String(hostelStudentDetails?.studentUserId || '').trim();
 
   useEffect(() => {
     onExistingHostelRequestChange?.(isActiveHostelRequest);
@@ -1388,14 +1389,20 @@ export function AdmissionStepThreeBusHostelPanel({
                 <div className="col-span-2 sm:col-span-4 mt-3 flex justify-end">
                   <PrintActionButton
                     label="Print Hostel Admit"
-                    disabled={!hostelStudentDetails || !(hostelStudentDetails as { _id?: string })._id}
+                    disabled={!hostelPrintStudentId}
                     onClick={() => {
-                      const studentId = (hostelStudentDetails as { _id?: string } | null)?._id;
-                      if (!studentId) return;
+                      if (!hostelPrintStudentId) return;
                       void handleExternalPrint(
                         'hostel',
                         { template: 'hostel-admit' },
-                        { template: 'hostel-admit', data: { studentId } },
+                        {
+                          template: 'hostel-admit',
+                          data: {
+                            studentId: hostelPrintStudentId,
+                            admissionNumber:
+                              hostelStudentDetails?.admissionNumber || admissionNumber || '',
+                          },
+                        },
                         'Hostel Admit Card'
                       );
                     }}
