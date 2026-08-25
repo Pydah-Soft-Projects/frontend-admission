@@ -155,12 +155,19 @@ function lineMatchesBuilderHead(
   line: { feeHeadId?: string | null; feeHeadCode?: string | null },
   head: { id?: string; code?: string }
 ): boolean {
-  const headId = String(head?.id || '').trim();
   const headCode = normalizeBuilderFeeHeadCode(head?.code);
-  const lineId = String(line?.feeHeadId || '').trim();
   const lineCode = normalizeBuilderFeeHeadCode(line?.feeHeadCode);
-  if (headId && lineId && headId === lineId) return true;
-  if (headCode && lineCode && headCode === lineCode) return true;
+
+  if (headCode && lineCode) {
+    return headCode === lineCode;
+  }
+
+  const headId = String(head?.id || '').trim();
+  const lineId = String(line?.feeHeadId || '').trim();
+
+  if (headId && lineId) {
+    return headId === lineId;
+  }
   return false;
 }
 
@@ -290,29 +297,46 @@ export function overallConcessionLinesToBuilderLines<
       concessionType === 'CONCESSION' ? resolved.adjustmentAmount : resolved.payableAmount;
     if (!readPositive(amount)) continue;
 
-    const feeHeadMeta =
-      feeHeadRows.find(
-        (h) =>
-          String(h._id || h.id) === feeHeadId ||
-          (feeHeadCode && String(h.code || '').toUpperCase() === feeHeadCode.toUpperCase())
-      ) || null;
+    const feeHeadMeta = resolveFeeHead(line, feeHeadRows);
+    const resolvedFeeHeadId = feeHeadMeta ? String(feeHeadMeta._id || feeHeadMeta.id) : feeHeadId;
+    const resolvedFeeHeadCode = feeHeadMeta?.code || feeHeadCode || '';
+    const resolvedFeeHeadName = feeHeadMeta?.name || matchingCatalog?.feeHeadName || resolvedFeeHeadCode || resolvedFeeHeadId || 'Fee head';
 
     const structureId = matchingCatalog
       ? String(matchingCatalog._id)
-      : `custom-${feeHeadId || feeHeadCode || 'head'}-${year}`;
+      : `custom-${resolvedFeeHeadId || resolvedFeeHeadCode || 'head'}-${year}`;
 
     result.push({
       structureId,
       amount,
       remarks: concessionType === 'CONCESSION' ? 'Concession' : 'Revised',
       concessionType,
-      feeHeadId: feeHeadId || (matchingCatalog?.feeHead ? String(matchingCatalog.feeHead) : undefined),
-      feeHeadCode: feeHeadCode || matchingCatalog?.feeHeadCode || feeHeadMeta?.code || '',
-      feeHeadName:
-        matchingCatalog?.feeHeadName || feeHeadMeta?.name || feeHeadCode || feeHeadId || 'Fee head',
+      feeHeadId: resolvedFeeHeadId || (matchingCatalog?.feeHead ? String(matchingCatalog.feeHead) : undefined),
+      feeHeadCode: resolvedFeeHeadCode || matchingCatalog?.feeHeadCode || '',
+      feeHeadName: resolvedFeeHeadName,
       studentYear: year,
     } as T);
   }
 
   return result;
+}
+
+export function resolveFeeHead<
+  T extends { _id?: string; id?: string; name?: string; code?: string },
+>(
+  entry: { feeHeadId?: string | null; feeHeadCode?: string | null },
+  feeHeads: T[]
+): T | null {
+  if (!entry || !Array.isArray(feeHeads)) return null;
+  const code = String(entry.feeHeadCode || '').trim().toUpperCase();
+  if (code) {
+    const byCode = feeHeads.find(h => String(h.code || '').trim().toUpperCase() === code);
+    if (byCode) return byCode;
+  }
+  const idStr = String(entry.feeHeadId || '').trim();
+  if (idStr) {
+    const byId = feeHeads.find(h => String(h._id || h.id || '') === idStr);
+    if (byId) return byId;
+  }
+  return null;
 }

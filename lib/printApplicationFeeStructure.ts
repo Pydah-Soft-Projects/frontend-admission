@@ -251,18 +251,18 @@ export function buildPrintFeeStructureYearRows(
 const normalizeFeeKeyPart = (value?: string | null) => String(value || '').trim();
 
 const feeColumnKeyForStructure = (row: FeeStructure): string => {
-  const id = normalizeFeeKeyPart(row.feeHead);
-  if (id) return `id:${id}`;
   const code = normalizeFeeKeyPart(row.feeHeadCode).toUpperCase();
   if (code) return `code:${code}`;
+  const id = normalizeFeeKeyPart(row.feeHead);
+  if (id) return `id:${id}`;
   return `name:${normalizeFeeKeyPart(row.feeHeadName).toUpperCase()}`;
 };
 
 const feeColumnKeyForAdjustment = (row: PrintFeeAdjustment): string => {
-  const id = normalizeFeeKeyPart(row.feeHeadId);
-  if (id) return `id:${id}`;
   const code = normalizeFeeKeyPart(row.feeHeadCode).toUpperCase();
   if (code) return `code:${code}`;
+  const id = normalizeFeeKeyPart(row.feeHeadId);
+  if (id) return `id:${id}`;
   return '';
 };
 

@@ -33,7 +33,7 @@ import {
 import { isJoiningDocumentChecklistKeyVisible } from '@/lib/joiningDocumentChecklist';
 import { buildAccommodationInjectedRows } from '@/lib/joiningBusFeeSync';
 import { parseJoiningTransportDetails } from '@/components/admission/AdmissionStepThreeBusHostelPanel';
-import { hasPersistableOverallConcessionAmounts } from '@/lib/overallConcessions';
+import { hasPersistableOverallConcessionAmounts, resolveFeeHead } from '@/lib/overallConcessions';
 import {
   formatJoiningDateOfBirthDisplay,
   normalizeJoiningDateOfBirthInput,
@@ -420,11 +420,7 @@ async function resolvePrintFeeStructureTableHtml(
 
   const mergedAdjustments = mergePrintFeeAdjustments(overallAdjustments, embeddedAdjustments).map((adj) => {
     if (adj.feeHeadName && adj.feeHeadName.trim()) return adj;
-    const matchingHead = feeHeads.find(
-      (h) =>
-        (adj.feeHeadId && String(h._id || h.id) === String(adj.feeHeadId)) ||
-        (adj.feeHeadCode && String(h.code).trim().toUpperCase() === String(adj.feeHeadCode).trim().toUpperCase())
-    );
+    const matchingHead = resolveFeeHead(adj, feeHeads);
     if (matchingHead) {
       return {
         ...adj,

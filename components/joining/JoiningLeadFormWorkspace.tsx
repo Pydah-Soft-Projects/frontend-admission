@@ -101,6 +101,7 @@ import {
   overallConcessionLinesToBuilderLines,
   resolveOverallConcessionLine,
   type OverallConcessionLine,
+  resolveFeeHead,
 } from '@/lib/overallConcessions';
 import {
   buildBtechIntakeAutoRemark,
@@ -282,7 +283,6 @@ const resolveStepFourFeeHeadDisplay = (
 ): { feeHeadCode: string; feeHeadName: string } => {
   let code = String(input.feeHeadCode || '').trim().toUpperCase();
   if (code === 'OTH02') code = 'OTH1';
-  const headId = String(input.feeHeadId || '').trim();
   const rawName = String(input.feeHeadName || '').trim();
   const nameLower = rawName.toLowerCase();
 
@@ -296,16 +296,8 @@ const resolveStepFourFeeHeadDisplay = (
     code = 'OTH1';
   }
 
-  const master =
-    (code
-      ? masterHeads.find((h) => String(h.code || '').trim().toUpperCase() === code)
-      : undefined) ||
-    (headId
-      ? masterHeads.find((h) => String(h._id || h.id || '').trim() === headId)
-      : undefined) ||
-    (nameLower
-      ? masterHeads.find((h) => String(h.name || '').trim().toLowerCase() === nameLower)
-      : undefined);
+  // Use resolveFeeHead to find the correct master head (preferring code first)
+  const master = resolveFeeHead({ feeHeadId: input.feeHeadId, feeHeadCode: code || input.feeHeadCode }, masterHeads);
 
   if (master) {
     let masterCode = String(master.code || '').trim().toUpperCase();
