@@ -27,9 +27,12 @@ import {
 import { PreferredMobileNumberSelect } from '@/components/joining/PreferredMobileNumberSelect';
 import {
   isApaarIdField,
+  isAdmissionDateEntryField,
   isFixedAcademicYearField,
   isFixedSemesterField,
   isPreviousCollegeField,
+  localCalendarDateYmd,
+  normalizeAdmissionDateEntryValue,
 } from '@/lib/joiningRegistrationFieldLayout';
 import { isCurrentAcademicYearField } from '@/lib/joiningAcademicYearRegistration';
 import {
@@ -903,6 +906,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const joiningFixedRegistrationRef = useRef<JoiningRegistrationFixedGate>(
     buildJoiningRegistrationFixedGate({ courseName: '', courseCode: '' })
   );
+  /** True when admission number exists — freezes admission/entry date fields. */
+  const admissionDateLockedRef = useRef(false);
   /** Per–fee-head student amounts/notes; persisted in joinings.lead_data._joiningStudentFeeDetails on Save Draft. */
   const [studentFeeDetails, setStudentFeeDetails] = useState<JoiningStudentFeeDetails>({ lines: [] });
   /** Fee heads added to builder UI before any year amount is entered. */
@@ -1313,6 +1318,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
   const handleRegistrationFieldChange = useCallback((fieldName: string, value: unknown) => {
     const n = fieldName.toLowerCase();
+    if (isAdmissionDateEntryField({ fieldName })) {
+      // Admission/entry date: current date only; ignore edits once admission number exists.
+      if (admissionDateLockedRef.current) return;
+      const today = localCalendarDateYmd();
+      setRegistrationExtras((prev) => ({
+        ...prev,
+        [fieldName]: today,
+        admission_date: today,
+        date_of_admission: today,
+        date_of_entry: today,
+        entry_date: today,
+      }));
+      return;
+    }
     if (
       n === 'academic_year' ||
       n === 'academicyear' ||
@@ -2274,6 +2293,20 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         if (v === undefined || v === null || String(v).trim() === '') return 'Unverified';
         return String(v);
       }
+      if (isAdmissionDateEntryField({ fieldName })) {
+        if (admissionDateLockedRef.current) {
+          const locked =
+            normalizeAdmissionDateEntryValue(registrationExtras[fieldName]) ||
+            normalizeAdmissionDateEntryValue(registrationExtras.admission_date) ||
+            normalizeAdmissionDateEntryValue(registrationExtras.date_of_admission) ||
+            normalizeAdmissionDateEntryValue(registrationExtras.date_of_entry) ||
+            normalizeAdmissionDateEntryValue(registrationExtras.entry_date) ||
+            normalizeAdmissionDateEntryValue(admissionRecord?.admissionDate) ||
+            normalizeAdmissionDateEntryValue(admissionRecord?.createdAt);
+          return locked || localCalendarDateYmd();
+        }
+        return localCalendarDateYmd();
+      }
       const v = registrationExtras[fieldName];
       if (typeof v === 'boolean') return v;
       if (v === undefined || v === null) return '';
@@ -2290,13 +2323,49 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       joiningRegistrationCourseContext.btechRegularSemester,
       joiningRegistrationCourseContext.btechLateralSemester,
       btechRegistrationSemester,
+      admissionRecord?.admissionDate,
+      admissionRecord?.createdAt,
     ]
   );
 
   const admissionNumberDisplay =
     meta.admissionNumber || admissionRecord?.admissionNumber || lead?.admissionNumber || null;
+  const admissionDateLocked = Boolean(admissionNumberDisplay);
+  admissionDateLockedRef.current = admissionDateLocked;
+  const admissionDateCurrentYmd = localCalendarDateYmd();
   const feeMongoAdmissionNumber =
     admissionRecord?.admissionNumber || meta.admissionNumber || lead?.admissionNumber || null;
+
+  // Keep admission/entry date extras on today's date until the admission number exists.
+  useEffect(() => {
+    if (admissionDateLocked) return;
+    const today = localCalendarDateYmd();
+    const fieldKeys = joiningRegistrationDisplayFieldsCoerced
+      .filter((f) => isAdmissionDateEntryField(f))
+      .map((f) => String(f.fieldName || '').trim())
+      .filter(Boolean);
+    const keys = fieldKeys.length
+      ? fieldKeys
+      : ['admission_date', 'date_of_admission', 'date_of_entry', 'entry_date'];
+    setRegistrationExtras((prev) => {
+      let changed = false;
+      const next: Record<string, unknown> = { ...prev };
+      for (const key of keys) {
+        if (String(next[key] ?? '').trim() !== today) {
+          next[key] = today;
+          changed = true;
+        }
+      }
+      // Keep common aliases aligned.
+      for (const alias of ['admission_date', 'date_of_admission', 'date_of_entry', 'entry_date']) {
+        if (String(next[alias] ?? '').trim() !== today) {
+          next[alias] = today;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [admissionDateLocked, joiningRegistrationDisplayFieldsCoerced]);
 
   const courseQuotaIntakeFields = useMemo(() => {
     if (!registrationIntakeYearField && !registrationIntakeSemesterField && !admissionNumberDisplay) {
@@ -7271,6 +7340,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                       }}
                       omitIntakeYearSemesterFromGrid
                       hideInlinePortraits
+                      admissionDateLocked={admissionDateLocked}
+                      admissionDateCurrentYmd={admissionDateCurrentYmd}
                     />
                   ) : null}
                 </div>

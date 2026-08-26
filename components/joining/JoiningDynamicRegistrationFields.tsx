@@ -20,6 +20,7 @@ import {
 import { JoiningCameraCaptureButton } from '@/components/joining/JoiningCameraCaptureButton';
 import {
   isApaarIdField,
+  isAdmissionDateEntryField,
   isFixedAcademicYearField,
   isFixedSemesterField,
   isJoiningRegistrationIntakeField,
@@ -387,6 +388,10 @@ type Props = {
   omitIntakeYearSemesterFromGrid?: boolean;
   /** When true, student/parent portrait uploads render only via `JoiningApplicantPhotosSection`. */
   hideInlinePortraits?: boolean;
+  /** When true, admission/entry date fields are frozen (admission number already generated). */
+  admissionDateLocked?: boolean;
+  /** Current date YYYY-MM-DD shown on unlocked admission/entry date fields. */
+  admissionDateCurrentYmd?: string;
   /** Whether the student photo is strictly required. */
   requireStudentPhoto?: boolean;
 };
@@ -515,6 +520,9 @@ export function JoiningDynamicRegistrationFields({
   studentContactFields,
   omitIntakeYearSemesterFromGrid = false,
   hideInlinePortraits = false,
+  admissionDateLocked = false,
+  admissionDateCurrentYmd,
+  requireStudentPhoto = false,
 }: Props) {
   const { stateNames, districtNames, mandalNames } = useLocations({
     stateName: selectedState || undefined,
@@ -797,6 +805,24 @@ export function JoiningDynamicRegistrationFields({
             : field.fieldType === 'tel'
               ? 'tel'
               : 'text';
+
+    if (isAdmissionDateEntryField(field)) {
+      const today = String(admissionDateCurrentYmd || '').trim();
+      const displayValue = admissionDateLocked
+        ? String(fieldValue || today)
+        : today || String(fieldValue || '');
+      return (
+        <Input
+          compact
+          label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
+          name={field.fieldName}
+          type="date"
+          value={displayValue}
+          disabled
+          onChange={() => {}}
+        />
+      );
+    }
 
     return (
       <Input compact
@@ -1448,6 +1474,34 @@ export function JoiningDynamicRegistrationFields({
                   : field.fieldType === 'tel'
                     ? 'tel'
                     : 'text';
+
+          if (isAdmissionDateEntryField(field)) {
+            const today = String(admissionDateCurrentYmd || '').trim();
+            const displayValue = admissionDateLocked
+              ? String(fieldValue || today)
+              : today || String(fieldValue || '');
+            return (
+              <div key={field._id || field.fieldName} className={gridItemClass}>
+                <Input
+                  compact
+                  label={`${field.fieldLabel}${isFieldRequired ? ' *' : ''}`}
+                  name={field.fieldName}
+                  type="date"
+                  value={displayValue}
+                  disabled
+                  onChange={() => {}}
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {admissionDateLocked
+                    ? 'Locked after admission number was generated — date cannot be modified.'
+                    : 'Shows the current date only — not editable.'}
+                </p>
+                {field.helpText ? (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{field.helpText}</p>
+                ) : null}
+              </div>
+            );
+          }
 
           return (
             <div key={field._id || field.fieldName} className={gridItemClass}>

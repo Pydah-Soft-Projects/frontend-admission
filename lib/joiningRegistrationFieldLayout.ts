@@ -56,6 +56,52 @@ export function isFixedSemesterField(field: JoiningRegistrationFieldLike): boole
 }
 
 /**
+ * Admission / entry date fields from the student registration form.
+ * On joining edit these show the current date only and lock after the admission number exists.
+ */
+export function isAdmissionDateEntryField(field: JoiningRegistrationFieldLike): boolean {
+  const n = normKey(field.fieldName || '');
+  const l = normKey(field.fieldLabel || '');
+  const hay = `${n} ${l}`;
+  if (
+    n === 'admission_date' ||
+    n === 'admissiondate' ||
+    n === 'date_of_admission' ||
+    n === 'dateofadmission' ||
+    n === 'date_of_entry' ||
+    n === 'dateofentry' ||
+    n === 'entry_date' ||
+    n === 'entrydate'
+  ) {
+    return true;
+  }
+  if (hay.includes('admission') && hay.includes('date')) return true;
+  if (hay.includes('date') && hay.includes('entry') && !hay.includes('birth')) return true;
+  return false;
+}
+
+/**
+ * Local calendar date as YYYY-MM-DD for admission date entry fields.
+ */
+export function localCalendarDateYmd(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Normalize a stored admission/entry date to YYYY-MM-DD when possible. */
+export function normalizeAdmissionDateEntryValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return localCalendarDateYmd(parsed);
+  return '';
+}
+
+/**
  * Joining Step 1 student profile order:
  * Name → DOB → Batch → Gender → Admission date → Scholar status → Student status → Previous college → APAAR (+ mobile/Aadhaar row).
  */
@@ -85,9 +131,7 @@ export function joiningStudentProfileFieldRank(
     return 40;
   }
   if (
-    (hay.includes('admission') && hay.includes('date')) ||
-    n === 'admission_date' ||
-    n === 'date_of_admission'
+    isAdmissionDateEntryField({ fieldName: field.fieldName, fieldLabel: field.fieldLabel })
   ) {
     return 50;
   }
