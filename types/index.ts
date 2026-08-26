@@ -935,6 +935,8 @@ export interface Admission {
   updatedByName?: string;
   /** Excel Reference 1 (from lead_data.reference1 on list API). */
   referenceName?: string;
+  /** Admission phase 1–5 (from lead_data.admissionPhase). */
+  admissionPhase?: string;
   /** Lead source / quota label on list API. */
   leadSource?: string;
   remarks?: string;

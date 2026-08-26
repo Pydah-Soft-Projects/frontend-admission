@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { PrintActionButton } from '@/components/ui/PrintActionButton';
 import { Input } from '@/components/ui/Input';
 import { ReferenceUserSelect } from '@/components/admission/ReferenceUserSelect';
+import { AdmissionReferenceHistoryDialog } from '@/components/admission/AdmissionReferenceHistoryDialog';
 import {
   joiningAPI,
   feeRequestAPI,
@@ -188,7 +189,7 @@ import { JoiningStepOneShell } from '@/components/joining/JoiningStepOneShell';
 import { ParentOccupationSelect } from '@/components/joining/ParentOccupationSelect';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
-import { BookOpen, FileText, GraduationCap, MapPin, User, UserPlus, Users } from 'lucide-react';
+import { BookOpen, FileText, GraduationCap, History, MapPin, User, UserPlus, Users } from 'lucide-react';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -344,6 +345,17 @@ const JOINING_FORM_CONTROL_CLASS =
   'w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500';
 
 const JOINING_FORM_LABEL_CLASS = 'mb-0.5 block text-xs font-medium text-gray-700 dark:text-slate-200';
+
+/** Step 4 admission phase options (stored as "1"…"5" in lead_data.admissionPhase). */
+const ADMISSION_PHASE_OPTIONS = ['1', '2', '3', '4', '5'] as const;
+
+function normalizeAdmissionPhaseValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  const match = raw.match(/^phase\s*([1-5])$/i) || raw.match(/^([1-5])$/);
+  return match?.[1] || '';
+}
 
 /** Step 4 fee tables — solid black/white headers (no accent colors). */
 const STEP_FOUR_TABLE_HEAD_ROW =
@@ -882,7 +894,10 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [registrationExtras, setRegistrationExtras] = useState<Record<string, unknown>>({});
   const [reference1, setReference1] = useState('');
+  const [admissionPhase, setAdmissionPhase] = useState('');
   const [isSavingReference, setIsSavingReference] = useState(false);
+  const [isReferenceHistoryOpen, setIsReferenceHistoryOpen] = useState(false);
+  const [isSavingAdmissionPhase, setIsSavingAdmissionPhase] = useState(false);
   const [isSavingRemarks, setIsSavingRemarks] = useState(false);
   /** Latest workflow-fixed registration year/semester (B.Tech vs others); synced after course catalog context resolves. */
   const joiningFixedRegistrationRef = useRef<JoiningRegistrationFixedGate>(
@@ -2945,6 +2960,12 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         }
         setFormState(mergeLeadIntoJoiningFormState(base, lead as LeadLike));
         setReference1(resolveJoiningReference1(null, joining, lead as LeadLike));
+        const joiningLeadData = joining.leadData as Record<string, unknown> | undefined;
+        setAdmissionPhase(
+          normalizeAdmissionPhaseValue(
+            joiningLeadData?.admissionPhase ?? joiningLeadData?.admission_phase
+          )
+        );
       }
     }
   }, [data, lead]);
@@ -3092,6 +3113,11 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       setStudentFeeDetails((prev) => ({ ...(batch ? { batch } : {}), lines: prev.lines }));
       setBuilderAddedHeadIds([]);
       setReference1(resolveJoiningReference1(record, joiningRecord ?? undefined, lead as LeadLike));
+      setAdmissionPhase(
+        normalizeAdmissionPhaseValue(
+          record.admissionPhase ?? leadData?.admissionPhase ?? leadData?.admission_phase
+        )
+      );
     },
     [lead, joiningRecord]
   );
@@ -4171,6 +4197,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       siblings: formState.hasSiblings ? formState.siblings : [],
       documents: serializeJoiningDocumentsForApi(formState.documents),
       reference1: reference1.trim(),
+      admissionPhase: normalizeAdmissionPhaseValue(admissionPhase),
       ...(isApprovedAdmission
         ? {
             // Include full registration extras (college, academic year, etc.).
@@ -4227,6 +4254,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     status,
     feeConfigurationBatch,
     reference1,
+    admissionPhase,
     selectedCasteCategoryId,
     casteCategories,
     allCastes,
@@ -4293,6 +4321,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         }
         showToast.success('Reference saved successfully');
       }
+      if (admissionRecord?._id) {
+        void queryClient.invalidateQueries({
+          queryKey: ['admission', String(admissionRecord._id), 'reference-history'],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ['admission', String(admissionRecord._id), 'application-history'],
+        });
+      }
       void queryClient.invalidateQueries({ queryKey: ['joining', leadId] });
       void queryClient.invalidateQueries({ queryKey: ['admissions'] });
     } catch (error: any) {
@@ -4301,6 +4337,43 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       showToast.error(msg);
     } finally {
       setIsSavingReference(false);
+    }
+  };
+
+  const handleSaveAdmissionPhase = async () => {
+    if (!leadId) return;
+    const phase = normalizeAdmissionPhaseValue(admissionPhase);
+    setIsSavingAdmissionPhase(true);
+    try {
+      if (status === 'approved' && admissionRecord?._id) {
+        await admissionAPI.patchPhaseById(String(admissionRecord._id), phase);
+        showToast.success('Admission phase updated successfully');
+        setAdmissionRecord((prev) => (prev ? { ...prev, admissionPhase: phase } : null));
+      } else {
+        const payload = {
+          ...payloadForSave,
+          admissionPhase: phase,
+          ...(joiningRecord?._id ? { _id: joiningRecord._id } : {}),
+        };
+        if (isPublicEdit && publicToken) {
+          await joiningPublicApi.saveDraft(publicToken, payload);
+        } else {
+          await joiningAPI.saveDraft(leadId, payload);
+        }
+        showToast.success('Admission phase saved successfully');
+      }
+      void queryClient.invalidateQueries({ queryKey: ['joining', leadId] });
+      void queryClient.invalidateQueries({ queryKey: ['admissions'] });
+      if (admissionRecord?._id) {
+        void queryClient.invalidateQueries({ queryKey: ['admission', String(admissionRecord._id)] });
+      }
+    } catch (error: any) {
+      console.error('Error saving admission phase:', error);
+      const msg =
+        error?.response?.data?.message || error?.message || 'Failed to save admission phase';
+      showToast.error(msg);
+    } finally {
+      setIsSavingAdmissionPhase(false);
     }
   };
 
@@ -4549,6 +4622,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     !isPublicEdit &&
     canEditReference &&
     (status === 'approved' ? isAdmissionEditable : canWriteJoining);
+
+  const canEditAdmissionPhaseField =
+    !isPublicEdit && (status === 'approved' ? isAdmissionEditable : canWriteJoining);
 
   const referenceFieldReadOnlyReason = useMemo(() => {
     if (canEditReferenceField && !isUpdatingAdmission && !isSaving) {
@@ -8005,51 +8081,121 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                 className="space-y-8"
               >
               <ApplicationInfoCard
-                title="Reference"
+                title="Reference & Admission Phase"
                 icon={<UserPlus className="h-4 w-4" aria-hidden />}
-                description="Staff or referral contact linked to this admission"
+                description="Staff referral contact and admission phase for this application"
               >
-                <div className="flex flex-row items-center gap-3">
-                  <div className="w-full max-w-[28rem] shrink-0">
-                    <ReferenceUserSelect
-                      label=""
-                      publicMode={isPublicEdit}
-                      value={reference1}
-                      onChange={setReference1}
-                      disabled={
-                        !canEditReferenceField ||
-                        isUpdatingAdmission ||
-                        isSaving
-                      }
-                      showAddUserButton={
-                        canEditReferenceField &&
-                        !isUpdatingAdmission &&
-                        !isSaving
-                      }
-                    />
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+                  <div className="min-w-0 space-y-2">
+                    <label className={JOINING_FORM_LABEL_CLASS}>Reference</label>
+                    <div className="flex flex-row flex-wrap items-center gap-3">
+                      <div className="w-full max-w-[28rem] shrink-0">
+                        <ReferenceUserSelect
+                          label=""
+                          publicMode={isPublicEdit}
+                          value={reference1}
+                          onChange={setReference1}
+                          disabled={
+                            !canEditReferenceField ||
+                            isUpdatingAdmission ||
+                            isSaving
+                          }
+                          showAddUserButton={
+                            canEditReferenceField &&
+                            !isUpdatingAdmission &&
+                            !isSaving
+                          }
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={handleSaveReference}
+                        disabled={
+                          isSavingReference ||
+                          !canEditReferenceField ||
+                          isUpdatingAdmission ||
+                          isSaving
+                        }
+                        className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
+                      >
+                        {isSavingReference ? 'Saving...' : 'Save'}
+                      </Button>
+                      {!isPublicEdit && admissionRecord?._id ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsReferenceHistoryOpen(true)}
+                          className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold"
+                        >
+                          <History className="mr-1.5 h-4 w-4" aria-hidden />
+                          Reference history
+                        </Button>
+                      ) : null}
+                      {referenceFieldReadOnlyReason ? (
+                        <p
+                          className="flex min-w-0 flex-1 items-center rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm leading-snug text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
+                          role="status"
+                        >
+                          {referenceFieldReadOnlyReason}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={handleSaveReference}
-                    disabled={
-                      isSavingReference ||
-                      !canEditReferenceField ||
-                      isUpdatingAdmission ||
-                      isSaving
-                    }
-                    className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
-                  >
-                    {isSavingReference ? 'Saving...' : 'Save'}
-                  </Button>
-                  {referenceFieldReadOnlyReason ? (
-                    <p
-                      className="flex min-w-0 flex-1 items-center rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm leading-snug text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
-                      role="status"
-                    >
-                      {referenceFieldReadOnlyReason}
-                    </p>
-                  ) : null}
+
+                  <div className="min-w-0 space-y-2">
+                    <label className={JOINING_FORM_LABEL_CLASS} htmlFor="joining-admission-phase">
+                      Admission Phase
+                    </label>
+                    <div className="flex flex-row flex-wrap items-center gap-3">
+                      <div className="w-full max-w-[16rem] shrink-0">
+                        <select
+                          id="joining-admission-phase"
+                          value={admissionPhase}
+                          onChange={(event) =>
+                            setAdmissionPhase(normalizeAdmissionPhaseValue(event.target.value))
+                          }
+                          disabled={
+                            !canEditAdmissionPhaseField ||
+                            isUpdatingAdmission ||
+                            isSaving ||
+                            isSavingAdmissionPhase
+                          }
+                          className={JOINING_FORM_CONTROL_CLASS}
+                        >
+                          <option value="">Select phase</option>
+                          {ADMISSION_PHASE_OPTIONS.map((phase) => (
+                            <option key={phase} value={phase}>
+                              Phase {phase}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={handleSaveAdmissionPhase}
+                        disabled={
+                          isSavingAdmissionPhase ||
+                          !canEditAdmissionPhaseField ||
+                          isUpdatingAdmission ||
+                          isSaving
+                        }
+                        className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
+                      >
+                        {isSavingAdmissionPhase ? 'Saving...' : 'Save'}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
+                {!isPublicEdit && admissionRecord?._id ? (
+                  <AdmissionReferenceHistoryDialog
+                    open={isReferenceHistoryOpen}
+                    onOpenChange={setIsReferenceHistoryOpen}
+                    admissionId={String(admissionRecord._id)}
+                    admissionNumber={
+                      admissionNumberDisplay || admissionRecord.admissionNumber || undefined
+                    }
+                  />
+                ) : null}
               </ApplicationInfoCard>
 
               {/* Concessions / Revised Fees Builder — open for staff drafts; admission # on Submit Fee Request */}

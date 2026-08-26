@@ -1737,8 +1737,18 @@ export const admissionAPI = {
     const response = await api.get(`/admissions/id/${admissionId}`);
     return response.data;
   },
-  getApplicationHistory: async (admissionId: string) => {
-    const response = await api.get(`/admissions/id/${admissionId}/history`);
+  getApplicationHistory: async (
+    admissionId: string,
+    options?: { scope?: 'reference' | 'all' }
+  ) => {
+    const queryParams = new URLSearchParams();
+    if (options?.scope && options.scope !== 'all') {
+      queryParams.set('scope', options.scope);
+    }
+    const query = queryParams.toString();
+    const response = await api.get(
+      `/admissions/id/${admissionId}/history${query ? `?${query}` : ''}`
+    );
     return response.data;
   },
   updateById: async (admissionId: string, data: any) => {
@@ -1778,6 +1788,10 @@ export const admissionAPI = {
   },
   patchRemarksById: async (admissionId: string, remarks: string) => {
     const response = await api.patch(`/admissions/id/${admissionId}/remarks`, { remarks });
+    return response.data;
+  },
+  patchPhaseById: async (admissionId: string, admissionPhase: string) => {
+    const response = await api.patch(`/admissions/id/${admissionId}/phase`, { admissionPhase });
     return response.data;
   },
   exportAdmissions: async (filters?: {
