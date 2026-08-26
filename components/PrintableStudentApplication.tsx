@@ -812,6 +812,40 @@ function getPrintApplicationHtml(props: {
     application as Joining,
     ((application as Joining).lead ?? application.leadData) as Record<string, unknown> | undefined
   );
+  const resolveAdmissionDateForPrint = (): string => {
+    const fromAdmission = String((application as Admission).admissionDate || '').trim();
+    if (fromAdmission) return formatPrintDate(fromAdmission);
+    const reg =
+      application.registrationFormData &&
+      typeof application.registrationFormData === 'object' &&
+      !Array.isArray(application.registrationFormData)
+        ? (application.registrationFormData as Record<string, unknown>)
+        : null;
+    if (reg) {
+      const dateKeys = new Set([
+        'admission_date',
+        'admissiondate',
+        'date_of_admission',
+        'dateofadmission',
+        'date_of_entry',
+        'dateofentry',
+        'entry_date',
+        'entrydate',
+      ]);
+      for (const [key, value] of Object.entries(reg)) {
+        const n = String(key || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '_');
+        if (!dateKeys.has(n)) continue;
+        const raw = String(value ?? '').trim();
+        if (raw) return formatPrintDate(raw);
+      }
+    }
+    const createdAt = String(application.createdAt || '').trim();
+    return createdAt ? formatPrintDate(createdAt) : '';
+  };
+  const admissionDateDisplay = resolveAdmissionDateForPrint();
   const fatherPhotoSrc = safeImageSrcForPrint(parents?.father?.photo);
   const motherPhotoSrc = safeImageSrcForPrint(parents?.mother?.photo);
   const studentPhotoSrc = pickStudentPortraitForPrint(application);
@@ -2082,7 +2116,7 @@ function getPrintApplicationHtml(props: {
         </div>
         <div class="form-sidebar-aside">
           <div class="office-use-top">
-            <div class="office-use-row"><span>PIN No :</span><span></span></div>
+            <div class="office-use-row"><span>Admission Date :</span><span>${escapeHtml(admissionDateDisplay)}</span></div>
             <div class="office-use-row"><span>Admission No :</span><span>${escapeHtml(admissionNumber || '')}</span></div>
             <div class="office-use-row"><span>Application No :</span><span class="text-red">${escapeHtml(applicationNumberDisplay)}</span></div>
             <div class="office-use-row"><span>Course :</span><span>${escapeHtml(courseName || course?.course)}</span></div>
