@@ -271,23 +271,34 @@ function extractOverallConcessionLines(response: unknown): PrintFeeAdjustment[] 
 }
 
 function extractFeeMongoTransactions(response: unknown): PrintPaidTransaction[] {
-  if (Array.isArray(response)) return response as PrintPaidTransaction[];
-  const root = response as
-    | {
-        transactions?: unknown;
-        data?: unknown;
+  let rows: PrintPaidTransaction[] = [];
+  if (Array.isArray(response)) rows = response as PrintPaidTransaction[];
+  else {
+    const root = response as
+      | {
+          transactions?: unknown;
+          data?: unknown;
+        }
+      | null
+      | undefined;
+    if (Array.isArray(root?.transactions)) rows = root.transactions as PrintPaidTransaction[];
+    else {
+      const payload = root?.data;
+      if (Array.isArray(payload)) rows = payload as PrintPaidTransaction[];
+      else if (payload && typeof payload === 'object') {
+        const nested = payload as { transactions?: unknown; data?: unknown };
+        if (Array.isArray(nested.transactions)) rows = nested.transactions as PrintPaidTransaction[];
+        else if (Array.isArray(nested.data)) rows = nested.data as PrintPaidTransaction[];
       }
-    | null
-    | undefined;
-  if (Array.isArray(root?.transactions)) return root.transactions as PrintPaidTransaction[];
-  const payload = root?.data;
-  if (Array.isArray(payload)) return payload as PrintPaidTransaction[];
-  if (payload && typeof payload === 'object') {
-    const nested = payload as { transactions?: unknown; data?: unknown };
-    if (Array.isArray(nested.transactions)) return nested.transactions as PrintPaidTransaction[];
-    if (Array.isArray(nested.data)) return nested.data as PrintPaidTransaction[];
+    }
   }
-  return [];
+  // Hide Fee Management CREDIT (concessions) — print payment collections only.
+  return rows.filter((tx) => {
+    const type = String((tx as { transactionType?: string })?.transactionType || '')
+      .trim()
+      .toUpperCase();
+    return type !== 'CREDIT';
+  });
 }
 
 function mergePrintFeeAdjustments(

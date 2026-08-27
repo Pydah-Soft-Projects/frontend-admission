@@ -5069,17 +5069,26 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       | { transactions?: unknown[]; data?: { data?: unknown[]; transactions?: unknown[] } | unknown[] }
       | unknown[]
       | undefined;
-    if (Array.isArray(response)) return response;
-    if (Array.isArray(response?.transactions)) return response.transactions;
-    const payload = response?.data;
-    if (Array.isArray(payload)) return payload;
-    if (payload && typeof payload === 'object' && 'transactions' in payload && Array.isArray(payload.transactions)) {
-      return payload.transactions;
+    let rows: unknown[] = [];
+    if (Array.isArray(response)) rows = response;
+    else if (Array.isArray(response?.transactions)) rows = response.transactions;
+    else {
+      const payload = response?.data;
+      if (Array.isArray(payload)) rows = payload;
+      else if (payload && typeof payload === 'object' && 'transactions' in payload && Array.isArray(payload.transactions)) {
+        rows = payload.transactions;
+      } else if (payload && typeof payload === 'object' && 'data' in payload && Array.isArray(payload.data)) {
+        rows = payload.data;
+      }
     }
-    if (payload && typeof payload === 'object' && 'data' in payload && Array.isArray(payload.data)) {
-      return payload.data;
-    }
-    return [];
+    // Hide Fee Management CREDIT (concessions) — show payment collections only.
+    return rows.filter((tx) => {
+      if (!tx || typeof tx !== 'object') return false;
+      const type = String((tx as { transactionType?: string }).transactionType || '')
+        .trim()
+        .toUpperCase();
+      return type !== 'CREDIT';
+    });
   }, [feeMongoTransactionsQuery.data]);
 
   const feeMongoTransactionFilters = useMemo(() => {
@@ -5102,12 +5111,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         status?: string;
       };
       if (row.status === 'cancelled') continue;
+      // Paid = DEBIT collections only. Ignore CREDIT (concessions / adjustments).
+      if (String(row.transactionType || '').trim().toUpperCase() !== 'DEBIT') continue;
       const year = Number(row.studentYear) || 1;
       const amount = Number(row.amount) || 0;
       if (amount <= 0) continue;
-      const multiplier = row.transactionType === 'CREDIT' ? -1 : 1;
       const add = (key: string) => {
-        map.set(key, (map.get(key) || 0) + amount * multiplier);
+        map.set(key, (map.get(key) || 0) + amount);
       };
       if (row.feeHead) add(`${String(row.feeHead)}::${year}`);
       if (row.feeHeadCode) add(`code:${String(row.feeHeadCode).toUpperCase()}::${year}`);

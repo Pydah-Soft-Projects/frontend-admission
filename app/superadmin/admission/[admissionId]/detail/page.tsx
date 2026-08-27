@@ -588,9 +588,14 @@ export default function AdmissionDetailPage() {
       if (Array.isArray(payload.transactions)) rows = payload.transactions;
       else if (Array.isArray(payload.data)) rows = payload.data;
     }
-    return rows.filter((tx): tx is FeeManagementTransactionRow =>
-      Boolean(tx && typeof tx === 'object')
-    );
+    return rows.filter((tx): tx is FeeManagementTransactionRow => {
+      if (!tx || typeof tx !== 'object') return false;
+      // Hide Fee Management CREDIT (concessions) — show payment collections only.
+      const type = String((tx as { transactionType?: string }).transactionType || '')
+        .trim()
+        .toUpperCase();
+      return type !== 'CREDIT';
+    });
   }, [feeMongoTransactionsQuery.data]);
 
   /** Only the heads shown in the fee configuration above: TUI01, OTH1, and transport. */
