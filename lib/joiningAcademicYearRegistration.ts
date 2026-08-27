@@ -486,3 +486,19 @@ export function calendarYearToAcademicYearRange(year: string | number | null | u
   }
   return raw;
 }
+
+/**
+ * Current admissions/hostel/transport session (e.g. 2026 → 2026-2027).
+ * Lateral intake/batch year must NOT drive this — laterals still use Year 2 fee rows
+ * within the current academic session.
+ */
+export function resolveCurrentAcademicYearSession(
+  calendarYear?: string | number | null
+): string {
+  const cy = clampApplicationCalendarYear(
+    calendarYear != null && String(calendarYear).trim() !== ''
+      ? Number(String(calendarYear).match(/^(\d{4})/)?.[1] ?? calendarYear)
+      : new Date().getFullYear()
+  );
+  return calendarYearToAcademicYearRange(cy);
+}

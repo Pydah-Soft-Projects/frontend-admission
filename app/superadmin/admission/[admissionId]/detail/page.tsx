@@ -33,7 +33,7 @@ import { useDashboardHeader, useJoiningDeskPermissions } from '@/components/layo
 import { resolveJoiningReference1 } from '@/lib/joiningApplicationViewDisplay';
 import { useCourseLookup } from '@/hooks/useCourseLookup';
 import { resolveJoiningOrAdmissionCourseLabel } from '@/lib/admissionCourseDisplay';
-import { resolveJoiningStudentYearOfStudy } from '@/lib/joiningAcademicYearRegistration';
+import { resolveJoiningStudentYearOfStudy, resolveCurrentAcademicYearSession } from '@/lib/joiningAcademicYearRegistration';
 import {
   communicationAddressHasDisplayValues,
 } from '@/lib/formatJoiningAddressDisplay';
@@ -1076,7 +1076,7 @@ export default function AdmissionDetailPage() {
                   disabled
                   courseName={courseName}
                   studentYearOfStudy={feeStudentYearOfStudy}
-                  joiningAcademicYear={feeConfigurationBatch}
+                  joiningAcademicYear={resolveCurrentAcademicYearSession()}
                   managedCourseId={
                     admission.courseInfo?.courseId
                       ? Number(admission.courseInfo.courseId)

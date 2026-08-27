@@ -8135,7 +8135,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                     courseName={formState.courseInfo.course}
                     programTotalYears={programTotalYears}
                     studentYearOfStudy={studentYearOfStudy}
-                    joiningAcademicYear={stepOneAcademicYear}
+                    joiningAcademicYear={String(joiningRegistrationCourseContext.calendarYear)}
                     collegeId={selectedCollegeId ? Number(selectedCollegeId) : null}
                     managedCourseId={formState.courseInfo.courseId ? Number(formState.courseInfo.courseId) : null}
                     admissionNumber={admissionNumberDisplay}

@@ -9,7 +9,7 @@ import {
   normalizeHostelFeesByYear,
   resolveHostelFeeRowForYear,
 } from '@/lib/joiningBusFeeSync';
-import { calendarYearToAcademicYearRange } from '@/lib/joiningAcademicYearRegistration';
+import { calendarYearToAcademicYearRange, resolveCurrentAcademicYearSession } from '@/lib/joiningAcademicYearRegistration';
 import { showToast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { handleExternalPrint } from '@/lib/printHtml';
@@ -92,7 +92,7 @@ type AdmissionStepThreeBusHostelPanelProps = {
   programTotalYears?: number;
   /** Program year for hostel fee display (1 = first year, 2 = lateral, etc.). */
   studentYearOfStudy?: number;
-  /** Step 1 intake calendar year (e.g. 2026) from registrationFormData. */
+  /** Current academic session for hostel/bus fees (e.g. 2026 → 2026-2027). Not lateral intake/batch year. */
   joiningAcademicYear?: string | null;
   collegeId?: number | null;
   managedCourseId?: number | null;
@@ -289,10 +289,11 @@ export function AdmissionStepThreeBusHostelPanel({
 
   const displayTab: AccommodationTab = selectedTab ?? activeTab;
 
-  const joiningAcademicYearSession = useMemo(
-    () => calendarYearToAcademicYearRange(joiningAcademicYear),
-    [joiningAcademicYear]
-  );
+  const joiningAcademicYearSession = useMemo(() => {
+    const fromProp = calendarYearToAcademicYearRange(joiningAcademicYear);
+    // Always prefer a real current-session range; fall back to clock year if prop is empty.
+    return fromProp || resolveCurrentAcademicYearSession();
+  }, [joiningAcademicYear]);
 
   const effectiveAcademicYear = joiningAcademicYearSession || value.academicYear || '';
 
@@ -906,9 +907,19 @@ export function AdmissionStepThreeBusHostelPanel({
     effectiveAcademicYear &&
     resolvedFeeAcademicYear !== effectiveAcademicYear;
   const resolvedFeeCourse = feePayload?.yearlyFees?.[0]?.course || feePayload?.fee?.course || '';
+  // Lateral display labels (e.g. B.Tech (LATERAL)) correctly use base course fees (B.Tech).
+  const normalizeHostelCourseForCompare = (value: string) =>
+    String(value || '')
+      .trim()
+      .replace(/\s*\(\s*lateral\s*\)\s*/gi, '')
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
   const feeCourseMismatch =
     Boolean(courseName && resolvedFeeCourse) &&
-    resolvedFeeCourse.toLowerCase() !== String(courseName).toLowerCase();
+    normalizeHostelCourseForCompare(resolvedFeeCourse) !==
+      normalizeHostelCourseForCompare(String(courseName)) &&
+    // Ignore unresolved Mongo course ids in the warning text.
+    !/^[a-f0-9]{24}$/i.test(String(resolvedFeeCourse).trim());
 
   return (
     <section
@@ -1540,6 +1551,15 @@ export function AdmissionStepThreeBusHostelPanel({
                   {courseName ? `Course: ${courseName}` : 'Course fee match from HMS'}
                   {hasHostelFeeRows
                     ? ` · Year ${displayHostelFeeRow?.studentYear ?? effectiveStudentYear} fee`
+                    : ''}
+                  {resolvedFeeCourse &&
+                  normalizeHostelCourseForCompare(resolvedFeeCourse) ===
+                    normalizeHostelCourseForCompare(String(courseName || '')) &&
+                  String(resolvedFeeCourse).trim().toLowerCase() !==
+                    String(courseName || '')
+                      .trim()
+                      .toLowerCase()
+                    ? ` · Using ${resolvedFeeCourse} hostel fee`
                     : ''}
                   {feeUsedFallback
                     ? ` · Fee from AY ${resolvedFeeAcademicYear} (no ${effectiveAcademicYear} config yet)`
