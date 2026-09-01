@@ -481,7 +481,7 @@ export default function SuperAdminDashboard() {
       <div className="flex flex-col gap-4 sm:flex-row mt-0 sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 sm:text-3xl">
-            Super Admin Dashboard.
+            Super Admin Dashboard
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
