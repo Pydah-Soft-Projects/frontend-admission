@@ -207,6 +207,7 @@ export default function AdmissionDetailPage() {
   });
   const [revealedPhones, setRevealedPhones] = useState<Record<string, boolean>>({});
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [isActivateDialogOpen, setIsActivateDialogOpen] = useState(false);
   const [cancelForm, setCancelForm] = useState({
     reason: '',
     approvedBy: '',
@@ -252,6 +253,24 @@ export default function AdmissionDetailPage() {
     },
     onError: (error: ApiError) => {
       showToast.error(error.response?.data?.message || 'Failed to cancel admission');
+    },
+  });
+
+  const activateAdmissionMutation = useMutation({
+    mutationFn: async () => {
+      if (!admission?._id) {
+        throw new Error('Admission record is not loaded');
+      }
+      return admissionAPI.activateById(admission._id);
+    },
+    onSuccess: async () => {
+      showToast.success('Admission activated successfully');
+      setIsActivateDialogOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ['admission', admissionId] });
+      await queryClient.invalidateQueries({ queryKey: ['admissions'] });
+    },
+    onError: (error: ApiError) => {
+      showToast.error(error.response?.data?.message || 'Failed to activate admission');
     },
   });
 
@@ -770,6 +789,11 @@ export default function AdmissionDetailPage() {
               Cancel Admission
             </Button>
           )}
+          {canEditAdmission && admission && isAdmissionCancelled ? (
+            <Button variant="primary" onClick={() => setIsActivateDialogOpen(true)}>
+              Activate Admission
+            </Button>
+          ) : null}
           <Link href={admissionsListHref}>
             <Button variant="outline">Back to List</Button>
           </Link>
@@ -899,6 +923,44 @@ export default function AdmissionDetailPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isActivateDialogOpen} onOpenChange={setIsActivateDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Activate Admission</DialogTitle>
+            <DialogDescription>
+              This will move the admission from Cancelled back to Active and sync the student
+              status in the student database to Regular.
+            </DialogDescription>
+          </DialogHeader>
+          {cancellationRemark ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm dark:border-slate-800 dark:bg-slate-900/40">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Previous cancellation remark
+              </p>
+              <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">{cancellationRemark}</p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsActivateDialogOpen(false)}
+              disabled={activateAdmissionMutation.isPending}
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              isLoading={activateAdmissionMutation.isPending}
+              onClick={() => activateAdmissionMutation.mutate()}
+            >
+              Activate Admission
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
