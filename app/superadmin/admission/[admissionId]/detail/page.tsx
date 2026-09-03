@@ -178,7 +178,7 @@ export default function AdmissionDetailPage() {
   const { setHeaderContent, clearHeaderContent } = useDashboardHeader();
   const admissionId = Array.isArray(params?.admissionId) ? params.admissionId[0] : params?.admissionId;
   const { getCourseName, getBranchName, getCollegeNameForCourse } = useCourseLookup();
-  const { canEditReference, canEditAdmission } = useJoiningDeskPermissions();
+  const { canEditReference, canEditAdmission, canActivateAdmission } = useJoiningDeskPermissions();
 
   const admissionsListHref = useMemo(() => {
     const tab = searchParams.get('tab');
@@ -789,7 +789,7 @@ export default function AdmissionDetailPage() {
               Cancel Admission
             </Button>
           )}
-          {canEditAdmission && admission && isAdmissionCancelled ? (
+          {canActivateAdmission && admission && isAdmissionCancelled ? (
             <Button variant="primary" onClick={() => setIsActivateDialogOpen(true)}>
               Activate Admission
             </Button>
@@ -812,6 +812,7 @@ export default function AdmissionDetailPage() {
     admissionsListHref,
     editApplicationHref,
     canEditAdmission,
+    canActivateAdmission,
     setHeaderContent,
     clearHeaderContent,
   ]);

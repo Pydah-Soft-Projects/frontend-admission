@@ -94,6 +94,7 @@ const buildFullAccessPermissions = (): Record<PermissionModuleKey, ModulePermiss
             permission: 'write',
             editReference: true,
             editAdmission: true,
+            activateAdmission: true,
             approveFeeRequest: true,
             pageConfirmedLeads: true,
             pageSelfRegistration: true,
@@ -142,6 +143,7 @@ const sanitizeSubAdminPermissions = (
             ? {
                 editReference: joiningExtras.editReference,
                 editAdmission: joiningExtras.editAdmission,
+                activateAdmission: joiningExtras.activateAdmission,
                 approveFeeRequest: joiningExtras.approveFeeRequest,
                 requireStudentPhoto: joiningExtras.requireStudentPhoto,
               }

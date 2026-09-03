@@ -93,7 +93,21 @@ export function JoiningModulePermissionExtras({ moduleState, collegeOptions, onC
                 </span>
               </span>
             </label>
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200 sm:col-span-2">
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                checked={Boolean(moduleState.activateAdmission)}
+                onChange={(e) => onChange({ activateAdmission: e.target.checked })}
+              />
+              <span>
+                Activate admission
+                <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">
+                  Reactivate cancelled admissions and sync student status
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200">
               <input
                 type="checkbox"
                 className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -114,7 +128,7 @@ export function JoiningModulePermissionExtras({ moduleState, collegeOptions, onC
                 </span>
               </span>
             </label>
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200">
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-blue-100/80 bg-white/80 p-2 text-[11px] font-medium text-slate-700 dark:border-blue-900/40 dark:bg-slate-900/60 dark:text-slate-200 sm:col-span-2">
               <input
                 type="checkbox"
                 className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
