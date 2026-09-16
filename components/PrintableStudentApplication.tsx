@@ -1078,6 +1078,15 @@ function getPrintApplicationHtml(props: {
       </div>
     </div>`;
 
+  const headerCollegeTitleFontSize = (() => {
+    const len = headerCollegeTitle.length;
+    if (len > 52) return '17px';
+    if (len > 44) return '18.5px';
+    if (len > 35) return '20px';
+    if (len > 26) return '22px';
+    return '24px';
+  })();
+
   const renderPrintPageHeader = () => `
     <div class="header-container">
       <div class="header-top-row">
@@ -1086,7 +1095,7 @@ function getPrintApplicationHtml(props: {
         </div>
         <div class="header-brand-stack">
           <div class="header-main">
-            <h1>${escapeHtml(headerCollegeTitle)}</h1>
+            <h1 style="font-size: ${headerCollegeTitleFontSize}; white-space: nowrap;">${escapeHtml(headerCollegeTitle)}</h1>
             <p class="header-college-address">${escapeHtml(headerCollegeAddress)}</p>
           </div>
         </div>
@@ -1155,11 +1164,11 @@ function getPrintApplicationHtml(props: {
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 14px;
+      gap: 12px;
     }
     .header-logo {
-      width: 118px;
-      height: 72px;
+      width: 110px;
+      height: 68px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -1174,6 +1183,8 @@ function getPrintApplicationHtml(props: {
       align-items: center;
       justify-content: center;
       text-align: center;
+      padding: 0 4px;
+      box-sizing: border-box;
     }
     .header-main {
       display: flex;
@@ -1248,13 +1259,14 @@ function getPrintApplicationHtml(props: {
     }
     .header-main h1 {
       margin: 0;
-      font-size: 29px;
+      font-size: 20px;
       font-weight: 800;
       color: #8B2323;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      line-height: 1.12;
+      letter-spacing: 0.2px;
+      line-height: 1.15;
       text-align: center;
+      max-width: 100%;
       white-space: nowrap;
     }
     .header-college-address {
@@ -1904,13 +1916,15 @@ function getPrintApplicationHtml(props: {
       .header-top-row {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 12px;
         break-inside: avoid;
         page-break-inside: avoid;
       }
       .header-brand-stack {
         align-items: center;
         justify-content: center;
+        min-width: 0;
+        flex: 1;
       }
       .form-sidebar-row {
         position: relative;
