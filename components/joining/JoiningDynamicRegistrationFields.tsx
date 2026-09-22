@@ -18,6 +18,7 @@ import {
   isJoiningStudentPortraitUploadField,
 } from '@/lib/joiningRegistrationPhotoFields';
 import { JoiningCameraCaptureButton } from '@/components/joining/JoiningCameraCaptureButton';
+import { JoiningImageCropModal } from '@/components/joining/JoiningImageCropModal';
 import {
   isApaarIdField,
   isAdmissionDateEntryField,
@@ -245,6 +246,8 @@ function RegistrationPortraitSlot({
   const fileLabel = String(value || '').trim();
   const hasPreview = isImageDataUrl(value);
   const [lastSavedFilename, setLastSavedFilename] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+
   useEffect(() => {
     if (!value || !isImageDataUrl(value)) setLastSavedFilename(null);
   }, [value]);
@@ -252,29 +255,28 @@ function RegistrationPortraitSlot({
   const galleryInputId = `joining-reg-photo-gal-${fieldName}`;
   const inputNameGal = `joining_registration_photo_${fieldName}_gallery`;
 
-  const pick =
-    (source: 'camera' | 'gallery'): ChangeEventHandler<HTMLInputElement> =>
-    (e) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      readImageFileToFormValue(file, fieldName, onChange, {
-        photoBaseSlug,
-        fieldLabel: fieldLabelForFile,
-        fieldName,
-        source,
-        onSuccessMeta: ({ fileName }) => setLastSavedFilename(fileName),
-      });
-    };
+  const onGalleryPick: ChangeEventHandler<HTMLInputElement> = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCropFile(file);
+  };
+
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center rounded-xl border border-white/80 bg-white/70 p-4 shadow-inner dark:border-slate-600 dark:bg-slate-800/60">
-      <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-white bg-white/90 dark:border-slate-600 dark:bg-slate-800/90">
+      <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-white bg-white/90 shadow-md dark:border-slate-600 dark:bg-slate-800/90">
         {hasPreview ? (
-          <img
-            src={String(value)}
-            alt={label}
-            className="h-full w-full object-cover"
-          />
+          <>
+            <img
+              src={String(value)}
+              alt={label}
+              className="h-full w-full object-cover"
+            />
+            <span className="absolute bottom-1 right-1 rounded-md bg-emerald-950/90 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-300 backdrop-blur-sm border border-emerald-400/40 shadow-sm flex items-center gap-1">
+              <span className="h-1 w-1 rounded-full bg-emerald-400" />
+              1:1 HD ✓
+            </span>
+          </>
         ) : fileLabel ? (
           <span className="px-2 text-center text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
             File selected
@@ -323,7 +325,7 @@ function RegistrationPortraitSlot({
             accept="image/*"
             className="sr-only"
             aria-label={`Upload ${label} from gallery — ${subjectDisplayName}`}
-            onChange={pick('gallery')}
+            onChange={onGalleryPick}
           />
           <label
             htmlFor={galleryInputId}
@@ -334,6 +336,119 @@ function RegistrationPortraitSlot({
           </label>
         </div>
       )}
+
+      {/* 1:1 HD Image Crop & Head/Shoulder Placement Guideline Modal */}
+      {cropFile ? (
+        <JoiningImageCropModal
+          file={cropFile}
+          open={Boolean(cropFile)}
+          label={label}
+          onClose={() => setCropFile(null)}
+          onCropComplete={(croppedFile) => {
+            setCropFile(null);
+            readImageFileToFormValue(croppedFile, fieldName, onChange, {
+              photoBaseSlug,
+              fieldLabel: fieldLabelForFile,
+              fieldName,
+              source: 'gallery',
+              onSuccessMeta: ({ fileName }) => setLastSavedFilename(fileName),
+            });
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+type GenericFileSlotProps = {
+  field: RegistrationFormField;
+  isFieldRequired: boolean;
+  photoBaseSlug: string;
+  subjectDisplayName: string;
+  onChange: (fieldName: string, value: unknown) => void;
+};
+
+function RegistrationGenericFileSlot({
+  field,
+  isFieldRequired,
+  photoBaseSlug,
+  subjectDisplayName,
+  onChange,
+}: GenericFileSlotProps) {
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const galId = `joining-reg-file-gal-${field.fieldName}`;
+
+  const onGalleryPick: ChangeEventHandler<HTMLInputElement> = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCropFile(file);
+  };
+
+  return (
+    <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
+      <label className={JOINING_FORM_LABEL_CLASS}>
+        {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
+      </label>
+      <p className="mb-2 text-xs text-gray-500 dark:text-slate-400">
+        Images only — <strong>Take photo</strong> opens live camera with visual placement guides; <strong>Upload</strong>{' '}
+        opens the interactive 1:1 HD cropper. Photos use prefix{' '}
+        <span className="font-mono">{photoBaseSlug}</span>.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <JoiningCameraCaptureButton
+          aria-label={`Take photo for ${field.fieldLabel} — ${subjectDisplayName}`}
+          buttonClassName="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
+          onCapture={(file) =>
+            readImageFileToFormValue(file, field.fieldName, onChange, {
+              photoBaseSlug,
+              fieldLabel: field.fieldLabel || field.fieldName,
+              fieldName: field.fieldName,
+              source: 'camera',
+            })
+          }
+        >
+          <Camera className="h-3.5 w-3.5" aria-hidden />
+          Take photo
+        </JoiningCameraCaptureButton>
+        <input
+          id={galId}
+          name={`joining_registration_file_${field.fieldName}_gallery`}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          aria-label={`Upload file for ${field.fieldLabel} — ${subjectDisplayName}`}
+          onChange={onGalleryPick}
+        />
+        <label
+          htmlFor={galId}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+        >
+          <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+          Upload
+        </label>
+      </div>
+      {field.helpText ? (
+        <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">{field.helpText}</p>
+      ) : null}
+
+      {cropFile ? (
+        <JoiningImageCropModal
+          file={cropFile}
+          open={Boolean(cropFile)}
+          label={field.fieldLabel || field.fieldName}
+          onClose={() => setCropFile(null)}
+          onCropComplete={(croppedFile) => {
+            setCropFile(null);
+            readImageFileToFormValue(croppedFile, field.fieldName, onChange, {
+              photoBaseSlug,
+              fieldLabel: field.fieldLabel || field.fieldName,
+              fieldName: field.fieldName,
+              source: 'gallery',
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1343,20 +1458,20 @@ export function JoiningDynamicRegistrationFields({
               <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
                 <div className="rounded-lg border border-dashed border-blue-300 bg-gradient-to-br from-blue-50/90 to-indigo-50/60 p-3 shadow-sm dark:border-blue-600/70 dark:from-slate-900/80 dark:to-slate-900/40">
                   <p className="mb-0.5 text-center text-xs font-semibold text-gray-900 dark:text-slate-100 sm:text-left">
-                    Applicant & parent photos
+                    Applicant & parent photos (1:1 HD Square Ratio)
                   </p>
                   <p className="mb-3 text-center text-[11px] text-gray-600 dark:text-slate-400 sm:text-left">
                     {requireStudentPhoto ? (
                       <>
-                        <strong className="text-amber-600 dark:text-amber-500">Student photo is required.</strong> Father and mother photos are optional. <strong>Take photo</strong> opens the live
-                        camera — choose <strong>Front</strong> or <strong>Rear</strong> for any photo. <strong>Upload</strong>{' '}
-                        picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
+                        <strong className="text-amber-600 dark:text-amber-500">Student photo is required.</strong> Father and mother photos are optional.{' '}
+                        Photos maintain a strict <strong>1:1 square ratio</strong> with <strong>head & shoulder guidelines</strong>.{' '}
+                        <strong>Take photo</strong> opens the live camera with visual placement guides; <strong>Upload</strong> opens an interactive 1:1 HD cropper.
                       </>
                     ) : (
                       <>
-                        Student, father, and mother photos are all optional. <strong>Take photo</strong> opens the live
-                        camera — choose <strong>Front</strong> or <strong>Rear</strong> for any photo. <strong>Upload</strong>{' '}
-                        picks from your gallery. Files use the student prefix <span className="font-mono">{photoBaseSlug}</span>.
+                        Student, father, and mother photos are optional.{' '}
+                        Photos maintain a strict <strong>1:1 square ratio</strong> with <strong>head & shoulder guidelines</strong>.{' '}
+                        <strong>Take photo</strong> opens the live camera with visual placement guides; <strong>Upload</strong> opens an interactive 1:1 HD cropper.
                       </>
                     )}
                   </p>
@@ -1402,65 +1517,15 @@ export function JoiningDynamicRegistrationFields({
           }
 
           if (field.fieldType === 'file') {
-            const galId = `joining-reg-file-gal-${field.fieldName}`;
-            const onGalleryPick: ChangeEventHandler<HTMLInputElement> = (e) => {
-              const file = e.target.files?.[0];
-              e.target.value = '';
-              if (!file) return;
-              readImageFileToFormValue(file, field.fieldName, onChange, {
-                photoBaseSlug,
-                fieldLabel: field.fieldLabel || field.fieldName,
-                fieldName: field.fieldName,
-                source: 'gallery',
-              });
-            };
             return (
-              <div key={field._id || field.fieldName} className="sm:col-span-2 lg:col-span-3">
-                <label className={JOINING_FORM_LABEL_CLASS}>
-                  {field.fieldLabel} {isFieldRequired && <span className="text-red-500">*</span>}
-                </label>
-                <p className="mb-2 text-xs text-gray-500 dark:text-slate-400">
-                  Images only — <strong>Take photo</strong> opens the live camera (front or rear); <strong>Upload</strong>{' '}
-                  picks from your gallery or files. New photos use the student file prefix{' '}
-                  <span className="font-mono">{photoBaseSlug}</span>.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <JoiningCameraCaptureButton
-                    aria-label={`Take photo for ${field.fieldLabel} — ${subjectDisplayName}`}
-                    buttonClassName="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
-                    onCapture={(file) =>
-                      readImageFileToFormValue(file, field.fieldName, onChange, {
-                        photoBaseSlug,
-                        fieldLabel: field.fieldLabel || field.fieldName,
-                        fieldName: field.fieldName,
-                        source: 'camera',
-                      })
-                    }
-                  >
-                    <Camera className="h-3.5 w-3.5" aria-hidden />
-                    Take photo
-                  </JoiningCameraCaptureButton>
-                  <input
-                    id={galId}
-                    name={`joining_registration_file_${field.fieldName}_gallery`}
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    aria-label={`Upload file for ${field.fieldLabel} — ${subjectDisplayName}`}
-                    onChange={onGalleryPick}
-                  />
-                  <label
-                    htmlFor={galId}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-                  >
-                    <ImagePlus className="h-3.5 w-3.5" aria-hidden />
-                    Upload
-                  </label>
-                </div>
-                {field.helpText ? (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">{field.helpText}</p>
-                ) : null}
-              </div>
+              <RegistrationGenericFileSlot
+                key={field._id || field.fieldName}
+                field={field}
+                isFieldRequired={isFieldRequired}
+                photoBaseSlug={photoBaseSlug}
+                subjectDisplayName={subjectDisplayName}
+                onChange={onChange}
+              />
             );
           }
 

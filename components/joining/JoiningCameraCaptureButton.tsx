@@ -4,11 +4,14 @@ import {
   canvasToJpegFile,
   preloadPortraitSegmenter,
   processPortraitBackground,
+  verifyPortraitGuidelines,
   type PortraitBackgroundMode,
+  type Segmentation,
 } from '@/lib/portraitPhotoBackground';
 import { SwitchCamera } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { JoiningPhotoGuidelinesOverlay } from '@/components/joining/JoiningPhotoGuidelinesOverlay';
 
 export type JoiningCameraFacing = 'user' | 'environment';
 
@@ -54,32 +57,7 @@ function waitMs(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
-/** Passport-style face outline so users align their face inside the square crop. */
-function PortraitFaceGuideOverlay() {
-  const stroke = 'rgba(255,255,255,0.92)';
-  const strokeSoft = 'rgba(255,255,255,0.55)';
-  const corner = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => (
-    <path d={`M ${x1} ${y1} L ${x2} ${y2} L ${x3} ${y3}`} stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-  );
 
-  return (
-    <div className="pointer-events-none absolute inset-0 z-10" aria-hidden>
-      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {corner(10, 22, 10, 10, 22, 10)}
-        {corner(90, 22, 90, 10, 78, 10)}
-        {corner(10, 78, 10, 90, 22, 90)}
-        {corner(90, 78, 90, 90, 78, 90)}
-        <ellipse cx="50" cy="42" rx="21" ry="25" stroke={stroke} strokeWidth="1.6" strokeDasharray="5 3.5" />
-        <circle cx="42" cy="39" r="1.4" fill={strokeSoft} />
-        <circle cx="58" cy="39" r="1.4" fill={strokeSoft} />
-        <path d="M 46 50 Q 50 53 54 50" stroke={strokeSoft} strokeWidth="1.2" strokeLinecap="round" />
-      </svg>
-      <p className="absolute bottom-2 left-0 right-0 text-center text-[10px] font-medium tracking-wide text-white/90 drop-shadow-sm">
-        Align face in outline
-      </p>
-    </div>
-  );
-}
 
 function isCameraBusyError(err: unknown): boolean {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -132,6 +110,7 @@ export function JoiningCameraCaptureButton({
   const [processingCapture, setProcessingCapture] = useState(false);
   const [activeFacing, setActiveFacing] = useState<JoiningCameraFacing>(facing);
   const [switchingFacing, setSwitchingFacing] = useState(false);
+  const [isValidGuideline, setIsValidGuideline] = useState<boolean | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const deviceMapRef = useRef<CameraDeviceMap>({});
@@ -237,7 +216,7 @@ export function JoiningCameraCaptureButton({
   }, []);
 
   const constraintAttemptsForFacing = useCallback((face: JoiningCameraFacing): MediaTrackConstraints[] => {
-    const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
+    const size = { width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 } };
     const facingOnly =
       face === 'user'
         ? { facingMode: 'user' as const, ...size }
@@ -323,12 +302,17 @@ export function JoiningCameraCaptureButton({
   }, [facing]);
 
   const startCamera = useCallback(async () => {
+    setIsValidGuideline(null);
     setErr(null);
     const initial = resolveInitialFacing();
     setActiveFacing(initial);
     try {
       const ok = await openCameraStream(initial);
-      if (ok) setOpen(true);
+      if (ok) {
+        setIsValidGuideline(null);
+        setErr(null);
+        setOpen(true);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(
@@ -370,6 +354,8 @@ export function JoiningCameraCaptureButton({
   const close = useCallback(() => {
     stopStream();
     setProcessingCapture(false);
+    setIsValidGuideline(null);
+    setErr(null);
     setOpen(false);
   }, [stopStream]);
 
@@ -395,6 +381,93 @@ export function JoiningCameraCaptureButton({
     };
   }, [open, attachStreamToVideo, activeFacing]);
 
+  // Always reset guideline match state to clean fresh state whenever camera opens or closes
+  useEffect(() => {
+    if (open) {
+      setIsValidGuideline(null);
+      setErr(null);
+    }
+  }, [open]);
+
+  const confirmCaptureRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Live real-time dynamic guideline check loop with requestAnimationFrame & auto-capture hold
+  useEffect(() => {
+    if (!open) {
+      setIsValidGuideline(null);
+      return;
+    }
+
+    let active = true;
+    let isChecking = false;
+    let animId: number | null = null;
+    let lastCheckTime = 0;
+    let matchStartTime: number | null = null;
+    let isAutoCapturing = false;
+
+    const checkFrame = async (timestamp: number) => {
+      if (!active) return;
+
+      if (!isChecking && !processingCapture && !isAutoCapturing && timestamp - lastCheckTime >= 80) {
+        lastCheckTime = timestamp;
+        const video = videoRef.current;
+        if (video && !video.paused && !video.ended && video.videoWidth >= 2 && video.videoHeight >= 2) {
+          isChecking = true;
+          try {
+            const w = video.videoWidth;
+            const h = video.videoHeight;
+            const side = Math.min(w, h);
+            const sx = Math.floor((w - side) / 2);
+            const sy = Math.floor((h - side) / 2);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(video, sx, sy, side, side, 0, 0, 256, 256);
+              const check = await verifyPortraitGuidelines(canvas);
+              if (active) {
+                setIsValidGuideline(check.isValid);
+                setErr(check.reason);
+
+                if (check.isValid) {
+                  const now = Date.now();
+                  if (matchStartTime === null) {
+                    matchStartTime = now;
+                  } else if (now - matchStartTime >= 350 && !isAutoCapturing && confirmCaptureRef.current) {
+                    isAutoCapturing = true;
+                    setErr('Perfect — Capturing...');
+                    void confirmCaptureRef.current();
+                  }
+                } else {
+                  matchStartTime = null;
+                }
+              }
+            }
+          } catch {
+            /* ignore frame errors */
+          } finally {
+            isChecking = false;
+          }
+        }
+      }
+
+      if (active && !isAutoCapturing) {
+        animId = window.requestAnimationFrame((ts) => void checkFrame(ts));
+      }
+    };
+
+    animId = window.requestAnimationFrame((ts) => void checkFrame(ts));
+
+    return () => {
+      active = false;
+      if (animId !== null) {
+        window.cancelAnimationFrame(animId);
+      }
+    };
+  }, [open, processingCapture]);
+
   const confirmCapture = useCallback(async () => {
     if (processingCapture) return;
     const video = videoRef.current;
@@ -402,24 +475,39 @@ export function JoiningCameraCaptureButton({
       setErr('Video is not ready yet. Wait for the preview, or switch camera again.');
       return;
     }
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    const side = Math.min(w, h);
-    const sx = Math.floor((w - side) / 2);
-    const sy = Math.floor((h - side) / 2);
-    const canvas = document.createElement('canvas');
-    canvas.width = side;
-    canvas.height = side;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
 
     setProcessingCapture(true);
     setErr(null);
+
+    let canvas: HTMLCanvasElement | null = null;
     try {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      const side = Math.min(w, h);
+      const sx = Math.floor((w - side) / 2);
+      const sy = Math.floor((h - side) / 2);
+      canvas = document.createElement('canvas');
+      canvas.width = side;
+      canvas.height = side;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
       ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+
+      // ALWAYS verify exact current frame on capture (NO STALE CACHING)
+      const check = await verifyPortraitGuidelines(canvas);
+
+      if (!check.isValid) {
+        setIsValidGuideline(false);
+        setErr(check.reason);
+        setProcessingCapture(false);
+        return; // Reject photo instantly if current frame does not match guidelines!
+      }
+
+      setIsValidGuideline(true);
       let outputCanvas = canvas;
       if (portraitBackground !== 'none') {
-        outputCanvas = await processPortraitBackground(canvas, portraitBackground, false);
+        outputCanvas = await processPortraitBackground(canvas, portraitBackground, false, check.segmentations);
       }
       const file = await canvasToJpegFile(outputCanvas);
       if (!file) {
@@ -429,7 +517,7 @@ export function JoiningCameraCaptureButton({
       close();
       onCapture(file);
     } catch {
-      const fallbackFile = await canvasToJpegFile(canvas);
+      const fallbackFile = canvas ? await canvasToJpegFile(canvas) : null;
       if (fallbackFile) {
         close();
         onCapture(fallbackFile);
@@ -442,6 +530,10 @@ export function JoiningCameraCaptureButton({
     }
   }, [close, onCapture, portraitBackground, processingCapture]);
 
+  useEffect(() => {
+    confirmCaptureRef.current = confirmCapture;
+  }, [confirmCapture]);
+
   return (
     <>
       <button
@@ -449,6 +541,8 @@ export function JoiningCameraCaptureButton({
         className={buttonClassName}
         disabled={disabled}
         aria-label={ariaLabel}
+        onMouseEnter={() => preloadPortraitSegmenter()}
+        onFocus={() => preloadPortraitSegmenter()}
         onClick={() => void startCamera()}
       >
         {children}
@@ -533,7 +627,12 @@ export function JoiningCameraCaptureButton({
                       muted
                       className="absolute inset-0 h-full w-full object-cover"
                     />
-                    <PortraitFaceGuideOverlay />
+                    <JoiningPhotoGuidelinesOverlay
+                      instructionText={err || 'Align head in oval & shoulders in lower guide zone'}
+                      showHdBadge={true}
+                      variant="camera"
+                      isValidGuideline={isValidGuideline}
+                    />
                     {allowFacingSwitch ? (
                       <button
                         type="button"
