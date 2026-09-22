@@ -10,6 +10,8 @@ export interface ModulePermission {
   editReference?: boolean;
   /** Joining desk: edit joining / admission records (requires module write). */
   editAdmission?: boolean;
+  /** Joining desk: reactivate cancelled admissions (requires module write). */
+  activateAdmission?: boolean;
   /** Joining desk: require student photo on admissions */
   requireStudentPhoto?: boolean;
   /** Joining desk: approve or reject fee requests on the Fee Requests page. */

@@ -4,7 +4,11 @@ export const JOINING_PERMISSION_KEY = 'joining';
 
 export type JoiningPermissionExtras = Pick<
   ModulePermission,
-  'editReference' | 'editAdmission' | 'approveFeeRequest' | 'requireStudentPhoto'
+  | 'editReference'
+  | 'editAdmission'
+  | 'activateAdmission'
+  | 'approveFeeRequest'
+  | 'requireStudentPhoto'
 >;
 
 export type JoiningDeskPageKey =
@@ -86,6 +90,7 @@ export function defaultJoiningPermissionExtras(): JoiningPermissionExtras {
   return {
     editReference: false,
     editAdmission: false,
+    activateAdmission: false,
     approveFeeRequest: false,
     requireStudentPhoto: false,
   };
@@ -230,12 +235,13 @@ function admissionTabFlagsForSave(value: ModulePermission): AdmissionTabPermissi
   };
 }
 
-/** Super Admin / legacy write without flags: both edits allowed. */
+/** Super Admin / legacy write without flags: all desk edits allowed. */
 export function isLegacyJoiningWrite(entry?: ModulePermission): boolean {
   if (!entry?.access || entry.permission !== 'write') return false;
   return (
     entry.editReference === undefined &&
     entry.editAdmission === undefined &&
+    entry.activateAdmission === undefined &&
     entry.approveFeeRequest === undefined
   );
 }
@@ -260,6 +266,16 @@ export function resolveJoiningEditAdmission(entry?: ModulePermission, isSuperAdm
   return Boolean(entry.editAdmission);
 }
 
+export function resolveJoiningActivateAdmission(
+  entry?: ModulePermission,
+  isSuperAdmin = false
+): boolean {
+  if (isSuperAdmin) return true;
+  if (!entry?.access || entry.permission !== 'write') return false;
+  if (isLegacyJoiningWrite(entry)) return true;
+  return Boolean(entry.activateAdmission);
+}
+
 export function resolveApproveFeeRequest(entry?: ModulePermission, isSuperAdmin = false): boolean {
   if (isSuperAdmin) return true;
   if (!entry?.access || entry.permission !== 'write') return false;
@@ -276,6 +292,7 @@ export function joiningExtrasFromStored(entry?: ModulePermission): JoiningPermis
     return {
       editReference: true,
       editAdmission: true,
+      activateAdmission: true,
       approveFeeRequest: true,
       requireStudentPhoto: false,
     };
@@ -283,6 +300,7 @@ export function joiningExtrasFromStored(entry?: ModulePermission): JoiningPermis
   return {
     editReference: Boolean(entry.editReference),
     editAdmission: Boolean(entry.editAdmission),
+    activateAdmission: Boolean(entry.activateAdmission),
     approveFeeRequest: Boolean(entry.approveFeeRequest),
     requireStudentPhoto: Boolean(entry.requireStudentPhoto),
   };
@@ -306,6 +324,7 @@ export function joiningPermissionForSave(value: ModulePermission): ModulePermiss
     permission: 'write',
     editReference: Boolean(value.editReference),
     editAdmission: Boolean(value.editAdmission),
+    activateAdmission: Boolean(value.activateAdmission),
     approveFeeRequest: Boolean(value.approveFeeRequest),
     requireStudentPhoto: Boolean(value.requireStudentPhoto),
     allowedColleges: collegeScope,

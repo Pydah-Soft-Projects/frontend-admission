@@ -22,6 +22,7 @@ import {
   allowedAdmissionTabs,
   resolveAdmissionTabAccess,
   resolveJoiningEditAdmission,
+  resolveJoiningActivateAdmission,
   resolveJoiningEditReference,
   resolveJoiningPageAccess,
   resolveSubmitFeeRequest,
@@ -155,6 +156,7 @@ type PermissionContextValue = {
   getModulePermission: (moduleKey: string) => ModulePermission | undefined;
   canJoiningEditReference: () => boolean;
   canJoiningEditAdmission: () => boolean;
+  canJoiningActivateAdmission: () => boolean;
   canSubmitFeeRequest: () => boolean;
   canApproveFeeRequest: () => boolean;
   canAccessJoiningPage: (page: JoiningDeskPageKey) => boolean;
@@ -220,6 +222,7 @@ export const useJoiningDeskPermissions = () => {
     ...base,
     canEditReference: false,
     canEditAdmission: false,
+    canActivateAdmission: false,
     canSubmitFeeRequest: false,
     canApproveFeeRequest: false,
     canAccessJoiningPage: (_page: JoiningDeskPageKey) => false,
@@ -231,6 +234,7 @@ export const useJoiningDeskPermissions = () => {
     ...base,
     canEditReference: ctx.canJoiningEditReference(),
     canEditAdmission: ctx.canJoiningEditAdmission(),
+    canActivateAdmission: ctx.canJoiningActivateAdmission(),
     canSubmitFeeRequest: ctx.canSubmitFeeRequest(),
     canApproveFeeRequest: ctx.canApproveFeeRequest(),
     canAccessJoiningPage: ctx.canAccessJoiningPage,
@@ -466,6 +470,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 
   const canJoiningEditAdmission = useCallback(
     () => resolveJoiningEditAdmission(joiningPermissionEntry, isSuperAdminRole),
+    [joiningPermissionEntry, isSuperAdminRole]
+  );
+
+  const canJoiningActivateAdmission = useCallback(
+    () => resolveJoiningActivateAdmission(joiningPermissionEntry, isSuperAdminRole),
     [joiningPermissionEntry, isSuperAdminRole]
   );
 
@@ -941,6 +950,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       getModulePermission,
       canJoiningEditReference,
       canJoiningEditAdmission,
+      canJoiningActivateAdmission,
       canSubmitFeeRequest,
       canApproveFeeRequest,
       canAccessJoiningPage,
@@ -954,6 +964,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       getModulePermission,
       canJoiningEditReference,
       canJoiningEditAdmission,
+      canJoiningActivateAdmission,
       canSubmitFeeRequest,
       canApproveFeeRequest,
       canAccessJoiningPage,

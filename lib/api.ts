@@ -1759,6 +1759,10 @@ export const admissionAPI = {
     const response = await api.post(`/admissions/id/${admissionId}/cancel`, data);
     return response.data;
   },
+  activateById: async (admissionId: string) => {
+    const response = await api.post(`/admissions/id/${admissionId}/activate`);
+    return response.data;
+  },
   sendConfirmationSms: async (admissionId: string) => {
     const response = await api.post(`/admissions/id/${admissionId}/send-confirmation-sms`);
     return response.data;

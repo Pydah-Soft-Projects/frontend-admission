@@ -1266,6 +1266,7 @@ const UserManagementPage = () => {
                                       {[
                                         joiningExtras.editReference ? 'Reference' : null,
                                         joiningExtras.editAdmission ? 'Admission' : null,
+                                        joiningExtras.activateAdmission ? 'Activate admission' : null,
                                         joiningExtras.approveFeeRequest ? 'Approve fees' : null,
                                       ]
                                         .filter(Boolean)
