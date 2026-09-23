@@ -192,7 +192,7 @@ import { JoiningStepOneShell } from '@/components/joining/JoiningStepOneShell';
 import { ParentOccupationSelect } from '@/components/joining/ParentOccupationSelect';
 import { useLocations } from '@/lib/useLocations';
 import { useInstitutions } from '@/lib/useInstitutions';
-import { BookOpen, FileText, GraduationCap, History, MapPin, User, UserPlus, Users } from 'lucide-react';
+import { BookOpen, FileText, GraduationCap, History, MapPin, Pencil, User, UserPlus, Users } from 'lucide-react';
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === undefined || amount === null || Number.isNaN(amount)) {
@@ -873,6 +873,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   }>({});
   const [admissionRecord, setAdmissionRecord] = useState<Admission | null>(null);
   const [admissionRemarks, setAdmissionRemarks] = useState('');
+  const [isEditingRemarks, setIsEditingRemarks] = useState(false);
   const [hasAppliedAdmissionSnapshot, setHasAppliedAdmissionSnapshot] = useState(false);
 
   const advanceApplicationWizard = useCallback(
@@ -4962,6 +4963,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     return Array.isArray(data?.revisedFees) ? data.revisedFees : [];
   }, [overallConcessionsQuery.data]);
 
+  const feeManagementRemarks = (overallConcessionsQuery.data as { data?: { remarks?: string } } | undefined)?.data?.remarks;
+
+  useEffect(() => {
+    if (feeManagementRemarks !== undefined && feeManagementRemarks !== null && feeManagementRemarks.trim() !== '') {
+      setAdmissionRemarks(feeManagementRemarks.trim());
+    }
+  }, [feeManagementRemarks]);
+
   /**
    * Set of feeHeadId (or feeHeadCode) values that came back from the API tagged
    * pending:true — i.e. lines from a pending fee_request, not yet approved.
@@ -6077,6 +6086,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       if (!workflowJoiningId) {
         throw new Error('Save the joining form first');
       }
+      if (admissionRecord?._id && admissionRemarks !== undefined) {
+        try {
+          await admissionAPI.patchRemarksById(String(admissionRecord._id), admissionRemarks);
+          setAdmissionRecord((prev) => (prev ? { ...prev, remarks: admissionRemarks } : null));
+        } catch (e) {
+          console.warn('Failed to patch admission remarks on step four save:', e);
+        }
+      }
       return joiningAPI.patchStepTwo(workflowJoiningId, {
         registrationFormData: joiningRegistrationPatch,
         transportDetails,
@@ -6089,8 +6106,9 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     onSuccess: async () => {
       builderConcessionsDirtyRef.current = false;
       builderConcessionsHydratedForRef.current = null;
+      setIsEditingRemarks(false);
       showToast.success(
-        'Fee configuration saved — fee portal, bus, and hostel systems updated where applicable'
+        'Fee configuration and admission remarks saved successfully'
       );
       await refetch();
       if (isAccommodationChoiceLocked(transportDetails)) {
@@ -6123,8 +6141,18 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
             (missingLabel ? ` — still missing: ${missingLabel}` : '')
         );
       }
+      if (admissionRecord?._id && admissionRemarks !== undefined) {
+        try {
+          await admissionAPI.patchRemarksById(String(admissionRecord._id), admissionRemarks);
+          setAdmissionRecord((prev) => (prev ? { ...prev, remarks: admissionRemarks } : null));
+        } catch (e) {
+          console.warn('Failed to patch admission remarks on fee request submit:', e);
+        }
+      }
       return feeRequestAPI.submit({
         joiningId,
+        remarks: admissionRemarks,
+        admissionRemarks,
         studentFeeDetails: {
           batch: studentFeeDetails.batch || feeConfigurationBatch,
           lines: filterEmptyFeeHeads(mapRevisedFeeLinesWithOth1(studentFeeDetails.lines || [])),
@@ -6145,6 +6173,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     onSuccess: async (res: any) => {
       builderConcessionsDirtyRef.current = false;
       builderConcessionsHydratedForRef.current = null;
+      setIsEditingRemarks(false);
       const mintedAdmissionNumber = String(
         res?.data?.admissionNumber ||
           res?.data?.data?.admissionNumber ||
@@ -8630,46 +8659,64 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                   ) : (
                     <p className="mt-4 text-xs text-slate-500 italic">No revised heads configured yet.</p>
                   )}
-                </div>
-              )}
 
-              {/* Admission Remarks Section */}
-              {status === 'approved' && canWriteJoining && canEditAdmission && (
-                <ApplicationInfoCard
-                  title="Admission Remarks"
-                  icon={<FileText className="h-4 w-4" aria-hidden />}
-                  description="Additional notes or remarks about this admission"
-                >
-                  <div className="flex flex-col gap-3">
-                    <textarea
-                      className={JOINING_FORM_CONTROL_CLASS}
-                      rows={4}
-                      placeholder="Enter admission remarks..."
-                      value={admissionRemarks}
-                      onChange={(e) => setAdmissionRemarks(e.target.value)}
-                      disabled={
-                        !canEditAdmission ||
-                        isUpdatingAdmission ||
-                        isSaving
-                      }
-                    />
-                    <div className="flex items-center gap-3">
-                      <Button
-                        type="button"
-                        onClick={handleSaveRemarks}
-                        disabled={
-                          isSavingRemarks ||
-                          !canEditAdmission ||
-                          isUpdatingAdmission ||
-                          isSaving
-                        }
-                        className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold bg-orange-600 hover:bg-orange-700 text-white shadow-sm transition"
-                      >
-                        {isSavingRemarks ? 'Saving...' : 'Save'}
-                      </Button>
+                  {/* Integrated Admission Remarks */}
+                  <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-blue-600 dark:text-blue-300" aria-hidden />
+                        Admission Remarks
+                      </label>
+                      {Boolean(admissionRemarks.trim()) && !isEditingRemarks && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setIsEditingRemarks(true)}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit Remarks
+                        </Button>
+                      )}
                     </div>
+
+                    {Boolean(admissionRemarks.trim()) && !isEditingRemarks ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 flex items-start justify-between gap-3">
+                        <p className="whitespace-pre-wrap leading-relaxed">{admissionRemarks}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <textarea
+                          className={JOINING_FORM_CONTROL_CLASS}
+                          rows={3}
+                          placeholder="Enter admission remarks..."
+                          value={admissionRemarks}
+                          onChange={(e) => setAdmissionRemarks(e.target.value)}
+                          disabled={
+                            (status === 'approved' && !canEditAdmission) ||
+                            isUpdatingAdmission ||
+                            isSaving
+                          }
+                        />
+                        {Boolean(admissionRemarks.trim()) && isEditingRemarks && (
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingRemarks(false)}
+                              className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 underline"
+                            >
+                              Cancel Edit
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
+                      Admission remarks will be saved with the fee configuration and stored in the Fee Management database.
+                    </p>
                   </div>
-                </ApplicationInfoCard>
+                </div>
               )}
 
               {renderWizardStepFooter(4)}

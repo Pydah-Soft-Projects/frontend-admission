@@ -1498,6 +1498,8 @@ export const feeRequestAPI = {
   },
   submit: async (data: {
     joiningId: string;
+    remarks?: string;
+    admissionRemarks?: string;
     studentFeeDetails?: JoiningStudentFeeDetails;
     registrationFormData?: { transport_details?: unknown };
     builderFeeHeadCheck?: {
