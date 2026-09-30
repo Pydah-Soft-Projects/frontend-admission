@@ -1997,6 +1997,30 @@ export const admissionAPI = {
     });
     return response.data;
   },
+  exportPendingCombined: async (filters?: {
+    collegeId?: string;
+    courseId?: string;
+    courseName?: string;
+    branchId?: string;
+    branchName?: string;
+    startDate?: string;
+    endDate?: string;
+    quota?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    const response = await api.get(`/admissions/pending-combined/export${query ? `?${query}` : ''}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 
   /** List minimum fee configs (college + course + branch + quota amounts) from admissions DB. */
   listMinimumFeeConfigs: async (filters?: { collegeId?: string; courseId?: string; branchId?: string }) => {

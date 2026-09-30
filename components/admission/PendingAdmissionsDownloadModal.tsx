@@ -419,18 +419,37 @@ export function PendingAdmissionsDownloadModal({
     staleTime: 30_000,
   });
 
-  const combinedRows = useMemo(() => {
-    if (!pendingFeesData?.rows?.length && !pendingDocsData?.rows?.length) return [] as CombinedPendingRow[];
+  /** Fee rows still pending after applying minimum-fee config (when set). */
+  const pendingFeeRows = useMemo(() => {
+    const rows = (pendingFeesData?.rows || []) as PendingFeeRow[];
+    if (!hasAnyMinimumFeeConfig) return rows;
+    return rows.filter((row) =>
+      isFeeStillPending(row, minimumFeeConfigs, minFeeFilterContext)
+    );
+  }, [pendingFeesData?.rows, hasAnyMinimumFeeConfig, minimumFeeConfigs, minFeeFilterContext]);
 
-    const feeMap = new Map<string, PendingFeeRow>();
-    (pendingFeesData?.rows || []).forEach((row: PendingFeeRow) => {
-      feeMap.set(row.id, row);
+  /**
+   * Combined pending list: includes all students who have pending documents OR pending fees.
+   * When minimum fee is active, students below minimum fee AND students with pending documents are both included.
+   */
+  const pendingCombinedRows = useMemo(() => {
+    const feeRows = pendingFeeRows;
+    const docsRows = (pendingDocsData?.rows || []) as PendingDocsRow[];
+    if (!feeRows.length && !docsRows.length) return [] as CombinedPendingRow[];
+
+    const allFeeMap = new Map<string, PendingFeeRow>();
+    ((pendingFeesData?.rows || []) as PendingFeeRow[]).forEach((row: PendingFeeRow) => {
+      allFeeMap.set(String(row.id), row);
     });
 
     const combined: CombinedPendingRow[] = [];
+    const processedIds = new Set<string>();
 
-    (pendingDocsData?.rows || []).forEach((row: PendingDocsRow) => {
-      const matchingFee = feeMap.get(row.id);
+    docsRows.forEach((row: PendingDocsRow) => {
+      const rowId = String(row.id);
+      processedIds.add(rowId);
+      const matchingFee = allFeeMap.get(rowId);
+
       combined.push({
         ...(matchingFee ?? {
           id: row.id,
@@ -448,58 +467,27 @@ export function PendingAdmissionsDownloadModal({
         }),
         ...row,
       });
-      if (matchingFee) {
-        feeMap.delete(row.id);
+    });
+
+    feeRows.forEach((feeRow) => {
+      const rowId = String(feeRow.id);
+      if (!processedIds.has(rowId)) {
+        processedIds.add(rowId);
+        combined.push({
+          ...feeRow,
+          importantDocumentsPending: [],
+          otherDocumentsPending: [],
+          importantDocumentsPendingText: 'Completed',
+          otherDocumentsPendingText: 'Completed',
+          pendingCertificatesText: 'Completed',
+        });
       }
     });
 
-    feeMap.forEach((feeRow) => {
-      combined.push({
-        ...feeRow,
-        importantDocumentsPending: [],
-        otherDocumentsPending: [],
-      });
-    });
-
     return combined;
-  }, [pendingFeesData?.rows, pendingDocsData?.rows]);
-
-  /** Fee rows still pending after applying minimum-fee config (when set). */
-  const pendingFeeRows = useMemo(() => {
-    const rows = (pendingFeesData?.rows || []) as PendingFeeRow[];
-    if (!hasAnyMinimumFeeConfig) return rows;
-    return rows.filter((row) =>
-      isFeeStillPending(row, minimumFeeConfigs, minFeeFilterContext)
-    );
-  }, [pendingFeesData?.rows, hasAnyMinimumFeeConfig, minimumFeeConfigs, minFeeFilterContext]);
-
-  /**
-   * Combined pending list when min fee is active: only students still below minimum.
-   * (Docs columns remain as context — fee-settled-vs-min students are excluded.)
-   */
-  const pendingCombinedRows = useMemo(() => {
-    if (!hasAnyMinimumFeeConfig) return combinedRows;
-
-    const docsById = new Map<string, PendingDocsRow>();
-    (pendingDocsData?.rows || []).forEach((row: PendingDocsRow) => {
-      docsById.set(row.id, row);
-    });
-
-    return pendingFeeRows.map((feeRow) => {
-      const docs = docsById.get(feeRow.id);
-      return {
-        ...feeRow,
-        importantDocumentsPending: docs?.importantDocumentsPending || [],
-        otherDocumentsPending: docs?.otherDocumentsPending || [],
-        importantDocumentsPendingText: docs?.importantDocumentsPendingText,
-        otherDocumentsPendingText: docs?.otherDocumentsPendingText,
-        pendingCertificatesText: docs?.pendingCertificatesText,
-      } as CombinedPendingRow;
-    });
   }, [
-    hasAnyMinimumFeeConfig,
-    combinedRows,
     pendingFeeRows,
+    pendingFeesData?.rows,
     pendingDocsData?.rows,
   ]);
 
@@ -714,13 +702,13 @@ export function PendingAdmissionsDownloadModal({
       if (!hasLoadedOnce) {
         setHasLoadedOnce(true);
       }
-      const { page: _page, limit: _limit, ...exportFilters } = filterParams;
+      const { page: _page, limit: _limit, ...exportFilters } = filterParams as any;
       const blob =
         view === 'fee'
           ? await admissionAPI.exportPendingFees(exportFilters)
           : view === 'documents'
           ? await admissionAPI.exportPendingCertificates(exportFilters)
-          : await admissionAPI.exportPendingFees(exportFilters);
+          : await admissionAPI.exportPendingCombined(exportFilters);
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
@@ -764,7 +752,7 @@ export function PendingAdmissionsDownloadModal({
       if (!hasLoadedOnce) {
         setHasLoadedOnce(true);
       }
-      const { page: _page, limit: _limit, ...baseFilters } = filterParams;
+      const { page: _page, limit: _limit, ...baseFilters } = filterParams as any;
       const printData =
         view === 'fee'
           ? await admissionAPI.listPendingFees({ ...baseFilters, all: true })
@@ -811,20 +799,22 @@ export function PendingAdmissionsDownloadModal({
                 if (matchingFee) feeMap.delete(row.id);
               });
               feeMap.forEach((feeRow) => {
-                combined.push({
-                  ...feeRow,
-                  importantDocumentsPending: [],
-                  otherDocumentsPending: [],
-                });
+                if (!hasAnyMinimumFeeConfig || isFeeStillPending(feeRow, minimumFeeConfigs, minFeeFilterContext)) {
+                  combined.push({
+                    ...feeRow,
+                    importantDocumentsPending: [],
+                    otherDocumentsPending: [],
+                  });
+                }
               });
               return combined;
             })()
           : [];
           const rawPrintRows = view === 'combined' ? combinedPrintRows : printRows;
-      // Pending-only: when min fee is configured, drop anyone who already met it.
+      // Pending-only: when min fee is configured in fee view, drop anyone who already met it.
       const finalPrintRows =
-        view !== 'documents' && hasAnyMinimumFeeConfig
-          ? rawPrintRows.filter((row) =>
+        view === 'fee' && hasAnyMinimumFeeConfig
+          ? (rawPrintRows as PendingFeeRow[]).filter((row) =>
               isFeeStillPending(row, minimumFeeConfigs, minFeeFilterContext)
             )
           : rawPrintRows;
@@ -837,8 +827,6 @@ export function PendingAdmissionsDownloadModal({
               : 'No pending fee records to print for the selected filters.'
             : view === 'documents'
             ? 'No pending document records to print for the selected filters.'
-            : hasAnyMinimumFeeConfig
-            ? 'No students below the minimum fee required for the selected filters.'
             : 'No pending combined records to print for the selected filters.'
         );
         return;
@@ -874,12 +862,13 @@ export function PendingAdmissionsDownloadModal({
       </tr>`;
           }
 
-          const importantText = row.importantDocumentsPending?.length
-            ? row.importantDocumentsPending.join(', ')
-            : row.importantDocumentsPendingText || 'Completed';
-          const otherText = row.otherDocumentsPending?.length
-            ? row.otherDocumentsPending.join(', ')
-            : row.otherDocumentsPendingText || row.pendingCertificatesText || '—';
+          const docRow = row as Partial<PendingDocsRow>;
+          const importantText = docRow.importantDocumentsPending?.length
+            ? docRow.importantDocumentsPending.join(', ')
+            : docRow.importantDocumentsPendingText || 'Completed';
+          const otherText = docRow.otherDocumentsPending?.length
+            ? docRow.otherDocumentsPending.join(', ')
+            : docRow.otherDocumentsPendingText || docRow.pendingCertificatesText || '—';
 
           if (view === 'documents') {
             return `
@@ -1423,12 +1412,13 @@ export function PendingAdmissionsDownloadModal({
                               );
                             }
 
-                            const importantText = row.importantDocumentsPending?.length
-                              ? row.importantDocumentsPending.join(', ')
-                              : row.importantDocumentsPendingText || 'Completed';
-                            const otherText = row.otherDocumentsPending?.length
-                              ? row.otherDocumentsPending.join(', ')
-                              : row.otherDocumentsPendingText || row.pendingCertificatesText || 'Completed';
+                            const docRow = row as Partial<PendingDocsRow>;
+                            const importantText = docRow.importantDocumentsPending?.length
+                              ? docRow.importantDocumentsPending.join(', ')
+                              : docRow.importantDocumentsPendingText || 'Completed';
+                            const otherText = docRow.otherDocumentsPending?.length
+                              ? docRow.otherDocumentsPending.join(', ')
+                              : docRow.otherDocumentsPendingText || docRow.pendingCertificatesText || 'Completed';
 
                             if (view === 'documents') {
                               return (
