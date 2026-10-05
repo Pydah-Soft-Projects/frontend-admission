@@ -2344,10 +2344,11 @@ export const paymentAPI = {
     const response = await api.post(`/payments/cashfree/reconcile`);
     return response.data;
   },
-  getOverallConcessions: async (admissionNumber: string) => {
-    const response = await api.get(
-      `/payments/overall-concessions?admissionNumber=${encodeURIComponent(admissionNumber)}`
-    );
+  getOverallConcessions: async (admissionNumber: string, joiningId?: string) => {
+    const params = new URLSearchParams();
+    if (admissionNumber) params.append('admissionNumber', admissionNumber);
+    if (joiningId) params.append('joiningId', joiningId);
+    const response = await api.get(`/payments/overall-concessions?${params.toString()}`);
     return response.data;
   },
   listFeeManagementTransactions: async (params: {

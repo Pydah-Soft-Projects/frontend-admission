@@ -4250,7 +4250,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
         const isCategoryMirror =
           Boolean(categoryName) &&
           Boolean(nestedCaste?.name) &&
-          normalizeCasteKey(nestedCaste.name) === normalizeCasteKey(categoryName);
+          normalizeCasteKey(nestedCaste?.name || '') === normalizeCasteKey(categoryName);
         return {
           // students.caste contract: always category name, never nested caste name.
           general: categoryName || formState.reservation.general || '',
@@ -4948,13 +4948,19 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   const feeHeadRows = useMemo(() => extractFeeHeadRows(feeHeadsQuery.data), [feeHeadsQuery.data]);
 
   const overallConcessionsQuery = useQuery({
-    queryKey: ['overall-concessions', admissionNumberDisplay || null],
+    queryKey: ['overall-concessions', admissionNumberDisplay || joiningRecord?._id || null],
     queryFn: async () => {
-      const res = await paymentAPI.getOverallConcessions(String(admissionNumberDisplay || ''));
+      const res = await paymentAPI.getOverallConcessions(
+        String(admissionNumberDisplay || ''),
+        String(joiningRecord?._id || '')
+      );
       return res;
     },
-    enabled: status === 'approved' && !isPublicEdit && Boolean(admissionNumberDisplay) && (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
-    staleTime: 30_000,
+    enabled:
+      !isPublicEdit &&
+      (Boolean(admissionNumberDisplay) || Boolean(joiningRecord?._id)) &&
+      (useWizard ? applicationWizardStep === 4 : showAdminPostAdmissionStep4),
+    staleTime: 5_000,
     refetchOnMount: 'always',
   });
 
@@ -4994,7 +5000,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
   }, [admissionNumberDisplay, joiningRecord?._id]);
 
   useEffect(() => {
-    if (status !== 'approved' || isPublicEdit || !admissionNumberDisplay) return;
+    if (isPublicEdit || (!admissionNumberDisplay && !joiningRecord?._id)) return;
     if (!overallConcessionsQuery.isFetched) return;
     if (builderConcessionsDirtyRef.current) return;
 
@@ -5011,16 +5017,25 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
       ? joiningRecord.studentFeeDetails.lines
       : [];
 
+    const lineKey = (line: JoiningStudentFeeLineOverride) => {
+      const head = String(line?.feeHeadId || line?.feeHeadCode || '').trim().toUpperCase();
+      const year = Number(line?.studentYear) || 1;
+      if (head) return `${head}::${year}`;
+      return String(line?.structureId || '');
+    };
+
     const mergedLinesMap = new Map<string, JoiningStudentFeeLineOverride>();
     
     // Draft lines from the joining record
     for (const line of draftLines) {
-      if (line?.structureId) mergedLinesMap.set(String(line.structureId), line);
+      const k = lineKey(line);
+      if (k) mergedLinesMap.set(k, line);
     }
     
     // Approved / pending database lines take precedence
     for (const line of dbLines) {
-      if (line?.structureId) mergedLinesMap.set(String(line.structureId), line);
+      const k = lineKey(line);
+      if (k) mergedLinesMap.set(k, line);
     }
 
     const lines = Array.from(mergedLinesMap.values());
@@ -6310,8 +6325,13 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
     const workflowAdmissionId = admissionRecord?._id;
     const headerName =
-      String(lead?.name || formState.studentInfo?.name || joiningRecord?.studentName || '').trim() ||
-      'Application';
+      String(
+        lead?.name ||
+          formState.studentInfo?.name ||
+          joiningRecord?.studentInfo?.name ||
+          (joiningRecord as any)?.studentName ||
+          ''
+      ).trim() || 'Application';
     const headerEnquiry = String(lead?.enquiryNumber || '').trim();
     const headerLeadId = String(lead?._id || lead?.id || joiningRecord?.leadId || effectiveAdminLeadId || '').trim();
 
@@ -6378,7 +6398,8 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
     isPublicEdit,
     lead,
     formState.studentInfo?.name,
-    joiningRecord?.studentName,
+    joiningRecord?.studentInfo?.name,
+    (joiningRecord as any)?.studentName,
     joiningRecord?.leadId,
     effectiveAdminLeadId,
     router,
@@ -8467,6 +8488,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
 
                             const headLines = (studentFeeDetails.lines || []).filter((line) => {
                               if (line.feeHeadId && String(line.feeHeadId) === String(head.id)) return true;
+                              if (line.feeHeadCode && head.code && String(line.feeHeadCode).toUpperCase() === String(head.code).toUpperCase()) return true;
                               return feeStructureCatalogRows.some(
                                 (item) =>
                                   String(item._id) === String(line.structureId) &&
@@ -8483,6 +8505,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                               const newLines = (studentFeeDetails.lines || []).map((line) => {
                                 const isThisHead =
                                   (line.feeHeadId && String(line.feeHeadId) === String(head.id)) ||
+                                  (line.feeHeadCode && head.code && String(line.feeHeadCode).toUpperCase() === String(head.code).toUpperCase()) ||
                                   feeStructureCatalogRows.some(
                                     (item) =>
                                       String(item._id) === String(line.structureId) &&
@@ -8548,7 +8571,14 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                   
                                   const structureId = matchingCatalog ? String(matchingCatalog._id) : `custom-${head.id}-${year}`;
                                   
-                                  const line = studentFeeDetails.lines?.find(l => String(l.structureId) === structureId);
+                                  const isLineForHeadAndYear = (l: JoiningStudentFeeLineOverride) => {
+                                    if (Number(l.studentYear) !== Number(year)) return false;
+                                    if (String(l.structureId) === structureId) return true;
+                                    if (l.feeHeadId && String(l.feeHeadId) === String(head.id)) return true;
+                                    if (l.feeHeadCode && head.code && String(l.feeHeadCode).toUpperCase() === String(head.code).toUpperCase()) return true;
+                                    return false;
+                                  };
+                                  const line = studentFeeDetails.lines?.find(isLineForHeadAndYear);
                                   const currentAmount =
                                     line?.amount !== undefined && line?.amount !== null
                                       ? Number(line.amount) || 0
@@ -8558,7 +8588,7 @@ export function JoiningLeadFormWorkspace({ adminLeadId, publicToken, publicBoots
                                     amount?: number | null;
                                   }) => {
                                     const newLines = [...(studentFeeDetails.lines || [])];
-                                    const lineIdx = newLines.findIndex(l => String(l.structureId) === structureId);
+                                    const lineIdx = newLines.findIndex(isLineForHeadAndYear);
                                     const nextAmount =
                                       patch.amount !== undefined ? patch.amount : currentAmount;
                                     if (nextAmount === null || !Number.isFinite(Number(nextAmount)) || Number(nextAmount) <= 0) {
