@@ -53,6 +53,7 @@ export interface User {
   division?: string;
   department?: string;
   group?: string;
+  isSSO?: boolean;
   createdAt: string;
   updatedAt: string;
 }

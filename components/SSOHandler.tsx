@@ -21,8 +21,11 @@ export const SSOHandler = () => {
             // Clear existing local sessions
             auth.clearAuth();
 
-            // The existing SSO verify-token logic in LoginPageContent will then proceed
-            // with a clean slate when the user hits the /auth/login route (or stays there).
+            // If not already on /auth/login, redirect to /auth/login with all query parameters
+            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/login')) {
+                const search = searchParams.toString();
+                window.location.replace(`/auth/login${search ? `?${search}` : ''}`);
+            }
         }
     }, [searchParams]);
 

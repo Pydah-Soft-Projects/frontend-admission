@@ -33,6 +33,7 @@ import {
 import { NotificationBell } from '../NotificationBell';
 import { MobileBottomNav, flattenNavItemsForMobile } from './MobileBottomNav';
 import { MobileMenuSheet } from './MobileMenuSheet';
+import { LogoutConfirmModal } from '../auth/LogoutConfirmModal';
 
 type IconProps = React.SVGProps<SVGSVGElement>;
 type IconComponent = React.FC<IconProps>;
@@ -347,6 +348,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [headerContent, setHeaderContent] = useState<ReactNode>(null);
   const [mobileTopBar, setMobileTopBarState] = useState<MobileTopBarOptions | null>(null);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   const isSuperadminLeadDetail = isSuperadminLeadDetailPath(pathname);
   const isJoiningWorkspaceEdit = isJoiningWorkspaceEditPath(pathname);
@@ -588,9 +590,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   }, []);
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined' && window.confirm('Are you sure you want to logout?')) {
-      auth.logout(); // async - calls backend for logout tracking, then redirects
-    }
+    setIsLogoutModalOpen(true);
   };
 
   const handleBack = () => {
@@ -1215,6 +1215,10 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             </div>
           </div>
         </div>
+        <LogoutConfirmModal
+          isOpen={isLogoutModalOpen}
+          onClose={() => setIsLogoutModalOpen(false)}
+        />
       </PermissionContext.Provider>
     </DashboardHeaderContext.Provider>
   );

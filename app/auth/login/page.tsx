@@ -93,8 +93,11 @@ function LoginPageContent() {
         throw new Error('Invalid session data received');
       }
 
-      // Step 4: Store session
-      auth.setAuth(token, user);
+      // Detect optional return/CRM URL parameter if provided by CRM gateway
+      const returnUrl = searchParams.get('returnUrl') || searchParams.get('crmUrl') || searchParams.get('redirectUrl');
+
+      // Step 4: Store session with SSO flag
+      auth.setAuth(token, { ...user, isSSO: true }, true, returnUrl || CRM_FRONTEND_URL);
 
       // Step 5: Redirect based on role
       if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
@@ -142,8 +145,8 @@ function LoginPageContent() {
 
 
       
-      // Set auth data
-      auth.setAuth(token, user);
+      // Set auth data (regular login - not SSO)
+      auth.setAuth(token, user, false);
 
       // Redirect based on role
       if (user.roleName === 'Super Admin' || user.roleName === 'Sub Super Admin') {
