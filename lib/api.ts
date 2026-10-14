@@ -160,9 +160,10 @@ export const authAPI = {
   },
   // Create SSO session (calls admissions backend)
   createSSOSession: async (ssoData: {
-    userId: string;
-    role: string;
-    portalId: string;
+    userId?: string;
+    email?: string;
+    role?: string;
+    portalId?: string;
     ssoToken: string;
   }) => {
     const response = await api.post('/auth/sso-session', ssoData);

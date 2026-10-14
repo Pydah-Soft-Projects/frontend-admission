@@ -77,9 +77,10 @@ function LoginPageContent() {
 
       // Step 3: Create local session via admissions backend
       const sessionData = await authAPI.createSSOSession({
-        userId,
-        role,
-        portalId,
+        userId: userId || verifyResult.data?.id,
+        email: verifyResult.data?.email,
+        role: role || verifyResult.data?.role,
+        portalId: portalId || verifyResult.data?.portalId,
         ssoToken: encryptedToken,
       });
 
