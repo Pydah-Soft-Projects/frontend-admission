@@ -41,6 +41,7 @@ import { PendingFeeDocsSmsSchedulerDialog } from '@/components/admission/Pending
 import {
   parseStudentQuotasResponse,
   quotaLabelsFromCatalog,
+  mergeQuotaSelectOptions,
 } from '@/lib/studentQuotaCatalog';
 import {
   MinimumFeeConfigDialog,
@@ -756,8 +757,12 @@ const CompletedAdmissionsPage = () => {
   });
 
   const quotaOptions = useMemo(
-    () => quotaLabelsFromCatalog(parseStudentQuotasResponse(studentQuotasResponse)),
-    [studentQuotasResponse]
+    () =>
+      mergeQuotaSelectOptions(
+        quotaLabelsFromCatalog(parseStudentQuotasResponse(studentQuotasResponse)),
+        quotaFilter
+      ),
+    [studentQuotasResponse, quotaFilter]
   );
 
   const statsThroughDate = dateRange.to || formatLocalDateIso(new Date());
