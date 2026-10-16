@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LogOut, ExternalLink, X } from 'lucide-react';
 import { auth } from '@/lib/auth';
+import { CRM_FRONTEND_URL } from '@/lib/api';
 
 interface LogoutConfirmModalProps {
   isOpen: boolean;
@@ -68,8 +69,11 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
       console.error('Logout error:', err);
       // Fallback in case of unexpected exception
       auth.clearAuth();
-      if (isSSO && crmUrl) {
-        window.location.replace(crmUrl);
+      const targetCrmUrl = (crmUrl && !crmUrl.includes('localhost') && !crmUrl.includes('127.0.0.1'))
+        ? crmUrl
+        : CRM_FRONTEND_URL;
+      if (isSSO) {
+        window.location.replace(targetCrmUrl);
       } else {
         window.location.replace('/auth/login');
       }

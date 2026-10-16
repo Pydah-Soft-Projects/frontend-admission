@@ -77,10 +77,14 @@ export const auth = {
   // Get CRM portal URL (saved from login/SSO session or default from env)
   getCRMUrl: (): string => {
     const ssoUrlCookie = Cookies.get(CRM_PORTAL_KEY);
-    if (ssoUrlCookie) return ssoUrlCookie;
+    if (ssoUrlCookie && !ssoUrlCookie.includes('localhost') && !ssoUrlCookie.includes('127.0.0.1')) {
+      return ssoUrlCookie;
+    }
     if (typeof window !== 'undefined') {
       const ssoUrlLocal = window.localStorage.getItem(CRM_PORTAL_KEY);
-      if (ssoUrlLocal) return ssoUrlLocal;
+      if (ssoUrlLocal && !ssoUrlLocal.includes('localhost') && !ssoUrlLocal.includes('127.0.0.1')) {
+        return ssoUrlLocal;
+      }
     }
     return CRM_FRONTEND_URL;
   },
@@ -142,13 +146,29 @@ export const auth = {
       window.localStorage.removeItem('refreshToken');
       window.localStorage.removeItem('user'); // Also common key
       window.sessionStorage.clear();
+
+      // Clean up portal switcher widget
+      try {
+        const switcherElements = document.querySelectorAll(
+          'portal-switcher, pydah-portal-switcher, #pydah-portal-switcher, .pydah-portal-switcher, [id*="portal-switcher"]'
+        );
+        switcherElements.forEach((el) => el.remove());
+        const switcherScript = document.getElementById('pydah-portal-switcher-cdn-script');
+        if (switcherScript) switcherScript.remove();
+        if ((window as any).PydahSwitcher?.destroy) {
+          (window as any).PydahSwitcher.destroy();
+        }
+      } catch (_) {}
     }
   },
 
   // Logout - calls backend to record logout, then clears auth and redirects to CRM or login
   logout: async () => {
     const isSSOUser = auth.isSSO();
-    const crmUrl = auth.getCRMUrl();
+    let crmUrl = auth.getCRMUrl();
+    if (!crmUrl || crmUrl.includes('localhost') || crmUrl.includes('127.0.0.1')) {
+      crmUrl = CRM_FRONTEND_URL;
+    }
     try {
       await authAPI.logout();
     } catch (_) {
