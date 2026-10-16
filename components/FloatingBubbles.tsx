@@ -12,6 +12,9 @@ interface Bubble {
     color: string;
 }
 
+
+
+
 export default function FloatingBubbles() {
     const [bubbles, setBubbles] = useState<Bubble[]>([]);
 
