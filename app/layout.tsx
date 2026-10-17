@@ -21,6 +21,7 @@ import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 import { SSOHandler } from "@/components/SSOHandler";
 import { PortalSwitcher } from "@/components/PortalSwitcher";
 import { Suspense } from "react";
+import Script from "next/script";
 
 export default function RootLayout({
   children,
@@ -44,6 +45,12 @@ export default function RootLayout({
           {children}
           <PwaInstallPrompt />
         </Providers>
+        <Script
+          id="pydah-portal-switcher-cdn-script"
+          src="https://crm.pydah.edu.in/portal-switcher.js"
+          data-current-portal="admissions-crm"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

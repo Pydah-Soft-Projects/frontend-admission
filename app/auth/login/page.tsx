@@ -27,9 +27,9 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(() => Boolean(searchParams.get('token')));
   const [error, setError] = useState<string | null>(null);
-  const [showLoginForm, setShowLoginForm] = useState(false);
+  const [showLoginForm, setShowLoginForm] = useState(() => !searchParams.get('token'));
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -46,6 +46,17 @@ function LoginPageContent() {
     const token = searchParams.get('token');
 
     if (token) {
+      // Ensure portal-switcher.js CDN is loaded to register <pydah-sso-loader />
+      const scriptId = 'pydah-portal-switcher-cdn-script';
+      if (typeof document !== 'undefined' && !document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://crm.pydah.edu.in/portal-switcher.js';
+        script.async = true;
+        script.setAttribute('data-current-portal', 'admissions-crm');
+        document.body.appendChild(script);
+      }
+
       // SSO token found - handle SSO login
       handleSSOLogin(token);
     } else {
@@ -179,16 +190,9 @@ function LoginPageContent() {
     }
   };
 
-  // Show loading state while verifying SSO token
+  // Show universal workspace transition loader while verifying SSO token
   if (isVerifying) {
-    return (
-      <div style={{ backgroundColor: '#f9fafb' }} className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="text-center relative z-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ea580c] mx-auto"></div>
-          <p className="mt-4 text-gray-600">Verifying authentication...</p>
-        </div>
-      </div>
-    );
+    return <pydah-sso-loader />;
   }
 
   // Show error state if SSO verification failed and no login form should be shown
