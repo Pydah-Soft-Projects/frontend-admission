@@ -82,7 +82,7 @@ export const PortalSwitcher = () => {
         const user = auth.getUser();
         window.PydahSwitcher.init({
           currentPortal: PORTAL_ID,
-          apiBaseUrl: CRM_BACKEND_URL || 'https://pydah-crm-backend.pydah.edu.in',
+          apiBaseUrl: CRM_BACKEND_URL || 'https://crm.pydah.edu.in',
           landingUrl: CRM_FRONTEND_URL || 'https://crm.pydah.edu.in',
           token: token,
           user: user || undefined,
@@ -100,7 +100,7 @@ export const PortalSwitcher = () => {
       script.src = 'https://crm.pydah.edu.in/portal-switcher.js';
       script.async = true;
       script.setAttribute('data-current-portal', PORTAL_ID);
-      script.setAttribute('data-api-base-url', CRM_BACKEND_URL || 'https://pydah-crm-backend.pydah.edu.in');
+      script.setAttribute('data-api-base-url', CRM_BACKEND_URL || 'https://crm.pydah.edu.in');
       script.setAttribute('data-landing-url', CRM_FRONTEND_URL || 'https://crm.pydah.edu.in');
       script.setAttribute('data-position', 'bottom-right');
 
